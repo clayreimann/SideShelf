@@ -5,9 +5,9 @@ import { useAuth } from '../providers/AuthProvider';
 
 export default function LoginModal() {
   const router = useRouter();
-  const { initialized, isAuthenticated, serverUrl, login } = useAuth();
+  const { initialized, isAuthenticated, serverUrl, username: usernameFromAuth, login } = useAuth();
   const [baseUrl, setBaseUrl] = useState(serverUrl ?? '');
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(usernameFromAuth ?? '');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export default function LoginModal() {
   useEffect(() => {
     if (initialized && isAuthenticated) {
       console.log('[login] Authenticated, redirecting to back');
-      router.back();
+      router.replace('/');
     }
   }, [initialized, isAuthenticated]);
 
@@ -33,7 +33,7 @@ export default function LoginModal() {
       console.log('[login] Submitting login', { baseUrl, username: username ? '<provided>' : '<empty>' });
       await login({ serverUrl: baseUrl, username, password });
       console.log('[login] Success');
-      router.back();
+      router.replace('/');
     } catch (e: any) {
       console.log('[login] Error', e);
       setError(e?.message || 'Login failed');
@@ -73,6 +73,7 @@ export default function LoginModal() {
           secureTextEntry
           style={styles.input}
           value={password}
+          onSubmitEditing={onSubmit}
           onChangeText={setPassword}
           textContentType="password"
         />

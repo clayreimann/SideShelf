@@ -15,9 +15,18 @@ function createThemedStyles(isDark: boolean) {
     link: isDark ? '#9CDCFE' : '#0066CC',
   } as const;
 
+  const tabs = {
+    backgroundColor: colors.background,
+    iconColor: colors.textPrimary,
+    labelColor: colors.textPrimary,
+    badgeTextColor: colors.textPrimary,
+    shadowColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.1)',
+  } as const;
+
   return {
     isDark,
     colors,
+    tabs,
     styles: StyleSheet.create({
       flatListContainer: {
         backgroundColor: colors.background,

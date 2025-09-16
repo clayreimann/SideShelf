@@ -6,17 +6,27 @@ This app uses Drizzle ORM with Expo SQLite.
 
 - `src/db/client.ts`: Opens the SQLite database, creates the Drizzle client, and runs migrations.
 - `src/db/schema/`: Drizzle schema definitions split by model (`users`, `libraries`, `libraryItems`).
-- `src/db/migrations/`: Generated and hand-authored migrations; loaded at runtime via the Expo migrator.
+- `src/db/migrations/`: SQL migrations; loaded at runtime via the Expo migrator.
 
-## Drizzle CLI
+## SQL Migrations (Expo-friendly)
 
-Config: `drizzle.config.ts`
+Per Drizzle docs for Expo SQLite, we bundle SQL migrations directly into the app so they run on-device.
 
-Scripts:
-- `npm run drizzle:generate` — generate migration files from the schema
-- `npm run drizzle:push` — generate and apply migration files
+Refs: [Drizzle <> Expo SQLite docs](https://orm.drizzle.team/docs/connect-expo-sqlite)
 
-Note: In React Native we cannot run node-based CLI at runtime, so we ship migrations and apply them on app start using `drizzle-orm/expo-sqlite/migrator`.
+### Generate migrations
+
+- Generate SQL migrations from schema changes:
+```bash
+npx drizzle-kit generate
+```
+
+This will emit `.sql` files under `src/db/migrations`. Review and commit them.
+
+### Runtime
+
+- `src/db/migrations/index.ts` imports the `.sql` files (as strings via inline-import) and exposes them to `drizzle-orm/expo-sqlite/migrator`.
+- `ensureDatabaseInitialized()` runs migrations on app start.
 
 ## Workflow
 

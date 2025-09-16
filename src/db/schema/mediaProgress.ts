@@ -9,11 +9,11 @@ export const mediaProgress = sqliteTable('media_progress', {
   duration: real('duration'),
   progress: real('progress'),
   currentTime: real('current_time'),
-  isFinished: integer('is_finished'),
-  hideFromContinueListening: integer('hide_from_continue_listening'),
-  lastUpdate: integer('last_update'),
-  startedAt: integer('started_at'),
-  finishedAt: integer('finished_at'),
+  isFinished: integer('is_finished', { mode: 'boolean' }),
+  hideFromContinueListening: integer('hide_from_continue_listening', { mode: 'boolean' }),
+  lastUpdate: integer('last_update', { mode: 'timestamp' }),
+  startedAt: integer('started_at', { mode: 'timestamp' }),
+  finishedAt: integer('finished_at', { mode: 'timestamp' }),
 });
 
 export type MediaProgressRow = typeof mediaProgress.$inferSelect;

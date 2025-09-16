@@ -51,9 +51,8 @@ export type AbsMediaProgress = {
   finishedAt?: number | null;
 };
 
-export type MeResponse = {
-  user: AbsUser;
+export type MeResponse = AbsUser & {
   userDefaultLibraryId?: string | null;
-  librariesAccessible?: AbsLibrary[];
+  librariesAccessible?: string[];
   mediaProgress?: AbsMediaProgress[];
 };

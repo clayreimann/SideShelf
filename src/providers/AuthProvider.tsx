@@ -1,9 +1,11 @@
+import { db } from '@/db/client';
+import { libraries, mediaProgress, userLibraries, users } from '@/db/schema';
+import { AbsMediaProgress, AbsUser, MeResponse } from '@/lib/absTypes';
+import { setApiConfig } from '@/lib/api/api';
+import { fetchMe } from '@/lib/api/endpoints';
+import { useDb } from '@/providers/DbProvider';
 import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { db, ensureDatabaseInitialized } from '../db/client';
-import { libraries, mediaProgress, userLibraries, users } from '../db/schema';
-import { AbsMediaProgress, AbsUser, MeResponse } from '../lib/absTypes';
-import { apiFetch, setApiConfig } from '../lib/api';
 
 type AuthState = {
     serverUrl: string | null;
@@ -46,12 +48,13 @@ async function getItem(key: string): Promise<string | null> {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+    const { initialized: dbInitialized } = useDb();
     const [state, setState] = useState<AuthState>({ serverUrl: null, accessToken: null, refreshToken: null, username: null });
     const [initialized, setInitialized] = useState(false);
 
     useEffect(() => {
         (async () => {
-            await ensureDatabaseInitialized();
+            if (!dbInitialized) return;
             const [serverUrl, accessToken, refreshToken, username] = await Promise.all([
                 getItem(SECURE_KEYS.serverUrl),
                 getItem(SECURE_KEYS.accessToken),
@@ -61,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setState({ serverUrl, accessToken, refreshToken, username });
             setInitialized(true);
         })();
-    }, []);
+    }, [dbInitialized]);
 
     useEffect(() => {
         setApiConfig({
@@ -132,10 +135,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // After login, fetch current user and persist to DB
         try {
-            const meRes = await apiFetch('/api/me');
+            if (!dbInitialized) return;
+            const meRes = await fetchMe();
             if (meRes.ok) {
                 const me: MeResponse = await meRes.json();
-                const user: AbsUser | undefined = me?.user;
+                const user: AbsUser | undefined = me;
                 if (user) {
                     const permissionsJson = user.permissions ? JSON.stringify(user.permissions) : null;
                     await db.insert(users).values({
@@ -165,23 +169,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 if (me?.librariesAccessible?.length) {
                     for (const lib of me.librariesAccessible) {
                         await db.insert(libraries).values({
-                            id: lib.id,
-                            name: lib.name,
-                            mediaType: lib.mediaType ?? null,
-                            createdAt: lib.createdAt ?? null,
-                        }).onConflictDoUpdate({
-                            target: libraries.id,
-                            set: { name: lib.name, mediaType: lib.mediaType ?? null, createdAt: lib.createdAt ?? null },
-                        });
-                        if (me.user?.id) {
-                            await db.insert(userLibraries).values({ userId: me.user.id, libraryId: lib.id }).onConflictDoNothing();
+                            id: lib,
+                            name: lib ?? 'Not yet fetched',
+                        }).onConflictDoNothing();
+                        if (me.id) {
+                            await db.insert(userLibraries).values({ userId: me.id, libraryId: lib }).onConflictDoNothing();
                         }
                     }
                 }
 
                 // Persist media progress
-                if (me?.mediaProgress?.length && me.user?.id) {
-                    const userId = me.user.id;
+                if (me?.mediaProgress?.length && me.id) {
+                    const userId = me.id;
                     for (const mp of me.mediaProgress as AbsMediaProgress[]) {
                         await db.insert(mediaProgress).values({
                             id: mp.id,
@@ -191,8 +190,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                             duration: mp.duration ?? null,
                             progress: mp.progress ?? null,
                             currentTime: mp.currentTime ?? null,
-                            isFinished: mp.isFinished ? 1 : 0,
-                            hideFromContinueListening: mp.hideFromContinueListening ? 1 : 0,
+                            isFinished: mp.isFinished,
+                            hideFromContinueListening: mp.hideFromContinueListening,
                             lastUpdate: mp.lastUpdate ?? null,
                             startedAt: mp.startedAt ?? null,
                             finishedAt: mp.finishedAt ?? null,
@@ -205,8 +204,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                                 duration: mp.duration ?? null,
                                 progress: mp.progress ?? null,
                                 currentTime: mp.currentTime ?? null,
-                                isFinished: mp.isFinished ? 1 : 0,
-                                hideFromContinueListening: mp.hideFromContinueListening ? 1 : 0,
+                                isFinished: mp.isFinished ?? null,
+                                hideFromContinueListening: mp.hideFromContinueListening ?? null,
                                 lastUpdate: mp.lastUpdate ?? null,
                                 startedAt: mp.startedAt ?? null,
                                 finishedAt: mp.finishedAt ?? null,
@@ -224,7 +223,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await Promise.all([
             saveItem(SECURE_KEYS.accessToken, null),
             saveItem(SECURE_KEYS.refreshToken, null),
-            saveItem(SECURE_KEYS.username, null),
         ]);
         setState((s) => ({ ...s, accessToken: null, refreshToken: null, username: null }));
     }, []);
