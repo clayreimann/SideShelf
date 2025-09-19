@@ -1,0 +1,127 @@
+---
+description: When making changes that relate to marshalling items into our out of the database
+alwaysApply: false
+---
+
+## Guidelines
+
+- All code for marshalling responses and inserting rows should run through helper code.
+- Helper code should be imported from @/db/helpers.
+- Helpers for different types should be in separate files.
+
+## Examples
+
+### Suggested directory layout
+
+```text
+src/db/helpers/
+  index.ts            // barrel that re-exports per-entity helpers
+  users.ts            // user-specific marshal/insert/update helpers
+  libraries.ts        // library-specific helpers
+  books.ts            // book-specific helpers
+  // add one file per entity/table as needed
+```
+
+### Example: users helper
+
+```ts
+// src/db/helpers/users.ts
+import { db } from '@/db/client';
+import { users } from '@/db/schema/users';
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
+import { eq } from 'drizzle-orm';
+
+// Shape returned by the API for a user (trim to what you actually receive)
+export type ApiUser = {
+  id: string;
+  username: string;
+  lastSeen: number | null;
+};
+
+// Drizzle inferred types
+export type NewUserRow = typeof users.$inferInsert;
+export type UserRow = typeof users.$inferSelect;
+
+// Pure function: API -> DB row
+export function marshalUserFromApi(apiUser: ApiUser): NewUserRow {
+  return {
+    id: apiUser.id,
+    username: apiUser.username,
+    lastSeen: apiUser.lastSeen,
+  };
+}
+
+// Write helper kept here, not in components/providers
+export async function upsertUser(user: NewUserRow): Promise<UserRow> {
+  const existing = await db.query.users.findFirst({
+    where: (u, { eq }) => eq(u.id, user.id),
+  });
+
+  if (existing) {
+    const [updated] = await db
+      .update(users)
+      .set(user)
+      .where(eq(users.id, user.id))
+      .returning();
+    return updated;
+  }
+
+  const [inserted] = await db.insert(users).values(user).returning();
+  return inserted;
+}
+
+// Optional: transaction-aware variant for batch operations
+export async function upsertUserTx(
+  tx: typeof db,
+  user: NewUserRow,
+): Promise<UserRow> {
+  const existing = await tx.query.users.findFirst({
+    where: (u, { eq }) => eq(u.id, user.id),
+  });
+  if (existing) {
+    const [updated] = await tx
+      .update(users)
+      .set(user)
+      .where(eq(users.id, user.id))
+      .returning();
+    return updated;
+  }
+  const [inserted] = await tx.insert(users).values(user).returning();
+  return inserted;
+}
+```
+
+### Example: barrel export
+
+```ts
+// src/db/helpers/index.ts
+export * as userHelpers from './users';
+export * as libraryHelpers from './libraries';
+export * as bookHelpers from './books';
+```
+
+### Example: consuming helpers in a provider
+
+```ts
+// inside a provider or screen (e.g., AuthProvider)
+import { userHelpers } from '@/db/helpers';
+
+async function handleLogin() {
+  const me = await api.getMe();
+  const row = userHelpers.marshalUserFromApi(me);
+  await userHelpers.upsertUser(row);
+}
+```
+
+### Do and Don’t
+
+- Do: call `marshal...` and `insert/upsert...` helpers from providers/components.
+- Do: keep all DB writes and marshalling logic in `src/db/helpers/*`.
+- Do: create one helper file per entity/table for clarity and separation.
+- Don’t: write inline `db.insert(...)` or `db.update(...)` in UI code.
+- Don’t: mix marshalling logic with rendering or navigation logic.
+
+### Testing helpers
+
+- Prefer testing the pure `marshal...` functions with simple input/output cases.
+- For write helpers, test via a transaction or an isolated test database and assert rows.

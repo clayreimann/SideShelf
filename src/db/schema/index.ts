@@ -1,5 +1,4 @@
-export * from './libraries';
-export * from './libraryItems';
-export * from './mediaProgress';
-export * from './userLibraries';
-export * from './users';
+export * as libraries from './libraries';
+export * as libraryItems from './libraryItems';
+export * as mediaProgress from './mediaProgress';
+export * as users from './users';

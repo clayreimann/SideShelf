@@ -8,12 +8,14 @@ type DbContextValue = {
   initialized: boolean;
   error: Error | null;
   db: typeof db;
+  resetDatabase: () => void;
 };
 
 const DbContext = createContext<DbContextValue | undefined>(undefined);
 
 export function DbProvider({ children }: { children: React.ReactNode }) {
   const { success, error } = useMigrations(db, migrations);
+  // @ts-ignore (ignore private property `nativeDatabase`)
   useDrizzleStudio(db.$client);
 
   console.log('db migrate - success', success);
@@ -22,6 +24,12 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     initialized: !!success && !error,
     error: error ?? null,
     db: db,
+    resetDatabase: () => {
+      db.$client.execSync('DELETE FROM users');
+      db.$client.execSync('DELETE FROM libraries');
+      db.$client.execSync('DELETE FROM library_items');
+      db.$client.execSync('DELETE FROM media_progress');
+    },
   }), [success, error]);
 
   return <DbContext.Provider value={value}>{children}</DbContext.Provider>;

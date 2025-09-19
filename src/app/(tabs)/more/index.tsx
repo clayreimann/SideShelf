@@ -10,7 +10,7 @@ export default function MoreScreen() {
 
   return (
     <>
-      <View style={[styles.flatListContainer, { gap: 16 }]}>
+      <View style={[styles.flatListContainer]}>
         <Link href="/more/collections" asChild>
           <Pressable style={styles.listItem}><Text style={styles.text}>Collections</Text></Pressable>
         </Link>

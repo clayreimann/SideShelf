@@ -1,4 +1,5 @@
 import { useThemedStyles } from '@/lib/theme';
+import { useDb } from '@/providers/DbProvider';
 import { useLibrary } from '@/providers/LibraryProvider';
 import { Stack } from 'expo-router';
 import { useMemo } from 'react';
@@ -13,6 +14,7 @@ type ActionItem = {
 export default function AdvancedScreen() {
   const { styles, isDark } = useThemedStyles();
   const { refetchItems, selectedLibrary, refetchLibraries, libraries } = useLibrary();
+  const { resetDatabase } = useDb();
   const data = useMemo(() => {
     return [
       {
@@ -34,7 +36,13 @@ export default function AdvancedScreen() {
       label: 'Refetch library items',
       onPress: refetchItems,
       disabled: !selectedLibrary,
-    }];
+    },
+    {
+      label: 'Reset database',
+      onPress: resetDatabase,
+      disabled: false,
+    },
+  ];
   }, [selectedLibrary, libraries]);
 
   return (

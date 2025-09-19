@@ -1,6 +1,7 @@
 type ApiConfig = {
   getBaseUrl: () => string | null;
   getAccessToken: () => string | null;
+  refreshAccessToken: () => Promise<boolean>;
 };
 
 let config: ApiConfig | null = null;
@@ -40,13 +41,20 @@ export async function apiFetch(input: string, init?: ApiFetchOptions): Promise<R
   }
 
   const method = (rest.method || 'GET').toUpperCase();
-  console.log(`[apiFetch] ${method} ${url}`);
+  console.log(`[apiFetch] ${method} ${url} ${JSON.stringify({...mergedHeaders, 'Authorization': (mergedHeaders as Record<string, string>)?.Authorization ? '<redacted>' : 'none'})}`);
+
   const res = await fetch(url, { ...rest, headers: mergedHeaders });
   console.log(`[apiFetch] <- ${res.status} ${res.statusText} for ${method} ${url}`);
+  if (res.status === 401) {
+    const success = await config?.refreshAccessToken();
+    if (success) {
+      return await apiFetch(input, { ...init, headers: mergedHeaders });
+    }
+  }
   if (!res.ok) {
     try {
       const text = await res.clone().text();
-      console.log(`[apiFetch] Response body (truncated):`, text.slice(0, 500));
+      console.log(`[apiFetch] Response body:\n${text}`);
     } catch {}
   }
   return res;

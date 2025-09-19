@@ -6,7 +6,10 @@ let sqliteDb: SQLite.SQLiteDatabase | null = null;
 export function getSQLiteDb(): SQLite.SQLiteDatabase {
   if (!sqliteDb) {
     console.log('Opening SQLite database');
-    sqliteDb = SQLite.openDatabaseSync('app.sqlite');
+    // sqliteDb = SQLite.openDatabaseSync('app.sqlite');
+    // sqliteDb = SQLite.openDatabaseSync('app.db');
+    // sqliteDb = SQLite.openDatabaseSync('abs.db');
+    sqliteDb = SQLite.openDatabaseSync('abs.sqlite');
   }
   return sqliteDb;
 }
