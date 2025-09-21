@@ -17,6 +17,7 @@ function createThemedStyles(isDark: boolean) {
 
   const tabs = {
     backgroundColor: colors.background,
+    opacity: isDark ? 0.8 : 1,
     iconColor: colors.textPrimary,
     labelColor: colors.textPrimary,
     badgeTextColor: colors.textPrimary,
@@ -30,6 +31,7 @@ function createThemedStyles(isDark: boolean) {
     styles: StyleSheet.create({
       flatListContainer: {
         backgroundColor: colors.background,
+        width: '100%',
       },
       container: {
         flex: 1,
@@ -45,6 +47,7 @@ function createThemedStyles(isDark: boolean) {
         paddingVertical: 10,
         borderBottomWidth: 1,
         borderBottomColor: colors.separator,
+        width: '100%',
       },
       link: {
         color: colors.link,

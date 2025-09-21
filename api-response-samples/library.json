@@ -1,0 +1,41 @@
+{
+  "id": "56abca32-5790-4459-8435-04b0ad991f59",
+  "name": "Jensen-Reimann Books",
+  "folders": [
+    {
+      "id": "c129ec53-8d3a-440c-a6f3-f239e6bca049",
+      "fullPath": "/mnt/audiobooks/Books",
+      "libraryId": "56abca32-5790-4459-8435-04b0ad991f59",
+      "addedAt": 1754918606706
+    }
+  ],
+  "displayOrder": 1,
+  "icon": "books-2",
+  "mediaType": "book",
+  "provider": "audible",
+  "settings": {
+    "coverAspectRatio": 1,
+    "disableWatcher": false,
+    "autoScanCronExpression": "*/15 * * * *",
+    "skipMatchingMediaWithAsin": false,
+    "skipMatchingMediaWithIsbn": false,
+    "audiobooksOnly": false,
+    "epubsAllowScriptedContent": false,
+    "hideSingleBookSeries": false,
+    "onlyShowLaterBooksInContinueSeries": false,
+    "metadataPrecedence": [
+      "folderStructure",
+      "audioMetatags",
+      "nfoFile",
+      "txtFiles",
+      "opfFile",
+      "absMetadata"
+    ],
+    "markAsFinishedPercentComplete": null,
+    "markAsFinishedTimeRemaining": 10
+  },
+  "lastScan": 1758481201305,
+  "lastScanVersion": "2.28.0",
+  "createdAt": 1754918606694,
+  "lastUpdate": 1758481201305
+}

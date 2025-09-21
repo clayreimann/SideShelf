@@ -1,0 +1,16 @@
+---
+description: Define the Audiobookshelf API reference
+alwaysApply: false
+---
+
+## API Reference
+
+When I ask you to refer to the API, consult the documentation at https://api.audiobookshelf.org/
+
+I might use the following terms to ask you to refer to the API:
+
+- the API
+- abs documentation
+- audiobookshelf API
+- abs docs
+- abs API

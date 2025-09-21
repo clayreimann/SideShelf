@@ -1,0 +1,25 @@
+{
+  "id": "41aed371-af7a-48e4-bdfc-5f5d0d2d0b00",
+  "name": "Dungeon Crawler Carl",
+  "nameIgnorePrefix": "Dungeon Crawler Carl",
+  "description": null,
+  "addedAt": 1755953580733,
+  "updatedAt": 1755953580733,
+  "libraryId": "56abca32-5790-4459-8435-04b0ad991f59",
+  "progress": {
+    "libraryItemIds": [
+      "576ebc61-ec25-49cf-b9ee-a9de1f66bc60",
+      "afb5e56d-eeeb-46a4-b025-7e2bd7427dd1",
+      "c8cf4d9d-0637-4317-afa8-c3f5fd449e46",
+      "ed3fb74f-38f1-49b4-891c-cdf5a17ad5ec",
+      "fa697ba6-083e-466e-ae3c-17cbb7a795c5",
+      "fb9b249e-90b3-4966-9593-788b1c6b7f93",
+      "65d62235-4255-442c-ab36-180acb7dc621"
+    ],
+    "libraryItemIdsFinished": [
+      "576ebc61-ec25-49cf-b9ee-a9de1f66bc60",
+      "afb5e56d-eeeb-46a4-b025-7e2bd7427dd1"
+    ],
+    "isFinished": false
+  }
+}

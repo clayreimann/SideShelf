@@ -15,6 +15,20 @@
       "when": 1758290062988,
       "tag": "0001_short_wild_child",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1758463564713,
+      "tag": "0002_dear_charles_xavier",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1758463601307,
+      "tag": "0003_silent_praxagora",
+      "breakpoints": true
     }
   ]
 }

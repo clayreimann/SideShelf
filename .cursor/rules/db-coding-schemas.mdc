@@ -1,10 +1,7 @@
 ---
-description: Audiobookshelf schema descriptions and api reference
+description: Audiobookshelf schema descriptions
 alwaysApply: false
 ---
-
-## API Reference
-When I ask you to refer to the API, consult the documentation at https://api.audiobookshelf.org/
 
 ## Schemas
 

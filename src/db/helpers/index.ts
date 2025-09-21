@@ -1,4 +1,9 @@
+export * as filterDataHelpers from './filterData';
 export * as libraryHelpers from './libraries';
+export * as libraryItemHelpers from './libraryItems';
+export * as mediaJoinsHelpers from './mediaJoins';
+export * as mediaMetadataHelpers from './mediaMetadata';
 export * as mediaProgressHelpers from './mediaProgress';
+export * as statisticsHelpers from './statistics';
 export * as authHelpers from './tokens';
 export * as userHelpers from './users';

@@ -1,0 +1,228 @@
+import { db } from '@/db/client';
+import { libraryItems } from '@/db/schema/libraryItems';
+import { mediaMetadata } from '@/db/schema/mediaMetadata';
+import { LibraryItem, LibraryItemsResponse } from '@/lib/api/types';
+import { eq } from 'drizzle-orm';
+
+export type NewLibraryItemRow = typeof libraryItems.$inferInsert;
+export type LibraryItemRow = typeof libraryItems.$inferSelect;
+
+// Marshal a single LibraryItem from API to database row
+export function marshalLibraryItemFromApi(item: LibraryItem): NewLibraryItemRow {
+  return {
+    id: item.id,
+    libraryId: item.libraryId,
+    ino: parseInt(item.ino) || null,
+    folderId: item.folderId || null,
+    path: item.path || null,
+    relPath: item.relPath || null,
+    isFile: item.isFile || false,
+    mtimeMs: item.mtimeMs || null,
+    ctimeMs: item.ctimeMs || null,
+    birthtimeMs: item.birthtimeMs || null,
+    addedAt: item.addedAt || null,
+    updatedAt: item.updatedAt || null,
+    lastScan: item.lastScan || null,
+    scanVersion: item.scanVersion ? parseInt(item.scanVersion) : null,
+    isMissing: item.isMissing || false,
+    isInvalid: item.isInvalid || false,
+    mediaType: item.mediaType || null,
+  };
+}
+
+// Marshal library items from API response
+export function marshalLibraryItemsFromResponse(response: LibraryItemsResponse): NewLibraryItemRow[] {
+  return response.results.map(marshalLibraryItemFromApi);
+}
+
+// Upsert a single library item
+export async function upsertLibraryItem(row: NewLibraryItemRow): Promise<LibraryItemRow> {
+  const existing = await db
+    .select()
+    .from(libraryItems)
+    .where(eq(libraryItems.id, row.id))
+    .limit(1);
+
+  if (existing.length > 0) {
+    const [updated] = await db
+      .update(libraryItems)
+      .set(row)
+      .where(eq(libraryItems.id, row.id))
+      .returning();
+    return updated;
+  }
+
+  const [inserted] = await db.insert(libraryItems).values(row).returning();
+  return inserted;
+}
+
+// Upsert multiple library items
+export async function upsertLibraryItems(rows: NewLibraryItemRow[]): Promise<void> {
+  if (!rows?.length) return;
+
+  for (const row of rows) {
+    await upsertLibraryItem(row);
+  }
+}
+
+// Transaction-aware variant for batch operations
+export async function upsertLibraryItemTx(
+  tx: typeof db,
+  row: NewLibraryItemRow,
+): Promise<LibraryItemRow> {
+  const existing = await tx
+    .select()
+    .from(libraryItems)
+    .where(eq(libraryItems.id, row.id))
+    .limit(1);
+
+  if (existing.length > 0) {
+    const [updated] = await tx
+      .update(libraryItems)
+      .set(row)
+      .where(eq(libraryItems.id, row.id))
+      .returning();
+    return updated;
+  }
+
+  const [inserted] = await tx.insert(libraryItems).values(row).returning();
+  return inserted;
+}
+
+// Get all library items from database
+export async function getAllLibraryItems(): Promise<LibraryItemRow[]> {
+  return await db
+    .select()
+    .from(libraryItems)
+    .orderBy(libraryItems.addedAt);
+}
+
+// Get library items by library ID
+export async function getLibraryItemsByLibraryId(libraryId: string): Promise<LibraryItemRow[]> {
+  return await db
+    .select()
+    .from(libraryItems)
+    .where(eq(libraryItems.libraryId, libraryId))
+    .orderBy(libraryItems.addedAt);
+}
+
+// Get a single library item by ID
+export async function getLibraryItemById(id: string): Promise<LibraryItemRow | null> {
+  const result = await db
+    .select()
+    .from(libraryItems)
+    .where(eq(libraryItems.id, id))
+    .limit(1);
+
+  return result[0] || null;
+}
+
+// Delete library items by library ID (useful when library is deleted)
+export async function deleteLibraryItemsByLibraryId(libraryId: string): Promise<void> {
+  await db.delete(libraryItems).where(eq(libraryItems.libraryId, libraryId));
+}
+
+// Delete all library items (useful for refresh scenarios)
+export async function deleteAllLibraryItems(): Promise<void> {
+  await db.delete(libraryItems);
+}
+
+// Type for library item list display with full metadata
+export type LibraryItemListRow = {
+  id: string;
+  libraryId: string;
+  mediaType: string | null;
+  addedAt: number | null;
+  updatedAt: number | null;
+  isMissing: boolean | null;
+  isInvalid: boolean | null;
+  // Media metadata fields
+  title: string | null;
+  subtitle: string | null;
+  author: string | null;
+  authorName: string | null;
+  authorNameLF: string | null;
+  narrator: string | null;
+  narratorName: string | null;
+  releaseDate: string | null;
+  publishedDate: string | null;
+  publishedYear: string | null;
+  duration: number | null;
+  coverUri: string | null;
+  description: string | null;
+  language: string | null;
+  explicit: boolean | null;
+  seriesName: string | null;
+};
+
+// Get library items with full metadata for list display
+export async function getLibraryItemsForList(libraryId?: string): Promise<LibraryItemListRow[]> {
+  const baseQuery = db
+    .select({
+      id: libraryItems.id,
+      libraryId: libraryItems.libraryId,
+      mediaType: libraryItems.mediaType,
+      addedAt: libraryItems.addedAt,
+      updatedAt: libraryItems.updatedAt,
+      isMissing: libraryItems.isMissing,
+      isInvalid: libraryItems.isInvalid,
+      // Media metadata fields
+      title: mediaMetadata.title,
+      subtitle: mediaMetadata.subtitle,
+      author: mediaMetadata.author, // For podcasts
+      authorName: mediaMetadata.authorName, // For books
+      authorNameLF: mediaMetadata.authorNameLF, // For sorting by author last name first
+      narrator: mediaMetadata.narratorName,
+      narratorName: mediaMetadata.narratorName,
+      releaseDate: mediaMetadata.publishedDate,
+      publishedDate: mediaMetadata.publishedDate,
+      publishedYear: mediaMetadata.publishedYear, // For sorting by published year
+      duration: mediaMetadata.duration,
+      coverUri: mediaMetadata.imageUrl, // For podcasts, books would need cover path logic
+      description: mediaMetadata.description,
+      language: mediaMetadata.language,
+      explicit: mediaMetadata.explicit,
+      seriesName: mediaMetadata.seriesName,
+    })
+    .from(libraryItems)
+    .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId));
+
+  if (libraryId) {
+    return await baseQuery
+      .where(eq(libraryItems.libraryId, libraryId))
+      .orderBy(libraryItems.addedAt);
+  }
+
+  return await baseQuery.orderBy(libraryItems.addedAt);
+}
+
+/**
+ * Transform database library items to display format for UI components
+ */
+export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof getLibraryItemsForList>>): Array<{
+  id: string;
+  mediaType: string | null;
+  title: string;
+  author: string;
+  authorNameLF: string | null;
+  narrator: string | null;
+  releaseDate: string | null;
+  publishedYear: string | null;
+  addedAt: number | null;
+  duration: number;
+  coverUri: string;
+}> {
+  return dbItems.map(item => ({
+    id: item.id,
+    mediaType: item.mediaType,
+    title: item.title || 'Unknown Title',
+    author: item.author || item.authorName || 'Unknown Author',
+    authorNameLF: item.authorNameLF,
+    narrator: item.narrator || item.narratorName || null,
+    releaseDate: item.releaseDate || item.publishedDate || null,
+    publishedYear: item.publishedYear,
+    addedAt: item.addedAt,
+    duration: item.duration || 0,
+    coverUri: item.coverUri || '',
+  }));
+}

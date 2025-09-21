@@ -1,0 +1,778 @@
+{
+  "id": "576ebc61-ec25-49cf-b9ee-a9de1f66bc60",
+  "ino": "77",
+  "oldLibraryItemId": null,
+  "libraryId": "56abca32-5790-4459-8435-04b0ad991f59",
+  "folderId": "c129ec53-8d3a-440c-a6f3-f239e6bca049",
+  "path": "/mnt/audiobooks/Books/Dungeon Crawler Carl [B08V8B2CGV]",
+  "relPath": "Dungeon Crawler Carl [B08V8B2CGV]",
+  "isFile": false,
+  "mtimeMs": 1642870291915,
+  "ctimeMs": 1754918834059,
+  "birthtimeMs": 0,
+  "addedAt": 1755953587260,
+  "updatedAt": 1756523072214,
+  "lastScan": 1755953587068,
+  "scanVersion": "2.28.0",
+  "isMissing": false,
+  "isInvalid": false,
+  "mediaType": "book",
+  "media": {
+    "id": "d7600517-5834-4b1f-8f2c-2ab36e707373",
+    "libraryItemId": "576ebc61-ec25-49cf-b9ee-a9de1f66bc60",
+    "metadata": {
+      "title": "Dungeon Crawler Carl",
+      "subtitle": "A LitRPG/Gamelit Adventure",
+      "authors": [
+        {
+          "id": "e26339ca-f45a-4caf-998b-be69ef8f64b8",
+          "name": "Matt Dinniman"
+        }
+      ],
+      "narrators": [
+        "Jeff Hays"
+      ],
+      "series": [
+        {
+          "id": "41aed371-af7a-48e4-bdfc-5f5d0d2d0b00",
+          "name": "Dungeon Crawler Carl",
+          "sequence": "1"
+        }
+      ],
+      "genres": [
+        "Literature & Fiction",
+        "Mystery, Thriller & Suspense",
+        "Science Fiction & Fantasy"
+      ],
+      "publishedYear": "2021",
+      "publishedDate": null,
+      "publisher": "Audible Studios",
+      "description": "<p><b>The apocalypse will be televised!</b></p> <p>A man. His ex-girlfriend's cat. A sadistic game show unlike anything in the universe: a dungeon crawl where survival depends on killing your prey in the most entertaining way possible. </p> <p>In a flash, every human-erected construction on Earth - from Buckingham Palace to the tiniest of sheds - collapses in a heap, sinking into the ground.</p> <p>The buildings and all the people inside have all been atomized and transformed into the dungeon: an 18-level labyrinth filled with traps, monsters, and loot. A dungeon so enormous, it circles the entire globe.</p> <p>Only a few dare venture inside. But once you're in, you can't get out. And what's worse, each level has a time limit. You have but days to find a staircase to the next level down, or it's game over. In this game, it's not about your strength or your dexterity. It's about your followers, your views. Your clout. It's about building an audience and killing those goblins with style. </p> <p>You can't just survive here. You gotta survive big.</p> <p>You gotta fight with vigor, with excitement. You gotta make them stand up and cheer. And if you do have that \"it\" factor, you may just find yourself with a following. That's the only way to truly survive in this game - with the help of the loot boxes dropped upon you by the generous benefactors watching from across the galaxy.</p> <p>They call it <i>Dungeon Crawler World</i>. But for Carl, it's anything but a game.</p>",
+      "isbn": null,
+      "asin": "B08V8B2CGV",
+      "language": "English",
+      "explicit": false,
+      "abridged": false
+    },
+    "coverPath": "/usr/share/audiobookshelf/metadata/items/576ebc61-ec25-49cf-b9ee-a9de1f66bc60/cover.jpg",
+    "tags": [
+      "Genre Fiction",
+      "Movie",
+      "TV & Video Game Tie-Ins",
+      "Thriller & Suspense",
+      "Suspense",
+      "Fantasy",
+      "Paranormal & Urban",
+      "Contemporary"
+    ],
+    "audioFiles": [
+      {
+        "index": 1,
+        "ino": "81",
+        "metadata": {
+          "filename": "Dungeon Crawler Carl: A LitRPG∕Gamelit Adventure [B08V8B2CGV].m4b",
+          "ext": ".m4b",
+          "path": "/mnt/audiobooks/Books/Dungeon Crawler Carl [B08V8B2CGV]/Dungeon Crawler Carl: A LitRPG∕Gamelit Adventure [B08V8B2CGV].m4b",
+          "relPath": "Dungeon Crawler Carl: A LitRPG∕Gamelit Adventure [B08V8B2CGV].m4b",
+          "size": 773647876,
+          "mtimeMs": 1642870291915,
+          "ctimeMs": 1754918834059,
+          "birthtimeMs": 0
+        },
+        "addedAt": 1755953587068,
+        "updatedAt": 1755953587068,
+        "trackNumFromMeta": null,
+        "discNumFromMeta": null,
+        "trackNumFromFilename": 8,
+        "discNumFromFilename": null,
+        "manuallyVerified": false,
+        "exclude": false,
+        "error": null,
+        "format": "QuickTime / MOV",
+        "duration": 48684.28,
+        "bitRate": 125588,
+        "language": "eng",
+        "codec": "aac",
+        "timeBase": "1/44100",
+        "channels": 2,
+        "channelLayout": "stereo",
+        "chapters": [
+          {
+            "start": 0,
+            "end": 13.396984,
+            "title": "Opening Credits",
+            "id": 0
+          },
+          {
+            "start": 13.396984,
+            "end": 1254.200975,
+            "title": "Chapter 1",
+            "id": 1
+          },
+          {
+            "start": 1254.200975,
+            "end": 2662.722971,
+            "title": "Part I - Chapter 2",
+            "id": 2
+          },
+          {
+            "start": 2662.722971,
+            "end": 3752.388957,
+            "title": "Chapter 3",
+            "id": 3
+          },
+          {
+            "start": 3752.388957,
+            "end": 5482.97195,
+            "title": "Chapter 4",
+            "id": 4
+          },
+          {
+            "start": 5482.97195,
+            "end": 6396.676939,
+            "title": "Chapter 5",
+            "id": 5
+          },
+          {
+            "start": 6396.676939,
+            "end": 6913.111927,
+            "title": "Chapter 6",
+            "id": 6
+          },
+          {
+            "start": 6913.111927,
+            "end": 7535.405918,
+            "title": "Chapter 7",
+            "id": 7
+          },
+          {
+            "start": 7535.405918,
+            "end": 8999.725918,
+            "title": "Chapter 8",
+            "id": 8
+          },
+          {
+            "start": 8999.725918,
+            "end": 9870.519909,
+            "title": "Chapter 9",
+            "id": 9
+          },
+          {
+            "start": 9870.519909,
+            "end": 10647.481905,
+            "title": "Chapter 10",
+            "id": 10
+          },
+          {
+            "start": 10647.481905,
+            "end": 11622.4639,
+            "title": "Chapter 11",
+            "id": 11
+          },
+          {
+            "start": 11622.4639,
+            "end": 12306.429887,
+            "title": "Chapter 12",
+            "id": 12
+          },
+          {
+            "start": 12306.429887,
+            "end": 12764.419887,
+            "title": "Chapter 13",
+            "id": 13
+          },
+          {
+            "start": 12764.419887,
+            "end": 13572.798866,
+            "title": "Chapter 14",
+            "id": 14
+          },
+          {
+            "start": 13572.798866,
+            "end": 14701.84585,
+            "title": "Chapter 15",
+            "id": 15
+          },
+          {
+            "start": 14701.84585,
+            "end": 15185.888844,
+            "title": "Chapter 16",
+            "id": 16
+          },
+          {
+            "start": 15185.888844,
+            "end": 15590.05483,
+            "title": "Chapter 17",
+            "id": 17
+          },
+          {
+            "start": 15590.05483,
+            "end": 15873.685828,
+            "title": "Chapter 18",
+            "id": 18
+          },
+          {
+            "start": 15873.685828,
+            "end": 16798.744807,
+            "title": "Chapter 19",
+            "id": 19
+          },
+          {
+            "start": 16798.744807,
+            "end": 18479.590794,
+            "title": "Chapter 20",
+            "id": 20
+          },
+          {
+            "start": 18479.590794,
+            "end": 19084.609773,
+            "title": "Chapter 21",
+            "id": 21
+          },
+          {
+            "start": 19084.609773,
+            "end": 20407.56576,
+            "title": "Chapter 22",
+            "id": 22
+          },
+          {
+            "start": 20407.56576,
+            "end": 20951.144739,
+            "title": "Chapter 23",
+            "id": 23
+          },
+          {
+            "start": 20951.144739,
+            "end": 22055.647732,
+            "title": "Chapter 24",
+            "id": 24
+          },
+          {
+            "start": 22055.647732,
+            "end": 23086.009728,
+            "title": "Chapter 25",
+            "id": 25
+          },
+          {
+            "start": 23086.009728,
+            "end": 24770.175714,
+            "title": "Chapter 26",
+            "id": 26
+          },
+          {
+            "start": 24770.175714,
+            "end": 25661.310703,
+            "title": "Chapter 27",
+            "id": 27
+          },
+          {
+            "start": 25661.310703,
+            "end": 26963.833696,
+            "title": "Part II - Chapter 28",
+            "id": 28
+          },
+          {
+            "start": 26963.833696,
+            "end": 27692.289683,
+            "title": "Chapter 29",
+            "id": 29
+          },
+          {
+            "start": 27692.289683,
+            "end": 29140.006667,
+            "title": "Chapter 30",
+            "id": 30
+          },
+          {
+            "start": 29140.006667,
+            "end": 29799.963651,
+            "title": "Chapter 31",
+            "id": 31
+          },
+          {
+            "start": 29799.963651,
+            "end": 31131.975646,
+            "title": "Chapter 32",
+            "id": 32
+          },
+          {
+            "start": 31131.975646,
+            "end": 32187.461633,
+            "title": "Chapter 33",
+            "id": 33
+          },
+          {
+            "start": 32187.461633,
+            "end": 32900.801633,
+            "title": "Chapter 34",
+            "id": 34
+          },
+          {
+            "start": 32900.801633,
+            "end": 34201.815624,
+            "title": "Chapter 35",
+            "id": 35
+          },
+          {
+            "start": 34201.815624,
+            "end": 35223.307619,
+            "title": "Chapter 36",
+            "id": 36
+          },
+          {
+            "start": 35223.307619,
+            "end": 36198.800612,
+            "title": "Chapter 37",
+            "id": 37
+          },
+          {
+            "start": 36198.800612,
+            "end": 37043.263605,
+            "title": "Chapter 38",
+            "id": 38
+          },
+          {
+            "start": 37043.263605,
+            "end": 37936.488594,
+            "title": "Chapter 39",
+            "id": 39
+          },
+          {
+            "start": 37936.488594,
+            "end": 39426.14059,
+            "title": "Chapter 40",
+            "id": 40
+          },
+          {
+            "start": 39426.14059,
+            "end": 40479.95458,
+            "title": "Chapter 41",
+            "id": 41
+          },
+          {
+            "start": 40479.95458,
+            "end": 42006.712562,
+            "title": "Chapter 42",
+            "id": 42
+          },
+          {
+            "start": 42006.712562,
+            "end": 43380.427551,
+            "title": "Chapter 43",
+            "id": 43
+          },
+          {
+            "start": 43380.427551,
+            "end": 44698.136531,
+            "title": "Chapter 44",
+            "id": 44
+          },
+          {
+            "start": 44698.136531,
+            "end": 45674.46551,
+            "title": "Chapter 45",
+            "id": 45
+          },
+          {
+            "start": 45674.46551,
+            "end": 46272.471497,
+            "title": "Chapter 46",
+            "id": 46
+          },
+          {
+            "start": 46272.471497,
+            "end": 47897.078481,
+            "title": "Chapter 47",
+            "id": 47
+          },
+          {
+            "start": 47897.078481,
+            "end": 48554.759478,
+            "title": "Epilogue",
+            "id": 48
+          },
+          {
+            "start": 48554.759478,
+            "end": 48684.234512,
+            "title": "End Credits",
+            "id": 49
+          }
+        ],
+        "embeddedCoverArt": "mjpeg",
+        "metaTags": {
+          "tagAlbum": "Dungeon Crawler Carl",
+          "tagArtist": "Matt Dinniman",
+          "tagGenre": "Movie, TV & Video Game Tie-Ins, Contemporary, Suspense",
+          "tagTitle": "Dungeon Crawler Carl",
+          "tagSeries": "Dungeon Crawler Carl",
+          "tagSeriesPart": "1",
+          "tagSubtitle": "A LitRPG/Gamelit Adventure",
+          "tagAlbumArtist": "Matt Dinniman",
+          "tagDate": "2021",
+          "tagComposer": "Jeff Hays",
+          "tagPublisher": "Audible Studios",
+          "tagComment": "A man. His ex-girlfriend's cat. A sadistic game show unlike anything in the universe: a dungeon crawl where survival depends on killing your prey in the most entertaining way possible. In a flash, every human-erected construction on Earth - from Buckingham Palace to the tiniest of sheds - collapses in a heap, sinking into the ground. The buildings and all the people inside have all been atomized and transformed into the dungeon: an 18-level labyrinth filled with traps, monsters, and loot.",
+          "tagLanguage": "English",
+          "tagASIN": "B08V8B2CGV"
+        },
+        "mimeType": "audio/mp4"
+      }
+    ],
+    "chapters": [
+      {
+        "start": 0,
+        "end": 13.396984,
+        "title": "Opening Credits",
+        "id": 0
+      },
+      {
+        "start": 13.396984,
+        "end": 1254.200975,
+        "title": "Chapter 1",
+        "id": 1
+      },
+      {
+        "start": 1254.200975,
+        "end": 2662.722971,
+        "title": "Part I - Chapter 2",
+        "id": 2
+      },
+      {
+        "start": 2662.722971,
+        "end": 3752.388957,
+        "title": "Chapter 3",
+        "id": 3
+      },
+      {
+        "start": 3752.388957,
+        "end": 5482.97195,
+        "title": "Chapter 4",
+        "id": 4
+      },
+      {
+        "start": 5482.97195,
+        "end": 6396.676939,
+        "title": "Chapter 5",
+        "id": 5
+      },
+      {
+        "start": 6396.676939,
+        "end": 6913.111927,
+        "title": "Chapter 6",
+        "id": 6
+      },
+      {
+        "start": 6913.111927,
+        "end": 7535.405918,
+        "title": "Chapter 7",
+        "id": 7
+      },
+      {
+        "start": 7535.405918,
+        "end": 8999.725918,
+        "title": "Chapter 8",
+        "id": 8
+      },
+      {
+        "start": 8999.725918,
+        "end": 9870.519909,
+        "title": "Chapter 9",
+        "id": 9
+      },
+      {
+        "start": 9870.519909,
+        "end": 10647.481905,
+        "title": "Chapter 10",
+        "id": 10
+      },
+      {
+        "start": 10647.481905,
+        "end": 11622.4639,
+        "title": "Chapter 11",
+        "id": 11
+      },
+      {
+        "start": 11622.4639,
+        "end": 12306.429887,
+        "title": "Chapter 12",
+        "id": 12
+      },
+      {
+        "start": 12306.429887,
+        "end": 12764.419887,
+        "title": "Chapter 13",
+        "id": 13
+      },
+      {
+        "start": 12764.419887,
+        "end": 13572.798866,
+        "title": "Chapter 14",
+        "id": 14
+      },
+      {
+        "start": 13572.798866,
+        "end": 14701.84585,
+        "title": "Chapter 15",
+        "id": 15
+      },
+      {
+        "start": 14701.84585,
+        "end": 15185.888844,
+        "title": "Chapter 16",
+        "id": 16
+      },
+      {
+        "start": 15185.888844,
+        "end": 15590.05483,
+        "title": "Chapter 17",
+        "id": 17
+      },
+      {
+        "start": 15590.05483,
+        "end": 15873.685828,
+        "title": "Chapter 18",
+        "id": 18
+      },
+      {
+        "start": 15873.685828,
+        "end": 16798.744807,
+        "title": "Chapter 19",
+        "id": 19
+      },
+      {
+        "start": 16798.744807,
+        "end": 18479.590794,
+        "title": "Chapter 20",
+        "id": 20
+      },
+      {
+        "start": 18479.590794,
+        "end": 19084.609773,
+        "title": "Chapter 21",
+        "id": 21
+      },
+      {
+        "start": 19084.609773,
+        "end": 20407.56576,
+        "title": "Chapter 22",
+        "id": 22
+      },
+      {
+        "start": 20407.56576,
+        "end": 20951.144739,
+        "title": "Chapter 23",
+        "id": 23
+      },
+      {
+        "start": 20951.144739,
+        "end": 22055.647732,
+        "title": "Chapter 24",
+        "id": 24
+      },
+      {
+        "start": 22055.647732,
+        "end": 23086.009728,
+        "title": "Chapter 25",
+        "id": 25
+      },
+      {
+        "start": 23086.009728,
+        "end": 24770.175714,
+        "title": "Chapter 26",
+        "id": 26
+      },
+      {
+        "start": 24770.175714,
+        "end": 25661.310703,
+        "title": "Chapter 27",
+        "id": 27
+      },
+      {
+        "start": 25661.310703,
+        "end": 26963.833696,
+        "title": "Part II - Chapter 28",
+        "id": 28
+      },
+      {
+        "start": 26963.833696,
+        "end": 27692.289683,
+        "title": "Chapter 29",
+        "id": 29
+      },
+      {
+        "start": 27692.289683,
+        "end": 29140.006667,
+        "title": "Chapter 30",
+        "id": 30
+      },
+      {
+        "start": 29140.006667,
+        "end": 29799.963651,
+        "title": "Chapter 31",
+        "id": 31
+      },
+      {
+        "start": 29799.963651,
+        "end": 31131.975646,
+        "title": "Chapter 32",
+        "id": 32
+      },
+      {
+        "start": 31131.975646,
+        "end": 32187.461633,
+        "title": "Chapter 33",
+        "id": 33
+      },
+      {
+        "start": 32187.461633,
+        "end": 32900.801633,
+        "title": "Chapter 34",
+        "id": 34
+      },
+      {
+        "start": 32900.801633,
+        "end": 34201.815624,
+        "title": "Chapter 35",
+        "id": 35
+      },
+      {
+        "start": 34201.815624,
+        "end": 35223.307619,
+        "title": "Chapter 36",
+        "id": 36
+      },
+      {
+        "start": 35223.307619,
+        "end": 36198.800612,
+        "title": "Chapter 37",
+        "id": 37
+      },
+      {
+        "start": 36198.800612,
+        "end": 37043.263605,
+        "title": "Chapter 38",
+        "id": 38
+      },
+      {
+        "start": 37043.263605,
+        "end": 37936.488594,
+        "title": "Chapter 39",
+        "id": 39
+      },
+      {
+        "start": 37936.488594,
+        "end": 39426.14059,
+        "title": "Chapter 40",
+        "id": 40
+      },
+      {
+        "start": 39426.14059,
+        "end": 40479.95458,
+        "title": "Chapter 41",
+        "id": 41
+      },
+      {
+        "start": 40479.95458,
+        "end": 42006.712562,
+        "title": "Chapter 42",
+        "id": 42
+      },
+      {
+        "start": 42006.712562,
+        "end": 43380.427551,
+        "title": "Chapter 43",
+        "id": 43
+      },
+      {
+        "start": 43380.427551,
+        "end": 44698.136531,
+        "title": "Chapter 44",
+        "id": 44
+      },
+      {
+        "start": 44698.136531,
+        "end": 45674.46551,
+        "title": "Chapter 45",
+        "id": 45
+      },
+      {
+        "start": 45674.46551,
+        "end": 46272.471497,
+        "title": "Chapter 46",
+        "id": 46
+      },
+      {
+        "start": 46272.471497,
+        "end": 47897.078481,
+        "title": "Chapter 47",
+        "id": 47
+      },
+      {
+        "start": 47897.078481,
+        "end": 48554.759478,
+        "title": "Epilogue",
+        "id": 48
+      },
+      {
+        "start": 48554.759478,
+        "end": 48684.234512,
+        "title": "End Credits",
+        "id": 49
+      }
+    ],
+    "ebookFile": null
+  },
+  "libraryFiles": [
+    {
+      "ino": "81",
+      "metadata": {
+        "filename": "Dungeon Crawler Carl: A LitRPG∕Gamelit Adventure [B08V8B2CGV].m4b",
+        "ext": ".m4b",
+        "path": "/mnt/audiobooks/Books/Dungeon Crawler Carl [B08V8B2CGV]/Dungeon Crawler Carl: A LitRPG∕Gamelit Adventure [B08V8B2CGV].m4b",
+        "relPath": "Dungeon Crawler Carl: A LitRPG∕Gamelit Adventure [B08V8B2CGV].m4b",
+        "size": 773647876,
+        "mtimeMs": 1642870291915,
+        "ctimeMs": 1754918834059,
+        "birthtimeMs": 0
+      },
+      "isSupplementary": null,
+      "addedAt": 1755953578977,
+      "updatedAt": 1755953578977,
+      "fileType": "audio"
+    },
+    {
+      "ino": "387",
+      "metadata": {
+        "filename": "Dungeon Crawler Carl: A LitRPG∕Gamelit Adventure [B08V8B2CGV].metadata.json",
+        "ext": ".json",
+        "path": "/mnt/audiobooks/Books/Dungeon Crawler Carl [B08V8B2CGV]/Dungeon Crawler Carl: A LitRPG∕Gamelit Adventure [B08V8B2CGV].metadata.json",
+        "relPath": "Dungeon Crawler Carl: A LitRPG∕Gamelit Adventure [B08V8B2CGV].metadata.json",
+        "size": 22629,
+        "mtimeMs": 1754830887096,
+        "ctimeMs": 1754918834059,
+        "birthtimeMs": 0
+      },
+      "isSupplementary": null,
+      "addedAt": 1755953578977,
+      "updatedAt": 1755953578977,
+      "fileType": "metadata"
+    },
+    {
+      "ino": "86",
+      "metadata": {
+        "filename": "Icon\r",
+        "ext": "",
+        "path": "/mnt/audiobooks/Books/Dungeon Crawler Carl [B08V8B2CGV]/Icon\r",
+        "relPath": "Icon\r",
+        "size": 0,
+        "mtimeMs": 1754830830753,
+        "ctimeMs": 1754918834059,
+        "birthtimeMs": 0
+      },
+      "isSupplementary": null,
+      "addedAt": 1755953578977,
+      "updatedAt": 1755953578977,
+      "fileType": "unknown"
+    }
+  ]
+}

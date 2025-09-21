@@ -15,6 +15,7 @@ type AuthState = {
 type AuthContextValue = AuthState & {
     initialized: boolean;
     isAuthenticated: boolean;
+    apiConfigured: boolean;
     setServerUrl: (url: string) => Promise<void>;
     login: (params: { serverUrl: string; username: string; password: string }) => Promise<void>;
     logout: () => Promise<void>;
@@ -69,6 +70,7 @@ async function persistTokensAndState(
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { initialized: dbInitialized } = useDb();
     const [state, setState] = useState<AuthState>({ serverUrl: null, accessToken: null, refreshToken: null, username: null });
+    const [apiConfigured, setApiConfigured] = useState(false);
     const [initialized, setInitialized] = useState(false);
 
     useEffect(() => {
@@ -80,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 getItem(SECURE_KEYS.refreshToken),
                 getItem(SECURE_KEYS.username),
             ]);
-            setState({ serverUrl, accessToken, refreshToken, username });
+            setState(s => ({ ...s, serverUrl, accessToken, refreshToken, username }));
             setInitialized(true);
         })();
     }, [dbInitialized]);
@@ -90,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             getBaseUrl: () => state.serverUrl,
             getAccessToken: () => state.accessToken,
             refreshAccessToken: async () => {
+                setApiConfigured(false);
                 console.log(`[AuthProvider] Refreshing access token ${state.serverUrl} ${state.refreshToken ? 'has refresh token' : 'no refresh token'}`);
                 if (!state.serverUrl || !state.refreshToken) return false;
                 const response = await fetch(`${state.serverUrl}/auth/refresh`, {
@@ -112,9 +115,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return true;
             }
         });
+        // Only set apiConfigured to true when we have both serverUrl and accessToken
+        setApiConfigured(!!state.serverUrl && !!state.accessToken);
     }, [state.serverUrl, state.accessToken]);
 
-    const isAuthenticated = !!state.accessToken && !!state.serverUrl;
+    const isAuthenticated = useMemo(() => !!state.accessToken && !!state.serverUrl, [state.accessToken, state.serverUrl]);
 
     const setServerUrl = useCallback(async (url: string) => {
         const normalized = url.trim().replace(/\/$/, '');
@@ -162,10 +167,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ...state,
         initialized,
         isAuthenticated,
+        apiConfigured,
         setServerUrl,
         login,
         logout,
-    }), [state, initialized, isAuthenticated, setServerUrl, login, logout]);
+    }), [state, initialized, isAuthenticated, apiConfigured, setServerUrl, login, logout]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

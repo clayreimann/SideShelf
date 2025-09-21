@@ -350,7 +350,34 @@ export interface LibrariesResponse {
   libraries: Library[];
 }
 
+// Filter data types for library filtering
+export interface FilterData {
+  authors: FilterAuthor[];
+  genres: string[];
+  tags: string[];
+  series: FilterSeries[];
+  narrators: string[];
+  languages: string[];
+}
+
+export interface FilterAuthor {
+  id: string;
+  name: string;
+}
+
+export interface FilterSeries {
+  id: string;
+  name: string;
+}
+
 export interface LibraryResponse extends Library {}
+
+export interface LibraryResponseWithFilterData  {
+  filterdata: FilterData;
+  library: Library;
+  issues: number;
+  numUserPlaylists: number;
+}
 
 export interface LibraryItemsResponse {
   results: LibraryItem[];

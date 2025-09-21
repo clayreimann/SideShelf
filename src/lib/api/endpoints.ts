@@ -5,6 +5,7 @@ import type {
   LibraryItemResponse,
   LibraryItemsResponse,
   LibraryResponse,
+  LibraryResponseWithFilterData,
   LoginResponse,
   MeResponse
 } from './types';
@@ -28,10 +29,21 @@ export async function fetchLibraries(): Promise<LibrariesResponse> {
 }
 
 export async function fetchLibrary(libraryId: string): Promise<LibraryResponse> {
-  const response = await apiFetch(`/api/libraries/${libraryId}`);
+  const url = `/api/libraries/${libraryId}`
+
+  const response = await apiFetch(url);
   if (!response.ok) {
     const error: ApiError = await response.json();
     throw new Error(error.message || error.error || 'Failed to fetch library');
+  }
+  return response.json();
+}
+
+export async function fetchLibraryWithFilterData(libraryId: string): Promise<LibraryResponseWithFilterData> {
+  const response = await apiFetch(`/api/libraries/${libraryId}?include=filterdata`);
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.message || error.error || 'Failed to fetch library with filterdata');
   }
   return response.json();
 }
@@ -62,6 +74,7 @@ export async function fetchLibraryItemCoverHead(libraryItemId: string): Promise<
 export async function login(baseUrl: string, username: string, password: string): Promise<LoginResponse> {
   const base = baseUrl.trim().replace(/\/$/, '');
   const url = `${base}/login`;
+  console.log('[auth] Login URL:', url);
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -71,6 +84,7 @@ export async function login(baseUrl: string, username: string, password: string)
     },
     body: JSON.stringify({ username, password }),
   });
+  console.log('[auth] Login response:', response.status, response.statusText);
 
   if (!response.ok) {
     const text = await response.clone().text();

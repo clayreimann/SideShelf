@@ -1,8 +1,10 @@
+import { statisticsHelpers } from '@/db/helpers';
 import { useThemedStyles } from '@/lib/theme';
+import { useAuth } from '@/providers/AuthProvider';
 import { useDb } from '@/providers/DbProvider';
 import { useLibrary } from '@/providers/LibraryProvider';
 import { Stack } from 'expo-router';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';
 
 type ActionItem = {
@@ -13,9 +15,32 @@ type ActionItem = {
 
 export default function AdvancedScreen() {
   const { styles, isDark } = useThemedStyles();
+  const { accessToken } = useAuth();
   const { refetchItems, selectedLibrary, refetchLibraries, libraries } = useLibrary();
   const { resetDatabase } = useDb();
-  const data = useMemo(() => {
+  const [counts, setCounts] = useState({
+    authors: 0,
+    genres: 0,
+    languages: 0,
+    narrators: 0,
+    series: 0,
+    tags: 0,
+  });
+
+  const refreshCounts = useCallback(async () => {
+    try {
+      const newCounts = await statisticsHelpers.getAllCounts();
+      setCounts(newCounts);
+    } catch (error) {
+      console.error('Failed to fetch counts:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCounts();
+  }, [refreshCounts]);
+
+  const data = useMemo<ActionItem[]>(() => {
     return [
       {
         label: `Libraries found: ${libraries.length}`,
@@ -28,22 +53,67 @@ export default function AdvancedScreen() {
         disabled: true,
       },
       {
+        label: `Authors: ${counts.authors}`,
+        onPress: () => {},
+        disabled: true,
+      },
+      {
+        label: `Genres: ${counts.genres}`,
+        onPress: () => {},
+        disabled: true,
+      },
+      {
+        label: `Languages: ${counts.languages}`,
+        onPress: () => {},
+        disabled: true,
+      },
+      {
+        label: `Narrators: ${counts.narrators}`,
+        onPress: () => {},
+        disabled: true,
+      },
+      {
+        label: `Series: ${counts.series}`,
+        onPress: () => {},
+        disabled: true,
+      },
+      {
+        label: `Tags: ${counts.tags}`,
+        onPress: () => {},
+        disabled: true,
+      },
+      {
+        label: 'Copy access token to clipboard',
+        onPress: async () => {
+          const { setStringAsync } = await import('expo-clipboard');
+          if (accessToken) {
+            await setStringAsync(accessToken);
+          }
+        },
+        disabled: !accessToken,
+      },
+      {
         label: 'Refetch library list',
         onPress: refetchLibraries,
         disabled: false,
       },
       {
-      label: 'Refetch library items',
-      onPress: refetchItems,
-      disabled: !selectedLibrary,
-    },
-    {
-      label: 'Reset database',
-      onPress: resetDatabase,
-      disabled: false,
-    },
-  ];
-  }, [selectedLibrary, libraries]);
+        label: 'Refetch library items',
+        onPress: refetchItems,
+        disabled: !selectedLibrary,
+      },
+      {
+        label: 'Refresh counts',
+        onPress: refreshCounts,
+        disabled: false,
+      },
+      {
+        label: 'Reset database',
+        onPress: resetDatabase,
+        disabled: false,
+      },
+    ];
+  }, [selectedLibrary, libraries, counts, refetchLibraries, refetchItems, refreshCounts, resetDatabase, accessToken]);
 
   return (
     <>

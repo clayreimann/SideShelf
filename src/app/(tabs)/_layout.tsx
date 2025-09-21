@@ -15,11 +15,10 @@ export default function TabLayout() {
     }, [initialized, isAuthenticated]);
     return (
         <NativeTabs
-            backgroundColor={tabs.backgroundColor}
+            blurEffect={'systemThickMaterialLight'}
             iconColor={tabs.iconColor}
             labelStyle={{ color: tabs.labelColor }}
             badgeTextColor={tabs.badgeTextColor}
-            shadowColor={tabs.shadowColor}
         >
             <NativeTabs.Trigger name="index">
                 <Label>Home</Label>
