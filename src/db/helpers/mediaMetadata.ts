@@ -1,4 +1,5 @@
 import type { Book, Podcast } from '@/lib/api/types';
+import { cacheCoverIfMissing } from '@/lib/covers';
 import { eq } from 'drizzle-orm';
 import { db } from '../client';
 import { libraryItems } from '../schema/libraryItems';
@@ -52,7 +53,7 @@ export function marshalBookToMediaMetadata(book: Book): NewMediaMetadataRow {
     // Podcast fields (null for books)
     author: null,
     feedUrl: null,
-    imageUrl: null,
+    imageUrl: null, // Will be set only after successful cover caching
     itunesPageUrl: null,
     itunesId: null,
     itunesArtistId: null,
@@ -282,4 +283,80 @@ export async function getMediaMetadataByLibraryId(libraryId: string): Promise<Me
  */
 export async function deleteMediaMetadataByLibraryItemId(libraryItemId: string): Promise<void> {
   await db.delete(mediaMetadata).where(eq(mediaMetadata.libraryItemId, libraryItemId));
+}
+
+/**
+ * Cache cover for a library item and update the imageUrl in the database
+ */
+export async function cacheCoverAndUpdateMetadata(libraryItemId: string): Promise<boolean> {
+  try {
+    // Cache the cover
+    const result = await cacheCoverIfMissing(libraryItemId);
+
+    // Only update the database if the cover was actually downloaded or if it already exists
+    if (result.wasDownloaded || result.uri) {
+      await db
+        .update(mediaMetadata)
+        .set({ imageUrl: result.uri })
+        .where(eq(mediaMetadata.libraryItemId, libraryItemId));
+
+      console.log(`[mediaMetadata] Updated cover for ${libraryItemId}: ${result.uri} (downloaded: ${result.wasDownloaded})`);
+      return result.wasDownloaded;
+    }
+
+    return false;
+  } catch (error) {
+    console.error(`[mediaMetadata] Failed to cache cover for ${libraryItemId}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Cache covers for all items in a library and update their imageUrls
+ */
+export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ downloadedCount: number; totalCount: number }> {
+  try {
+    const items = await db
+      .select({
+        libraryItemId: mediaMetadata.libraryItemId,
+        mediaType: mediaMetadata.mediaType
+      })
+      .from(mediaMetadata)
+      .innerJoin(libraryItems, eq(mediaMetadata.libraryItemId, libraryItems.id))
+      .where(eq(libraryItems.libraryId, libraryId));
+
+    console.log(`[mediaMetadata] Caching covers for ${items.length} items in library ${libraryId}`);
+
+    let downloadedCount = 0;
+
+    // Cache covers in parallel (but limit concurrency to avoid overwhelming the server)
+    const batchSize = 5;
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      const results = await Promise.all(
+        batch.map(item => cacheCoverAndUpdateMetadata(item.libraryItemId))
+      );
+      downloadedCount += results.filter(Boolean).length;
+    }
+
+    console.log(`[mediaMetadata] Finished caching covers for library ${libraryId}. Downloaded: ${downloadedCount}/${items.length}`);
+    return { downloadedCount, totalCount: items.length };
+  } catch (error) {
+    console.error(`[mediaMetadata] Failed to cache covers for library ${libraryId}:`, error);
+    return { downloadedCount: 0, totalCount: 0 };
+  }
+}
+
+/**
+ * Clear imageUrl from all media metadata (useful when clearing cover cache)
+ */
+export async function clearAllImageUrls(): Promise<void> {
+  try {
+    await db
+      .update(mediaMetadata)
+      .set({ imageUrl: null });
+    console.log('[mediaMetadata] Cleared all imageUrls from database');
+  } catch (error) {
+    console.error('[mediaMetadata] Failed to clear imageUrls:', error);
+  }
 }

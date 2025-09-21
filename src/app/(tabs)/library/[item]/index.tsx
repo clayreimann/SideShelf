@@ -4,8 +4,9 @@ import { Text, View } from 'react-native';
 
 import { getLibraryItemById, NewLibraryItemRow } from '@/db/helpers/libraryItems';
 import { getMediaGenres, getMediaTags } from '@/db/helpers/mediaJoins';
-import { getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
+import { cacheCoverAndUpdateMetadata, getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
 import { MediaMetadataRow } from '@/db/schema/mediaMetadata';
+import { getCoverUri } from '@/lib/covers';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, useWindowDimensions } from 'react-native';
 import RenderHtml from 'react-native-render-html';
@@ -36,6 +37,23 @@ export default function LibraryItemDetailScreen() {
           setMetadata(meta);
           setGenres(genres);
           setTags(tags);
+
+          // Cache cover in background if item exists
+          if (itemRow) {
+            cacheCoverAndUpdateMetadata(itemRow.id).then(wasDownloaded => {
+              if (wasDownloaded) {
+                console.log('Cover was downloaded for item detail, refreshing metadata');
+                // Refresh metadata to show the new cover
+                getMediaMetadataByLibraryItemId(itemRow.id).then(updatedMeta => {
+                  if (isMounted && updatedMeta) {
+                    setMetadata(updatedMeta);
+                  }
+                });
+              }
+            }).catch(error => {
+              console.error('Failed to cache cover for item detail:', error);
+            });
+          }
         }
       } catch (e) {
         if (isMounted) {
@@ -72,7 +90,7 @@ export default function LibraryItemDetailScreen() {
 
   // Prefer metadata fields, fallback to item fields
   const title = metadata?.title || 'Unknown Title';
-  const coverUri = metadata?.imageUrl;
+  const coverUri = metadata?.imageUrl || (item ? getCoverUri(item.id) : null);
   const description = metadata?.description || '';
   const author = metadata?.authorName || metadata?.author || 'Unknown Author';
   const narrator = metadata?.narratorName || null;

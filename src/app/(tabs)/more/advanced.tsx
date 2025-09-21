@@ -1,4 +1,6 @@
 import { statisticsHelpers } from '@/db/helpers';
+import { clearAllImageUrls } from '@/db/helpers/mediaMetadata';
+import { clearAllCoverCache } from '@/lib/covers';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { useDb } from '@/providers/DbProvider';
@@ -33,6 +35,16 @@ export default function AdvancedScreen() {
       setCounts(newCounts);
     } catch (error) {
       console.error('Failed to fetch counts:', error);
+    }
+  }, []);
+
+  const clearCoverCache = useCallback(async () => {
+    try {
+      await clearAllCoverCache();
+      await clearAllImageUrls();
+      console.log('Cover cache and database imageUrls cleared successfully');
+    } catch (error) {
+      console.error('Failed to clear cover cache:', error);
     }
   }, []);
 
@@ -108,12 +120,17 @@ export default function AdvancedScreen() {
         disabled: false,
       },
       {
+        label: 'Clear cover cache',
+        onPress: clearCoverCache,
+        disabled: false,
+      },
+      {
         label: 'Reset database',
         onPress: resetDatabase,
         disabled: false,
       },
     ];
-  }, [selectedLibrary, libraries, counts, refetchLibraries, refetchItems, refreshCounts, resetDatabase, accessToken]);
+  }, [selectedLibrary, libraries, counts, refetchLibraries, refetchItems, refreshCounts, resetDatabase, accessToken, clearCoverCache]);
 
   return (
     <>

@@ -9,7 +9,7 @@ import {
     upsertLibrary
 } from '@/db/helpers/libraries';
 import { getLibraryItemsForList, marshalLibraryItemsFromResponse, transformItemsToDisplayFormat, upsertLibraryItems } from '@/db/helpers/libraryItems';
-import { upsertBooksMetadata, upsertPodcastsMetadata } from '@/db/helpers/mediaMetadata';
+import { cacheCoversForLibraryItems, upsertBooksMetadata, upsertPodcastsMetadata } from '@/db/helpers/mediaMetadata';
 import { fetchLibraries, fetchLibraryItems, fetchLibraryWithFilterData } from '@/lib/api/endpoints';
 import { Book, Podcast } from '@/lib/api/types';
 import { useAuth } from '@/providers/AuthProvider';
@@ -222,6 +222,21 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
             const dbItems = await getLibraryItemsForList(selectedLibraryId);
             const displayItems = transformItemsToDisplayFormat(dbItems);
             setRawItems(displayItems);
+
+            // Cache covers in the background (don't await to avoid blocking UI)
+            cacheCoversForLibraryItems(selectedLibraryId).then((result) => {
+                console.log(`[LibraryProvider] Cover caching completed. Downloaded: ${result.downloadedCount}/${result.totalCount}`);
+                // Only refresh the UI if covers were actually downloaded
+                if (result.downloadedCount > 0) {
+                    console.log('[LibraryProvider] Refreshing display with new covers');
+                    getLibraryItemsForList(selectedLibraryId).then(updatedItems => {
+                        const updatedDisplayItems = transformItemsToDisplayFormat(updatedItems);
+                        setRawItems(updatedDisplayItems);
+                    });
+                }
+            }).catch(error => {
+                console.error('[LibraryProvider] Cover caching failed:', error);
+            });
 
         } catch (error) {
             console.error('[LibraryProvider] Failed to refresh items:', error);

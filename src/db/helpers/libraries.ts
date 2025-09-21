@@ -26,7 +26,6 @@ export function marshalLibrariesFromResponse(response: LibrariesResponse): NewLi
 
 // Upsert a single library
 export async function upsertLibrary(row: NewLibraryRow): Promise<void> {
-  console.log('[libraries] Upserting library:', row);
   await db
     .insert(libraries)
     .values(row)

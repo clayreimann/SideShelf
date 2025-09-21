@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/lib/theme';
 import { useLibrary, type LibraryItemListRow, type SortConfig, type SortDirection, type SortField } from '@/providers/LibraryProvider';
 import { Link, Stack } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { FlatList, Modal, Pressable, RefreshControl, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Modal, Pressable, RefreshControl, Text, TouchableOpacity, View } from 'react-native';
 
 interface LibraryPickerProps {
   libraries: any[] | null;
@@ -133,11 +133,122 @@ function SortMenu({ visible, onClose, sortConfig, onSortChange, isDark }: SortMe
 }
 
 
+type ViewMode = 'grid' | 'list';
+
+interface GridItemProps {
+  item: LibraryItemListRow;
+  isDark: boolean;
+}
+
+function GridItem({ item, isDark }: GridItemProps) {
+  return (
+    <Link
+      href={{ pathname: '/(tabs)/library/[item]', params: { item: item.id } }}
+      asChild
+    >
+      <TouchableOpacity style={{ width: '30%', aspectRatio: 1, marginBottom: 12 }}>
+        <View style={{ flex: 1, borderRadius: 6, backgroundColor: isDark ? '#222' : '#eee', overflow: 'hidden' }}>
+          {item.coverUri ? (
+            <Image
+              source={{ uri: item.coverUri }}
+              style={{ flex: 1, width: '100%', height: '100%' }}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: isDark ? '#bbb' : '#444', fontSize: 12, textAlign: 'center', paddingHorizontal: 6 }} numberOfLines={3}>
+                {item.title || 'Untitled'}
+              </Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Link>
+  );
+}
+
+interface ListItemProps {
+  item: LibraryItemListRow;
+  isDark: boolean;
+}
+
+function ListItem({ item, isDark }: ListItemProps) {
+  return (
+    <Link
+      href={{ pathname: '/(tabs)/library/[item]', params: { item: item.id } }}
+      asChild
+    >
+      <TouchableOpacity style={{
+        flexDirection: 'row',
+        padding: 12,
+        backgroundColor: isDark ? '#1a1a1a' : '#fff',
+        marginHorizontal: 12,
+        marginBottom: 8,
+        borderRadius: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+      }}>
+        <View style={{
+          width: 60,
+          height: 60,
+          borderRadius: 4,
+          backgroundColor: isDark ? '#333' : '#f0f0f0',
+          overflow: 'hidden',
+          marginRight: 12,
+        }}>
+          {item.coverUri ? (
+            <Image
+              source={{ uri: item.coverUri }}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: isDark ? '#666' : '#999', fontSize: 10 }}>
+                No Cover
+              </Text>
+            </View>
+          )}
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <Text style={{
+            color: isDark ? '#fff' : '#000',
+            fontSize: 16,
+            fontWeight: '600',
+            marginBottom: 4,
+          }} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <Text style={{
+            color: isDark ? '#aaa' : '#666',
+            fontSize: 14,
+            marginBottom: 2,
+          }} numberOfLines={1}>
+            {item.author}
+          </Text>
+          {item.narrator && (
+            <Text style={{
+              color: isDark ? '#888' : '#888',
+              fontSize: 12,
+            }} numberOfLines={1}>
+              Narrated by {item.narrator}
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Link>
+  );
+}
+
 export default function AboutScreen() {
   const { styles, isDark } = useThemedStyles();
   const { libraries, items, selectLibrary, selectedLibrary, isLoadingItems, refetchItems, sortConfig, setSortConfig } = useLibrary();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await refetchItems();
@@ -153,21 +264,37 @@ export default function AboutScreen() {
   }
 
   let title = selectedLibrary?.name || 'Library';
-  const sortButton = (
-    <TouchableOpacity
-      onPress={() => setShowSortMenu(true)}
-      style={{
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 6,
-        backgroundColor: isDark ? '#333' : '#f0f0f0',
-        marginLeft: 12,
-      }}
-    >
-      <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 14 }}>
-        Sort
-      </Text>
-    </TouchableOpacity>
+
+  const headerButtons = (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <TouchableOpacity
+        onPress={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+        style={{
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: 6,
+          backgroundColor: isDark ? '#333' : '#f0f0f0',
+          marginRight: 8,
+        }}
+      >
+        <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 14 }}>
+          {viewMode === 'grid' ? 'List' : 'Grid'}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => setShowSortMenu(true)}
+        style={{
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: 6,
+          backgroundColor: isDark ? '#333' : '#f0f0f0',
+        }}
+      >
+        <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 14 }}>
+          Sort
+        </Text>
+      </TouchableOpacity>
+    </View>
   );
   return (
     <>
@@ -191,24 +318,23 @@ export default function AboutScreen() {
         </View>
         <FlatList
           data={items}
-          numColumns={3}
-          columnWrapperStyle={{ gap: 12, paddingHorizontal: 12 }}
-          renderItem={({ item }: { item: LibraryItemListRow }) => (
-            <Link
-              href={{ pathname: '/(tabs)/library/[item]', params: { item: item.id } }}
-              asChild
-            >
-              <TouchableOpacity style={{ width: '30%', aspectRatio: 1, marginBottom: 12 }}>
-                <View style={{ flex: 1, borderRadius: 6, backgroundColor: isDark ? '#222' : '#eee', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: isDark ? '#bbb' : '#444', fontSize: 12, textAlign: 'center', paddingHorizontal: 6 }} numberOfLines={3}>
-                    {item.title || 'Untitled'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </Link>
-          )}
+          numColumns={viewMode === 'grid' ? 3 : 1}
+          key={viewMode} // Force re-render when view mode changes
+          columnWrapperStyle={viewMode === 'grid' ? { gap: 12, paddingHorizontal: 12 } : undefined}
+          renderItem={({ item }: { item: LibraryItemListRow }) =>
+            viewMode === 'grid' ?
+              <GridItem item={item} isDark={isDark} /> :
+              <ListItem item={item} isDark={isDark} />
+          }
           refreshControl={<RefreshControl refreshing={isRefreshing || isLoadingItems} onRefresh={onRefresh} tintColor={isDark ? '#fff' : '#000'} />}
-          contentContainerStyle={[styles.flatListContainer, { paddingTop: 8, paddingBottom: 24 }]}
+          contentContainerStyle={[
+            styles.flatListContainer,
+            {
+              paddingTop: 8,
+              paddingBottom: 24,
+              ...(viewMode === 'list' && { paddingHorizontal: 0 })
+            }
+          ]}
           indicatorStyle={isDark ? 'white' : 'black'}
         />
         <SortMenu
@@ -218,7 +344,7 @@ export default function AboutScreen() {
           onSortChange={setSortConfig}
           isDark={isDark}
         />
-        <Stack.Screen options={{ title, headerTitle: title, headerRight: () => sortButton }} />
+        <Stack.Screen options={{ title, headerTitle: title, headerRight: () => headerButtons }} />
       </View>
     </>
   );
