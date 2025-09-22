@@ -1,13 +1,13 @@
+import { useThemedStyles } from '@/lib/theme';
+import { useAuth } from '@/providers/AuthProvider';
 import { useRouter } from 'expo-router';
 import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect } from 'react';
-import { useThemedStyles } from '../../lib/theme';
-import { useAuth } from '../../providers/AuthProvider';
 
 export default function TabLayout() {
     const router = useRouter();
     const { initialized, isAuthenticated } = useAuth();
-    const { tabs } = useThemedStyles();
+    const { tabs, isDark } = useThemedStyles();
     useEffect(() => {
         if (initialized && !isAuthenticated) {
             router.push('/login');
@@ -15,12 +15,12 @@ export default function TabLayout() {
     }, [initialized, isAuthenticated]);
     return (
         <NativeTabs
-            blurEffect={'systemThickMaterialLight'}
+            blurEffect={isDark ? 'systemThickMaterialDark' : 'systemThickMaterialLight'}
             iconColor={tabs.iconColor}
             labelStyle={{ color: tabs.labelColor }}
             badgeTextColor={tabs.badgeTextColor}
         >
-            <NativeTabs.Trigger name="index">
+            <NativeTabs.Trigger name="home">
                 <Label>Home</Label>
                 <Icon sf={{default: "house", selected: "house.fill"}} />
             </NativeTabs.Trigger>

@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/lib/theme';
 import { Stack } from 'expo-router';
 
-export default function MoreLayout() {
+export default function HomeLayout() {
   const { colors, header } = useThemedStyles();
   return (
     <Stack screenOptions={{
@@ -12,7 +12,7 @@ export default function MoreLayout() {
       headerTitleStyle: { color: header.titleColor },
       headerShadowVisible: false,
     }}>
-      <Stack.Screen name="index" options={{ title: 'More' }} />
+      <Stack.Screen name="index" options={{ title: 'Home' }} />
     </Stack>
   );
 }

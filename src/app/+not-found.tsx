@@ -1,30 +1,25 @@
+import { useThemedStyles } from '@/lib/theme';
 import { Link, Stack } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 export default function NotFoundScreen() {
+  const { styles, colors, header } = useThemedStyles();
+
   return (
     <>
-      <Stack.Screen options={{ title: 'Oops! Not Found' }} />
+      <Stack.Screen
+        options={{
+          title: 'Oops! Not Found',
+          headerStyle: { backgroundColor: header.backgroundColor },
+          headerTintColor: header.tintColor,
+          headerTitleStyle: { color: header.titleColor },
+        }}
+      />
       <View style={styles.container}>
-        <Link href="/" style={styles.button}>
+        <Link href="/(tabs)/home" style={[styles.link, { fontSize: 20 }]}>
           Go back to Home screen!
         </Link>
       </View>
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#25292e',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  button: {
-    fontSize: 20,
-    textDecorationLine: 'underline',
-    color: '#fff',
-  },
-});
