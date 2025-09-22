@@ -1,4 +1,5 @@
 import { LibraryItemList, LibraryPicker } from '@/components/library';
+import { SortMenu } from '@/components/ui';
 import { useThemedStyles } from '@/lib/theme';
 import { useLibrary } from '@/providers/LibraryProvider';
 import { Stack } from 'expo-router';
@@ -72,9 +73,14 @@ export default function AboutScreen() {
           items={items}
           isLoading={isLoadingItems}
           onRefresh={onRefresh}
+          viewMode={viewMode}
+        />
+        <SortMenu
+          visible={showSortMenu}
+          onClose={() => setShowSortMenu(false)}
           sortConfig={sortConfig}
           onSortChange={setSortConfig}
-          viewMode={viewMode}
+          isDark={isDark}
         />
         <Stack.Screen options={{ title, headerTitle: title, headerRight: controls }} />
       </View>

@@ -1,8 +1,7 @@
 import { useThemedStyles } from '@/lib/theme';
-import { LibraryItemListRow, SortConfig } from '@/providers/LibraryProvider';
+import { LibraryItemListRow } from '@/providers/LibraryProvider';
 import React, { useCallback, useState } from 'react';
 import { FlatList, RefreshControl, View } from 'react-native';
-import SortMenu from '../ui/SortMenu';
 import { GridItem, ListItem } from './LibraryItem';
 
 type ViewMode = 'grid' | 'list';
@@ -11,22 +10,17 @@ interface LibraryItemListProps {
   items: LibraryItemListRow[];
   isLoading?: boolean;
   onRefresh?: () => Promise<void>;
-  sortConfig: SortConfig;
-  onSortChange: (config: SortConfig) => void;
-  viewMode?: 'grid' | 'list';
+  viewMode?: ViewMode;
 }
 
 export default function LibraryItemList({
   items,
   isLoading = false,
   onRefresh,
-  sortConfig,
-  onSortChange,
   viewMode = 'grid'
 }: LibraryItemListProps) {
   const { styles, isDark } = useThemedStyles();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showSortMenu, setShowSortMenu] = useState(false);
 
   const handleRefresh = useCallback(async () => {
     if (!onRefresh) return;
@@ -66,13 +60,6 @@ export default function LibraryItemList({
           }
         ]}
         indicatorStyle={isDark ? 'white' : 'black'}
-      />
-      <SortMenu
-        visible={showSortMenu}
-        onClose={() => setShowSortMenu(false)}
-        sortConfig={sortConfig}
-        onSortChange={onSortChange}
-        isDark={isDark}
       />
     </View>
   );

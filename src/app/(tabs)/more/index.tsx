@@ -1,30 +1,41 @@
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
-import { Link, Stack, useRouter } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { useMemo } from 'react';
+import { FlatList, Pressable, Text } from 'react-native';
+
+type ActionItem = {
+  label: string;
+  onPress?: () => void;
+};
 
 export default function MoreScreen() {
   const { styles } = useThemedStyles();
   const router = useRouter();
   const { logout } = useAuth();
 
+
+  const data = useMemo(() => {
+    return [
+      { label: 'Collections', onPress: () => router.push('/more/collections') },
+      { label: 'About Me', onPress: () => router.push('/more/me') },
+      { label: 'Settings', onPress: () => router.push('/more/settings') },
+      { label: 'Advanced', onPress: () => router.push('/more/advanced') },
+      { label: 'Log out', onPress: async () => { await logout(); router.replace('/login'); } },
+    ];
+  }, [router, logout]);
   return (
     <>
-      <View style={[styles.flatListContainer]}>
-        <Link href="/more/collections" asChild>
-          <Pressable style={styles.listItem}><Text style={styles.text}>Collections</Text></Pressable>
-        </Link>
-        <Link href="/more/settings" asChild>
-          <Pressable style={styles.listItem}><Text style={styles.text}>Settings</Text></Pressable>
-        </Link>
-        <Link href="/more/advanced" asChild>
-          <Pressable style={styles.listItem}><Text style={styles.text}>Advanced</Text></Pressable>
-        </Link>
-        <Pressable style={styles.listItem} onPress={async () => { await logout(); router.replace('/login'); }}>
-          <Text style={styles.text}>Log out</Text>
+      <FlatList style={[styles.flatListContainer]}
+        data={data}
+        renderItem={({ item }) => (
+        <Pressable style={styles.listItem} onPress={item.onPress}>
+          <Text style={styles.text}>{item.label}</Text>
         </Pressable>
-      </View>
-      <Stack.Screen options={{ title: 'More' }} />
+        )}
+      />
+
+      < Stack.Screen options={{ title: 'More' }} />
     </>
   );
 }
