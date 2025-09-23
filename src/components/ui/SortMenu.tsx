@@ -1,25 +1,39 @@
-import { SortConfig, SortDirection, SortField } from '@/providers/LibraryProvider';
 import React from 'react';
 import { Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
 
-interface SortMenuProps {
-  visible: boolean;
-  onClose: () => void;
-  sortConfig: SortConfig;
-  onSortChange: (config: SortConfig) => void;
-  isDark: boolean;
+// Generic sort option type
+export interface SortOption<T = string> {
+  field: T;
+  label: string;
 }
 
-export default function SortMenu({ visible, onClose, sortConfig, onSortChange, isDark }: SortMenuProps) {
-  const sortOptions: { field: SortField; label: string }[] = [
-    { field: 'title', label: 'Title' },
-    { field: 'author', label: 'Author' },
-    { field: 'publishedYear', label: 'Published Year' },
-    { field: 'addedAt', label: 'Date Added' },
-  ];
+// Generic sort config type
+export interface GenericSortConfig<T = string> {
+  field: T;
+  direction: 'asc' | 'desc';
+}
 
-  const handleSortChange = (field: SortField) => {
-    const direction: SortDirection =
+interface SortMenuProps<T = string> {
+  visible: boolean;
+  onClose: () => void;
+  sortConfig: GenericSortConfig<T>;
+  onSortChange: (config: GenericSortConfig<T>) => void;
+  sortOptions: SortOption<T>[];
+  isDark: boolean;
+  title?: string;
+}
+
+export default function SortMenu<T = string>({
+  visible,
+  onClose,
+  sortConfig,
+  onSortChange,
+  sortOptions,
+  isDark,
+  title = 'Sort by'
+}: SortMenuProps<T>) {
+  const handleSortChange = (field: T) => {
+    const direction: 'asc' | 'desc' =
       sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc';
     onSortChange({ field, direction });
     onClose();
@@ -62,7 +76,7 @@ export default function SortMenu({ visible, onClose, sortConfig, onSortChange, i
             color: isDark ? '#fff' : '#000',
             textAlign: 'center',
           }}>
-            Sort by
+            {title}
           </Text>
           {sortOptions.map((option) => (
             <TouchableOpacity

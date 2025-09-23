@@ -1,10 +1,11 @@
 import { LibraryItemList, LibraryPicker } from '@/components/library';
-import { SortMenu } from '@/components/ui';
+import { HeaderControls, SortMenu } from '@/components/ui';
 import { useThemedStyles } from '@/lib/theme';
 import { useLibrary } from '@/providers/LibraryProvider';
+import { SortField } from '@/stores';
 import { Stack } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 export default function AboutScreen() {
   const { styles, isDark } = useThemedStyles();
@@ -19,36 +20,21 @@ export default function AboutScreen() {
   const toggleViewMode = useCallback(() => setViewMode(viewMode === 'grid' ? 'list' : 'grid'), [viewMode]);
 
   const controls = useCallback(() => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', }}>
-      <TouchableOpacity
-        onPress={toggleViewMode}
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderRadius: 6,
-          backgroundColor: isDark ? '#333' : '#f0f0f0',
-          marginRight: 8,
-        }}
-      >
-        <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 14 }}>
-          {viewMode === 'grid' ? 'List' : 'Grid'}
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={() => setShowSortMenu(true)}
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderRadius: 6,
-          backgroundColor: isDark ? '#333' : '#f0f0f0',
-        }}
-      >
-        <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 14 }}>
-          Sort
-        </Text>
-      </TouchableOpacity>
-    </View>
-  ), [isDark, viewMode, setShowSortMenu, toggleViewMode]);
+    <HeaderControls
+      isDark={isDark}
+      viewMode={viewMode}
+      onToggleViewMode={toggleViewMode}
+      onSort={() => setShowSortMenu(true)}
+    />
+  ), [isDark, viewMode, toggleViewMode]);
+
+  // Library sort options
+  const librarySortOptions = [
+    { field: 'title' as SortField, label: 'Title' },
+    { field: 'author' as SortField, label: 'Author' },
+    { field: 'publishedYear' as SortField, label: 'Published Year' },
+    { field: 'addedAt' as SortField, label: 'Date Added' },
+  ];
 
   if (!libraries.length) {
     return (
@@ -80,6 +66,7 @@ export default function AboutScreen() {
           onClose={() => setShowSortMenu(false)}
           sortConfig={sortConfig}
           onSortChange={setSortConfig}
+          sortOptions={librarySortOptions}
           isDark={isDark}
         />
         <Stack.Screen options={{ title, headerTitle: title, headerRight: controls }} />
