@@ -4,7 +4,7 @@ import { clearAllCoverCache } from '@/lib/covers';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { useDb } from '@/providers/DbProvider';
-import { useLibrary } from '@/providers/LibraryProvider';
+import { useLibrary } from '@/stores';
 import { Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, Text, View } from 'react-native';

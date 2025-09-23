@@ -2,7 +2,8 @@ import { db } from '@/db/client';
 import { libraryItems } from '@/db/schema/libraryItems';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
 import { LibraryItem, LibraryItemsResponse } from '@/lib/api/types';
-import { eq, isNull } from 'drizzle-orm';
+import { eq, inArray, not } from 'drizzle-orm';
+import { mediaAuthors } from '../schema/mediaJoins';
 
 export type NewLibraryItemRow = typeof libraryItems.$inferInsert;
 export type LibraryItemRow = typeof libraryItems.$inferSelect;
@@ -127,19 +128,25 @@ export async function deleteAllLibraryItems(): Promise<void> {
   await db.delete(libraryItems);
 }
 
-// Get library items that don't have full metadata yet (for background processing)
+// Get library items that don't have full metadata yet (no author linkage since that's probably the only guaranteed linkage) (for background processing)
 export async function getLibraryItemsNeedingFullData(limit: number = 50): Promise<string[]> {
   console.log(`[getLibraryItemsNeedingFullData] Looking for items without metadata (limit: ${limit})`);
 
-  const results = await db
+  const itemsWithFullData = await db
+    .select({ id: libraryItems.id, mediaMetadataId: mediaMetadata.id })
+    .from(libraryItems)
+    .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
+    .innerJoin(mediaAuthors, eq(mediaMetadata.id, mediaAuthors.mediaId));
+
+  const itemsWithoutFullData = await db
     .select({ id: libraryItems.id })
     .from(libraryItems)
-    .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
-    .where(isNull(mediaMetadata.id)) // Items without metadata
+    .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
+    .where(not(inArray(mediaMetadata.id, itemsWithFullData.map(r => r.mediaMetadataId))))
     .limit(limit);
 
-  console.log(`[getLibraryItemsNeedingFullData] Found ${results.length} items without metadata`);
-  return results.map(r => r.id);
+  console.log(`[getLibraryItemsNeedingFullData] Found ${itemsWithoutFullData.length} items without metadata`);
+  return itemsWithoutFullData.map(r => r.id);
 }
 
 // Get library items that might need full data refresh (alternative approach)

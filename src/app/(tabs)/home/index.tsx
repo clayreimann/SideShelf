@@ -1,4 +1,4 @@
-import { getHomeScreenData, getItemsNeedingFullRefresh, type HomeScreenItem } from '@/db/helpers/homeScreen';
+import { getHomeScreenData, getItemsWithProgressNeedingFullRefresh, type HomeScreenItem } from '@/db/helpers/homeScreen';
 import { getUserByUsername } from '@/db/helpers/users';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
@@ -72,7 +72,7 @@ export default function HomeScreen() {
       setSections(newSections);
 
       // Process items with progress in the background
-      const itemsNeedingRefresh = await getItemsNeedingFullRefresh(user.id);
+      const itemsNeedingRefresh = await getItemsWithProgressNeedingFullRefresh(user.id);
       if (itemsNeedingRefresh.length > 0) {
         console.log(`[HomeScreen] Found ${itemsNeedingRefresh.length} items needing full refresh`);
         libraryItemBatchService.processItemsWithProgress(user.id, itemsNeedingRefresh)

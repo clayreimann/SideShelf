@@ -9,15 +9,12 @@
  * - Persistence to AsyncStorage
  */
 
-import { upsertFilterData } from '@/db/helpers/filterData';
 import {
     getAllLibraries,
     getLibraryById,
     LibraryRow,
     marshalLibrariesFromResponse,
-    marshalLibraryFromApi,
-    upsertLibraries,
-    upsertLibrary
+    upsertLibraries
 } from '@/db/helpers/libraries';
 import {
     getLibraryItemsForList,
@@ -26,7 +23,7 @@ import {
     upsertLibraryItems
 } from '@/db/helpers/libraryItems';
 import { cacheCoversForLibraryItems, upsertBooksMetadata, upsertPodcastsMetadata } from '@/db/helpers/mediaMetadata';
-import { fetchLibraries, fetchLibraryItems, fetchLibraryWithFilterData } from '@/lib/api/endpoints';
+import { fetchLibraries, fetchLibraryItems } from '@/lib/api/endpoints';
 import { Book, Podcast } from '@/lib/api/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -71,9 +68,13 @@ export interface LibrarySliceState {
 export interface LibrarySliceActions {
     // Public actions
     /** Initialize the slice (load from storage, fetch initial data) */
-    initializeLibrary: (apiConfigured: boolean, dbInitialized: boolean) => Promise<void>;
+    initializeLibrarySlice: (apiConfigured: boolean, dbInitialized: boolean) => Promise<void>;
     /** Select a library and load its items */
     selectLibrary: (libraryId: string) => Promise<void>;
+    /** Select a library using only cached data (no API calls) */
+    selectLibraryFromCache: (libraryId: string) => Promise<void>;
+    /** Load cached items for the currently selected library (no API calls) */
+    loadCachedItems: () => Promise<void>;
     /** Refresh all libraries from API and update database */
     refetchLibraries: () => Promise<LibraryRow[]>;
     /** Refresh items for the currently selected library */
@@ -134,7 +135,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     /**
      * Initialize the slice by loading from storage and fetching initial data
      */
-    initializeLibrary: async (apiConfigured: boolean, dbInitialized: boolean) => {
+    initializeLibrarySlice: async (apiConfigured: boolean, dbInitialized: boolean) => {
         const state = get();
         if (state.library.initialized) return;
 
@@ -153,10 +154,13 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
             await get()._loadLibrarySettingsFromStorage();
 
             // Set ready state
-            get()._setLibraryReady(apiConfigured, dbInitialized);
+            const ready = get()._setLibraryReady(apiConfigured, dbInitialized);
+            if (ready) {
+                console.log(`[LibrarySlice] Library slice already ready=${ready} apiConfigured=${apiConfigured} dbInitialized=${dbInitialized}`);
+            }
 
             // If ready, fetch initial data
-            if (apiConfigured && dbInitialized) {
+            if (ready) {
                 console.log('[LibrarySlice] API and DB ready, fetching initial data...');
 
                 const { library: { selectedLibraryId } } = get();
@@ -259,18 +263,6 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
             // Persist selection to storage
             await AsyncStorage.setItem(STORAGE_KEYS.selectedLibraryId, libraryId);
 
-            // Fetch library with filter data from API
-            const response = await fetchLibraryWithFilterData(libraryId);
-            const { filterdata, library } = response;
-            const libraryRow = marshalLibraryFromApi(library);
-            await upsertLibrary(libraryRow);
-
-            // Process and store filterdata if present
-            if (filterdata) {
-                console.log('[LibrarySlice] Processing filterdata for library:', libraryId);
-                await upsertFilterData(filterdata);
-            }
-
             // Get updated library from database
             const selectedLibrary = await getLibraryById(libraryId);
             if (selectedLibrary) {
@@ -278,10 +270,31 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                     ...state,
                     library: { ...state.library, selectedLibrary }
                 }));
-
-                // Refresh items for this library
-                await get().refetchItems();
             }
+
+            // // Fetch library with filter data from API
+            // const response = await fetchLibraryWithFilterData(libraryId);
+            // const { filterdata, library } = response;
+            // const libraryRow = marshalLibraryFromApi(library);
+            // await upsertLibrary(libraryRow);
+
+            // // Process and store filterdata if present
+            // if (filterdata) {
+            //     console.log('[LibrarySlice] Processing filterdata for library:', libraryId);
+            //     await upsertFilterData(filterdata);
+            // }
+
+            // // Get updated library from database
+            // const selectedLibrary = await getLibraryById(libraryId);
+            // if (selectedLibrary) {
+            //     set((state: LibrarySlice) => ({
+            //         ...state,
+            //         library: { ...state.library, selectedLibrary }
+            //     }));
+
+            //     // Refresh items for this library
+            //     await get().refetchItems();
+            // }
 
         } catch (error) {
             console.error('[LibrarySlice] Failed to select library:', error);
@@ -299,6 +312,114 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 library: {
                     ...state.library,
                     loading: { ...state.library.loading, isSelectingLibrary: false }
+                }
+            }));
+        }
+    },
+
+    /**
+     * Select a library using only cached data (no API calls)
+     * This is useful for quick library switching without waiting for API responses
+     */
+    selectLibraryFromCache: async (libraryId: string) => {
+        const state = get();
+        if (!state.library.ready) {
+            console.warn('[LibrarySlice] Slice not ready, cannot select library from cache');
+            return;
+        }
+
+        if (state.library.selectedLibraryId === libraryId) {
+            console.log('[LibrarySlice] Library already selected:', libraryId);
+            return;
+        }
+
+        console.log('[LibrarySlice] Selecting library from cache:', libraryId);
+
+        set((state: LibrarySlice) => ({
+            ...state,
+            library: {
+                ...state.library,
+                selectedLibraryId: libraryId,
+                loading: { ...state.library.loading, isSelectingLibrary: true }
+            }
+        }));
+
+        try {
+            // Persist selection to storage
+            await AsyncStorage.setItem(STORAGE_KEYS.selectedLibraryId, libraryId);
+
+            // Get library from database (cached data only)
+            const selectedLibrary = await getLibraryById(libraryId);
+            if (selectedLibrary) {
+                set((state: LibrarySlice) => ({
+                    ...state,
+                    library: { ...state.library, selectedLibrary }
+                }));
+
+                // Load cached items for this library
+                await get().loadCachedItems();
+            }
+
+        } catch (error) {
+            console.error('[LibrarySlice] Failed to select library from cache:', error);
+        } finally {
+            set((state: LibrarySlice) => ({
+                ...state,
+                library: {
+                    ...state.library,
+                    loading: { ...state.library.loading, isSelectingLibrary: false }
+                }
+            }));
+        }
+    },
+
+    /**
+     * Load cached items for the currently selected library (no API calls)
+     * This loads items from the database only, useful for quick loading
+     */
+    loadCachedItems: async () => {
+        const state = get();
+        const { selectedLibraryId } = state.library;
+
+        if (!selectedLibraryId) {
+            console.warn('[LibrarySlice] No library selected, cannot load cached items');
+            return;
+        }
+
+        console.log('[LibrarySlice] Loading cached items for library:', selectedLibraryId);
+
+        set((state: LibrarySlice) => ({
+            ...state,
+            library: {
+                ...state.library,
+                loading: { ...state.library.loading, isLoadingItems: true }
+            }
+        }));
+
+        try {
+            // Get items from database with full metadata for display
+            const dbItems = await getLibraryItemsForList(selectedLibraryId);
+            const displayItems = transformItemsToDisplayFormat(dbItems);
+
+            set((state: LibrarySlice) => ({
+                ...state,
+                library: {
+                    ...state.library,
+                    rawItems: displayItems,
+                    items: sortLibraryItems(displayItems, state.library.sortConfig)
+                }
+            }));
+
+            console.log(`[LibrarySlice] Loaded ${displayItems.length} cached items`);
+
+        } catch (error) {
+            console.error('[LibrarySlice] Failed to load cached items:', error);
+        } finally {
+            set((state: LibrarySlice) => ({
+                ...state,
+                library: {
+                    ...state.library,
+                    loading: { ...state.library.loading, isLoadingItems: false }
                 }
             }));
         }
@@ -499,13 +620,14 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     /**
      * Set ready state based on API and DB initialization
      */
-    _setLibraryReady: (apiConfigured: boolean, dbInitialized: boolean) => {
+    _setLibraryReady: (apiConfigured: boolean, dbInitialized: boolean): boolean => {
         const ready = apiConfigured && dbInitialized;
         console.log(`[LibrarySlice] Setting ready state: ${ready} (api=${apiConfigured}, db=${dbInitialized})`);
         set((state: LibrarySlice) => ({
             ...state,
             library: { ...state.library, ready }
         }));
+        return ready;
     },
 
     /**

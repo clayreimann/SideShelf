@@ -166,7 +166,7 @@ export async function getHomeScreenData(userId: string): Promise<{
 }
 
 // Check if any items need full data refresh (they have metadata but no audio file metadata) and return their IDs
-export async function getItemsNeedingFullRefresh(userId: string, limit: number = 50): Promise<string[]> {
+export async function getItemsWithProgressNeedingFullRefresh(userId: string, limit: number = 50): Promise<string[]> {
     // Get items with audio files
     const itemsWithAudioFiles = await db
         .select({ libraryItemId: mediaMetadata.libraryItemId })
@@ -179,10 +179,16 @@ export async function getItemsNeedingFullRefresh(userId: string, limit: number =
 
     // Select a batch of library items not in the itemsWithAudioFiles array
     const itemsWithProgress = await db
-        .select({ libraryItemId: libraryItems.id })
-        .from(libraryItems)
-        .where(not(inArray(libraryItems.id, itemsWithAudioFiles.map(item => item.libraryItemId))))
+        .select({ libraryItemId: mediaProgress.libraryItemId })
+        .from(mediaProgress)
+        .where(and(
+            eq(mediaProgress.userId, userId),
+            eq(mediaProgress.isFinished, false),
+            eq(mediaProgress.hideFromContinueListening, false),
+            not(inArray(mediaProgress.libraryItemId, itemsWithAudioFiles.map(item => item.libraryItemId)))
+        ))
         .limit(limit);
+    console.log(`[getItemsNeedingFullRefresh] Found ${itemsWithProgress.length} items with progress`);
 
     return itemsWithProgress.map(item => item.libraryItemId);
 }

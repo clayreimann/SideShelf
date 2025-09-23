@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/lib/theme';
-import { LibraryItemListRow } from '@/providers/LibraryProvider';
+import { LibraryItemListRow } from '@/stores';
 import React, { useCallback, useState } from 'react';
 import { FlatList, RefreshControl, View } from 'react-native';
 import { GridItem, ListItem } from './LibraryItem';

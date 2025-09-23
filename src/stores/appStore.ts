@@ -97,8 +97,10 @@ export function useLibrary() {
     const ready = useAppStore(state => state.library.ready);
 
     // Actions (these don't change so we can get them once)
-    const initialize = useAppStore(state => state.initializeLibrary);
+    const initialize = useAppStore(state => state.initializeLibrarySlice);
     const selectLibrary = useAppStore(state => state.selectLibrary);
+    const selectLibraryFromCache = useAppStore(state => state.selectLibraryFromCache);
+    const loadCachedItems = useAppStore(state => state.loadCachedItems);
     const refetchLibraries = useAppStore(state => state.refetchLibraries);
     const refetchItems = useAppStore(state => state.refetchItems);
     const setSortConfig = useAppStore(state => state.setSortConfig);
@@ -118,6 +120,8 @@ export function useLibrary() {
         ready,
         initialize,
         selectLibrary,
+        selectLibraryFromCache,
+        loadCachedItems,
         refetchLibraries,
         refetchItems,
         setSortConfig,
@@ -136,6 +140,8 @@ export function useLibrary() {
         ready,
         initialize,
         selectLibrary,
+        selectLibraryFromCache,
+        loadCachedItems,
         refetchLibraries,
         refetchItems,
         setSortConfig,
@@ -183,7 +189,7 @@ export function useLibraryState<T>(selector: (state: LibrarySlice) => T): T {
  */
 export function useLibraryActions() {
     return useAppStore((state) => ({
-        initialize: state.initializeLibrary,
+        initialize: state.initializeLibrarySlice,
         selectLibrary: state.selectLibrary,
         refetchLibraries: state.refetchLibraries,
         refetchItems: state.refetchItems,
@@ -214,7 +220,7 @@ export function useLibraryActions() {
  * ```
  */
 export function useLibraryStoreInitializer(apiConfigured: boolean, dbInitialized: boolean) {
-    const initializeLibrary = useAppStore(state => state.initializeLibrary);
+    const initializeLibrary = useAppStore(state => state.initializeLibrarySlice);
     const setLibraryReady = useAppStore(state => state._setLibraryReady);
     const initialized = useAppStore(state => state.library.initialized);
 

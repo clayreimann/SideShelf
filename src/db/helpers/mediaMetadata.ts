@@ -293,7 +293,7 @@ export async function cacheCoverAndUpdateMetadata(libraryItemId: string): Promis
     const result = await cacheCoverIfMissing(libraryItemId);
 
     // Only update the database if the cover was actually downloaded or if it already exists
-    if (result.wasDownloaded && result.uri) {
+    if (result.uri) {
       await db
         .update(mediaMetadata)
         .set({ imageUrl: result.uri })
