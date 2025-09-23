@@ -2,28 +2,21 @@ import { LibraryItemList, LibraryPicker } from '@/components/library';
 import { HeaderControls, SortMenu } from '@/components/ui';
 import { useThemedStyles } from '@/lib/theme';
 import { SortField, useLibrary } from '@/stores';
-import { Stack, useFocusEffect } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 
 export default function AboutScreen() {
   const { styles, isDark } = useThemedStyles();
-  const { libraries, items, selectLibrary, selectedLibrary, isLoadingItems, refetchItems, refetchLibraries, sortConfig, setSortConfig } = useLibrary();
+  const { libraries, items, selectLibrary, selectedLibrary, isLoadingItems, refresh, sortConfig, setSortConfig } = useLibrary();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showSortMenu, setShowSortMenu] = useState(false);
 
   const onRefresh = useCallback(async () => {
-    await refetchItems();
-  }, [refetchItems]);
+    await refresh();
+  }, [refresh]);
 
   const toggleViewMode = useCallback(() => setViewMode(viewMode === 'grid' ? 'list' : 'grid'), [viewMode]);
-
-  useFocusEffect(
-    useCallback(() => {
-      refetchLibraries();
-    }, [refetchLibraries])
-  );
-
 
   const controls = useCallback(() => (
     <HeaderControls

@@ -18,7 +18,7 @@ type ActionItem = {
 export default function AdvancedScreen() {
   const { styles, isDark } = useThemedStyles();
   const { accessToken } = useAuth();
-  const { refetchItems, selectedLibrary, refetchLibraries, libraries } = useLibrary();
+  const { refresh, selectedLibrary, libraries } = useLibrary();
   const { resetDatabase } = useDb();
   const [counts, setCounts] = useState({
     authors: 0,
@@ -105,14 +105,9 @@ export default function AdvancedScreen() {
         disabled: !accessToken,
       },
       {
-        label: 'Refetch library list',
-        onPress: refetchLibraries,
+        label: 'Refresh libraries and items',
+        onPress: refresh,
         disabled: false,
-      },
-      {
-        label: 'Refetch library items',
-        onPress: refetchItems,
-        disabled: !selectedLibrary,
       },
       {
         label: 'Refresh counts',
@@ -130,7 +125,7 @@ export default function AdvancedScreen() {
         disabled: false,
       },
     ];
-  }, [selectedLibrary, libraries, counts, refetchLibraries, refetchItems, refreshCounts, resetDatabase, accessToken, clearCoverCache]);
+  }, [selectedLibrary, libraries, counts, refresh, refreshCounts, resetDatabase, accessToken, clearCoverCache]);
 
   return (
     <>

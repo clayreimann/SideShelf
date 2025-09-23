@@ -76,7 +76,7 @@ export const useLibraryStore = useAppStore;
  *     selectedLibrary,
  *     items,
  *     selectLibrary,
- *     refetchItems
+ *     refresh
  *   } = useLibrary();
  *
  *   // Use the store state and actions...
@@ -99,10 +99,7 @@ export function useLibrary() {
     // Actions (these don't change so we can get them once)
     const initialize = useAppStore(state => state.initializeLibrarySlice);
     const selectLibrary = useAppStore(state => state.selectLibrary);
-    const selectLibraryFromCache = useAppStore(state => state.selectLibraryFromCache);
-    const loadCachedItems = useAppStore(state => state.loadCachedItems);
-    const refetchLibraries = useAppStore(state => state.refetchLibraries);
-    const refetchItems = useAppStore(state => state.refetchItems);
+    const refresh = useAppStore(state => state.refresh);
     const setSortConfig = useAppStore(state => state.setSortConfig);
     const reset = useAppStore(state => state.resetLibrary);
 
@@ -120,10 +117,7 @@ export function useLibrary() {
         ready,
         initialize,
         selectLibrary,
-        selectLibraryFromCache,
-        loadCachedItems,
-        refetchLibraries,
-        refetchItems,
+        refresh,
         setSortConfig,
         reset,
     }), [
@@ -140,10 +134,7 @@ export function useLibrary() {
         ready,
         initialize,
         selectLibrary,
-        selectLibraryFromCache,
-        loadCachedItems,
-        refetchLibraries,
-        refetchItems,
+        refresh,
         setSortConfig,
         reset,
     ]);
@@ -177,7 +168,7 @@ export function useLibraryState<T>(selector: (state: LibrarySlice) => T): T {
  * @example
  * ```tsx
  * function ActionButton() {
- *   const { selectLibrary, refetchItems } = useLibraryActions();
+ *   const { selectLibrary, refresh } = useLibraryActions();
  *
  *   return (
  *     <Button onPress={() => selectLibrary('library-id')}>
@@ -191,8 +182,7 @@ export function useLibraryActions() {
     return useAppStore((state) => ({
         initialize: state.initializeLibrarySlice,
         selectLibrary: state.selectLibrary,
-        refetchLibraries: state.refetchLibraries,
-        refetchItems: state.refetchItems,
+        refresh: state.refresh,
         setSortConfig: state.setSortConfig,
         reset: state.resetLibrary,
     }));
