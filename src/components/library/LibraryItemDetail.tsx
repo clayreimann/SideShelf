@@ -175,7 +175,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const author = metadata?.authorName || metadata?.author || 'Unknown Author';
   const narrator = metadata?.narratorName || null;
   const series = metadata?.seriesName || null;
-  const imageSize = width * 0.8;
+  const imageSize = width - 64;
 
   return (
     <ScrollView
@@ -222,10 +222,9 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           Series: {series}
         </Text>
       ) : null}
-      <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 8 }}>
-        <Text style={[styles.text, { marginRight: 8 }]}>Author: {author}</Text>
-        {narrator ? <Text style={styles.text}>Narrator: {narrator}</Text> : null}
-      </View>
+        <Text style={[styles.text, { marginBottom: 4, textAlign: 'center' }]}>Author: {author}</Text>
+
+        {narrator ? <Text style={[styles.text, { marginBottom: 4, textAlign: 'center' }]}>Narrator: {narrator}</Text> : null}
 
       {/* Progress display */}
       {progress && (

@@ -2,12 +2,15 @@ import { db } from '@/db/client';
 import { audioFiles } from '@/db/schema/audioFiles';
 import { authors } from '@/db/schema/authors';
 import { chapters } from '@/db/schema/chapters';
+import { genres } from '@/db/schema/genres';
 import { libraryFiles } from '@/db/schema/libraryFiles';
 import { libraryItems } from '@/db/schema/libraryItems';
 import { mediaAuthors, mediaSeries } from '@/db/schema/mediaJoins';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
+import { narrators } from '@/db/schema/narrators';
 import { series } from '@/db/schema/series';
-import type { Series as ApiSeries, Author, Book, LibraryItem } from '@/lib/api/types';
+import { tags } from '@/db/schema/tags';
+import type { Series as ApiSeries, Author, Book, LibraryItem, Podcast } from '@/lib/api/types';
 import { and, eq, isNull } from 'drizzle-orm';
 
 // Import our new helpers
@@ -15,7 +18,8 @@ import { marshalAudioFileFromApi } from './audioFiles';
 import { marshalChapterFromApi, type ApiChapter } from './chapters';
 import { marshalLibraryFileFromApi } from './libraryFiles';
 import { marshalLibraryItemFromApi } from './libraryItems';
-import { marshalBookToMediaMetadata } from './mediaMetadata';
+import { upsertBookJoins, upsertPodcastJoins } from './mediaJoins';
+import { marshalBookToMediaMetadata, marshalPodcastToMediaMetadata } from './mediaMetadata';
 
 export type NewAuthorRow = typeof authors.$inferInsert;
 export type NewSeriesRow = typeof series.$inferInsert;
@@ -41,6 +45,31 @@ export function marshalSeriesFromApi(apiSeries: ApiSeries): NewSeriesRow {
         addedAt: null,
         updatedAt: null,
     };
+}
+
+// Helper functions to upsert genres, narrators, and tags into their base tables
+export async function upsertGenres(genreNames: string[]): Promise<void> {
+    if (!genreNames?.length) return;
+
+    for (const genreName of genreNames) {
+        await db.insert(genres).values({ name: genreName }).onConflictDoNothing();
+    }
+}
+
+export async function upsertNarrators(narratorNames: string[]): Promise<void> {
+    if (!narratorNames?.length) return;
+
+    for (const narratorName of narratorNames) {
+        await db.insert(narrators).values({ name: narratorName }).onConflictDoNothing();
+    }
+}
+
+export async function upsertTags(tagNames: string[]): Promise<void> {
+    if (!tagNames?.length) return;
+
+    for (const tagName of tagNames) {
+        await db.insert(tags).values({ name: tagName }).onConflictDoNothing();
+    }
 }
 
 // Process a full library item from batch API response
@@ -69,15 +98,31 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
                     target: mediaMetadata.id,
                     set: mediaRow,
                 });
+        } else if (apiItem.mediaType === 'podcast' && apiItem.media) {
+            const podcast = apiItem.media as Podcast;
+            mediaRow = marshalPodcastToMediaMetadata(podcast);
+
+            await tx.insert(mediaMetadata).values(mediaRow)
+                .onConflictDoUpdate({
+                    target: mediaMetadata.id,
+                    set: mediaRow,
+                });
         }
     });
 
     // Yield to event loop after first transaction
     await yieldToEventLoop();
 
-    // Transaction 2: Authors and Series (if we have media)
+    // Transaction 2: Authors, Series, Genres, Narrators, and Tags (if we have media)
     if (apiItem.mediaType === 'book' && apiItem.media && mediaRow) {
         const book = apiItem.media as Book;
+
+        // First, upsert genres, narrators, and tags into their base tables
+        await Promise.all([
+            upsertGenres(book.metadata.genres || []),
+            upsertNarrators(book.metadata.narrators || []),
+            upsertTags(book.tags || []),
+        ]);
 
         await db.transaction(async (tx) => {
             // 3. Process authors (batch insert for better performance)
@@ -136,12 +181,30 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
             }
         });
 
-        // Yield to event loop after second transaction
-        await yieldToEventLoop();
+        // 5. Process all media joins (genres, narrators, tags, etc.) using the existing helper
+        await upsertBookJoins(book);
+    } else if (apiItem.mediaType === 'podcast' && apiItem.media && mediaRow) {
+        const podcast = apiItem.media as Podcast;
 
-        // Transaction 3: Audio files and chapters
+        // First, upsert genres and tags into their base tables (podcasts don't have narrators)
+        await Promise.all([
+            upsertGenres(podcast.metadata.genres || []),
+            upsertTags(podcast.tags || []),
+        ]);
+
+        // Process all media joins (genres, tags) using the existing helper
+        await upsertPodcastJoins(podcast);
+    }
+
+    // Yield to event loop after second transaction
+    await yieldToEventLoop();
+
+    // Transaction 3: Audio files and chapters (for books only)
+    if (apiItem.mediaType === 'book' && apiItem.media && mediaRow) {
+        const book = apiItem.media as Book;
+
         await db.transaction(async (tx) => {
-            // 5. Process audio files
+            // 6. Process audio files
             if (book.audioFiles && book.audioFiles.length > 0) {
                 const audioFileRows = book.audioFiles.map(af => marshalAudioFileFromApi(mediaRow.id, af));
                 for (const audioFileRow of audioFileRows) {
@@ -153,7 +216,7 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
                 }
             }
 
-            // 6. Process chapters
+            // 7. Process chapters
             if (book.chapters && book.chapters.length > 0) {
                 const chapterRows = book.chapters.map(ch => marshalChapterFromApi(mediaRow.id, ch as ApiChapter));
                 for (const chapterRow of chapterRows) {
@@ -175,6 +238,7 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
         const libraryFileRows = apiItem.libraryFiles.map(lf => marshalLibraryFileFromApi(apiItem.id, lf));
 
         await db.transaction(async (tx) => {
+            // 8. Process library files
             for (const libraryFileRow of libraryFileRows) {
                 await tx.insert(libraryFiles).values(libraryFileRow)
                     .onConflictDoUpdate({
