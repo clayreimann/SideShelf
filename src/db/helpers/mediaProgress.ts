@@ -1,8 +1,10 @@
 import { db } from '@/db/client';
 import { mediaProgress } from '@/db/schema/mediaProgress';
 import { LoginResponse, MediaProgress, MeResponse } from '@/lib/api/types';
+import { and, eq } from 'drizzle-orm';
 
 export type NewMediaProgressRow = typeof mediaProgress.$inferInsert;
+export type MediaProgressRow = typeof mediaProgress.$inferSelect;
 
 // Extract array of media progress rows from an auth/me or login response
 export function marshalMediaProgressFromAuthResponse(data: MeResponse | LoginResponse): NewMediaProgressRow[] {
@@ -55,4 +57,23 @@ export async function upsertMediaProgress(rows: NewMediaProgressRow[]): Promise<
       .values(row)
       .onConflictDoUpdate({ target: mediaProgress.id, set: row });
   }
+}
+
+// Get media progress for a specific library item and user
+export async function getMediaProgressForLibraryItem(
+  libraryItemId: string,
+  userId: string
+): Promise<MediaProgressRow | null> {
+  const results = await db
+    .select()
+    .from(mediaProgress)
+    .where(
+      and(
+        eq(mediaProgress.libraryItemId, libraryItemId),
+        eq(mediaProgress.userId, userId)
+      )
+    )
+    .limit(1);
+
+  return results[0] || null;
 }

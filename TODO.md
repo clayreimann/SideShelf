@@ -1,13 +1,13 @@
 # To Do
 
-Next:
-- Book download
-- Player UI on item details screen
-- Add now playing to home screen
-- Home screen continue listening list
-- Stream content from server
-  - setting to auto download items when streaming playback starts?
-- Small floating player
+## Next:
+- [ ] Book download
+- [ ] Player UI on item details screen
+- [ ] Add now playing to home screen
+- [x] Home screen continue listening list
+- [ ] Stream content from server
+  - [ ] setting to auto download items when streaming playback starts?
+- [ ] Small floating player
 - Full screen player
 
 ## Library tab

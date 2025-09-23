@@ -2,7 +2,7 @@ import { db } from '@/db/client';
 import { libraryItems } from '@/db/schema/libraryItems';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
 import { LibraryItem, LibraryItemsResponse } from '@/lib/api/types';
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 
 export type NewLibraryItemRow = typeof libraryItems.$inferInsert;
 export type LibraryItemRow = typeof libraryItems.$inferSelect;
@@ -125,6 +125,45 @@ export async function deleteLibraryItemsByLibraryId(libraryId: string): Promise<
 // Delete all library items (useful for refresh scenarios)
 export async function deleteAllLibraryItems(): Promise<void> {
   await db.delete(libraryItems);
+}
+
+// Get library items that don't have full metadata yet (for background processing)
+export async function getLibraryItemsNeedingFullData(limit: number = 50): Promise<string[]> {
+  console.log(`[getLibraryItemsNeedingFullData] Looking for items without metadata (limit: ${limit})`);
+
+  const results = await db
+    .select({ id: libraryItems.id })
+    .from(libraryItems)
+    .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
+    .where(isNull(mediaMetadata.id)) // Items without metadata
+    .limit(limit);
+
+  console.log(`[getLibraryItemsNeedingFullData] Found ${results.length} items without metadata`);
+  return results.map(r => r.id);
+}
+
+// Get library items that might need full data refresh (alternative approach)
+export async function getLibraryItemsNeedingRefresh(limit: number = 50): Promise<string[]> {
+  console.log(`[getLibraryItemsNeedingRefresh] Looking for items that might need refresh (limit: ${limit})`);
+
+  // Get items that either:
+  // 1. Don't have metadata at all
+  // 2. Have metadata but no audio files or chapters (incomplete data)
+  const results = await db
+    .select({
+      id: libraryItems.id,
+      hasMetadata: mediaMetadata.id,
+    })
+    .from(libraryItems)
+    .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
+    .where(eq(libraryItems.mediaType, 'book')) // Focus on books for now
+    .limit(limit * 2); // Get more to filter from
+
+  // Filter to items that need processing
+  const needsProcessing = results.filter(item => !item.hasMetadata);
+
+  console.log(`[getLibraryItemsNeedingRefresh] Found ${needsProcessing.length} items needing refresh`);
+  return needsProcessing.slice(0, limit).map(r => r.id);
 }
 
 // Type for library item list display with full metadata

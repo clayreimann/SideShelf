@@ -1,6 +1,7 @@
 import { HeaderControls, SortMenu } from '@/components/ui';
 import { useThemedStyles } from '@/lib/theme';
 import { SeriesSortField, useSeries } from '@/stores';
+import { useFocusEffect } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from 'react-native';
@@ -13,6 +14,15 @@ export default function SeriesScreen() {
   const onRefresh = useCallback(async () => {
     await refetchSeries();
   }, [refetchSeries]);
+
+  // Load series when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (ready && items.length === 0) {
+        refetchSeries();
+      }
+    }, [ready, items.length, refetchSeries])
+  );
 
   const controls = useCallback(() => (
     <HeaderControls

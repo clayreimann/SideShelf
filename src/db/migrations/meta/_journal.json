@@ -29,6 +29,27 @@
       "when": 1758463601307,
       "tag": "0003_silent_praxagora",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1758602328430,
+      "tag": "0004_tiresome_loki",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1758633166940,
+      "tag": "0005_serious_madelyne_pryor",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1758634102961,
+      "tag": "0006_certain_silverclaw",
+      "breakpoints": true
     }
   ]
 }

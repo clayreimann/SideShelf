@@ -1,6 +1,7 @@
 import { HeaderControls, SortMenu } from '@/components/ui';
 import { useThemedStyles } from '@/lib/theme';
 import { AuthorSortField, useAuthors } from '@/stores';
+import { useFocusEffect } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from 'react-native';
@@ -13,6 +14,15 @@ export default function AuthorsScreen() {
   const onRefresh = useCallback(async () => {
     await refetchAuthors();
   }, [refetchAuthors]);
+
+  // Load authors when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (ready && items.length === 0) {
+        refetchAuthors();
+      }
+    }, [ready, items.length, refetchAuthors])
+  );
 
   const controls = useCallback(() => (
     <HeaderControls
@@ -85,25 +95,23 @@ export default function AuthorsScreen() {
 
   return (
     <>
-      <View style={styles.container}>
-        <FlatList
-          data={items}
-          renderItem={renderAuthor}
-          keyExtractor={(item) => item.id}
-          refreshing={isLoadingItems}
-          onRefresh={onRefresh}
-          contentContainerStyle={{ flexGrow: 1 }}
-        />
-        <SortMenu
-          visible={showSortMenu}
-          onClose={() => setShowSortMenu(false)}
-          sortConfig={sortConfig}
-          onSortChange={setSortConfig}
-          sortOptions={authorsSortOptions}
-          isDark={isDark}
-        />
-        <Stack.Screen options={{ headerTitle: `Authors (${items.length})`, headerRight: controls }} />
-      </View>
+      <FlatList
+        data={items}
+        renderItem={renderAuthor}
+        keyExtractor={(item) => item.id}
+        refreshing={isLoadingItems}
+        onRefresh={onRefresh}
+        contentContainerStyle={styles.flatListContainer}
+      />
+      <SortMenu
+        visible={showSortMenu}
+        onClose={() => setShowSortMenu(false)}
+        sortConfig={sortConfig}
+        onSortChange={setSortConfig}
+        sortOptions={authorsSortOptions}
+        isDark={isDark}
+      />
+      <Stack.Screen options={{ headerTitle: `Authors (${items.length})`, headerRight: controls }} />
     </>
   );
 }

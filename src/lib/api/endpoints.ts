@@ -2,6 +2,7 @@ import { apiFetch } from './api';
 import type {
   ApiError,
   LibrariesResponse,
+  LibraryItem,
   LibraryItemResponse,
   LibraryItemsResponse,
   LibraryResponse,
@@ -69,6 +70,25 @@ export async function fetchLibraryItem(libraryItemId: string): Promise<LibraryIt
 // HEAD request to get the resolved cover URL; caller can use response.url
 export async function fetchLibraryItemCoverHead(libraryItemId: string): Promise<Response> {
   return await apiFetch(`/api/items/${libraryItemId}/cover`, { method: 'HEAD' });
+}
+
+// Batch fetch library items with full details (includes authors, series, audioFiles, chapters, libraryFiles)
+export async function fetchLibraryItemsBatch(libraryItemIds: string[]): Promise<LibraryItem[]> {
+  const response = await apiFetch('/api/items/batch/get', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ libraryItemIds }),
+  });
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.message || error.error || 'Failed to batch fetch library items');
+  }
+
+  const data = await response.json();
+  return data.libraryItems || [];
 }
 
 export async function login(baseUrl: string, username: string, password: string): Promise<LoginResponse> {

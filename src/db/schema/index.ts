@@ -1,6 +1,15 @@
+export * as audioFiles from './audioFiles';
+export * as authors from './authors';
+export * as chapters from './chapters';
+export * as genres from './genres';
+export * as languages from './languages';
 export * as libraries from './libraries';
+export * as libraryFiles from './libraryFiles';
 export * as libraryItems from './libraryItems';
 export * as mediaJoins from './mediaJoins';
 export * as mediaMetadata from './mediaMetadata';
 export * as mediaProgress from './mediaProgress';
+export * as narrators from './narrators';
+export * as series from './series';
+export * as tags from './tags';
 export * as users from './users';

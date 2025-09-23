@@ -4,7 +4,6 @@ import { eq } from 'drizzle-orm';
 import { db } from '../client';
 import { libraryItems } from '../schema/libraryItems';
 import { mediaMetadata, MediaMetadataRow, NewMediaMetadataRow } from '../schema/mediaMetadata';
-import { upsertBookJoins, upsertPodcastJoins } from './mediaJoins';
 
 /**
  * Marshal book data from API to media metadata row
@@ -145,8 +144,8 @@ export async function upsertBookMetadata(book: Book): Promise<MediaMetadataRow> 
     result = inserted;
   }
 
-  // Update join tables
-  await upsertBookJoins(book);
+  // Note: Join tables (authors, series, etc.) are now populated by the batch API processing
+  // in fullLibraryItems.ts, which has access to the complete data from the batch API
 
   return result;
 }
@@ -176,8 +175,8 @@ export async function upsertPodcastMetadata(podcast: Podcast): Promise<MediaMeta
     result = inserted;
   }
 
-  // Update join tables
-  await upsertPodcastJoins(podcast);
+  // Note: Join tables are now populated by the batch API processing
+  // in fullLibraryItems.ts, which has access to the complete data from the batch API
 
   return result;
 }
@@ -294,7 +293,7 @@ export async function cacheCoverAndUpdateMetadata(libraryItemId: string): Promis
     const result = await cacheCoverIfMissing(libraryItemId);
 
     // Only update the database if the cover was actually downloaded or if it already exists
-    if (result.wasDownloaded || result.uri) {
+    if (result.wasDownloaded && result.uri) {
       await db
         .update(mediaMetadata)
         .set({ imageUrl: result.uri })
@@ -319,13 +318,15 @@ export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ d
     const items = await db
       .select({
         libraryItemId: mediaMetadata.libraryItemId,
-        mediaType: mediaMetadata.mediaType
+        mediaType: mediaMetadata.mediaType,
+        imageUrl: mediaMetadata.imageUrl,
       })
       .from(mediaMetadata)
       .innerJoin(libraryItems, eq(mediaMetadata.libraryItemId, libraryItems.id))
       .where(eq(libraryItems.libraryId, libraryId));
 
-    console.log(`[mediaMetadata] Caching covers for ${items.length} items in library ${libraryId}`);
+    const itemsToCache = items.filter(item => !item.imageUrl);
+    console.log(`[mediaMetadata] Caching covers for ${itemsToCache.length} of ${items.length} items in library ${libraryId}`);
 
     let downloadedCount = 0;
 
@@ -339,7 +340,7 @@ export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ d
       downloadedCount += results.filter(Boolean).length;
     }
 
-    console.log(`[mediaMetadata] Finished caching covers for library ${libraryId}. Downloaded: ${downloadedCount}/${items.length}`);
+    console.log(`[mediaMetadata] Finished caching covers for library ${libraryId}. Downloaded=${downloadedCount} Already cached=${items.length - itemsToCache.length} Total=${items.length}`);
     return { downloadedCount, totalCount: items.length };
   } catch (error) {
     console.error(`[mediaMetadata] Failed to cache covers for library ${libraryId}:`, error);

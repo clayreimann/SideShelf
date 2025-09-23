@@ -18,7 +18,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   // @ts-ignore (ignore private property `nativeDatabase`)
   useDrizzleStudio(db.$client);
 
-  console.log(`[db migrate] - success=${success} error=${error}`);
+  console.log(`[db migrate] - migration version=${migrations.journal.version} migrations=[${Object.keys(migrations.migrations).join(', ')}] success=${success} error=${error}`);
   const value = useMemo<DbContextValue>(() => ({
     initialized: !!success && !error,
     error: error ?? null,

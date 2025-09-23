@@ -1,0 +1,1 @@
+CREATE INDEX `media_series_pk` ON `media_series` (`media_id`,`series_id`);
