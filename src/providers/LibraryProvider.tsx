@@ -89,43 +89,68 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
+    // Sorting helper functions, now accepting sortConfig for possible nested sorts
+    function compareByTitle(a: LibraryItemListRow, b: LibraryItemListRow, config: SortConfig): number {
+        const aValue = a.title?.toLowerCase() || '';
+        const bValue = b.title?.toLowerCase() || '';
+        if (aValue < bValue) return -1;
+        if (aValue > bValue) return 1;
+        return 0;
+    }
+
+    function compareByAuthor(a: LibraryItemListRow, b: LibraryItemListRow, config: SortConfig): number {
+        // Use authorNameLF for proper last name first sorting, fallback to author
+        const aValue = (a.authorNameLF || a.author)?.toLowerCase() || '';
+        const bValue = (b.authorNameLF || b.author)?.toLowerCase() || '';
+        if (aValue < bValue) return -1;
+        if (aValue > bValue) return 1;
+        return 0;
+    }
+
+    function compareByPublishedYear(a: LibraryItemListRow, b: LibraryItemListRow, config: SortConfig): number {
+        const aValue = a.publishedYear || '';
+        const bValue = b.publishedYear || '';
+        if (aValue < bValue) return -1;
+        if (aValue > bValue) return 1;
+        return 0;
+    }
+
+    function compareByAddedAt(a: LibraryItemListRow, b: LibraryItemListRow, config: SortConfig): number {
+        const aValue = a.addedAt || 0;
+        const bValue = b.addedAt || 0;
+        if (aValue < bValue) return -1;
+        if (aValue > bValue) return 1;
+        return 0;
+    }
+
     const sortItems = useCallback((items: LibraryItemListRow[], config: SortConfig): LibraryItemListRow[] => {
+        let compareFn: (a: LibraryItemListRow, b: LibraryItemListRow, config: SortConfig) => number;
+
+        switch (config.field) {
+            case 'title':
+                compareFn = compareByTitle;
+                break;
+            case 'author':
+                compareFn = compareByAuthor;
+                break;
+            case 'publishedYear':
+                compareFn = compareByPublishedYear;
+                break;
+            case 'addedAt':
+                compareFn = compareByAddedAt;
+                break;
+            default:
+                // fallback: no sorting
+                compareFn = () => 0;
+        }
+
         const sorted = [...items].sort((a, b) => {
-            let aValue: string | number | null;
-            let bValue: string | number | null;
-
-            switch (config.field) {
-                case 'title':
-                    aValue = a.title?.toLowerCase() || '';
-                    bValue = b.title?.toLowerCase() || '';
-                    break;
-                case 'author':
-                    // Use authorNameLF for proper last name first sorting, fallback to author
-                    aValue = (a.authorNameLF || a.author)?.toLowerCase() || '';
-                    bValue = (b.authorNameLF || b.author)?.toLowerCase() || '';
-                    break;
-                case 'publishedYear':
-                    aValue = a.publishedYear || '';
-                    bValue = b.publishedYear || '';
-                    break;
-                case 'addedAt':
-                    aValue = a.addedAt || 0;
-                    bValue = b.addedAt || 0;
-                    break;
-                default:
-                    return 0;
-            }
-
-            let comparison = 0;
-            if (aValue < bValue) comparison = -1;
-            else if (aValue > bValue) comparison = 1;
-
+            const comparison = compareFn(a, b, config);
             return config.direction === 'desc' ? -comparison : comparison;
         });
 
         return sorted;
     }, []);
-
     // Memoized sorted items
     const items = useMemo(() => {
         return sortItems(rawItems, sortConfig);
