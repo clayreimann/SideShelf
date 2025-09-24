@@ -2,7 +2,7 @@ import { db } from '@/db/client';
 import { libraryItems } from '@/db/schema/libraryItems';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
 import { LibraryItem, LibraryItemsResponse } from '@/lib/api/types';
-import { eq, inArray, not } from 'drizzle-orm';
+import { and, eq, inArray, not } from 'drizzle-orm';
 import { mediaAuthors } from '../schema/mediaJoins';
 
 export type NewLibraryItemRow = typeof libraryItems.$inferInsert;
@@ -142,7 +142,10 @@ export async function getLibraryItemsNeedingFullData(limit: number = 50): Promis
     .select({ id: libraryItems.id })
     .from(libraryItems)
     .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
-    .where(not(inArray(mediaMetadata.id, itemsWithFullData.map(r => r.mediaMetadataId))))
+    .where(and(
+      not(inArray(mediaMetadata.id, itemsWithFullData.map(r => r.mediaMetadataId))),
+      eq(libraryItems.mediaType, 'book')
+    ))
     .limit(limit);
 
   console.log(`[getLibraryItemsNeedingFullData] Found ${itemsWithoutFullData.length} items without metadata`);

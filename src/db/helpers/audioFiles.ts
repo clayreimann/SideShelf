@@ -142,3 +142,15 @@ export async function getDownloadedAudioFilesForMedia(mediaId: string): Promise<
     .where(and(eq(audioFiles.mediaId, mediaId), eq(audioFiles.isDownloaded, true)))
     .orderBy(audioFiles.index);
 }
+
+// Clear download status for audio file
+export async function clearAudioFileDownloadStatus(audioFileId: string): Promise<void> {
+  await db
+    .update(audioFiles)
+    .set({
+      isDownloaded: false,
+      downloadPath: null,
+      downloadedAt: null,
+    })
+    .where(eq(audioFiles.id, audioFileId));
+}
