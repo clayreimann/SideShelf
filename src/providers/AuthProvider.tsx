@@ -150,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 mediaProgressHelpers.upsertMediaProgress(mediaProgress),
             ]);
         } catch (e) {
+            console.error('[AuthProvider] Login error', e);
             throw new Error(e instanceof Error ? e.message : 'Login failed');
         }
 

@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/lib/theme';
-import { Text, View } from 'react-native';
+import { Alert, Text, TouchableOpacity, View } from 'react-native';
 
 import { CollapsibleSection } from '@/components/ui';
 import { AudioFileRow, getAudioFilesForMedia } from '@/db/helpers/audioFiles';
@@ -13,8 +13,9 @@ import { getUserByUsername } from '@/db/helpers/users';
 import { MediaMetadataRow } from '@/db/schema/mediaMetadata';
 import { fetchLibraryItemsBatch } from '@/lib/api/endpoints';
 import { getCoverUri } from '@/lib/covers';
+import { cancelDownload, deleteDownloadedLibraryItem, downloadLibraryItem, DownloadProgress, formatBytes, formatSpeed, formatTimeRemaining, isLibraryItemDownloaded, pauseDownload, resumeDownload } from '@/lib/downloads';
 import { useAuth } from '@/providers/AuthProvider';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, useWindowDimensions } from 'react-native';
 import RenderHtml from 'react-native-render-html';
 
@@ -39,7 +40,7 @@ function formatTime(seconds: number): string {
 export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItemDetailProps) {
   const { styles, isDark } = useThemedStyles();
   const { width } = useWindowDimensions();
-  const { username } = useAuth();
+  const { username, serverUrl, accessToken } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [item, setItem] = useState<NewLibraryItemRow | null>(null);
@@ -49,6 +50,11 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const [progress, setProgress] = useState<MediaProgressRow | null>(null);
   const [chapters, setChapters] = useState<ChapterRow[]>([]);
   const [audioFiles, setAudioFiles] = useState<AudioFileRow[]>([]);
+
+  // Download states
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -73,6 +79,9 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         const chaptersData = meta ? await getChaptersForMedia(meta.id) : [];
         const audioFilesData = meta ? await getAudioFilesForMedia(meta.id) : [];
 
+        // Check download status
+        const downloadedStatus = itemRow ? await isLibraryItemDownloaded(itemRow.id) : false;
+
         if (isMounted) {
           setItem(itemRow);
           setMetadata(meta);
@@ -81,6 +90,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           setProgress(progressData);
           setChapters(chaptersData);
           setAudioFiles(audioFilesData);
+          setIsDownloaded(downloadedStatus);
 
           // Notify parent of title change for header
           const title = meta?.title || 'Unknown Title';
@@ -151,6 +161,113 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     if (itemId) fetchData();
     return () => { isMounted = false; };
   }, [itemId, username, onTitleChange]);
+
+  // Download handlers
+  const handleDownload = useCallback(async () => {
+    if (!item || !serverUrl || !accessToken || isDownloading) return;
+
+    setIsDownloading(true);
+    setDownloadProgress(null);
+
+    try {
+      await downloadLibraryItem(
+        item.id,
+        serverUrl,
+        accessToken,
+        (progress) => {
+          setDownloadProgress(progress);
+        }
+      );
+      setIsDownloaded(true);
+      setDownloadProgress(null);
+
+      // Refresh audio files to show download status
+      if (metadata) {
+        const updatedAudioFiles = await getAudioFilesForMedia(metadata.id);
+        setAudioFiles(updatedAudioFiles);
+      }
+    } catch (error) {
+      console.error('[LibraryItemDetail] Download failed:', error);
+      Alert.alert(
+        'Download Failed',
+        `Failed to download library item: ${error}`,
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [item, serverUrl, accessToken, isDownloading, metadata]);
+
+  const handleDeleteDownload = useCallback(async () => {
+    if (!item) return;
+
+    Alert.alert(
+      'Delete Download',
+      'Are you sure you want to delete the downloaded files? This will free up storage space.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDownloadedLibraryItem(item.id);
+              setIsDownloaded(false);
+
+              // Refresh audio files to show download status
+              if (metadata) {
+                const updatedAudioFiles = await getAudioFilesForMedia(metadata.id);
+                setAudioFiles(updatedAudioFiles);
+              }
+            } catch (error) {
+              console.error('[LibraryItemDetail] Delete download failed:', error);
+              Alert.alert(
+                'Delete Failed',
+                `Failed to delete downloaded files: ${error}`,
+                [{ text: 'OK' }]
+              );
+            }
+          }
+        }
+      ]
+    );
+  }, [item, metadata]);
+
+  const handleCancelDownload = useCallback(() => {
+    if (!item) return;
+
+    cancelDownload(item.id);
+    setIsDownloading(false);
+    setDownloadProgress(null);
+  }, [item]);
+
+  const handlePauseDownload = useCallback(() => {
+    if (!item) return;
+
+    pauseDownload(item.id);
+    if (downloadProgress) {
+      setDownloadProgress({
+        ...downloadProgress,
+        status: 'paused',
+        canPause: false,
+        canResume: true,
+      });
+    }
+  }, [item, downloadProgress]);
+
+  const handleResumeDownload = useCallback(() => {
+    if (!item) return;
+
+    resumeDownload(item.id);
+    if (downloadProgress) {
+      setDownloadProgress({
+        ...downloadProgress,
+        status: 'downloading',
+        canPause: true,
+        canResume: false,
+      });
+    }
+  }, [item, downloadProgress]);
 
   if (loading) {
     return (
@@ -263,6 +380,188 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           </View>
         </View>
       )}
+
+      {/* Download Section */}
+      <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
+        {isDownloading && downloadProgress ? (
+          <View style={{
+            backgroundColor: isDark ? '#333' : '#f5f5f5',
+            borderRadius: 8,
+            padding: 12
+          }}>
+            <Text style={[styles.text, { fontSize: 14, marginBottom: 8, textAlign: 'center' }]}>
+              {downloadProgress.status === 'downloading'
+                ? `Downloading: ${downloadProgress.currentFile}`
+                : downloadProgress.status === 'completed'
+                ? 'Download Complete!'
+                : downloadProgress.status === 'cancelled'
+                ? 'Download Cancelled'
+                : 'Download Error'}
+            </Text>
+
+            {/* Overall Progress Bar */}
+            <View style={{ marginBottom: 8 }}>
+              <View style={{
+                height: 6,
+                backgroundColor: isDark ? '#555' : '#ddd',
+                borderRadius: 3,
+                overflow: 'hidden'
+              }}>
+                <View style={{
+                  height: '100%',
+                  width: `${Math.round(downloadProgress.totalProgress * 100)}%`,
+                  backgroundColor: downloadProgress.status === 'error' ? '#FF3B30' : '#007AFF',
+                  borderRadius: 3,
+                }} />
+              </View>
+              <Text style={[styles.text, { fontSize: 11, opacity: 0.6, textAlign: 'center', marginTop: 2 }]}>
+                Overall Progress: {Math.round(downloadProgress.totalProgress * 100)}%
+              </Text>
+            </View>
+
+            {/* Current File Progress Bar */}
+            {downloadProgress.status === 'downloading' && downloadProgress.currentFile && (
+              <View style={{ marginBottom: 8 }}>
+                <View style={{
+                  height: 4,
+                  backgroundColor: isDark ? '#555' : '#ddd',
+                  borderRadius: 2,
+                  overflow: 'hidden'
+                }}>
+                  <View style={{
+                    height: '100%',
+                    width: `${Math.round(downloadProgress.fileProgress * 100)}%`,
+                    backgroundColor: '#34C759',
+                    borderRadius: 2,
+                  }} />
+                </View>
+                <Text style={[styles.text, { fontSize: 11, opacity: 0.6, textAlign: 'center', marginTop: 2 }]}>
+                  Current File: {Math.round(downloadProgress.fileProgress * 100)}%
+                </Text>
+              </View>
+            )}
+
+            {/* Download Stats */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.text, { fontSize: 11, opacity: 0.7, textAlign: 'left' }]}>
+                  Files: {downloadProgress.downloadedFiles}/{downloadProgress.totalFiles}
+                </Text>
+                <Text style={[styles.text, { fontSize: 11, opacity: 0.7, textAlign: 'left' }]}>
+                  Size: {formatBytes(downloadProgress.bytesDownloaded)}/{formatBytes(downloadProgress.totalBytes)}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.text, { fontSize: 11, opacity: 0.7, textAlign: 'right' }]}>
+                  Speed: {formatSpeed(downloadProgress.downloadSpeed)}
+                </Text>
+                {downloadProgress.downloadSpeed > 0 && (
+                  <Text style={[styles.text, { fontSize: 11, opacity: 0.7, textAlign: 'right' }]}>
+                    ETA: {formatTimeRemaining(
+                      downloadProgress.totalBytes - downloadProgress.bytesDownloaded,
+                      downloadProgress.downloadSpeed
+                    )}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            {/* Download Control Buttons */}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 8 }}>
+              {downloadProgress.canPause && (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#FF9500',
+                    borderRadius: 6,
+                    paddingVertical: 8,
+                    paddingHorizontal: 16,
+                  }}
+                  onPress={handlePauseDownload}
+                >
+                  <Text style={{
+                    color: 'white',
+                    fontSize: 12,
+                    fontWeight: '600'
+                  }}>
+                    ⏸️ Pause
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {downloadProgress.canResume && (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#34C759',
+                    borderRadius: 6,
+                    paddingVertical: 8,
+                    paddingHorizontal: 16,
+                  }}
+                  onPress={handleResumeDownload}
+                >
+                  <Text style={{
+                    color: 'white',
+                    fontSize: 12,
+                    fontWeight: '600'
+                  }}>
+                    ▶️ Resume
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {(downloadProgress.status === 'downloading' || downloadProgress.status === 'paused') && (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#FF3B30',
+                    borderRadius: 6,
+                    paddingVertical: 8,
+                    paddingHorizontal: 16,
+                  }}
+                  onPress={handleCancelDownload}
+                >
+                  <Text style={{
+                    color: 'white',
+                    fontSize: 12,
+                    fontWeight: '600'
+                  }}>
+                    ❌ Cancel
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={{
+              backgroundColor: isDownloaded ? '#FF3B30' : '#007AFF',
+              borderRadius: 8,
+              padding: 12,
+              alignItems: 'center',
+              opacity: (!serverUrl || !accessToken) ? 0.5 : 1
+            }}
+            onPress={isDownloaded ? handleDeleteDownload : handleDownload}
+            disabled={!serverUrl || !accessToken || isDownloading}
+          >
+            <Text style={{
+              color: 'white',
+              fontSize: 16,
+              fontWeight: '600'
+            }}>
+              {isDownloaded ? '🗑️ Delete Download' : '⬇️ Download'}
+            </Text>
+            {isDownloaded && (
+              <Text style={{
+                color: 'white',
+                fontSize: 12,
+                opacity: 0.8,
+                marginTop: 2
+              }}>
+                Tap to free up storage space
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+
       {genres && genres.length > 0 && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8, justifyContent: 'center' }}>
           {genres.map((g: string, idx: number) => (
