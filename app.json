@@ -1,22 +1,25 @@
 {
   "expo": {
-    "name": "abs-react-native",
-    "slug": "abs-react-native",
+    "name": "PocketShelf",
+    "slug": "pocket-shelf",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "absreactnative",
+    "scheme": "pocket-shelf",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
         "NSLocalNetworkUsageDescription": "This app needs access to your local network to download files.",
         "UIBackgroundModes": [
           "audio"
         ]
       },
-      "bundleIdentifier": "com.anonymous.abs-react-native"
+      "bundleIdentifier": "cloud.madtown.pocketshelf"
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +29,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "cloud.madtown.mybookshelf"
     },
     "web": {
       "output": "static",

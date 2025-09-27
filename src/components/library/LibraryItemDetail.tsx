@@ -175,6 +175,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         serverUrl,
         accessToken,
         (progress) => {
+          console.log('[LibraryItemDetail] Download progress:', progress);
           setDownloadProgress(progress);
         }
       );

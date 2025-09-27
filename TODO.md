@@ -2,13 +2,19 @@
 
 ## Next:
 - [ ] Book download
+  - [ ] debounce/smoothe dl rate and ETA calculations
+  - [ ] review and simplify/refactor download.ts
+  - [ ] review and simplify/refactor libraryItemDetail.tsx
+  - [ ] Fix background downloader library (new architecture, etc)
 - [ ] Player UI on item details screen
 - [ ] Add now playing to home screen
 - [x] Home screen continue listening list
 - [ ] Stream content from server
   - [ ] setting to auto download items when streaming playback starts?
 - [ ] Small floating player
-- Full screen player
+- [ ] Full screen player
+- [ ] Track playing events (start, pause, sync progress, sync failed)
+  - [ ] Display listening sessions on item details screen (split sessions if paused for more than 15 minutes–configurable)
 
 ## Library tab
 - [x] select the first library in the user's available libraries
@@ -87,4 +93,7 @@ LibraryProvider implementation:
     - refresh the list of items in the selected library
         - authors, series, genres, narrators from library items should only be used to populate join tables
 
-## Schemas
+## Downloader fixes
+
+- progress update time floatValue instead of intValue
+- update event emitting to use enqueueEvent instead of sendEventWithName

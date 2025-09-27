@@ -31,6 +31,21 @@ export interface DownloadTaskInfo {
 
 export type DownloadProgressCallback = (progress: DownloadProgress) => void;
 
+// Download speed smoothing configuration
+const SPEED_SMOOTHING_FACTOR = 0.2; // Higher = more responsive, lower = smoother
+const MIN_SAMPLES_FOR_ETA = 3; // Minimum progress updates before showing stable ETA
+const PROGRESS_DEBOUNCE_MS = 350; // Debounce progress updates to reduce UI jitter
+
+interface DownloadSpeedTracker {
+  smoothedSpeed: number;
+  sampleCount: number;
+  lastUpdateTime: number;
+  lastBytesDownloaded: number;
+  debounceTimer?: ReturnType<typeof setTimeout>;
+  hasShownInitialProgress: boolean;
+  lastProgressUpdate?: DownloadProgress;
+}
+
 // Global download task tracking
 const activeDownloads = new Map<string, {
   tasks: DownloadTaskInfo[];
@@ -38,17 +53,24 @@ const activeDownloads = new Map<string, {
   totalBytes: number;
   downloadedBytes: number;
   isPaused: boolean;
+  speedTracker: DownloadSpeedTracker;
 }>();
 
 // Initialize background downloader configuration
 RNBackgroundDownloader.setConfig({
-  progressInterval: 500, // Update progress every 500ms
-  isLogsEnabled: __DEV__, // Enable logs in development
+  progressInterval: 300, // Update progress every 100ms
+  // progressMinBytes: 1048576, // 1MB
+  // isLogsEnabled: __DEV__, // Enable logs in development
 });
 
 export function cancelDownload(libraryItemId: string): void {
   const downloadInfo = activeDownloads.get(libraryItemId);
   if (downloadInfo) {
+    // Clear any pending debounce timer
+    if (downloadInfo.speedTracker.debounceTimer) {
+      clearTimeout(downloadInfo.speedTracker.debounceTimer);
+    }
+
     // Stop all tasks for this library item
     downloadInfo.tasks.forEach(taskInfo => {
       taskInfo.task.stop();
@@ -66,6 +88,9 @@ export function pauseDownload(libraryItemId: string): void {
     });
     downloadInfo.isPaused = true;
     console.log(`[downloads] Paused download for ${libraryItemId}`);
+
+    // Trigger immediate progress update to show paused state
+    triggerProgressUpdate(libraryItemId);
   }
 }
 
@@ -77,6 +102,9 @@ export function resumeDownload(libraryItemId: string): void {
     });
     downloadInfo.isPaused = false;
     console.log(`[downloads] Resumed download for ${libraryItemId}`);
+
+    // Trigger immediate progress update to show resumed state
+    triggerProgressUpdate(libraryItemId);
   }
 }
 
@@ -86,6 +114,86 @@ function isDownloadActive(libraryItemId: string): boolean {
 
 function getDownloadInfo(libraryItemId: string) {
   return activeDownloads.get(libraryItemId);
+}
+
+/**
+ * Trigger a progress update for a download to refresh the UI state
+ */
+function triggerProgressUpdate(libraryItemId: string): void {
+  const downloadInfo = getDownloadInfo(libraryItemId);
+  if (!downloadInfo || !downloadInfo.progressCallback) return;
+
+  // Use the last known progress update if available, otherwise create a basic one
+  const lastUpdate = downloadInfo.speedTracker.lastProgressUpdate;
+
+  if (lastUpdate) {
+    // Update the status and control flags based on current state
+    const updatedProgress: DownloadProgress = {
+      ...lastUpdate,
+      status: downloadInfo.isPaused ? 'paused' : 'downloading',
+      canPause: !downloadInfo.isPaused,
+      canResume: downloadInfo.isPaused,
+    };
+
+    downloadInfo.progressCallback(updatedProgress);
+  } else {
+    // Fallback to basic progress update if no previous update exists
+    const currentTotalBytes = downloadInfo.downloadedBytes;
+    const actualStatus: DownloadProgress['status'] = downloadInfo.isPaused ? 'paused' : 'downloading';
+
+    const progressUpdate: DownloadProgress = {
+      libraryItemId,
+      totalFiles: 2,
+      downloadedFiles: 1,
+      currentFile: '',
+      fileProgress: 0,
+      totalProgress: downloadInfo.totalBytes > 0 ? currentTotalBytes / downloadInfo.totalBytes : 0,
+      bytesDownloaded: currentTotalBytes,
+      totalBytes: downloadInfo.totalBytes,
+      fileBytesDownloaded: 0,
+      fileTotalBytes: 0,
+      downloadSpeed: downloadInfo.speedTracker.smoothedSpeed,
+      status: actualStatus,
+      canPause: actualStatus === 'downloading',
+      canResume: actualStatus === 'paused',
+    };
+
+    downloadInfo.progressCallback(progressUpdate);
+  }
+}
+
+/**
+ * Calculate smoothed download speed using exponential moving average
+ */
+function calculateSmoothedSpeed(
+  speedTracker: DownloadSpeedTracker,
+  currentBytesDownloaded: number,
+  currentTime: number
+): number {
+  const timeDelta = (currentTime - speedTracker.lastUpdateTime) / 1000; // Convert to seconds
+  const bytesDelta = currentBytesDownloaded - speedTracker.lastBytesDownloaded;
+
+  if (timeDelta <= 0 || bytesDelta < 0) {
+    return speedTracker.smoothedSpeed;
+  }
+
+  const instantSpeed = bytesDelta / timeDelta;
+
+  // For the first sample, use the instant speed
+  if (speedTracker.sampleCount === 0) {
+    speedTracker.smoothedSpeed = instantSpeed;
+  } else {
+    // Apply exponential moving average
+    speedTracker.smoothedSpeed =
+      (SPEED_SMOOTHING_FACTOR * instantSpeed) +
+      ((1 - SPEED_SMOOTHING_FACTOR) * speedTracker.smoothedSpeed);
+  }
+
+  speedTracker.sampleCount++;
+  speedTracker.lastUpdateTime = currentTime;
+  speedTracker.lastBytesDownloaded = currentBytesDownloaded;
+
+  return speedTracker.smoothedSpeed;
 }
 
 /**
@@ -113,8 +221,10 @@ export function formatSpeed(bytesPerSecond: number): string {
 /**
  * Estimate time remaining based on current speed
  */
-export function formatTimeRemaining(bytesRemaining: number, bytesPerSecond: number): string {
-  if (bytesPerSecond === 0) return 'Calculating...';
+export function formatTimeRemaining(bytesRemaining: number, bytesPerSecond: number, sampleCount: number = MIN_SAMPLES_FOR_ETA): string {
+  if (bytesPerSecond === 0 || sampleCount < MIN_SAMPLES_FOR_ETA) {
+    return 'Calculating...';
+  }
 
   const secondsRemaining = bytesRemaining / bytesPerSecond;
 
@@ -152,7 +262,7 @@ async function ensureDownloadsDirectory(libraryItemId: string): Promise<void> {
  * Construct download URL for an audio file based on the Swift code pattern
  */
 function constructDownloadUrl(libraryItemId: string, audioFileIno: string, serverUrl: string, token: string): string {
-  return `${serverUrl}/api/items/${libraryItemId}/file/${audioFileIno}/download?token=${token}`;
+  return `${serverUrl}/api/items/${libraryItemId}/file/${audioFileIno}/download`;
 }
 
 /**
@@ -192,6 +302,14 @@ async function downloadAudioFile(
       audioFileId: audioFile.id,
       filename: audioFile.filename,
     }
+  }).begin((data) => {
+    console.log('[downloads] Download begin:', data);
+  }).progress(data => {
+    console.log('[downloads] Download progress:', data);
+  }).done((data) => {
+    console.log('[downloads] Download done:', data);
+  }).error((data) => {
+    console.log('[downloads] Download error:', data);
   });
 
   const taskInfo: DownloadTaskInfo = {
@@ -203,6 +321,7 @@ async function downloadAudioFile(
 
   // Set up progress callback
   task.progress((data) => {
+    console.log('[downloads] Download progress:', data);
     onProgress?.(taskInfo, data.bytesDownloaded, data.bytesTotal);
   });
 
@@ -255,31 +374,45 @@ export async function downloadLibraryItem(
       totalBytes,
       downloadedBytes: 0,
       isPaused: false,
+      speedTracker: {
+        smoothedSpeed: 0,
+        sampleCount: 0,
+        lastUpdateTime: Date.now(),
+        lastBytesDownloaded: 0,
+        hasShownInitialProgress: false,
+      },
     });
 
     const updateProgress = (
       currentFile: string,
       fileBytesDownloaded: number,
       fileTotalBytes: number,
-      status: DownloadProgress['status'] = 'downloading'
+      overrideStatus?: DownloadProgress['status']
     ) => {
-      const now = Date.now();
-      const timeSinceLastUpdate = (now - lastProgressTime) / 1000;
-      const currentTotalBytes = totalBytesDownloaded + fileBytesDownloaded;
-      const bytesSinceLastUpdate = currentTotalBytes - lastBytesDownloaded;
-
-      // Calculate download speed (bytes per second)
-      const downloadSpeed = timeSinceLastUpdate > 0 ? bytesSinceLastUpdate / timeSinceLastUpdate : 0;
-
-      lastProgressTime = now;
-      lastBytesDownloaded = currentTotalBytes;
-
       const downloadInfo = getDownloadInfo(libraryItemId);
-      if (downloadInfo) {
-        downloadInfo.downloadedBytes = currentTotalBytes;
+      if (!downloadInfo) return;
+
+      const currentTotalBytes = totalBytesDownloaded + fileBytesDownloaded;
+      downloadInfo.downloadedBytes = currentTotalBytes;
+
+      // Determine actual status based on download state
+      let actualStatus: DownloadProgress['status'];
+      if (overrideStatus) {
+        actualStatus = overrideStatus;
+      } else {
+        actualStatus = downloadInfo.isPaused ? 'paused' : 'downloading';
       }
 
-      onProgress?.({
+      // Calculate smoothed download speed
+      const now = Date.now();
+      const smoothedSpeed = calculateSmoothedSpeed(
+        downloadInfo.speedTracker,
+        currentTotalBytes,
+        now
+      );
+
+      // Create progress update
+      const progressUpdate: DownloadProgress = {
         libraryItemId,
         totalFiles: totalFiles + 1, // +1 for cover
         downloadedFiles,
@@ -290,11 +423,43 @@ export async function downloadLibraryItem(
         totalBytes,
         fileBytesDownloaded,
         fileTotalBytes,
-        downloadSpeed,
-        status,
-        canPause: status === 'downloading',
-        canResume: status === 'paused',
-      });
+        downloadSpeed: smoothedSpeed,
+        status: actualStatus,
+        canPause: actualStatus === 'downloading',
+        canResume: actualStatus === 'paused',
+      };
+
+      // Store the last progress update for reference
+      downloadInfo.speedTracker.lastProgressUpdate = progressUpdate;
+
+      // Clear any existing debounce timer
+      if (downloadInfo.speedTracker.debounceTimer) {
+        clearTimeout(downloadInfo.speedTracker.debounceTimer);
+      }
+
+      // For completed/error states, update immediately
+      if (actualStatus === 'completed' || actualStatus === 'error' || actualStatus === 'cancelled') {
+        onProgress?.(progressUpdate);
+        return;
+      }
+
+      // Show first progress update immediately, then debounce subsequent updates
+      if (!downloadInfo.speedTracker.hasShownInitialProgress) {
+        downloadInfo.speedTracker.hasShownInitialProgress = true;
+        onProgress?.(progressUpdate);
+        return;
+      }
+
+      // For paused state, update immediately to show pause status
+      if (actualStatus === 'paused') {
+        onProgress?.(progressUpdate);
+        return;
+      }
+
+      // Debounce progress updates for downloading state
+      downloadInfo.speedTracker.debounceTimer = setTimeout(() => {
+        onProgress?.(progressUpdate);
+      }, PROGRESS_DEBOUNCE_MS);
     };
 
     // Download cover image first
@@ -316,7 +481,7 @@ export async function downloadLibraryItem(
           serverUrl,
           token,
           (taskInfo, bytesDownloaded, bytesTotal) => {
-            updateProgress(taskInfo.filename, bytesDownloaded, bytesTotal, 'downloading');
+            updateProgress(taskInfo.filename, bytesDownloaded, bytesTotal);
           }
         );
 
@@ -337,7 +502,7 @@ export async function downloadLibraryItem(
             markAudioFileAsDownloaded(audioFile.id, downloadPath).then(() => {
               downloadedFiles++;
               totalBytesDownloaded += data.bytesDownloaded;
-              updateProgress(audioFile.filename, data.bytesDownloaded, data.bytesTotal, 'downloading');
+              updateProgress(audioFile.filename, data.bytesDownloaded, data.bytesTotal);
               resolve();
             }).catch(reject);
           });
@@ -367,6 +532,13 @@ export async function downloadLibraryItem(
 
     // Download completed
     updateProgress('', 0, 0, 'completed');
+
+    // Clean up any pending timers
+    const downloadInfo = getDownloadInfo(libraryItemId);
+    if (downloadInfo?.speedTracker.debounceTimer) {
+      clearTimeout(downloadInfo.speedTracker.debounceTimer);
+    }
+
     activeDownloads.delete(libraryItemId);
 
     console.log(`[downloads] Completed all downloads for library item ${libraryItemId}`);
@@ -374,6 +546,10 @@ export async function downloadLibraryItem(
     console.error(`[downloads] Download failed for library item ${libraryItemId}:`, error);
 
     // Clean up failed download
+    const downloadInfo = getDownloadInfo(libraryItemId);
+    if (downloadInfo?.speedTracker.debounceTimer) {
+      clearTimeout(downloadInfo.speedTracker.debounceTimer);
+    }
     activeDownloads.delete(libraryItemId);
 
     onProgress?.({
@@ -433,6 +609,13 @@ export async function initializeDownloads(): Promise<void> {
           totalBytes: 0, // Will be calculated
           downloadedBytes: 0,
           isPaused: false,
+          speedTracker: {
+            smoothedSpeed: 0,
+            sampleCount: 0,
+            lastUpdateTime: Date.now(),
+            lastBytesDownloaded: 0,
+            hasShownInitialProgress: false,
+          },
         });
 
         console.log(`[downloads] Restored ${tasks.length} tasks for library item ${libraryItemId}`);
