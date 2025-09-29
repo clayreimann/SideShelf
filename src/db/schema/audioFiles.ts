@@ -48,7 +48,8 @@ export const audioFiles = sqliteTable('audio_files', {
   tagComment: text('tag_comment'),
   tagLanguage: text('tag_language'),
   tagASIN: text('tag_asin'),
-  // Downloaded file info
+  // Downloaded file info (this is local to the app, not from the server)
+  // We should make sure this does not get cleared during `onConflict`
   isDownloaded: integer('is_downloaded', { mode: 'boolean' }).default(false),
   downloadPath: text('download_path'),
   downloadedAt: integer('downloaded_at', { mode: 'timestamp' }),

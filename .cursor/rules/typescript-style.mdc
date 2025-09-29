@@ -1,0 +1,22 @@
+---
+globs: *.ts,*.tsx
+alwaysApply: false
+---
+
+- Imports should use the '@/' prefix.
+- Types should be documented with JSDoc.
+
+
+## Import Examples
+
+```ts
+// Correct
+// src/app/(tabs)/myScreen.tsx
+import { db } from '@/db/client';
+```
+
+```ts
+// Incorrect
+// src/app/(tabs)/myScreen.tsx
+import { db } from '../../db/client';
+```

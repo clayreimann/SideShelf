@@ -17,7 +17,7 @@ export const STORAGE_KEYS = {
 /**
  * Default sort configuration
  */
-export const DEFAULT_SORT_CONFIG: SortConfig = { field: 'title', direction: 'desc' };
+export const DEFAULT_SORT_CONFIG: SortConfig = { field: 'title', direction: 'asc' };
 
 /**
  * Default author sort configuration

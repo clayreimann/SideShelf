@@ -6,6 +6,7 @@
   - [ ] review and simplify/refactor download.ts
   - [ ] review and simplify/refactor libraryItemDetail.tsx
   - [ ] Fix background downloader library (new architecture, etc)
+    - [ ] expo plugin to modify app delegate so to conform to url complete delegate
 - [ ] Player UI on item details screen
 - [ ] Add now playing to home screen
 - [x] Home screen continue listening list

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "PocketShelf",
-    "slug": "pocket-shelf",
+    "name": "SideShelf",
+    "slug": "side-shelf",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "pocket-shelf",
+    "scheme": "side-shelf",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -19,7 +19,7 @@
           "audio"
         ]
       },
-      "bundleIdentifier": "cloud.madtown.pocketshelf"
+      "bundleIdentifier": "cloud.madtown.sideshelf"
     },
     "android": {
       "adaptiveIcon": {
@@ -30,7 +30,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "cloud.madtown.mybookshelf"
+      "package": "cloud.madtown.sideshelf"
     },
     "web": {
       "output": "static",

@@ -1,5 +1,6 @@
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
+import { DownloadService } from '@/services/DownloadService';
 import { useRouter } from 'expo-router';
 import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useEffect } from 'react';
@@ -13,6 +14,9 @@ export default function TabLayout() {
             router.push('/login');
         }
     }, [initialized, isAuthenticated]);
+    useEffect(() => {
+        DownloadService.getInstance().initialize();
+    }, []);
     return (
         <NativeTabs
             blurEffect={isDark ? 'systemThickMaterialDark' : 'systemThickMaterialLight'}
