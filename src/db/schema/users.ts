@@ -6,9 +6,9 @@ export const users = sqliteTable('users', {
   type: text('type'),
   createdAt: integer('created_at'),
   lastSeen: integer('last_seen'),
-  // a comma-separated list of series IDs to hide from the user's "Continue Series" shelf
+  // a comma-separated list of series IDs to hide from the user's "Continue ApiSeries" shelf
   hideFromContinueListening: text('hide_from_continue_listening'),
-  // from UserPermissions
+  // from ApiUserPermissions
   canDownload: integer('download', { mode: 'boolean' }),
   canUpdate: integer('update', { mode: 'boolean' }),
   canDelete: integer('delete', { mode: 'boolean' }),

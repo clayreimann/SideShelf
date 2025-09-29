@@ -1,4 +1,4 @@
-import type { Book, Podcast } from '@/lib/api/types';
+import type { ApiBook, ApiPodcast } from '@/types/api';
 import { cacheCoverIfMissing } from '@/lib/covers';
 import { eq } from 'drizzle-orm';
 import { db } from '../client';
@@ -8,7 +8,7 @@ import { mediaMetadata, MediaMetadataRow, NewMediaMetadataRow } from '../schema/
 /**
  * Marshal book data from API to media metadata row
  */
-export function marshalBookToMediaMetadata(book: Book): NewMediaMetadataRow {
+export function marshalBookToMediaMetadata(book: ApiBook): NewMediaMetadataRow {
   const metadata = book.metadata;
 
   return {
@@ -23,7 +23,7 @@ export function marshalBookToMediaMetadata(book: Book): NewMediaMetadataRow {
     language: metadata.language,
     explicit: metadata.explicit,
 
-    // Book-specific fields
+    // ApiBook-specific fields
     publisher: metadata.publisher,
     isbn: metadata.isbn,
     asin: metadata.asin,
@@ -49,7 +49,7 @@ export function marshalBookToMediaMetadata(book: Book): NewMediaMetadataRow {
     goodreadsId: null,
     googleBooksId: null,
 
-    // Podcast fields (null for books)
+    // ApiPodcast fields (null for books)
     author: null,
     feedUrl: null,
     imageUrl: null, // Will be set only after successful cover caching
@@ -67,7 +67,7 @@ export function marshalBookToMediaMetadata(book: Book): NewMediaMetadataRow {
 /**
  * Marshal podcast data from API to media metadata row
  */
-export function marshalPodcastToMediaMetadata(podcast: Podcast): NewMediaMetadataRow {
+export function marshalPodcastToMediaMetadata(podcast: ApiPodcast): NewMediaMetadataRow {
   const metadata = podcast.metadata;
 
   return {
@@ -82,7 +82,7 @@ export function marshalPodcastToMediaMetadata(podcast: Podcast): NewMediaMetadat
     language: metadata.language,
     explicit: metadata.explicit,
 
-    // Podcast-specific fields
+    // ApiPodcast-specific fields
     author: metadata.author,
     feedUrl: metadata.feedUrl,
     imageUrl: metadata.imageUrl,
@@ -91,13 +91,13 @@ export function marshalPodcastToMediaMetadata(podcast: Podcast): NewMediaMetadat
     itunesArtistId: metadata.itunesArtistId,
     type: metadata.type,
 
-    // Book fields (null for podcasts)
+    // ApiBook fields (null for podcasts)
     publisher: null,
     isbn: null,
     asin: null,
     publishedYear: null,
     publishedDate: metadata.releaseDate, // Map releaseDate to publishedDate
-    duration: null, // Podcast duration would be sum of episodes
+    duration: null, // ApiPodcast duration would be sum of episodes
     trackCount: podcast.episodes?.length || null,
     format: null,
     edition: null,
@@ -122,7 +122,7 @@ export function marshalPodcastToMediaMetadata(podcast: Podcast): NewMediaMetadat
 /**
  * Upsert media metadata for a book
  */
-export async function upsertBookMetadata(book: Book): Promise<MediaMetadataRow> {
+export async function upsertBookMetadata(book: ApiBook): Promise<MediaMetadataRow> {
   const row = marshalBookToMediaMetadata(book);
 
   const existing = await db
@@ -153,7 +153,7 @@ export async function upsertBookMetadata(book: Book): Promise<MediaMetadataRow> 
 /**
  * Upsert media metadata for a podcast
  */
-export async function upsertPodcastMetadata(podcast: Podcast): Promise<MediaMetadataRow> {
+export async function upsertPodcastMetadata(podcast: ApiPodcast): Promise<MediaMetadataRow> {
   const row = marshalPodcastToMediaMetadata(podcast);
 
   const existing = await db
@@ -184,7 +184,7 @@ export async function upsertPodcastMetadata(podcast: Podcast): Promise<MediaMeta
 /**
  * Upsert multiple book metadata records
  */
-export async function upsertBooksMetadata(books: Book[]): Promise<void> {
+export async function upsertBooksMetadata(books: ApiBook[]): Promise<void> {
   if (!books?.length) return;
 
   for (const book of books) {
@@ -195,7 +195,7 @@ export async function upsertBooksMetadata(books: Book[]): Promise<void> {
 /**
  * Upsert multiple podcast metadata records
  */
-export async function upsertPodcastsMetadata(podcasts: Podcast[]): Promise<void> {
+export async function upsertPodcastsMetadata(podcasts: ApiPodcast[]): Promise<void> {
   if (!podcasts?.length) return;
 
   for (const podcast of podcasts) {

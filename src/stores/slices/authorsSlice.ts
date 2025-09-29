@@ -20,7 +20,7 @@ import {
     AuthorSortConfig,
     LoadingStates,
     SliceCreator
-} from '../types';
+} from '@/types/store';
 import { DEFAULT_AUTHOR_SORT_CONFIG, sortAuthors, STORAGE_KEYS } from '../utils';
 
 /**

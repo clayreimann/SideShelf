@@ -9,7 +9,7 @@ export default function AboutMeScreen() {
   return (
     <>
       <View style={styles.container}>
-        <Text style={styles.text}>User: {username}</Text>
+        <Text style={styles.text}>ApiUser: {username}</Text>
         <Text style={styles.text}>Audiobookshelf: {serverUrl}</Text>
       </View>
       <Stack.Screen options={{ title: 'About Me' }} />

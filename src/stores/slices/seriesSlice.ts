@@ -1,5 +1,5 @@
 /**
- * Series slice for Zustand store
+ * ApiSeries slice for Zustand store
  *
  * This slice manages series-related state including:
  * - All available series
@@ -20,11 +20,11 @@ import {
     LoadingStates,
     SeriesSortConfig,
     SliceCreator
-} from '../types';
+} from '@/types/store';
 import { DEFAULT_SERIES_SORT_CONFIG, sortSeries, STORAGE_KEYS } from '../utils';
 
 /**
- * Series slice state interface - scoped under 'series' to avoid conflicts
+ * ApiSeries slice state interface - scoped under 'series' to avoid conflicts
  */
 export interface SeriesSliceState {
     series: {
@@ -46,7 +46,7 @@ export interface SeriesSliceState {
 }
 
 /**
- * Series slice actions interface
+ * ApiSeries slice actions interface
  */
 export interface SeriesSliceActions {
     // Public actions

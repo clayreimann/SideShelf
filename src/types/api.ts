@@ -1,27 +1,33 @@
-// Audiobookshelf API Response Types
-// Based on documentation: https://api.audiobookshelf.org/
+/**
+ * Audiobookshelf API Response Types
+ * Based on documentation: https://api.audiobookshelf.org/
+ *
+ * Note: These types represent the API response format and may differ
+ * from database row types. Use ApiUser, ApiLibrary, etc. to distinguish
+ * from database types (UserRow, LibraryRow, etc.)
+ */
 
 // Base types used across multiple endpoints
-export interface User {
+export interface ApiUser {
   id: string;
   username: string;
   type: string;
   token?: string;
   accessToken?: string;
   refreshToken?: string;
-  mediaProgress: MediaProgress[];
+  mediaProgress: ApiMediaProgress[];
   seriesHideFromContinueListening: string[];
-  bookmarks: AudioBookmark[];
+  bookmarks: ApiAudioBookmark[];
   isActive: boolean;
   isLocked: boolean;
   lastSeen: number;
   createdAt: number;
-  permissions: UserPermissions;
+  permissions: ApiUserPermissions;
   librariesAccessible: string[];
   itemTagsAccessible: string[];
 }
 
-export interface UserPermissions {
+export interface ApiUserPermissions {
   download: boolean;
   update: boolean;
   delete: boolean;
@@ -31,7 +37,7 @@ export interface UserPermissions {
   accessExplicitContent: boolean;
 }
 
-export interface MediaProgress {
+export interface ApiMediaProgress {
   id: string;
   libraryItemId: string;
   episodeId?: string;
@@ -45,7 +51,7 @@ export interface MediaProgress {
   finishedAt: number | null;
 }
 
-export interface AudioBookmark {
+export interface ApiAudioBookmark {
   id: string;
   libraryItemId: string;
   title: string;
@@ -53,20 +59,20 @@ export interface AudioBookmark {
   createdAt: number;
 }
 
-export interface Library {
+export interface ApiLibrary {
   id: string;
   name: string;
-  folders: Folder[];
+  folders: ApiFolder[];
   displayOrder: number;
   icon: string;
   mediaType: 'book' | 'podcast';
   provider: string;
-  settings: LibrarySettings;
+  settings: ApiLibrarySettings;
   createdAt: number;
   lastUpdate: number;
 }
 
-export interface LibrarySettings {
+export interface ApiLibrarySettings {
   coverAspectRatio: number;
   disableWatcher: boolean;
   skipMatchingMediaWithAsin: boolean;
@@ -74,14 +80,14 @@ export interface LibrarySettings {
   autoScanCronExpression: string | null;
 }
 
-export interface Folder {
+export interface ApiFolder {
   id: string;
   fullPath: string;
   libraryId: string;
   addedAt: number;
 }
 
-export interface LibraryItem {
+export interface ApiLibraryItem {
   id: string;
   ino: string;
   libraryId: string;
@@ -99,19 +105,19 @@ export interface LibraryItem {
   isMissing: boolean;
   isInvalid: boolean;
   mediaType: 'book' | 'podcast';
-  media: Book | Podcast;
-  libraryFiles: LibraryFile[];
+  media: ApiBook | ApiPodcast;
+  libraryFiles: ApiLibraryFile[];
 }
 
-export interface LibraryFile {
+export interface ApiLibraryFile {
   ino: string;
-  metadata: FileMetadata;
+  metadata: ApiFileMetadata;
   addedAt: number;
   updatedAt: number;
   fileType: string;
 }
 
-export interface FileMetadata {
+export interface ApiFileMetadata {
   filename: string;
   ext: string;
   path: string;
@@ -122,24 +128,24 @@ export interface FileMetadata {
   birthtimeMs: number;
 }
 
-export interface Book {
+export interface ApiBook {
   id: string;
   libraryItemId: string;
-  metadata: BookMetadata;
+  metadata: ApiBookMetadata;
   coverPath: string | null;
   tags: string[];
-  audioFiles: AudioFile[];
-  chapters: BookChapter[];
+  audioFiles: ApiAudioFile[];
+  chapters: ApiBookChapter[];
   missingParts: unknown[];
-  ebookFile: EBookFile | null;
+  ebookFile: ApiEBookFile | null;
 }
 
-export interface BookMetadata {
+export interface ApiBookMetadata {
   title: string | null;
   subtitle: string | null;
-  authors: Author[];
+  authors: ApiAuthor[];
   narrators: string[];
-  series: Series[];
+  series: ApiSeries[];
   genres: string[];
   publishedYear: string | null;
   publishedDate: string | null;
@@ -155,7 +161,7 @@ export interface BookMetadata {
   seriesName: string;
 }
 
-export interface Author {
+export interface ApiAuthor {
   id: string;
   asin: string | null;
   name: string;
@@ -165,7 +171,7 @@ export interface Author {
   updatedAt: number;
 }
 
-export interface Series {
+export interface ApiSeries {
   id: string;
   name: string;
   description: string | null;
@@ -174,10 +180,10 @@ export interface Series {
   sequence: string | null;
 }
 
-export interface AudioFile {
+export interface ApiAudioFile {
   index: number;
   ino: string;
-  metadata: FileMetadata;
+  metadata: ApiFileMetadata;
   addedAt: number;
   updatedAt: number;
   trackNumFromMeta: number | null;
@@ -197,11 +203,11 @@ export interface AudioFile {
   channelLayout: string;
   chapters: unknown[];
   embeddedCoverArt: string | null;
-  metaTags: AudioMetaTags;
+  metaTags: ApiAudioMetaTags;
   mimeType: string;
 }
 
-export interface AudioMetaTags {
+export interface ApiAudioMetaTags {
   tagAlbum: string | null;
   tagArtist: string | null;
   tagGenre: string | null;
@@ -234,28 +240,28 @@ export interface AudioMetaTags {
   tagMusicBrainzArtistId: string | null;
 }
 
-export interface BookChapter {
+export interface ApiBookChapter {
   id: number;
   start: number;
   end: number;
   title: string;
 }
 
-export interface EBookFile {
+export interface ApiEBookFile {
   ino: string;
-  metadata: FileMetadata;
+  metadata: ApiFileMetadata;
   ebookFormat: string;
   addedAt: number;
   updatedAt: number;
 }
 
-export interface Podcast {
+export interface ApiPodcast {
   id: string;
   libraryItemId: string;
-  metadata: PodcastMetadata;
+  metadata: ApiPodcastMetadata;
   coverPath: string | null;
   tags: string[];
-  episodes: PodcastEpisode[];
+  episodes: ApiPodcastEpisode[];
   autoDownloadEpisodes: boolean;
   autoDownloadSchedule: string;
   lastEpisodeCheck: number;
@@ -263,7 +269,7 @@ export interface Podcast {
   maxNewEpisodesToDownload: number;
 }
 
-export interface PodcastMetadata {
+export interface ApiPodcastMetadata {
   title: string | null;
   author: string | null;
   description: string | null;
@@ -279,7 +285,7 @@ export interface PodcastMetadata {
   type: string | null;
 }
 
-export interface PodcastEpisode {
+export interface ApiPodcastEpisode {
   libraryItemId: string;
   id: string;
   index: number;
@@ -289,98 +295,98 @@ export interface PodcastEpisode {
   title: string;
   subtitle: string | null;
   description: string | null;
-  enclosure: PodcastEpisodeEnclosure | null;
+  enclosure: ApiPodcastEpisodeEnclosure | null;
   pubDate: string | null;
-  audioFile: AudioFile | null;
+  audioFile: ApiAudioFile | null;
   publishedAt: number | null;
   addedAt: number;
   updatedAt: number;
 }
 
-export interface PodcastEpisodeEnclosure {
+export interface ApiPodcastEpisodeEnclosure {
   url: string;
   type: string;
   length: string | null;
 }
 
-export interface Collection {
+export interface ApiCollection {
   id: string;
   libraryId: string;
   userId: string;
   name: string;
   description: string | null;
-  books: LibraryItem[];
+  books: ApiLibraryItem[];
   lastUpdate: number;
   createdAt: number;
 }
 
-export interface Playlist {
+export interface ApiPlaylist {
   id: string;
   libraryId: string;
   userId: string;
   name: string;
   description: string | null;
   coverPath: string | null;
-  items: PlaylistItem[];
+  items: ApiPlaylistItem[];
   lastUpdate: number;
   createdAt: number;
 }
 
-export interface PlaylistItem {
+export interface ApiPlaylistItem {
   libraryItemId: string;
   episodeId: string | null;
-  libraryItem: LibraryItem;
-  episode: PodcastEpisode | null;
+  libraryItem: ApiLibraryItem;
+  episode: ApiPodcastEpisode | null;
 }
 
 // API Response Types
-export interface LoginResponse {
-  user: User;
+export interface ApiLoginResponse {
+  user: ApiUser;
   userDefaultLibraryId: string;
   serverSettings: Record<string, unknown>;
 }
 
-export interface MeResponse {
-  user: User;
+export interface ApiMeResponse {
+  user: ApiUser;
   userDefaultLibraryId: string;
   serverSettings: Record<string, unknown>;
 }
 
-export interface LibrariesResponse {
-  libraries: Library[];
+export interface ApiLibrariesResponse {
+  libraries: ApiLibrary[];
 }
 
 // Filter data types for library filtering
-export interface FilterData {
-  authors: FilterAuthor[];
+export interface ApiFilterData {
+  authors: ApiFilterAuthor[];
   genres: string[];
   tags: string[];
-  series: FilterSeries[];
+  series: ApiFilterSeries[];
   narrators: string[];
   languages: string[];
 }
 
-export interface FilterAuthor {
+export interface ApiFilterAuthor {
   id: string;
   name: string;
 }
 
-export interface FilterSeries {
+export interface ApiFilterSeries {
   id: string;
   name: string;
 }
 
-export interface LibraryResponse extends Library {}
+export interface ApiLibraryResponse extends ApiLibrary {}
 
-export interface LibraryResponseWithFilterData  {
-  filterdata: FilterData;
-  library: Library;
+export interface ApiLibraryResponseWithFilterData  {
+  filterdata: ApiFilterData;
+  library: ApiLibrary;
   issues: number;
   numUserPlaylists: number;
 }
 
-export interface LibraryItemsResponse {
-  results: LibraryItem[];
+export interface ApiLibraryItemsResponse {
+  results: ApiLibraryItem[];
   total: number;
   limit: number;
   page: number;
@@ -393,10 +399,18 @@ export interface LibraryItemsResponse {
   include: string;
 }
 
-export interface LibraryItemResponse extends LibraryItem {}
+export interface ApiLibraryItemResponse extends ApiLibraryItem {}
 
 // Error response type
 export interface ApiError {
   error: string;
   message?: string;
+}
+
+// Chapter interface from API (based on the sample data)
+export interface ApiChapter {
+  id: number;
+  start: number;
+  end: number;
+  title: string;
 }

@@ -4,16 +4,16 @@
 
 import { AuthorListRow } from '@/db/helpers/authors';
 import { SeriesListRow } from '@/db/helpers/series';
+import type { LibraryItemListRow } from '@/types/database';
 import { describe, expect, it } from '@jest/globals';
-import { LibraryItemListRow } from '../types';
 import {
-    DEFAULT_AUTHOR_SORT_CONFIG,
-    DEFAULT_SERIES_SORT_CONFIG,
-    DEFAULT_SORT_CONFIG,
-    sortAuthors,
-    sortLibraryItems,
-    sortSeries,
-    STORAGE_KEYS,
+  DEFAULT_AUTHOR_SORT_CONFIG,
+  DEFAULT_SERIES_SORT_CONFIG,
+  DEFAULT_SORT_CONFIG,
+  sortAuthors,
+  sortLibraryItems,
+  sortSeries,
+  STORAGE_KEYS,
 } from '../utils';
 
 describe('Store Utils', () => {

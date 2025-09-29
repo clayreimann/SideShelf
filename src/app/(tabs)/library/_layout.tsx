@@ -12,7 +12,7 @@ export default function LibraryLayout() {
             headerTitleStyle: { color: header.titleColor },
             headerShadowVisible: false,
         }}>
-            <Stack.Screen name="index" options={{ title: 'Library' }} />
+            <Stack.Screen name="index" options={{ title: 'ApiLibrary' }} />
         </Stack>
     );
 }

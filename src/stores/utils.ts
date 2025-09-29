@@ -4,7 +4,8 @@
 
 import { AuthorListRow } from '@/db/helpers/authors';
 import { SeriesListRow } from '@/db/helpers/series';
-import { AuthorSortConfig, LibraryItemListRow, SeriesSortConfig, SortConfig } from './types';
+import type { LibraryItemListRow } from '@/types/database';
+import { AuthorSortConfig, SeriesSortConfig, SortConfig } from '@/types/store';
 
 /**
  * Storage keys for persisting state

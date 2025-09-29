@@ -2,21 +2,36 @@ import { clearAudioFileDownloadStatus, getAudioFilesForMedia, markAudioFileAsDow
 import { getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
 import { cacheCoverIfMissing } from '@/lib/covers';
 import {
-    calculateSmoothedSpeed,
-    clearDebounceTimer,
-    createSpeedTracker,
-    DEFAULT_DOWNLOAD_CONFIG
+  calculateSmoothedSpeed,
+  clearDebounceTimer,
+  createSpeedTracker,
+  DEFAULT_DOWNLOAD_CONFIG
 } from '@/lib/downloads/speedTracker';
 import {
-    constructDownloadUrl,
-    downloadFileExists,
-    ensureDownloadsDirectory,
-    getDownloadPath,
-    getDownloadsDirectory
+  constructDownloadUrl,
+  downloadFileExists,
+  ensureDownloadsDirectory,
+  getDownloadPath,
+  getDownloadsDirectory
 } from '@/lib/fileSystem';
+import type {
+  DownloadConfig,
+  DownloadInfo,
+  DownloadProgress,
+  DownloadProgressCallback,
+  DownloadSpeedTracker,
+  DownloadTaskInfo
+} from '@/types/services';
 import RNBackgroundDownloader, { DownloadTask } from '@kesha-antonov/react-native-background-downloader';
 
-// Types
+// Re-export types for backward compatibility
+export type {
+  DownloadConfig, DownloadInfo, DownloadProgress, DownloadProgressCallback,
+  DownloadSpeedTracker, DownloadTaskInfo
+};
+
+// Remove duplicate type definitions - they're now in @/types/services
+/*
 export interface DownloadProgress {
   libraryItemId: string;
   totalFiles: number;
@@ -65,12 +80,7 @@ export interface DownloadInfo {
   expectedTotalFiles?: number; // Total files expected (from database), not just active tasks
 }
 
-export interface DownloadConfig {
-  speedSmoothingFactor: number;
-  minSamplesForEta: number;
-  progressDebounceMs: number;
-  progressInterval: number;
-}
+*/
 
 export class DownloadService {
   private static instance: DownloadService;
@@ -200,7 +210,7 @@ export class DownloadService {
       // Get metadata and audio files
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) {
-        throw new Error('Library item metadata not found');
+        throw new Error('ApiLibrary item metadata not found');
       }
 
       const audioFiles = await getAudioFilesForMedia(metadata.id);
@@ -725,7 +735,7 @@ export class DownloadService {
         if (metadata) {
           const audioFiles = await getAudioFilesForMedia(metadata.id);
           totalExpectedFiles = audioFiles.length;
-          console.log(`[DownloadService] Library item ${libraryItemId} has ${audioFiles.length} audio files in database, ${tasks.length} active tasks`);
+          console.log(`[DownloadService] ApiLibrary item ${libraryItemId} has ${audioFiles.length} audio files in database, ${tasks.length} active tasks`);
         }
       } catch (error) {
         console.error(`[DownloadService] Error getting audio files for ${libraryItemId}:`, error);

@@ -61,7 +61,7 @@
 ## Components
 
 - common book entry view for flatlist
-
+- [ ] cancelling the download doesn't clear the download progress UI
 
 ## Reset
 - [x] Add a button under advanced to reset the database and log out

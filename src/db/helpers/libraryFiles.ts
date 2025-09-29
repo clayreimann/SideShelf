@@ -1,13 +1,13 @@
 import { db } from '@/db/client';
 import { libraryFiles } from '@/db/schema/libraryFiles';
-import type { LibraryFile } from '@/lib/api/types';
+import type { ApiLibraryFile } from '@/types/api';
 import { and, eq } from 'drizzle-orm';
 
 export type NewLibraryFileRow = typeof libraryFiles.$inferInsert;
 export type LibraryFileRow = typeof libraryFiles.$inferSelect;
 
-// Marshal LibraryFile from API to database row
-export function marshalLibraryFileFromApi(libraryItemId: string, apiLibraryFile: LibraryFile): NewLibraryFileRow {
+// Marshal ApiLibraryFile from API to database row
+export function marshalLibraryFileFromApi(libraryItemId: string, apiLibraryFile: ApiLibraryFile): NewLibraryFileRow {
   return {
     id: `${libraryItemId}_${apiLibraryFile.ino}`,
     libraryItemId,

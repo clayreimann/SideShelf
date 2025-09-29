@@ -15,12 +15,12 @@ export {
     useAppStore, // Debug
     useAuthors, useAuthorsActions, useAuthorsState, useAuthorsStoreInitializer, // Legacy export for backward compatibility
     useDebugStore, // Authors
-    useLibrary, useLibraryActions, useLibraryState, useLibraryStore, useLibraryStoreInitializer, // Library
-    useSeries, useSeriesActions, useSeriesState, useSeriesStoreInitializer, // Series
+    useLibrary, useLibraryActions, useLibraryState, useLibraryStore, useLibraryStoreInitializer, // ApiLibrary
+    useSeries, useSeriesActions, useSeriesState, useSeriesStoreInitializer, // ApiSeries
     type StoreState
 } from './appStore';
 
-// Library slice type exports
+// ApiLibrary slice type exports
 export {
     type LibrarySlice, type LibrarySliceActions, type LibrarySliceState
 } from './slices/librarySlice';
@@ -30,21 +30,21 @@ export {
     type AuthorsSlice, type AuthorsSliceActions, type AuthorsSliceState
 } from './slices/authorsSlice';
 
-// Series slice type exports
+// ApiSeries slice type exports
 export {
     type SeriesSlice, type SeriesSliceActions, type SeriesSliceState
 } from './slices/seriesSlice';
 
 // Shared types
+export type { LibraryItemListRow } from '@/types/database';
 export {
     type AuthorSortConfig, type AuthorSortField,
-    type LibraryItemListRow, type LoadingStates,
+    type LoadingStates,
     type SeriesSortConfig, type SeriesSortField,
     type SliceCreator, type SortConfig, type SortDirection, type SortField
-} from './types';
+} from '@/types/store';
 
 // Utilities
 export {
-    DEFAULT_AUTHOR_SORT_CONFIG, DEFAULT_SERIES_SORT_CONFIG, DEFAULT_SORT_CONFIG,
-    sortAuthors, sortLibraryItems as sortItems, sortSeries, STORAGE_KEYS
+    DEFAULT_AUTHOR_SORT_CONFIG, DEFAULT_SERIES_SORT_CONFIG, DEFAULT_SORT_CONFIG, sortAuthors, sortLibraryItems as sortItems, sortSeries, STORAGE_KEYS
 } from './utils';

@@ -1,13 +1,13 @@
 import { db } from '@/db/client';
 import { audioFiles } from '@/db/schema/audioFiles';
-import type { AudioFile } from '@/lib/api/types';
+import type { ApiAudioFile } from '@/types/api';
 import { and, eq } from 'drizzle-orm';
 
 export type NewAudioFileRow = typeof audioFiles.$inferInsert;
 export type AudioFileRow = typeof audioFiles.$inferSelect;
 
-// Marshal AudioFile from API to database row
-export function marshalAudioFileFromApi(mediaId: string, apiAudioFile: AudioFile): NewAudioFileRow {
+// Marshal ApiAudioFile from API to database row
+export function marshalAudioFileFromApi(mediaId: string, apiAudioFile: ApiAudioFile): NewAudioFileRow {
   return {
     id: `${mediaId}_${apiAudioFile.index}`,
     mediaId,

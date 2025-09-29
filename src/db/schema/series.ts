@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
-// ABS Series entity (id + name)
+// ABS ApiSeries entity (id + name)
 export const series = sqliteTable('series', {
   id: text('id').primaryKey(),
   name: text('name'),

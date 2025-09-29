@@ -1,4 +1,4 @@
-import { LoginResponse, MeResponse, User } from '@/lib/api/types';
+import type { ApiLoginResponse, ApiMeResponse, ApiUser } from '@/types/api';
 
 export type Tokens = {
   accessToken: string | null;
@@ -6,15 +6,15 @@ export type Tokens = {
 };
 
 // Accepts either /login or /me response
-export function extractTokensFromAuthResponse(data: MeResponse | LoginResponse): Tokens {
+export function extractTokensFromAuthResponse(data: ApiMeResponse | ApiLoginResponse): Tokens {
   const user = data.user;
   const accessToken = user?.accessToken ?? user?.token ?? null;
   const refreshToken = user?.refreshToken ?? null;
   return { accessToken, refreshToken };
 }
 
-// Alternative function that accepts a User object directly
-export function extractTokensFromUser(user: User): Tokens {
+// Alternative function that accepts a ApiUser object directly
+export function extractTokensFromUser(user: ApiUser): Tokens {
   const accessToken = user?.accessToken ?? user?.token ?? null;
   const refreshToken = user?.refreshToken ?? null;
   return { accessToken, refreshToken };

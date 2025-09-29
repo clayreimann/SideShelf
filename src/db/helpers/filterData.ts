@@ -1,4 +1,4 @@
-import type { FilterData } from '@/lib/api/types';
+import type { ApiFilterData } from '@/types/api';
 import { db } from '../client';
 import { AuthorRow, authors } from '../schema/authors';
 import { GenreRow, genres } from '../schema/genres';
@@ -10,7 +10,7 @@ import { TagRow, tags } from '../schema/tags';
 /**
  * Marshal filterdata from API response to database rows
  */
-export function marshalFilterDataFromApi(filterData: FilterData) {
+export function marshalFilterDataFromApi(filterData: ApiFilterData) {
   const authorRows: Omit<AuthorRow, 'numBooks'>[] = filterData.authors.map(author => ({
     id: author.id,
     name: author.name,
@@ -155,7 +155,7 @@ export async function upsertTagsFromFilterData(tagRows: TagRow[]) {
 /**
  * Upsert all filterdata into the database
  */
-export async function upsertFilterData(filterData: FilterData) {
+export async function upsertFilterData(filterData: ApiFilterData) {
   const marshaledData = marshalFilterDataFromApi(filterData);
 
   await Promise.all([

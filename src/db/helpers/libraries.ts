@@ -1,13 +1,13 @@
 import { db } from '@/db/client';
 import { libraries } from '@/db/schema/libraries';
-import { LibrariesResponse, Library } from '@/lib/api/types';
+import type { ApiLibrariesResponse, ApiLibrary } from '@/types/api';
 import { eq } from 'drizzle-orm';
 
 export type NewLibraryRow = typeof libraries.$inferInsert;
 export type LibraryRow = typeof libraries.$inferSelect;
 
-// Marshal a single Library from API to database row
-export function marshalLibraryFromApi(library: Library): NewLibraryRow {
+// Marshal a single ApiLibrary from API to database row
+export function marshalLibraryFromApi(library: ApiLibrary): NewLibraryRow {
   return {
     id: library.id,
     name: library.name,
@@ -20,7 +20,7 @@ export function marshalLibraryFromApi(library: Library): NewLibraryRow {
 }
 
 // Marshal libraries from API response
-export function marshalLibrariesFromResponse(response: LibrariesResponse): NewLibraryRow[] {
+export function marshalLibrariesFromResponse(response: ApiLibrariesResponse): NewLibraryRow[] {
   return response.libraries.map(marshalLibraryFromApi);
 }
 

@@ -32,7 +32,7 @@ export default function SeriesScreen() {
     />
   ), [isDark]);
 
-  // Series sort options
+  // ApiSeries sort options
   const seriesSortOptions = [
     { field: 'name' as SeriesSortField, label: 'Name' },
     { field: 'addedAt' as SeriesSortField, label: 'Date Added' },
@@ -67,7 +67,7 @@ export default function SeriesScreen() {
         <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
           <ActivityIndicator size="large" />
           <Text style={[styles.text, { marginTop: 16 }]}>Loading series...</Text>
-          <Stack.Screen options={{ title: 'Series', headerTitle: 'Series' }} />
+          <Stack.Screen options={{ title: 'ApiSeries', headerTitle: 'ApiSeries' }} />
         </View>
       </>
     );
@@ -79,7 +79,7 @@ export default function SeriesScreen() {
         <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
           <Text style={styles.text}>No series found</Text>
           <Text style={[styles.text, { fontSize: 12, marginTop: 8, opacity: 0.7 }]}>
-            Series will appear here once you have books that are part of a series
+            ApiSeries will appear here once you have books that are part of a series
           </Text>
           <TouchableOpacity
             onPress={onRefresh}
@@ -92,10 +92,10 @@ export default function SeriesScreen() {
             }}
           >
             <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 16 }}>
-              Reload Series
+              Reload ApiSeries
             </Text>
           </TouchableOpacity>
-          <Stack.Screen options={{ title: 'Series', headerTitle: 'Series' }} />
+          <Stack.Screen options={{ title: 'ApiSeries', headerTitle: 'ApiSeries' }} />
         </View>
       </>
     );
@@ -120,7 +120,7 @@ export default function SeriesScreen() {
           sortOptions={seriesSortOptions}
           isDark={isDark}
         />
-        <Stack.Screen options={{ title: 'Series', headerTitle: `Series (${items.length})`, headerRight: controls }} />
+        <Stack.Screen options={{ title: 'ApiSeries', headerTitle: `ApiSeries (${items.length})`, headerRight: controls }} />
       </View>
     </>
   );

@@ -1,4 +1,4 @@
-import type { Book, Podcast } from '@/lib/api/types';
+import type { ApiBook, ApiPodcast } from '@/types/api';
 import { eq } from 'drizzle-orm';
 import { db } from '../client';
 import {
@@ -114,7 +114,7 @@ export async function upsertMediaNarrators(mediaId: string, narrators: string[])
 /**
  * Upsert all join table data for a book
  */
-export async function upsertBookJoins(book: Book): Promise<void> {
+export async function upsertBookJoins(book: ApiBook): Promise<void> {
   const mediaId = book.id;
   const metadata = book.metadata;
 
@@ -130,7 +130,7 @@ export async function upsertBookJoins(book: Book): Promise<void> {
 /**
  * Upsert all join table data for a podcast
  */
-export async function upsertPodcastJoins(podcast: Podcast): Promise<void> {
+export async function upsertPodcastJoins(podcast: ApiPodcast): Promise<void> {
   const mediaId = podcast.id;
   const metadata = podcast.metadata;
 

@@ -5,26 +5,26 @@
  * and database schema. Use these fixtures in tests to ensure consistency.
  */
 
-import {
-    Book,
-    LibrariesResponse,
-    Library,
-    LibraryItem,
-    LibraryItemsResponse,
-    LoginResponse,
-    MeResponse,
-    Podcast,
-    User
-} from '@/lib/api/types';
+import type {
+  ApiBook,
+  ApiLibrariesResponse,
+  ApiLibrary,
+  ApiLibraryItem,
+  ApiLibraryItemsResponse,
+  ApiLoginResponse,
+  ApiMeResponse,
+  ApiPodcast,
+  ApiUser
+} from '@/types/api';
 
-import {
-    LibraryItemRow,
-    LibraryRow,
-    UserRow,
-} from '@/db/helpers';
+import type {
+  LibraryItemRow,
+  LibraryRow,
+  UserRow
+} from '@/types/database';
 
-// User fixtures
-export const mockApiUser: User = {
+// ApiUser fixtures
+export const mockApiUser: ApiUser = {
   id: 'user-1',
   username: 'testuser',
   type: 'admin',
@@ -42,7 +42,7 @@ export const mockApiUser: User = {
   },
 };
 
-export const mockMeResponse: MeResponse = {
+export const mockMeResponse: ApiMeResponse = {
   user: mockApiUser,
   userDefaultLibraryId: 'lib-1',
   serverSettings: {
@@ -76,7 +76,7 @@ export const mockMeResponse: MeResponse = {
   Source: 'test',
 };
 
-export const mockLoginResponse: LoginResponse = {
+export const mockLoginResponse: ApiLoginResponse = {
   ...mockMeResponse,
   accessToken: 'test-access-token',
 };
@@ -97,8 +97,8 @@ export const mockUserRow: UserRow = {
   canAccessExplicitContent: false,
 };
 
-// Library fixtures
-export const mockApiLibrary: Library = {
+// ApiLibrary fixtures
+export const mockApiLibrary: ApiLibrary = {
   id: 'lib-1',
   name: 'My Books',
   folders: [
@@ -124,7 +124,7 @@ export const mockApiLibrary: Library = {
   lastUpdate: 1672531200000,
 };
 
-export const mockApiPodcastLibrary: Library = {
+export const mockApiPodcastLibrary: ApiLibrary = {
   id: 'lib-2',
   name: 'My Podcasts',
   folders: [
@@ -150,7 +150,7 @@ export const mockApiPodcastLibrary: Library = {
   lastUpdate: 1672531200000,
 };
 
-export const mockLibrariesResponse: LibrariesResponse = {
+export const mockLibrariesResponse: ApiLibrariesResponse = {
   libraries: [mockApiLibrary, mockApiPodcastLibrary],
 };
 
@@ -174,8 +174,8 @@ export const mockPodcastLibraryRow: LibraryRow = {
   updatedAt: 1672531200000,
 };
 
-// Book fixtures
-export const mockBook: Book = {
+// ApiBook fixtures
+export const mockBook: ApiBook = {
   libraryItemId: 'li-1',
   metadata: {
     title: 'The Great Gatsby',
@@ -281,11 +281,11 @@ export const mockBook: Book = {
   ebookFile: null,
 };
 
-// Podcast fixtures
-export const mockPodcast: Podcast = {
+// ApiPodcast fixtures
+export const mockPodcast: ApiPodcast = {
   libraryItemId: 'li-2',
   metadata: {
-    title: 'Tech Talk Podcast',
+    title: 'Tech Talk ApiPodcast',
     author: 'Tech Experts',
     description: 'Weekly discussions about the latest in technology.',
     releaseDate: '2023-01-01',
@@ -351,7 +351,7 @@ export const mockPodcast: Podcast = {
         chapters: [],
         embeddedCoverArt: null,
         metaTags: {
-          tagAlbum: 'Tech Talk Podcast',
+          tagAlbum: 'Tech Talk ApiPodcast',
           tagArtist: 'Tech Experts',
           tagTitle: 'Introduction to AI',
         },
@@ -388,8 +388,8 @@ export const mockPodcast: Podcast = {
   maxNewEpisodesToDownload: 3,
 };
 
-// Library Item fixtures
-export const mockBookLibraryItem: LibraryItem = {
+// ApiLibrary Item fixtures
+export const mockBookLibraryItem: ApiLibraryItem = {
   id: 'li-1',
   ino: '1111111111',
   libraryId: 'lib-1',
@@ -429,7 +429,7 @@ export const mockBookLibraryItem: LibraryItem = {
   size: 15728640,
 };
 
-export const mockPodcastLibraryItem: LibraryItem = {
+export const mockPodcastLibraryItem: ApiLibraryItem = {
   id: 'li-2',
   ino: '2222222222',
   libraryId: 'lib-2',
@@ -469,7 +469,7 @@ export const mockPodcastLibraryItem: LibraryItem = {
   size: 25165824,
 };
 
-export const mockLibraryItemsResponse: LibraryItemsResponse = {
+export const mockLibraryItemsResponse: ApiLibraryItemsResponse = {
   results: [mockBookLibraryItem, mockPodcastLibraryItem],
   total: 2,
   limit: 0,

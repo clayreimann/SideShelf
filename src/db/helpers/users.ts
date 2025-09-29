@@ -1,13 +1,13 @@
 import { db } from '@/db/client';
 import { users } from '@/db/schema/users';
-import { LoginResponse, MeResponse, User } from '@/lib/api/types';
+import type { ApiLoginResponse, ApiMeResponse, ApiUser } from '@/types/api';
 import { eq } from 'drizzle-orm';
 
 export type NewUserRow = typeof users.$inferInsert;
 export type UserRow = typeof users.$inferSelect;
 
 // Extracts minimal user fields needed for our users table from /me or /login responses
-export function marshalUserFromAuthResponse(data: MeResponse | LoginResponse): NewUserRow | null {
+export function marshalUserFromAuthResponse(data: ApiMeResponse | ApiLoginResponse): NewUserRow | null {
   if (!data?.user?.id || !data.user.username) return null;
 
   const user = data.user;
@@ -33,8 +33,8 @@ export function marshalUserFromAuthResponse(data: MeResponse | LoginResponse): N
   return row;
 }
 
-// Alternative function that accepts a User object directly
-export function marshalUserFromUser(user: User): NewUserRow | null {
+// Alternative function that accepts a ApiUser object directly
+export function marshalUserFromUser(user: ApiUser): NewUserRow | null {
   if (!user?.id || !user.username) return null;
 
   const perms = user.permissions;

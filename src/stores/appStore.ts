@@ -41,13 +41,13 @@ export interface StoreState extends LibrarySlice, AuthorsSlice, SeriesSlice {
  */
 export const useAppStore = create<StoreState>()(
     subscribeWithSelector((set, get) => ({
-        // Library slice
+        // ApiLibrary slice
         ...createLibrarySlice(set, get),
 
         // Authors slice
         ...createAuthorsSlice(set, get),
 
-        // Series slice
+        // ApiSeries slice
         ...createSeriesSlice(set, get),
 
         // Future slices will be spread here
@@ -172,7 +172,7 @@ export function useLibraryState<T>(selector: (state: LibrarySlice) => T): T {
  *
  *   return (
  *     <Button onPress={() => selectLibrary('library-id')}>
- *       Select Library
+ *       Select ApiLibrary
  *     </Button>
  *   );
  * }
@@ -420,7 +420,7 @@ export function useAuthorsActions() {
  *
  *   return (
  *     <Button onPress={() => refetchSeries()}>
- *       Refresh Series
+ *       Refresh ApiSeries
  *     </Button>
  *   );
  * }

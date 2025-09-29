@@ -1,15 +1,16 @@
 import { db } from '@/db/client';
 import { libraryItems } from '@/db/schema/libraryItems';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
-import { LibraryItem, LibraryItemsResponse } from '@/lib/api/types';
+import type { ApiLibraryItem, ApiLibraryItemsResponse } from '@/types/api';
+import type { LibraryItemListRow } from '@/types/database';
 import { and, eq, inArray, not } from 'drizzle-orm';
 import { mediaAuthors } from '../schema/mediaJoins';
 
 export type NewLibraryItemRow = typeof libraryItems.$inferInsert;
 export type LibraryItemRow = typeof libraryItems.$inferSelect;
 
-// Marshal a single LibraryItem from API to database row
-export function marshalLibraryItemFromApi(item: LibraryItem): NewLibraryItemRow {
+// Marshal a single ApiLibraryItem from API to database row
+export function marshalLibraryItemFromApi(item: ApiLibraryItem): NewLibraryItemRow {
   return {
     id: item.id,
     libraryId: item.libraryId,
@@ -32,7 +33,7 @@ export function marshalLibraryItemFromApi(item: LibraryItem): NewLibraryItemRow 
 }
 
 // Marshal library items from API response
-export function marshalLibraryItemsFromResponse(response: LibraryItemsResponse): NewLibraryItemRow[] {
+export function marshalLibraryItemsFromResponse(response: ApiLibraryItemsResponse): NewLibraryItemRow[] {
   return response.results.map(marshalLibraryItemFromApi);
 }
 
@@ -176,33 +177,6 @@ export async function getLibraryItemsNeedingRefresh(limit: number = 50): Promise
   return needsProcessing.slice(0, limit).map(r => r.id);
 }
 
-// Type for library item list display with full metadata
-export type LibraryItemListRow = {
-  id: string;
-  libraryId: string;
-  mediaType: string | null;
-  addedAt: number | null;
-  updatedAt: number | null;
-  isMissing: boolean | null;
-  isInvalid: boolean | null;
-  // Media metadata fields
-  title: string | null;
-  subtitle: string | null;
-  author: string | null;
-  authorName: string | null;
-  authorNameLF: string | null;
-  narrator: string | null;
-  narratorName: string | null;
-  releaseDate: string | null;
-  publishedDate: string | null;
-  publishedYear: string | null;
-  duration: number | null;
-  coverUri: string | null;
-  description: string | null;
-  language: string | null;
-  explicit: boolean | null;
-  seriesName: string | null;
-};
 
 // Get library items with full metadata for list display
 export async function getLibraryItemsForList(libraryId?: string): Promise<LibraryItemListRow[]> {
@@ -265,7 +239,7 @@ export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof
     id: item.id,
     mediaType: item.mediaType,
     title: item.title || 'Unknown Title',
-    author: item.author || item.authorName || 'Unknown Author',
+    author: item.author || item.authorName || 'Unknown ApiAuthor',
     authorNameLF: item.authorNameLF,
     narrator: item.narrator || item.narratorName || null,
     releaseDate: item.releaseDate || item.publishedDate || null,

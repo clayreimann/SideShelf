@@ -85,7 +85,7 @@ export default function AdvancedScreen() {
         disabled: true,
       },
       {
-        label: `Series: ${counts.series}`,
+        label: `ApiSeries: ${counts.series}`,
         onPress: () => {},
         disabled: true,
       },

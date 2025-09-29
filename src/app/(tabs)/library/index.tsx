@@ -27,10 +27,10 @@ export default function AboutScreen() {
     />
   ), [isDark, viewMode, toggleViewMode]);
 
-  // Library sort options
+  // ApiLibrary sort options
   const librarySortOptions = [
     { field: 'title' as SortField, label: 'Title' },
-    { field: 'author' as SortField, label: 'Author' },
+    { field: 'author' as SortField, label: 'ApiAuthor' },
     { field: 'publishedYear' as SortField, label: 'Published Year' },
     { field: 'addedAt' as SortField, label: 'Date Added' },
   ];
@@ -43,7 +43,7 @@ export default function AboutScreen() {
     );
   }
 
-  const title = selectedLibrary?.name || 'Library';
+  const title = selectedLibrary?.name || 'ApiLibrary';
 
   return (
     <>

@@ -107,7 +107,7 @@ export function ListItem({ item, isDark }: { item: LibraryItemListRow; isDark: b
   );
 }
 
-export default function LibraryItem({ item, isDark, variant = 'grid' }: LibraryItemProps) {
+export default function ApiLibraryItem({ item, isDark, variant = 'grid' }: LibraryItemProps) {
   return variant === 'grid' ?
     <GridItem item={item} isDark={isDark} /> :
     <ListItem item={item} isDark={isDark} />;

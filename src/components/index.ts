@@ -1,4 +1,4 @@
-// Library components
+// ApiLibrary components
 export * from './library';
 
 // UI components

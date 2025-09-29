@@ -29,11 +29,11 @@ export default function TabLayout() {
                 <Icon sf={{default: "house", selected: "house.fill"}} />
             </NativeTabs.Trigger>
             <NativeTabs.Trigger name="library">
-                <Label>Library</Label>
+                <Label>ApiLibrary</Label>
                 <Icon sf={{default: "books.vertical", selected: "books.vertical.fill"}} />
             </NativeTabs.Trigger>
             <NativeTabs.Trigger name="series">
-                <Label>Series</Label>
+                <Label>ApiSeries</Label>
                 <Icon sf={{default: "square.stack", selected: "square.stack.fill"}} />
             </NativeTabs.Trigger>
             <NativeTabs.Trigger name="authors">

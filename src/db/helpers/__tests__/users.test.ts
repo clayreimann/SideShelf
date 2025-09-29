@@ -32,7 +32,7 @@ describe('Users Helper', () => {
   });
 
   describe('marshalUserFromAuthResponse', () => {
-    it('should correctly marshal user data from MeResponse', () => {
+    it('should correctly marshal user data from ApiMeResponse', () => {
       const result = marshalUserFromAuthResponse(mockMeResponse);
 
       expect(result).toEqual({
@@ -52,7 +52,7 @@ describe('Users Helper', () => {
       });
     });
 
-    it('should correctly marshal user data from LoginResponse', () => {
+    it('should correctly marshal user data from ApiLoginResponse', () => {
       const result = marshalUserFromAuthResponse(mockLoginResponse);
 
       expect(result).toEqual({
@@ -135,7 +135,7 @@ describe('Users Helper', () => {
   });
 
   describe('marshalUserFromUser', () => {
-    it('should correctly marshal user data from User object', () => {
+    it('should correctly marshal user data from ApiUser object', () => {
       const result = marshalUserFromUser(mockApiUser);
 
       expect(result).toEqual({

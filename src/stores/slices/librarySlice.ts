@@ -1,5 +1,5 @@
 /**
- * Library slice for Zustand store
+ * ApiLibrary slice for Zustand store
  *
  * This slice manages library-related state including:
  * - Selected library and its items
@@ -25,18 +25,18 @@ import {
 } from '@/db/helpers/libraryItems';
 import { cacheCoversForLibraryItems, upsertBooksMetadata, upsertPodcastsMetadata } from '@/db/helpers/mediaMetadata';
 import { fetchLibraries, fetchLibraryItems } from '@/lib/api/endpoints';
-import { Book, Podcast } from '@/lib/api/types';
+import type { ApiBook, ApiPodcast } from '@/types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import {
+import type {
     LoadingStates,
     SliceCreator,
     SortConfig
-} from '../types';
+} from '@/types/store';
 import { DEFAULT_SORT_CONFIG, sortLibraryItems, STORAGE_KEYS } from '../utils';
 
 /**
- * Library slice state interface - scoped under 'library' to avoid conflicts
+ * ApiLibrary slice state interface - scoped under 'library' to avoid conflicts
  */
 export interface LibrarySliceState {
     library: {
@@ -63,7 +63,7 @@ export interface LibrarySliceState {
 }
 
 /**
- * Library slice actions interface
+ * ApiLibrary slice actions interface
  */
 export interface LibrarySliceActions {
     // Public methods
@@ -141,7 +141,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
             // Set ready state
             const ready = get()._setLibraryReady(apiConfigured, dbInitialized);
-            console.log(`[LibrarySlice] Library slice ready=${ready} apiConfigured=${apiConfigured} dbInitialized=${dbInitialized}`);
+            console.log(`[LibrarySlice] ApiLibrary slice ready=${ready} apiConfigured=${apiConfigured} dbInitialized=${dbInitialized}`);
 
             if (dbInitialized) {
                 console.log('[LibrarySlice] Loading cached libraries and items...');
@@ -197,7 +197,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         }
 
         if (state.library.selectedLibraryId === libraryId && !fetchFromApi) {
-            console.log('[LibrarySlice] Library already selected:', libraryId);
+            console.log('[LibrarySlice] ApiLibrary already selected:', libraryId);
             return;
         }
 
@@ -252,7 +252,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         }
 
         if (state.library.selectedLibraryId === libraryId) {
-            console.log('[LibrarySlice] Library already selected:', libraryId);
+            console.log('[LibrarySlice] ApiLibrary already selected:', libraryId);
             return;
         }
 
@@ -440,7 +440,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 // Extract books from library items and process metadata
                 const books = response.results
                     .filter(item => item.mediaType === 'book' && item.media)
-                    .map(item => ({ ...item.media, libraryItemId: item.id }) as Book);
+                    .map(item => ({ ...item.media, libraryItemId: item.id }) as ApiBook);
 
                 if (books.length > 0) {
                     console.log('[LibrarySlice] Processing book metadata for', books.length, 'books');
@@ -450,7 +450,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 // Extract podcasts from library items and process metadata
                 const podcasts = response.results
                     .filter(item => item.mediaType === 'podcast' && item.media)
-                    .map(item => ({ ...item.media, libraryItemId: item.id }) as Podcast);
+                    .map(item => ({ ...item.media, libraryItemId: item.id }) as ApiPodcast);
 
                 if (podcasts.length > 0) {
                     console.log('[LibrarySlice] Processing podcast metadata for', podcasts.length, 'podcasts');

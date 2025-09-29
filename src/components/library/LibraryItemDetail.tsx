@@ -114,7 +114,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     return () => { isMounted = false; };
   }, [itemId, onTitleChange]);
 
-  // User progress fetching effect
+  // ApiUser progress fetching effect
   useEffect(() => {
     let isMounted = true;
 
@@ -389,7 +389,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const title = metadata?.title || 'Unknown Title';
   const coverUri = metadata?.imageUrl || (item ? getCoverUri(item.id) : null);
   const description = metadata?.description || '';
-  const author = metadata?.authorName || metadata?.author || 'Unknown Author';
+  const author = metadata?.authorName || metadata?.author || 'Unknown ApiAuthor';
   const narrator = metadata?.narratorName || null;
   const series = metadata?.seriesName || null;
   const imageSize = width - 64;
@@ -436,10 +436,10 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       </Text>
       {series ? (
         <Text style={[styles.text, { fontStyle: 'italic', marginBottom: 4, textAlign: 'center' }]}>
-          Series: {series}
+          ApiSeries: {series}
         </Text>
       ) : null}
-        <Text style={[styles.text, { marginBottom: 4, textAlign: 'center' }]}>Author: {author}</Text>
+        <Text style={[styles.text, { marginBottom: 4, textAlign: 'center' }]}>ApiAuthor: {author}</Text>
 
         {narrator ? <Text style={[styles.text, { marginBottom: 4, textAlign: 'center' }]}>Narrator: {narrator}</Text> : null}
 

@@ -10,7 +10,7 @@ import { mediaMetadata } from '@/db/schema/mediaMetadata';
 import { narrators } from '@/db/schema/narrators';
 import { series } from '@/db/schema/series';
 import { tags } from '@/db/schema/tags';
-import type { Series as ApiSeries, Author, Book, LibraryItem, Podcast } from '@/lib/api/types';
+import type { ApiSeries as ApiSeries, ApiAuthor, ApiBook, ApiLibraryItem, ApiPodcast } from '@/types/api';
 import { and, eq, isNull } from 'drizzle-orm';
 
 // Import our new helpers
@@ -27,7 +27,7 @@ export type NewMediaAuthorRow = typeof mediaAuthors.$inferInsert;
 export type NewMediaSeriesRow = typeof mediaSeries.$inferInsert;
 
 // Marshal author from API to database row
-export function marshalAuthorFromApi(apiAuthor: Author): NewAuthorRow {
+export function marshalAuthorFromApi(apiAuthor: ApiAuthor): NewAuthorRow {
     return {
         id: apiAuthor.id,
         name: apiAuthor.name,
@@ -41,7 +41,7 @@ export function marshalSeriesFromApi(apiSeries: ApiSeries): NewSeriesRow {
     return {
         id: apiSeries.id,
         name: apiSeries.name,
-        description: null, // Series from batch API don't include description
+        description: null, // ApiSeries from batch API don't include description
         addedAt: null,
         updatedAt: null,
     };
@@ -73,11 +73,11 @@ export async function upsertTags(tagNames: string[]): Promise<void> {
 }
 
 // Process a full library item from batch API response
-export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void> {
+export async function processFullLibraryItem(apiItem: ApiLibraryItem): Promise<void> {
     // console.log(`[fullLibraryItems] Processing library item:`);
 
     // Break up processing into smaller transactions to avoid blocking UI
-    // Transaction 1: Library item and media metadata
+    // Transaction 1: ApiLibrary item and media metadata
     let mediaRow: any = null;
     await db.transaction(async (tx) => {
         // 1. Upsert the library item
@@ -90,7 +90,7 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
 
         // 2. Process media metadata
         if (apiItem.mediaType === 'book' && apiItem.media) {
-            const book = apiItem.media as Book;
+            const book = apiItem.media as ApiBook;
             mediaRow = marshalBookToMediaMetadata(book);
 
             await tx.insert(mediaMetadata).values(mediaRow)
@@ -99,7 +99,7 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
                     set: mediaRow,
                 });
         } else if (apiItem.mediaType === 'podcast' && apiItem.media) {
-            const podcast = apiItem.media as Podcast;
+            const podcast = apiItem.media as ApiPodcast;
             mediaRow = marshalPodcastToMediaMetadata(podcast);
 
             await tx.insert(mediaMetadata).values(mediaRow)
@@ -113,9 +113,9 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
     // Yield to event loop after first transaction
     await yieldToEventLoop();
 
-    // Transaction 2: Authors, Series, Genres, Narrators, and Tags (if we have media)
+    // Transaction 2: Authors, ApiSeries, Genres, Narrators, and Tags (if we have media)
     if (apiItem.mediaType === 'book' && apiItem.media && mediaRow) {
-        const book = apiItem.media as Book;
+        const book = apiItem.media as ApiBook;
 
         // First, upsert genres, narrators, and tags into their base tables
         await Promise.all([
@@ -184,7 +184,7 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
         // 5. Process all media joins (genres, narrators, tags, etc.) using the existing helper
         await upsertBookJoins(book);
     } else if (apiItem.mediaType === 'podcast' && apiItem.media && mediaRow) {
-        const podcast = apiItem.media as Podcast;
+        const podcast = apiItem.media as ApiPodcast;
 
         // First, upsert genres and tags into their base tables (podcasts don't have narrators)
         await Promise.all([
@@ -201,7 +201,7 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
 
     // Transaction 3: Audio files and chapters (for books only)
     if (apiItem.mediaType === 'book' && apiItem.media && mediaRow) {
-        const book = apiItem.media as Book;
+        const book = apiItem.media as ApiBook;
 
         await db.transaction(async (tx) => {
             // 6. Process audio files
@@ -233,7 +233,7 @@ export async function processFullLibraryItem(apiItem: LibraryItem): Promise<void
     // Yield to event loop before final transaction
     await yieldToEventLoop();
 
-    // Transaction 4: Library files
+    // Transaction 4: ApiLibrary files
     if (apiItem.libraryFiles && apiItem.libraryFiles.length > 0) {
         const libraryFileRows = apiItem.libraryFiles.map(lf => marshalLibraryFileFromApi(apiItem.id, lf));
 
@@ -256,7 +256,7 @@ function yieldToEventLoop(): Promise<void> {
 }
 
 // Process multiple full library items from batch API response
-export async function processFullLibraryItems(apiItems: LibraryItem[]): Promise<void> {
+export async function processFullLibraryItems(apiItems: ApiLibraryItem[]): Promise<void> {
     console.log(`[fullLibraryItems] Processing ${apiItems.length} full library items`);
 
     for (let i = 0; i < apiItems.length; i++) {

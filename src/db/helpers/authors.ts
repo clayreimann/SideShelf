@@ -87,7 +87,7 @@ export async function updateAuthorBookCount(authorId: string, count: number): Pr
 }
 
 /**
- * Author display row for lists
+ * ApiAuthor display row for lists
  */
 export interface AuthorListRow {
   id: string;
@@ -102,7 +102,7 @@ export interface AuthorListRow {
 export function transformAuthorsToDisplayFormat(authors: AuthorRow[]): AuthorListRow[] {
   return authors.map(author => ({
     id: author.id,
-    name: author.name || 'Unknown Author',
+    name: author.name || 'Unknown ApiAuthor',
     imageUrl: author.imageUrl,
     numBooks: author.numBooks || 0,
   }));

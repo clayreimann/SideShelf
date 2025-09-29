@@ -1,17 +1,17 @@
-import { apiFetch } from './api';
 import type {
   ApiError,
-  LibrariesResponse,
-  LibraryItem,
-  LibraryItemResponse,
-  LibraryItemsResponse,
-  LibraryResponse,
-  LibraryResponseWithFilterData,
-  LoginResponse,
-  MeResponse
-} from './types';
+  ApiLibrariesResponse,
+  ApiLibraryItem,
+  ApiLibraryItemResponse,
+  ApiLibraryItemsResponse,
+  ApiLibraryResponse,
+  ApiLibraryResponseWithFilterData,
+  ApiLoginResponse,
+  ApiMeResponse
+} from '@/types/api';
+import { apiFetch } from './api';
 
-export async function fetchMe(): Promise<MeResponse> {
+export async function fetchMe(): Promise<ApiMeResponse> {
   const response = await apiFetch('/api/me');
   if (!response.ok) {
     const error: ApiError = await response.json();
@@ -20,7 +20,7 @@ export async function fetchMe(): Promise<MeResponse> {
   return response.json();
 }
 
-export async function fetchLibraries(): Promise<LibrariesResponse> {
+export async function fetchLibraries(): Promise<ApiLibrariesResponse> {
   const response = await apiFetch('/api/libraries');
   if (!response.ok) {
     const error: ApiError = await response.json();
@@ -29,7 +29,7 @@ export async function fetchLibraries(): Promise<LibrariesResponse> {
   return response.json();
 }
 
-export async function fetchLibrary(libraryId: string): Promise<LibraryResponse> {
+export async function fetchLibrary(libraryId: string): Promise<ApiLibraryResponse> {
   const url = `/api/libraries/${libraryId}`
 
   const response = await apiFetch(url);
@@ -40,7 +40,7 @@ export async function fetchLibrary(libraryId: string): Promise<LibraryResponse> 
   return response.json();
 }
 
-export async function fetchLibraryWithFilterData(libraryId: string): Promise<LibraryResponseWithFilterData> {
+export async function fetchLibraryWithFilterData(libraryId: string): Promise<ApiLibraryResponseWithFilterData> {
   const response = await apiFetch(`/api/libraries/${libraryId}?include=filterdata`);
   if (!response.ok) {
     const error: ApiError = await response.json();
@@ -49,7 +49,7 @@ export async function fetchLibraryWithFilterData(libraryId: string): Promise<Lib
   return response.json();
 }
 
-export async function fetchLibraryItems(libraryId: string): Promise<LibraryItemsResponse> {
+export async function fetchLibraryItems(libraryId: string): Promise<ApiLibraryItemsResponse> {
   const response = await apiFetch(`/api/libraries/${libraryId}/items`);
   if (!response.ok) {
     const error: ApiError = await response.json();
@@ -58,7 +58,7 @@ export async function fetchLibraryItems(libraryId: string): Promise<LibraryItems
   return response.json();
 }
 
-export async function fetchLibraryItem(libraryItemId: string): Promise<LibraryItemResponse> {
+export async function fetchLibraryItem(libraryItemId: string): Promise<ApiLibraryItemResponse> {
   const response = await apiFetch(`/api/items/${libraryItemId}`);
   if (!response.ok) {
     const error: ApiError = await response.json();
@@ -73,7 +73,7 @@ export async function fetchLibraryItemCoverHead(libraryItemId: string): Promise<
 }
 
 // Batch fetch library items with full details (includes authors, series, audioFiles, chapters, libraryFiles)
-export async function fetchLibraryItemsBatch(libraryItemIds: string[]): Promise<LibraryItem[]> {
+export async function fetchLibraryItemsBatch(libraryItemIds: string[]): Promise<ApiLibraryItem[]> {
   const response = await apiFetch('/api/items/batch/get', {
     method: 'POST',
     headers: {
@@ -91,7 +91,7 @@ export async function fetchLibraryItemsBatch(libraryItemIds: string[]): Promise<
   return data.libraryItems || [];
 }
 
-export async function login(baseUrl: string, username: string, password: string): Promise<LoginResponse> {
+export async function login(baseUrl: string, username: string, password: string): Promise<ApiLoginResponse> {
   const base = baseUrl.trim().replace(/\/$/, '');
   const url = `${base}/login`;
   console.log('[auth] Login URL:', url);

@@ -12,7 +12,7 @@ export default function SeriesLayout() {
       headerTitleStyle: { color: header.titleColor },
       headerShadowVisible: false,
     }}>
-      <Stack.Screen name="index" options={{ title: 'Series' }} />
+      <Stack.Screen name="index" options={{ title: 'ApiSeries' }} />
     </Stack>
   );
 }

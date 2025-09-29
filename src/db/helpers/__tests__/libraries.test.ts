@@ -53,7 +53,7 @@ describe('Libraries Helper', () => {
     it('should handle missing optional fields', () => {
       const libraryWithMissingFields = {
         id: 'lib-minimal',
-        name: 'Minimal Library',
+        name: 'Minimal ApiLibrary',
         folders: [],
         // Missing icon, displayOrder, mediaType, createdAt, lastUpdate
       } as any;
@@ -62,7 +62,7 @@ describe('Libraries Helper', () => {
 
       expect(result).toEqual({
         id: 'lib-minimal',
-        name: 'Minimal Library',
+        name: 'Minimal ApiLibrary',
         icon: null,
         displayOrder: null,
         mediaType: null,
@@ -132,7 +132,7 @@ describe('Libraries Helper', () => {
       it('should insert a new library', async () => {
         const libraryRow: NewLibraryRow = {
           id: 'lib-new',
-          name: 'New Library',
+          name: 'New ApiLibrary',
           icon: 'book',
           displayOrder: 3,
           mediaType: 'book',
@@ -151,7 +151,7 @@ describe('Libraries Helper', () => {
           .then(rows => rows[0] || null);
 
         expect(insertedLibrary).toBeDefined();
-        expect(insertedLibrary?.name).toBe('New Library');
+        expect(insertedLibrary?.name).toBe('New ApiLibrary');
         expect(insertedLibrary?.icon).toBe('book');
         expect(insertedLibrary?.mediaType).toBe('book');
       });
@@ -159,7 +159,7 @@ describe('Libraries Helper', () => {
       it('should update an existing library', async () => {
         const libraryRow: NewLibraryRow = {
           id: 'lib-existing',
-          name: 'Existing Library',
+          name: 'Existing ApiLibrary',
           icon: 'database',
           displayOrder: 1,
           mediaType: 'book',
@@ -173,7 +173,7 @@ describe('Libraries Helper', () => {
         // Update the library
         const updatedLibraryRow: NewLibraryRow = {
           ...libraryRow,
-          name: 'Updated Library',
+          name: 'Updated ApiLibrary',
           icon: 'podcast',
           mediaType: 'podcast',
         };
@@ -189,7 +189,7 @@ describe('Libraries Helper', () => {
           .then(rows => rows[0] || null);
 
         expect(updatedLibrary).toBeDefined();
-        expect(updatedLibrary?.name).toBe('Updated Library');
+        expect(updatedLibrary?.name).toBe('Updated ApiLibrary');
         expect(updatedLibrary?.icon).toBe('podcast');
         expect(updatedLibrary?.mediaType).toBe('podcast');
       });
@@ -200,7 +200,7 @@ describe('Libraries Helper', () => {
         const libraryRows: NewLibraryRow[] = [
           {
             id: 'lib-1',
-            name: 'Library 1',
+            name: 'ApiLibrary 1',
             icon: 'database',
             displayOrder: 1,
             mediaType: 'book',
@@ -209,7 +209,7 @@ describe('Libraries Helper', () => {
           },
           {
             id: 'lib-2',
-            name: 'Library 2',
+            name: 'ApiLibrary 2',
             icon: 'podcast',
             displayOrder: 2,
             mediaType: 'podcast',
@@ -223,8 +223,8 @@ describe('Libraries Helper', () => {
         // Verify both libraries were inserted
         const libraries = await getAllLibraries();
         expect(libraries).toHaveLength(2);
-        expect(libraries.map(l => l.name)).toContain('Library 1');
-        expect(libraries.map(l => l.name)).toContain('Library 2');
+        expect(libraries.map(l => l.name)).toContain('ApiLibrary 1');
+        expect(libraries.map(l => l.name)).toContain('ApiLibrary 2');
       });
 
       it('should handle empty array', async () => {
@@ -273,7 +273,7 @@ describe('Libraries Helper', () => {
         const sameOrderLibraries: NewLibraryRow[] = [
           {
             id: 'lib-z',
-            name: 'Z Library',
+            name: 'Z ApiLibrary',
             icon: 'database',
             displayOrder: 1,
             mediaType: 'book',
@@ -282,7 +282,7 @@ describe('Libraries Helper', () => {
           },
           {
             id: 'lib-a',
-            name: 'A Library',
+            name: 'A ApiLibrary',
             icon: 'podcast',
             displayOrder: 1,
             mediaType: 'podcast',
@@ -298,8 +298,8 @@ describe('Libraries Helper', () => {
         expect(libraries).toHaveLength(2);
 
         // Should be ordered by name when displayOrder is the same
-        expect(libraries[0].name).toBe('A Library');
-        expect(libraries[1].name).toBe('Z Library');
+        expect(libraries[0].name).toBe('A ApiLibrary');
+        expect(libraries[1].name).toBe('Z ApiLibrary');
       });
     });
 
@@ -382,13 +382,13 @@ describe('Libraries Helper', () => {
       // Update a library
       const updatedLibrary = {
         ...marshaledLibraries[0],
-        name: 'Updated Books Library',
+        name: 'Updated Books ApiLibrary',
       };
       await upsertLibrary(updatedLibrary);
 
       // Verify the update
       const retrievedUpdatedLibrary = await getLibraryById('lib-1');
-      expect(retrievedUpdatedLibrary?.name).toBe('Updated Books Library');
+      expect(retrievedUpdatedLibrary?.name).toBe('Updated Books ApiLibrary');
 
       // Clean up
       await deleteAllLibraries();
@@ -401,7 +401,7 @@ describe('Libraries Helper', () => {
       const libraries: NewLibraryRow[] = [
         {
           id: 'lib-3',
-          name: 'Third Library',
+          name: 'Third ApiLibrary',
           icon: 'database',
           displayOrder: 3,
           mediaType: 'book',
@@ -410,7 +410,7 @@ describe('Libraries Helper', () => {
         },
         {
           id: 'lib-1',
-          name: 'First Library',
+          name: 'First ApiLibrary',
           icon: 'podcast',
           displayOrder: 1,
           mediaType: 'podcast',
@@ -419,7 +419,7 @@ describe('Libraries Helper', () => {
         },
         {
           id: 'lib-2',
-          name: 'Second Library',
+          name: 'Second ApiLibrary',
           icon: 'database',
           displayOrder: 2,
           mediaType: 'book',
@@ -438,9 +438,9 @@ describe('Libraries Helper', () => {
       expect(retrievedLibraries[1].displayOrder).toBe(2);
       expect(retrievedLibraries[2].displayOrder).toBe(3);
 
-      expect(retrievedLibraries[0].name).toBe('First Library');
-      expect(retrievedLibraries[1].name).toBe('Second Library');
-      expect(retrievedLibraries[2].name).toBe('Third Library');
+      expect(retrievedLibraries[0].name).toBe('First ApiLibrary');
+      expect(retrievedLibraries[1].name).toBe('Second ApiLibrary');
+      expect(retrievedLibraries[2].name).toBe('Third ApiLibrary');
     });
   });
 });

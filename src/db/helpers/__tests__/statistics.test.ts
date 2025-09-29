@@ -35,9 +35,9 @@ describe('Statistics Helper', () => {
       // Insert test data for each table
       await testDb.sqlite.execSync(`
         INSERT INTO authors (id, name) VALUES
-        ('author-1', 'Author 1'),
-        ('author-2', 'Author 2'),
-        ('author-3', 'Author 3');
+        ('author-1', 'ApiAuthor 1'),
+        ('author-2', 'ApiAuthor 2'),
+        ('author-3', 'ApiAuthor 3');
       `);
 
       await testDb.sqlite.execSync(`
@@ -61,11 +61,11 @@ describe('Statistics Helper', () => {
 
       await testDb.sqlite.execSync(`
         INSERT INTO series (id, name, added_at, updated_at) VALUES
-        ('series-1', 'Series 1', 1672531200, 1672531200),
-        ('series-2', 'Series 2', 1672617600, 1672617600),
-        ('series-3', 'Series 3', 1672704000, 1672704000),
-        ('series-4', 'Series 4', 1672790400, 1672790400),
-        ('series-5', 'Series 5', 1672876800, 1672876800);
+        ('series-1', 'ApiSeries 1', 1672531200, 1672531200),
+        ('series-2', 'ApiSeries 2', 1672617600, 1672617600),
+        ('series-3', 'ApiSeries 3', 1672704000, 1672704000),
+        ('series-4', 'ApiSeries 4', 1672790400, 1672790400),
+        ('series-5', 'ApiSeries 5', 1672876800, 1672876800);
       `);
 
       await testDb.sqlite.execSync(`
@@ -115,8 +115,8 @@ describe('Statistics Helper', () => {
       // Insert different amounts of test data
       await testDb.sqlite.execSync(`
         INSERT INTO authors (id, name) VALUES
-        ('author-1', 'Author 1'),
-        ('author-2', 'Author 2');
+        ('author-1', 'ApiAuthor 1'),
+        ('author-2', 'ApiAuthor 2');
       `);
 
       await testDb.sqlite.execSync(`
@@ -141,11 +141,11 @@ describe('Statistics Helper', () => {
 
       await testDb.sqlite.execSync(`
         INSERT INTO series (id, name, added_at, updated_at) VALUES
-        ('series-1', 'Series 1', 1672531200, 1672531200),
-        ('series-2', 'Series 2', 1672617600, 1672617600),
-        ('series-3', 'Series 3', 1672704000, 1672704000),
-        ('series-4', 'Series 4', 1672790400, 1672790400),
-        ('series-5', 'Series 5', 1672876800, 1672876800);
+        ('series-1', 'ApiSeries 1', 1672531200, 1672531200),
+        ('series-2', 'ApiSeries 2', 1672617600, 1672617600),
+        ('series-3', 'ApiSeries 3', 1672704000, 1672704000),
+        ('series-4', 'ApiSeries 4', 1672790400, 1672790400),
+        ('series-5', 'ApiSeries 5', 1672876800, 1672876800);
       `);
 
       await testDb.sqlite.execSync(`
@@ -217,7 +217,7 @@ describe('Statistics Helper', () => {
         insertPromises.push(
           testDb.sqlite.execSync(`
             INSERT INTO authors (id, name)
-            VALUES ('author-${i}', 'Author ${i}');
+            VALUES ('author-${i}', 'ApiAuthor ${i}');
           `)
         );
       }
@@ -237,7 +237,7 @@ describe('Statistics Helper', () => {
       for (let i = 1; i <= 100; i++) {
         await testDb.sqlite.execSync(`
           INSERT INTO authors (id, name)
-          VALUES ('author-${i}', 'Author ${i}');
+          VALUES ('author-${i}', 'ApiAuthor ${i}');
         `);
         await testDb.sqlite.execSync(`
           INSERT INTO genres (name)
@@ -245,7 +245,7 @@ describe('Statistics Helper', () => {
         `);
         await testDb.sqlite.execSync(`
           INSERT INTO series (id, name, added_at, updated_at)
-          VALUES ('series-${i}', 'Series ${i}', 1672531200, 1672531200);
+          VALUES ('series-${i}', 'ApiSeries ${i}', 1672531200, 1672531200);
         `);
       }
 

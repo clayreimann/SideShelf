@@ -1,13 +1,13 @@
 import { db } from '@/db/client';
 import { mediaProgress } from '@/db/schema/mediaProgress';
-import { LoginResponse, MediaProgress, MeResponse } from '@/lib/api/types';
+import type { ApiLoginResponse, ApiMediaProgress, ApiMeResponse } from '@/types/api';
 import { and, eq } from 'drizzle-orm';
 
 export type NewMediaProgressRow = typeof mediaProgress.$inferInsert;
 export type MediaProgressRow = typeof mediaProgress.$inferSelect;
 
 // Extract array of media progress rows from an auth/me or login response
-export function marshalMediaProgressFromAuthResponse(data: MeResponse | LoginResponse): NewMediaProgressRow[] {
+export function marshalMediaProgressFromAuthResponse(data: ApiMeResponse | ApiLoginResponse): NewMediaProgressRow[] {
   const userId = data.user?.id;
   const list = data.user?.mediaProgress ?? [];
 
@@ -29,8 +29,8 @@ export function marshalMediaProgressFromAuthResponse(data: MeResponse | LoginRes
   }));
 }
 
-// Alternative function that accepts MediaProgress array and userId directly
-export function marshalMediaProgressFromArray(mediaProgressList: MediaProgress[], userId: string): NewMediaProgressRow[] {
+// Alternative function that accepts ApiMediaProgress array and userId directly
+export function marshalMediaProgressFromArray(mediaProgressList: ApiMediaProgress[], userId: string): NewMediaProgressRow[] {
   if (!userId || !Array.isArray(mediaProgressList) || mediaProgressList.length === 0) return [];
 
   return mediaProgressList.map((mp) => ({

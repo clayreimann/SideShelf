@@ -26,7 +26,7 @@ export const mediaGenres = sqliteTable('media_genres', {
 export const mediaSeries = sqliteTable('media_series', {
   mediaId: text('media_id').notNull().references(() => mediaMetadata.id, { onDelete: 'cascade' }),
   seriesId: text('series_id').notNull().references(() => series.id, { onDelete: 'cascade' }),
-  sequence: text('sequence'), // Series sequence number/position
+  sequence: text('sequence'), // ApiSeries sequence number/position
 }, (table) => ([
     unique('media_series_pk').on(table.mediaId, table.seriesId),
 ]));
