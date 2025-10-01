@@ -98,3 +98,9 @@ LibraryProvider implementation:
 
 - progress update time floatValue instead of intValue
 - update event emitting to use enqueueEvent instead of sendEventWithName
+
+
+## Future chats
+```
+Let's move all local state for items fetched from the API into separate companion objects that can be joined at runtime so that onConflict calls don't squash purely local state
+```

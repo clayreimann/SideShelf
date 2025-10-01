@@ -1,6 +1,8 @@
 import { db } from '@/db/client';
 import { libraryItems } from '@/db/schema/libraryItems';
+import { localCoverCache } from '@/db/schema/localData';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
+import { getCoverUri } from '@/lib/covers';
 import type { ApiLibraryItem, ApiLibraryItemsResponse } from '@/types/api';
 import type { LibraryItemListRow } from '@/types/database';
 import { and, eq, inArray, not } from 'drizzle-orm';
@@ -201,14 +203,15 @@ export async function getLibraryItemsForList(libraryId?: string): Promise<Librar
       publishedDate: mediaMetadata.publishedDate,
       publishedYear: mediaMetadata.publishedYear, // For sorting by published year
       duration: mediaMetadata.duration,
-      coverUri: mediaMetadata.imageUrl, // For podcasts, books would need cover path logic
+      coverUri: localCoverCache.localCoverUrl, // Use local cover cache instead of imageUrl
       description: mediaMetadata.description,
       language: mediaMetadata.language,
       explicit: mediaMetadata.explicit,
       seriesName: mediaMetadata.seriesName,
     })
     .from(libraryItems)
-    .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId));
+    .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
+    .leftJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId));
 
   if (libraryId) {
     return await baseQuery
@@ -246,6 +249,6 @@ export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof
     publishedYear: item.publishedYear,
     addedAt: item.addedAt,
     duration: item.duration || 0,
-    coverUri: item.coverUri || '',
+    coverUri: item.coverUri || getCoverUri(item.id), // Fallback to getCoverUri if no cached cover
   }));
 }

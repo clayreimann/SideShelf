@@ -11,6 +11,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 
 import { AuthorsSlice, createAuthorsSlice } from './slices/authorsSlice';
 import { createLibrarySlice, LibrarySlice } from './slices/librarySlice';
+import { createPlayerSlice, PlayerSlice } from './slices/playerSlice';
 import { createSeriesSlice, SeriesSlice } from './slices/seriesSlice';
 
 /**
@@ -19,10 +20,9 @@ import { createSeriesSlice, SeriesSlice } from './slices/seriesSlice';
  * This interface combines all slices into a single store.
  * As new slices are added, they should be included here.
  */
-export interface StoreState extends LibrarySlice, AuthorsSlice, SeriesSlice {
+export interface StoreState extends LibrarySlice, AuthorsSlice, SeriesSlice, PlayerSlice {
     // Future slices will be added here
     // For example:
-    // PlayerSlice,
     // SettingsSlice,
     // etc.
 }
@@ -50,8 +50,10 @@ export const useAppStore = create<StoreState>()(
         // ApiSeries slice
         ...createSeriesSlice(set, get),
 
+        // Player slice
+        ...createPlayerSlice(set, get),
+
         // Future slices will be spread here
-        // ...createPlayerSlice(set, get),
         // ...createSettingsSlice(set, get),
     }))
 );
@@ -433,6 +435,182 @@ export function useSeriesActions() {
         setSortConfig: state.setSeriesSortConfig,
         reset: state.resetSeries,
     }));
+}
+
+/**
+ * Hook to use the player slice with automatic subscription management
+ *
+ * This hook provides a clean interface to the player slice, similar to the
+ * existing library and authors hooks. It automatically handles subscriptions
+ * and provides type-safe access to the player state and actions.
+ *
+ * @example
+ * ```tsx
+ * function PlayerComponent() {
+ *   const {
+ *     currentTrack,
+ *     isPlaying,
+ *     position,
+ *     playTrack,
+ *     togglePlayPause
+ *   } = usePlayer();
+ *
+ *   // Use the store state and actions...
+ * }
+ * ```
+ */
+export function usePlayer() {
+    const currentTrack = useAppStore(state => state.player.currentTrack);
+    const isPlaying = useAppStore(state => state.player.isPlaying);
+    const position = useAppStore(state => state.player.position);
+    const currentChapter = useAppStore(state => state.player.currentChapter);
+    const playbackRate = useAppStore(state => state.player.playbackRate);
+    const volume = useAppStore(state => state.player.volume);
+    const isModalVisible = useAppStore(state => state.player.isModalVisible);
+    const isLoadingTrack = useAppStore(state => state.player.loading.isLoadingTrack);
+    const isSeeking = useAppStore(state => state.player.loading.isSeeking);
+    const initialized = useAppStore(state => state.player.initialized);
+
+    // Actions (these don't change so we can get them once)
+    const initialize = useAppStore(state => state.initializePlayerSlice);
+    const playTrack = useAppStore(state => state.playTrack);
+    const togglePlayPause = useAppStore(state => state.togglePlayPause);
+    const pause = useAppStore(state => state.pause);
+    const play = useAppStore(state => state.play);
+    const seekTo = useAppStore(state => state.seekTo);
+    const skipForward = useAppStore(state => state.skipForward);
+    const skipBackward = useAppStore(state => state.skipBackward);
+    const setPlaybackRate = useAppStore(state => state.setPlaybackRate);
+    const setVolume = useAppStore(state => state.setVolume);
+    const setModalVisible = useAppStore(state => state.setModalVisible);
+    const clearTrack = useAppStore(state => state.clearTrack);
+
+    return React.useMemo(() => ({
+        currentTrack,
+        isPlaying,
+        position,
+        currentChapter,
+        playbackRate,
+        volume,
+        isModalVisible,
+        isLoadingTrack,
+        isSeeking,
+        initialized,
+        initialize,
+        playTrack,
+        togglePlayPause,
+        pause,
+        play,
+        seekTo,
+        skipForward,
+        skipBackward,
+        setPlaybackRate,
+        setVolume,
+        setModalVisible,
+        clearTrack,
+    }), [
+        currentTrack,
+        isPlaying,
+        position,
+        currentChapter,
+        playbackRate,
+        volume,
+        isModalVisible,
+        isLoadingTrack,
+        isSeeking,
+        initialized,
+        initialize,
+        playTrack,
+        togglePlayPause,
+        pause,
+        play,
+        seekTo,
+        skipForward,
+        skipBackward,
+        setPlaybackRate,
+        setVolume,
+        setModalVisible,
+        clearTrack,
+    ]);
+}
+
+/**
+ * Hook to get specific player state without subscribing to the entire slice
+ *
+ * @example
+ * ```tsx
+ * // Only re-render when current track changes
+ * const currentTrack = usePlayerState(state => state.player.currentTrack);
+ *
+ * // Only re-render when playing state changes
+ * const isPlaying = usePlayerState(state => state.player.isPlaying);
+ * ```
+ */
+export function usePlayerState<T>(selector: (state: PlayerSlice) => T): T {
+    return useAppStore(selector);
+}
+
+/**
+ * Hook to get player actions without subscribing to state
+ *
+ * This hook provides access to player actions without subscribing to any state,
+ * which is useful for components that only need to trigger actions.
+ *
+ * @example
+ * ```tsx
+ * function PlayButton() {
+ *   const { playTrack, togglePlayPause } = usePlayerActions();
+ *
+ *   return (
+ *     <Button onPress={() => togglePlayPause()}>
+ *       Toggle Play/Pause
+ *     </Button>
+ *   );
+ * }
+ * ```
+ */
+export function usePlayerActions() {
+    return useAppStore((state) => ({
+        initialize: state.initializePlayerSlice,
+        playTrack: state.playTrack,
+        togglePlayPause: state.togglePlayPause,
+        pause: state.pause,
+        play: state.play,
+        seekTo: state.seekTo,
+        skipForward: state.skipForward,
+        skipBackward: state.skipBackward,
+        setPlaybackRate: state.setPlaybackRate,
+        setVolume: state.setVolume,
+        setModalVisible: state.setModalVisible,
+        clearTrack: state.clearTrack,
+    }));
+}
+
+/**
+ * Hook to initialize the player store
+ *
+ * This hook should be used in a provider component or at the app root
+ * to initialize the player store when the app starts.
+ *
+ * @example
+ * ```tsx
+ * function App() {
+ *   usePlayerStoreInitializer();
+ *
+ *   return <YourAppContent />;
+ * }
+ * ```
+ */
+export function usePlayerStoreInitializer() {
+    const initializePlayer = useAppStore(state => state.initializePlayerSlice);
+    const initialized = useAppStore(state => state.player.initialized);
+
+    // Initialize the player store on mount
+    React.useEffect(() => {
+        if (!initialized) {
+            initializePlayer();
+        }
+    }, [initializePlayer, initialized]);
 }
 
 /**

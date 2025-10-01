@@ -33,7 +33,7 @@ export const mediaMetadata = sqliteTable('media_metadata', {
 
   // ApiPodcast-specific fields
   feedUrl: text('feed_url'),
-  imageUrl: text('image_url'),
+  imageUrl: text('image_url'), // This will be populated from API, local covers stored in localCoverCache
   itunesPageUrl: text('itunes_page_url'),
   itunesId: text('itunes_id'),
   itunesArtistId: text('itunes_artist_id'),

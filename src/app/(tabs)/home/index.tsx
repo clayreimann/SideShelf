@@ -1,19 +1,21 @@
+import { ProgressBar } from '@/components/ui';
 import { getHomeScreenData, getItemsWithProgressNeedingFullRefresh, type HomeScreenItem } from '@/db/helpers/homeScreen';
 import { getUserByUsername } from '@/db/helpers/users';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { libraryItemBatchService } from '@/services/libraryItemBatchService';
+import { progressSyncService } from '@/services/ProgressSyncService';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Pressable,
   RefreshControl,
   SectionList,
   Text,
-  TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 interface HomeSection {
@@ -41,6 +43,8 @@ export default function HomeScreen() {
         console.error('[HomeScreen] No user found for username:', username);
         return;
       }
+
+      await progressSyncService.fetchAndSyncProgress();
 
       // Get home screen data
       const data = await getHomeScreenData(user.id);
@@ -116,7 +120,7 @@ export default function HomeScreen() {
   }, [loadHomeData]);
 
   const renderItem = ({ item }: { item: HomeScreenItem }) => (
-    <TouchableOpacity
+    <Pressable
       style={[styles.listItem, { backgroundColor: colors.headerBackground, marginBottom: 12, borderRadius: 8 }]}
       onPress={() => router.push(`/library/${item.id}`)}
     >
@@ -140,20 +144,9 @@ export default function HomeScreen() {
         {/* Progress bar for continue listening items */}
         {item.progress !== undefined && item.progress > 0 && (
           <View style={{ marginTop: 8 }}>
-            <View style={{
-              height: 3,
-              backgroundColor: colors.separator,
-              borderRadius: 1.5,
-              overflow: 'hidden'
-            }}>
-              <View style={{
-                height: '100%',
-                width: `${Math.round(item.progress * 100)}%`,
-                backgroundColor: colors.link
-              }} />
-            </View>
+            <ProgressBar progress={item.progress} variant="small" showPercentage={true} />
             <Text style={[styles.text, { opacity: 0.6, fontSize: 11, marginTop: 2 }]}>
-              {Math.round(item.progress * 100)}% complete
+              Finished: {item.isFinished ? 'Yes' : 'No'}
             </Text>
           </View>
         )}
@@ -170,7 +163,7 @@ export default function HomeScreen() {
           </Text>
         )}
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 
   const renderSectionHeader = ({ section }: { section: HomeSection }) => (
@@ -217,19 +210,19 @@ export default function HomeScreen() {
 
   return (
     <SectionList
-        sections={sections}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.flatListContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.link}
-          />
-        }
-        showsVerticalScrollIndicator={false}
-      />
+      sections={sections}
+      renderItem={renderItem}
+      renderSectionHeader={renderSectionHeader}
+      keyExtractor={(item) => item.id}
+      contentContainerStyle={styles.flatListContainer}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.link}
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    />
   );
 }

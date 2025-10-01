@@ -47,7 +47,7 @@ export default function AboutScreen() {
 
   return (
     <>
-      <View style={{ flex: 1 }}>
+      <View style={styles.container} needsOffscreenAlphaCompositing={true}>
         <LibraryPicker
           libraries={libraries}
           selectLibrary={selectLibrary}

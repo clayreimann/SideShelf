@@ -1,6 +1,7 @@
 import { db } from '@/db/client';
 import { audioFiles } from '@/db/schema/audioFiles';
 import { libraryItems } from '@/db/schema/libraryItems';
+import { localAudioFileDownloads } from '@/db/schema/localData';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
 import { mediaProgress } from '@/db/schema/mediaProgress';
 import { and, desc, eq, gt, inArray, not } from 'drizzle-orm';
@@ -82,9 +83,10 @@ export async function getDownloadedItems(limit: number = 20): Promise<HomeScreen
         .from(libraryItems)
         .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
         .innerJoin(audioFiles, eq(mediaMetadata.id, audioFiles.mediaId))
+        .innerJoin(localAudioFileDownloads, eq(audioFiles.id, localAudioFileDownloads.audioFileId))
         .where(and(
             eq(libraryItems.mediaType, 'book'),
-            eq(audioFiles.isDownloaded, true)
+            eq(localAudioFileDownloads.isDownloaded, true)
         ))
         .groupBy(libraryItems.id, mediaMetadata.title, mediaMetadata.subtitle,
             mediaMetadata.authorName, mediaMetadata.seriesName,

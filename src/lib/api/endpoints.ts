@@ -91,6 +91,35 @@ export async function fetchLibraryItemsBatch(libraryItemIds: string[]): Promise<
   return data.libraryItems || [];
 }
 
+/**
+ * Update media progress on the server
+ */
+export async function updateMediaProgress(
+  libraryItemId: string,
+  currentTime: number,
+  duration: number,
+  progress: number,
+  isFinished: boolean = false
+): Promise<void> {
+  const response = await apiFetch(`/api/me/progress/${libraryItemId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      currentTime,
+      duration,
+      progress,
+      isFinished,
+    }),
+  });
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.message || error.error || 'Failed to update media progress');
+  }
+}
+
 export async function login(baseUrl: string, username: string, password: string): Promise<ApiLoginResponse> {
   const base = baseUrl.trim().replace(/\/$/, '');
   const url = `${base}/login`;

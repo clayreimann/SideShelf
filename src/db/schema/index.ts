@@ -6,6 +6,7 @@ export * as languages from './languages';
 export * as libraries from './libraries';
 export * as libraryFiles from './libraryFiles';
 export * as libraryItems from './libraryItems';
+export * as localData from './localData';
 export * as mediaJoins from './mediaJoins';
 export * as mediaMetadata from './mediaMetadata';
 export * as mediaProgress from './mediaProgress';

@@ -1,5 +1,5 @@
 /**
- * ApiSeries database helper functions
+ * Series database helper functions
  *
  * This module provides functions for managing series in the database,
  * including fetching, upserting, and transforming series data.
@@ -77,7 +77,7 @@ export async function upsertMultipleSeries(rows: NewSeriesRow[]): Promise<void> 
 }
 
 /**
- * ApiSeries display row for lists
+ * Series display row for lists
  */
 export interface SeriesListRow {
   id: string;
@@ -93,7 +93,7 @@ export interface SeriesListRow {
 export function transformSeriesToDisplayFormat(series: SeriesRow[]): SeriesListRow[] {
   return series.map(serie => ({
     id: serie.id,
-    name: serie.name || 'Unknown ApiSeries',
+    name: serie.name || 'Unknown Series',
     description: serie.description,
     addedAt: serie.addedAt,
     updatedAt: serie.updatedAt,

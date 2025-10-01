@@ -59,6 +59,11 @@ export interface AuthorsSliceActions {
     /** Reset the slice to initial state */
     resetAuthors: () => void;
 
+    // Internal actions (prefixed with underscore)
+    /** Set ready state based on API and DB initialization */
+    _setAuthorsReady: (apiConfigured: boolean, dbInitialized: boolean) => void;
+    /** Load data from AsyncStorage */
+    _loadAuthorsSettingsFromStorage: () => Promise<void>;
 }
 
 /**

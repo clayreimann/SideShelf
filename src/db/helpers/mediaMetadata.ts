@@ -1,9 +1,10 @@
-import type { ApiBook, ApiPodcast } from '@/types/api';
 import { cacheCoverIfMissing } from '@/lib/covers';
+import type { ApiBook, ApiPodcast } from '@/types/api';
 import { eq } from 'drizzle-orm';
 import { db } from '../client';
 import { libraryItems } from '../schema/libraryItems';
 import { mediaMetadata, MediaMetadataRow, NewMediaMetadataRow } from '../schema/mediaMetadata';
+import { cacheLocalCover, getLocalCoverUrl } from './localData';
 
 /**
  * Marshal book data from API to media metadata row
@@ -285,21 +286,31 @@ export async function deleteMediaMetadataByLibraryItemId(libraryItemId: string):
 }
 
 /**
- * Cache cover for a library item and update the imageUrl in the database
+ * Cache cover for a library item and store in local cache
  */
 export async function cacheCoverAndUpdateMetadata(libraryItemId: string): Promise<boolean> {
   try {
+    // Get the media ID for this library item
+    const mediaResult = await db
+      .select({ mediaId: mediaMetadata.id })
+      .from(mediaMetadata)
+      .where(eq(mediaMetadata.libraryItemId, libraryItemId))
+      .limit(1);
+
+    if (!mediaResult[0]) {
+      console.error(`[mediaMetadata] No media metadata found for library item ${libraryItemId}`);
+      return false;
+    }
+
+    const mediaId = mediaResult[0].mediaId;
+
     // Cache the cover
     const result = await cacheCoverIfMissing(libraryItemId);
 
-    // Only update the database if the cover was actually downloaded or if it already exists
+    // Only update the local cache if the cover was actually downloaded or if it already exists
     if (result.uri) {
-      await db
-        .update(mediaMetadata)
-        .set({ imageUrl: result.uri })
-        .where(eq(mediaMetadata.libraryItemId, libraryItemId));
-
-      console.log(`[mediaMetadata] Updated cover for ${libraryItemId}: ${result.uri} (downloaded: ${result.wasDownloaded})`);
+      await cacheLocalCover(mediaId, result.uri);
+      console.log(`[mediaMetadata] Cached cover for ${libraryItemId} (media: ${mediaId}): ${result.uri} (downloaded: ${result.wasDownloaded})`);
       return result.wasDownloaded;
     }
 
@@ -318,22 +329,31 @@ export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ d
     const items = await db
       .select({
         libraryItemId: mediaMetadata.libraryItemId,
+        mediaId: mediaMetadata.id,
         mediaType: mediaMetadata.mediaType,
-        imageUrl: mediaMetadata.imageUrl,
       })
       .from(mediaMetadata)
       .innerJoin(libraryItems, eq(mediaMetadata.libraryItemId, libraryItems.id))
       .where(eq(libraryItems.libraryId, libraryId));
 
-    const itemsToCache = items.filter(item => !item.imageUrl);
+    // Check which items already have cached covers
+    const itemsWithCachedCovers = new Set<string>();
+    for (const item of items) {
+      const cachedUrl = await getLocalCoverUrl(item.mediaId);
+      if (cachedUrl) {
+        itemsWithCachedCovers.add(item.libraryItemId);
+      }
+    }
+
+    const itemsToCache = items.filter(item => !itemsWithCachedCovers.has(item.libraryItemId));
     console.log(`[mediaMetadata] Caching covers for ${itemsToCache.length} of ${items.length} items in library ${libraryId}`);
 
     let downloadedCount = 0;
 
     // Cache covers in parallel (but limit concurrency to avoid overwhelming the server)
     const batchSize = 5;
-    for (let i = 0; i < items.length; i += batchSize) {
-      const batch = items.slice(i, i + batchSize);
+    for (let i = 0; i < itemsToCache.length; i += batchSize) {
+      const batch = itemsToCache.slice(i, i + batchSize);
       const results = await Promise.all(
         batch.map(item => cacheCoverAndUpdateMetadata(item.libraryItemId))
       );

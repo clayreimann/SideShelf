@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/lib/theme';
-import React, { useState } from 'react';
-import { Animated, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Animated, Pressable, Text, View } from 'react-native';
 
 interface CollapsibleSectionProps {
   title: string;
@@ -18,6 +18,11 @@ export function CollapsibleSection({
   const { styles, isDark } = useThemedStyles();
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [animation] = useState(new Animated.Value(defaultExpanded ? 1 : 0));
+
+  // Ensure animation value matches initial expanded state
+  useEffect(() => {
+    animation.setValue(defaultExpanded ? 1 : 0);
+  }, [defaultExpanded, animation]);
 
   const toggleExpanded = () => {
     const toValue = isExpanded ? 0 : 1;
@@ -42,7 +47,7 @@ export function CollapsibleSection({
 
   return (
     <View style={{ marginBottom: 16 }}>
-      <TouchableOpacity
+      <Pressable
         onPress={toggleExpanded}
         style={{
           flexDirection: 'row',
@@ -67,7 +72,7 @@ export function CollapsibleSection({
         <Text style={[styles.text, { fontSize: 18, fontWeight: '600', flex: 1 }]}>
           {title}
         </Text>
-      </TouchableOpacity>
+      </Pressable >
 
       <Animated.View
         style={{

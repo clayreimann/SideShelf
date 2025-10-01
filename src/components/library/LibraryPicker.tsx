@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 interface LibraryPickerProps {
   libraries: any[] | null;
@@ -25,11 +25,11 @@ export default function LibraryPicker({ libraries, selectLibrary, selectedLibrar
       gap: 8,
     }}>
       {libraries.map((lib) => (
-        <TouchableOpacity key={lib.id} onPress={() => selectLibrary(lib.id)}>
+        <Pressable key={lib.id} onPress={() => selectLibrary(lib.id)}>
           <Text style={{ backgroundColor: selectedLibrary?.id === lib.id ? (isDark ? '#222' : '#eee') : 'transparent', color: selectedLibrary?.id === lib.id ? (isDark ? '#fff' : '#000') : '#888' }}>
             {lib.name}
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       ))}
     </View>
   );

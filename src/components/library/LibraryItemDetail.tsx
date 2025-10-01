@@ -1,9 +1,9 @@
 import { useThemedStyles } from '@/lib/theme';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
 
-import { CollapsibleSection } from '@/components/ui';
-import { AudioFileRow, getAudioFilesForMedia } from '@/db/helpers/audioFiles';
+import { CollapsibleSection, ProgressBar } from '@/components/ui';
 import { ChapterRow, getChaptersForMedia } from '@/db/helpers/chapters';
+import { AudioFileWithDownloadInfo, getAudioFilesWithDownloadInfo } from '@/db/helpers/combinedQueries';
 import { processFullLibraryItems } from '@/db/helpers/fullLibraryItems';
 import { getLibraryItemById, NewLibraryItemRow } from '@/db/helpers/libraryItems';
 import { getMediaGenres, getMediaTags } from '@/db/helpers/mediaJoins';
@@ -16,9 +16,17 @@ import { getCoverUri } from '@/lib/covers';
 import { formatBytes, formatSpeed, formatTimeRemaining } from '@/lib/helpers/formatters';
 import { useAuth } from '@/providers/AuthProvider';
 import { DownloadProgress, downloadService } from '@/services/DownloadService';
+import { playerService } from '@/services/PlayerService';
+import { useAppStore } from '@/stores/appStore';
+import type { PlayerTrack } from '@/types/player';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import Octicons from '@expo/vector-icons/Octicons';
+import { Stack } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, useWindowDimensions } from 'react-native';
 import RenderHtml from 'react-native-render-html';
+
 
 interface LibraryItemDetailProps {
   itemId: string;
@@ -38,10 +46,20 @@ function formatTime(seconds: number): string {
   }
 }
 
+function Separator() {
+  const { isDark } = useThemedStyles();
+  return <View style={{ marginHorizontal: 12 }}>
+    <Text style={{ color: isDark ? '#bbb' : '#444', fontSize: 24, textAlign: 'center' }}>•</Text>
+  </View>;
+}
+
 export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItemDetailProps) {
   const { styles, isDark } = useThemedStyles();
   const { width } = useWindowDimensions();
   const { username, serverUrl, accessToken } = useAuth();
+
+  // Player store
+  const { playTrack, player } = useAppStore();
 
   const [loading, setLoading] = useState(true);
   const [item, setItem] = useState<NewLibraryItemRow | null>(null);
@@ -50,7 +68,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const [tags, setTags] = useState<string[]>([]);
   const [progress, setProgress] = useState<MediaProgressRow | null>(null);
   const [chapters, setChapters] = useState<ChapterRow[]>([]);
-  const [audioFiles, setAudioFiles] = useState<AudioFileRow[]>([]);
+  const [audioFiles, setAudioFiles] = useState<AudioFileWithDownloadInfo[]>([]);
 
   // Download states
   const [isDownloaded, setIsDownloaded] = useState(false);
@@ -71,7 +89,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
         // Get chapters and audio files if metadata exists
         const chaptersData = meta ? await getChaptersForMedia(meta.id) : [];
-        const audioFilesData = meta ? await getAudioFilesForMedia(meta.id) : [];
+        const audioFilesData = meta ? await getAudioFilesWithDownloadInfo(meta.id) : [];
 
         // Ensure DownloadService is initialized before checking status
         await downloadService.initialize();
@@ -122,6 +140,10 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       if (!username || !item) return;
 
       try {
+        // TODO: Re-enable progress sync once API conformance is verified
+        // await progressSyncService.fetchAndSyncProgress(username);
+
+        // Get the local progress data
         const user = await getUserByUsername(username);
         if (user?.id) {
           const progressData = await getMediaProgressForLibraryItem(item.id, user.id);
@@ -171,7 +193,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           if (metadata && isMounted) {
             const [newChapters, newAudioFiles] = await Promise.all([
               getChaptersForMedia(metadata.id),
-              getAudioFilesForMedia(metadata.id)
+              getAudioFilesWithDownloadInfo(metadata.id)
             ]);
 
             if (isMounted) {
@@ -288,7 +310,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       // The progress subscription will handle state updates
       // Refresh audio files to show download status when completed
       if (metadata) {
-        const updatedAudioFiles = await getAudioFilesForMedia(metadata.id);
+        const updatedAudioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
         setAudioFiles(updatedAudioFiles);
       }
     } catch (error) {
@@ -331,7 +353,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
               // Refresh audio files to show download status
               if (metadata) {
-                const updatedAudioFiles = await getAudioFilesForMedia(metadata.id);
+                const updatedAudioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
                 setAudioFiles(updatedAudioFiles);
               }
             } catch (error) {
@@ -369,6 +391,40 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     // State will be updated via progress subscription
   }, [item]);
 
+  // Play handler
+  const handlePlay = useCallback(async () => {
+    if (!item || !metadata || !audioFiles.length) {
+      Alert.alert('Cannot Play', 'No audio files available for this item.');
+      return;
+    }
+
+    try {
+      // Build player track
+      const playerTrack: PlayerTrack = {
+        libraryItemId: item.id,
+        mediaId: metadata.id,
+        title: metadata.title || 'Unknown Title',
+        author: metadata.authorName || metadata.author || 'Unknown Author',
+        coverUri: metadata.imageUrl || getCoverUri(item.id),
+        audioFiles,
+        chapters,
+        duration: audioFiles.reduce((total, file) => total + (file.duration || 0), 0),
+        isDownloaded: audioFiles.some(file => file.downloadInfo?.isDownloaded),
+      };
+
+      // Play the track
+      await playTrack(playerTrack);
+      await playerService.playTrack(playerTrack, username || undefined);
+    } catch (error) {
+      console.error('[LibraryItemDetail] Failed to play track:', error);
+      Alert.alert(
+        'Playback Failed',
+        `Failed to start playback: ${error}`,
+        [{ text: 'OK' }]
+      );
+    }
+  }, [item, metadata, audioFiles, chapters, playTrack]);
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -389,12 +445,12 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const title = metadata?.title || 'Unknown Title';
   const coverUri = metadata?.imageUrl || (item ? getCoverUri(item.id) : null);
   const description = metadata?.description || '';
-  const author = metadata?.authorName || metadata?.author || 'Unknown ApiAuthor';
+  const author = metadata?.authorName || metadata?.author || 'Unknown Author';
   const narrator = metadata?.narratorName || null;
   const series = metadata?.seriesName || null;
-  const imageSize = width - 64;
+  const imageSize = width * 0.4;
 
-  return (
+  return <>
     <ScrollView
       style={{ flex: 1, backgroundColor: styles.container.backgroundColor, marginBottom: 100 }}
       contentContainerStyle={{ padding: 16 }}
@@ -434,14 +490,34 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       <Text style={[styles.text, { fontSize: 24, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }]}>
         {title}
       </Text>
-      {series ? (
-        <Text style={[styles.text, { fontStyle: 'italic', marginBottom: 4, textAlign: 'center' }]}>
-          ApiSeries: {series}
-        </Text>
-      ) : null}
-        <Text style={[styles.text, { marginBottom: 4, textAlign: 'center' }]}>ApiAuthor: {author}</Text>
+      <View style={{ flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <FontAwesome6 name="pen-to-square" size={16} color={isDark ? 'white' : 'black'} style={{ marginRight: 8 }} />
+            <Text style={[styles.text, { textAlign: 'center' }]}>
+              {author}
+            </Text>
+          </View>
+          {narrator ? (
+            <>
+              <Separator />
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <FontAwesome6 name="microphone-lines" size={16} color={isDark ? 'white' : 'black'} style={{ marginRight: 8 }} />
+                <Text style={[styles.text, { textAlign: 'center' }]}>
+                  {narrator}
+                </Text>
+              </View>
+            </>
+          ) : null}
+        </View>
+        {series ? (
+          <Text style={[styles.text, { fontStyle: 'italic', marginBottom: 4, textAlign: 'center' }]}>
+            <MaterialCommunityIcons name="bookshelf" size={24} color={isDark ? 'white' : 'black'} /> {series}
+          </Text>
+        ) : null}
+      </View>
 
-        {narrator ? <Text style={[styles.text, { marginBottom: 4, textAlign: 'center' }]}>Narrator: {narrator}</Text> : null}
+
 
       {/* Progress display */}
       {progress && (
@@ -451,32 +527,14 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
             borderRadius: 8,
             padding: 12
           }}>
-            <Text style={[styles.text, { fontSize: 14, marginBottom: 8, textAlign: 'center' }]}>
-              Progress: {Math.round((progress.progress || 0) * 100)}%
-            </Text>
-            <View style={{
-              height: 4,
-              backgroundColor: isDark ? '#555' : '#ddd',
-              borderRadius: 2,
-              overflow: 'hidden'
-            }}>
-              <View style={{
-                height: '100%',
-                width: `${Math.round((progress.progress || 0) * 100)}%`,
-                backgroundColor: '#007AFF',
-                borderRadius: 2,
-              }} />
-            </View>
-            {progress.currentTime && progress.duration && (
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
-                  {formatTime(progress.currentTime)}
-                </Text>
-                <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
-                  {formatTime(progress.duration)}
-                </Text>
-              </View>
-            )}
+            <ProgressBar
+              progress={progress.progress || 0}
+              variant="medium"
+              showTimeLabels={!!(progress.currentTime && progress.duration)}
+              currentTime={progress.currentTime || undefined}
+              duration={progress.duration || undefined}
+              showPercentage={true}
+            />
           </View>
         </View>
       )}
@@ -494,10 +552,10 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
                 downloadProgress.status === 'downloading'
                   ? `Downloading: ${downloadProgress.currentFile}`
                   : downloadProgress.status === 'completed'
-                  ? 'Download Complete!'
-                  : downloadProgress.status === 'cancelled'
-                  ? 'Download Cancelled'
-                  : 'Download Error'
+                    ? 'Download Complete!'
+                    : downloadProgress.status === 'cancelled'
+                      ? 'Download Cancelled'
+                      : 'Download Error'
               ) : (
                 'Preparing download...'
               )}
@@ -505,43 +563,25 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
             {/* Overall Progress Bar */}
             <View style={{ marginBottom: 8 }}>
-              <View style={{
-                height: 6,
-                backgroundColor: isDark ? '#555' : '#ddd',
-                borderRadius: 3,
-                overflow: 'hidden'
-              }}>
-                <View style={{
-                  height: '100%',
-                  width: `${Math.round((downloadProgress?.totalProgress || 0) * 100)}%`,
-                  backgroundColor: downloadProgress?.status === 'error' ? '#FF3B30' : '#007AFF',
-                  borderRadius: 3,
-                }} />
-              </View>
-              <Text style={[styles.text, { fontSize: 11, opacity: 0.6, textAlign: 'center', marginTop: 2 }]}>
-                Overall Progress: {Math.round((downloadProgress?.totalProgress || 0) * 100)}%
-              </Text>
+              <ProgressBar
+                progress={downloadProgress?.totalProgress || 0}
+                variant="large"
+                progressColor={downloadProgress?.status === 'error' ? '#FF3B30' : '#007AFF'}
+                customPercentageText={`Overall Progress: ${Math.round((downloadProgress?.totalProgress || 0) * 100)}%`}
+                showPercentage={true}
+              />
             </View>
 
             {/* Current File Progress Bar */}
             {downloadProgress?.status === 'downloading' && downloadProgress?.currentFile && (
               <View style={{ marginBottom: 8 }}>
-                <View style={{
-                  height: 4,
-                  backgroundColor: isDark ? '#555' : '#ddd',
-                  borderRadius: 2,
-                  overflow: 'hidden'
-                }}>
-                  <View style={{
-                    height: '100%',
-                    width: `${Math.round((downloadProgress?.fileProgress || 0) * 100)}%`,
-                    backgroundColor: '#34C759',
-                    borderRadius: 2,
-                  }} />
-                </View>
-                <Text style={[styles.text, { fontSize: 11, opacity: 0.6, textAlign: 'center', marginTop: 2 }]}>
-                  Current File: {Math.round((downloadProgress?.fileProgress || 0) * 100)}%
-                </Text>
+                <ProgressBar
+                  progress={downloadProgress?.fileProgress || 0}
+                  variant="medium"
+                  progressColor="#34C759"
+                  customPercentageText={`Current File: ${Math.round((downloadProgress?.fileProgress || 0) * 100)}%`}
+                  showPercentage={true}
+                />
               </View>
             )}
 
@@ -635,38 +675,43 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
               )}
             </View>
           </View>
-        ) : (
+        ) : null}
+      </View>
+
+      {/* Play Button */}
+      {audioFiles.length > 0 && (
+        <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
           <TouchableOpacity
             style={{
-              backgroundColor: isDownloaded ? '#FF3B30' : '#007AFF',
+              backgroundColor: '#34C759',
               borderRadius: 8,
               padding: 12,
               alignItems: 'center',
-              opacity: (!serverUrl || !accessToken) ? 0.5 : 1
+              opacity: player.loading.isLoadingTrack ? 0.5 : 1
             }}
-            onPress={isDownloaded ? handleDeleteDownload : handleDownload}
-            disabled={!serverUrl || !accessToken || isDownloading}
+            onPress={handlePlay}
+            disabled={player.loading.isLoadingTrack}
           >
             <Text style={{
               color: 'white',
               fontSize: 16,
               fontWeight: '600'
             }}>
-              {isDownloaded ? '🗑️ Delete Download' : '⬇️ Download'}
+              {player.loading.isLoadingTrack ? '⏳ Loading...' : '▶️ Play'}
             </Text>
-            {isDownloaded && (
+            {audioFiles.some(file => file.downloadInfo?.isDownloaded) && (
               <Text style={{
                 color: 'white',
                 fontSize: 12,
                 opacity: 0.8,
                 marginTop: 2
               }}>
-                Tap to free up storage space
+                Downloaded files available
               </Text>
             )}
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
 
       {genres && genres.length > 0 && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8, justifyContent: 'center' }}>
@@ -693,6 +738,14 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
             contentWidth={width - 64}
             source={{ html: description }}
             baseStyle={{ color: styles.text.color, fontSize: 16 }}
+            tagsStyles={{
+              p: { marginBottom: 12, lineHeight: 24, },
+              div: { marginBottom: 8, },
+              br: { marginBottom: 8, },
+              b: { fontWeight: 'bold', },
+              strong: { fontWeight: 'bold', },
+              i: { fontStyle: 'italic', }
+            }}
           />
         </CollapsibleSection>
       )}
@@ -710,7 +763,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
                 Chapter {chapter.chapterId}: {chapter.title}
               </Text>
               <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
-                {formatTime(chapter.start)} - {formatTime(chapter.end)}
+                {formatTime(chapter.start)} - {formatTime(chapter.end)} ({formatTime(chapter.end - chapter.start)})
               </Text>
             </View>
           ))}
@@ -743,7 +796,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
                     Format: {file.format}
                   </Text>
                 )}
-                {file.isDownloaded && (
+                {file.downloadInfo?.isDownloaded && (
                   <Text style={[styles.text, { fontSize: 12, color: '#007AFF' }]}>
                     ⬇ Downloaded
                   </Text>
@@ -754,5 +807,12 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         </CollapsibleSection>
       )}
     </ScrollView>
-  );
+    <Stack.Screen options={{
+      headerRight: () => (
+        <TouchableOpacity onPress={isDownloaded ? handleDeleteDownload : handleDownload} disabled={!serverUrl || !accessToken || isDownloading}>
+          <Octicons name={isDownloaded ? 'trash' : 'download'} size={24} color={isDark ? 'white' : 'black'} />
+        </TouchableOpacity>
+      )
+    }} />
+  </>
 }

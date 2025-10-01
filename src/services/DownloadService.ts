@@ -1,33 +1,34 @@
-import { clearAudioFileDownloadStatus, getAudioFilesForMedia, markAudioFileAsDownloaded } from '@/db/helpers/audioFiles';
+import { clearAudioFileDownloadStatus, markAudioFileAsDownloaded } from '@/db/helpers/audioFiles';
+import { getAudioFilesWithDownloadInfo } from '@/db/helpers/combinedQueries';
 import { getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
 import { cacheCoverIfMissing } from '@/lib/covers';
 import {
-  calculateSmoothedSpeed,
-  clearDebounceTimer,
-  createSpeedTracker,
-  DEFAULT_DOWNLOAD_CONFIG
+    calculateSmoothedSpeed,
+    clearDebounceTimer,
+    createSpeedTracker,
+    DEFAULT_DOWNLOAD_CONFIG
 } from '@/lib/downloads/speedTracker';
 import {
-  constructDownloadUrl,
-  downloadFileExists,
-  ensureDownloadsDirectory,
-  getDownloadPath,
-  getDownloadsDirectory
+    constructDownloadUrl,
+    downloadFileExists,
+    ensureDownloadsDirectory,
+    getDownloadPath,
+    getDownloadsDirectory
 } from '@/lib/fileSystem';
 import type {
-  DownloadConfig,
-  DownloadInfo,
-  DownloadProgress,
-  DownloadProgressCallback,
-  DownloadSpeedTracker,
-  DownloadTaskInfo
+    DownloadConfig,
+    DownloadInfo,
+    DownloadProgress,
+    DownloadProgressCallback,
+    DownloadSpeedTracker,
+    DownloadTaskInfo
 } from '@/types/services';
 import RNBackgroundDownloader, { DownloadTask } from '@kesha-antonov/react-native-background-downloader';
 
 // Re-export types for backward compatibility
 export type {
-  DownloadConfig, DownloadInfo, DownloadProgress, DownloadProgressCallback,
-  DownloadSpeedTracker, DownloadTaskInfo
+    DownloadConfig, DownloadInfo, DownloadProgress, DownloadProgressCallback,
+    DownloadSpeedTracker, DownloadTaskInfo
 };
 
 // Remove duplicate type definitions - they're now in @/types/services
@@ -213,13 +214,13 @@ export class DownloadService {
         throw new Error('ApiLibrary item metadata not found');
       }
 
-      const audioFiles = await getAudioFilesForMedia(metadata.id);
+      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       if (audioFiles.length === 0) {
         throw new Error('No audio files found for this library item');
       }
 
       const totalFiles = audioFiles.length;
-      const totalBytes = audioFiles.reduce((sum, file) => sum + (file.size || 0), 0);
+      const totalBytes = audioFiles.reduce((sum: number, file) => sum + (file.size || 0), 0);
 
       // Initialize download tracking
       const downloadInfo: DownloadInfo = {
@@ -261,7 +262,7 @@ export class DownloadService {
       // Don't increment downloadedFiles for cover
 
       // Start all downloads concurrently
-      const downloadPromises = audioFiles.map(async (audioFile) => {
+      const downloadPromises = audioFiles.map(async (audioFile: any) => {
         try {
           const task = await this.downloadAudioFile(
             libraryItemId,
@@ -414,11 +415,11 @@ export class DownloadService {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) return false;
 
-      const audioFiles = await getAudioFilesForMedia(metadata.id);
+      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       if (audioFiles.length === 0) return false;
 
       // Check if all audio files are marked as downloaded
-      const isDownloaded = audioFiles.every(file => file.isDownloaded);
+      const isDownloaded = audioFiles.every(file => file.downloadInfo?.isDownloaded);
       console.log(`[DownloadService] Checking if library item is downloaded for ${libraryItemId}: ${isDownloaded}`);
       return isDownloaded;
     } catch (error) {
@@ -435,9 +436,9 @@ export class DownloadService {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) return { downloaded: 0, total: 0, progress: 0 };
 
-      const audioFiles = await getAudioFilesForMedia(metadata.id);
+      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       const total = audioFiles.length;
-      const downloaded = audioFiles.filter(file => file.isDownloaded).length;
+      const downloaded = audioFiles.filter(file => file.downloadInfo?.isDownloaded).length;
       const progress = total > 0 ? downloaded / total : 0;
 
       return { downloaded, total, progress };
@@ -461,9 +462,9 @@ export class DownloadService {
       // Update database to mark files as not downloaded
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (metadata) {
-        const audioFiles = await getAudioFilesForMedia(metadata.id);
+        const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
         for (const audioFile of audioFiles) {
-          if (audioFile.isDownloaded) {
+          if (audioFile.downloadInfo?.isDownloaded) {
             await clearAudioFileDownloadStatus(audioFile.id);
           }
         }
@@ -486,9 +487,9 @@ export class DownloadService {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) return 0;
 
-      const audioFiles = await getAudioFilesForMedia(metadata.id);
+      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       return audioFiles
-        .filter(file => file.isDownloaded)
+        .filter(file => file.downloadInfo?.isDownloaded)
         .reduce((total, file) => total + (file.size || 0), 0);
     } catch (error) {
       console.error(`[DownloadService] Error calculating download size for ${libraryItemId}:`, error);
@@ -733,7 +734,7 @@ export class DownloadService {
       try {
         const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
         if (metadata) {
-          const audioFiles = await getAudioFilesForMedia(metadata.id);
+          const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
           totalExpectedFiles = audioFiles.length;
           console.log(`[DownloadService] ApiLibrary item ${libraryItemId} has ${audioFiles.length} audio files in database, ${tasks.length} active tasks`);
         }
@@ -755,22 +756,22 @@ export class DownloadService {
 
       // Set up event listeners for restored tasks
       for (const taskInfo of tasks) {
-        taskInfo.task.progress((data) => {
+        taskInfo.task.progress((data: any) => {
           this.handleTaskProgress(libraryItemId, taskInfo, data.bytesDownloaded, data.bytesTotal);
         });
 
-        taskInfo.task.done((data) => {
+        taskInfo.task.done((data: any) => {
           console.log(`[DownloadService] *** TASK DONE EVENT FIRED *** ${taskInfo.filename}: ${data.bytesDownloaded} bytes`);
           const downloadPath = getDownloadPath(libraryItemId, taskInfo.filename);
           markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPath).then(() => {
             console.log(`[DownloadService] File marked as downloaded, calling handleTaskCompletion`);
             this.handleTaskCompletion(libraryItemId, taskInfo, data.bytesDownloaded);
-          }).catch(error => {
+          }).catch((error: any) => {
             console.error(`[DownloadService] Error marking file as downloaded:`, error);
           });
         });
 
-        taskInfo.task.error((error) => {
+        taskInfo.task.error((error: any) => {
           console.error(`[DownloadService] Restored task error for ${taskInfo.filename}:`, error);
           this.handleDownloadError(libraryItemId, error);
         });
@@ -851,8 +852,8 @@ export class DownloadService {
     try {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (metadata) {
-        const audioFiles = await getAudioFilesForMedia(metadata.id);
-        alreadyDownloadedFiles = audioFiles.filter(file => file.isDownloaded).length;
+        const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
+        alreadyDownloadedFiles = audioFiles.filter(file => file.downloadInfo?.isDownloaded).length;
         console.log(`[DownloadService] ${alreadyDownloadedFiles} files already marked as downloaded in database`);
 
         // Calculate total bytes from all audio files
@@ -860,7 +861,7 @@ export class DownloadService {
 
         // Add bytes from already downloaded files
         const downloadedFileBytes = audioFiles
-          .filter(file => file.isDownloaded)
+          .filter(file => file.downloadInfo?.isDownloaded)
           .reduce((sum, file) => sum + (file.size || 0), 0);
         totalBytesDownloaded += downloadedFileBytes;
         console.log(`[DownloadService] Added ${downloadedFileBytes} bytes from already downloaded files`);

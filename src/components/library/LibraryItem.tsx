@@ -1,7 +1,7 @@
 import { LibraryItemListRow } from '@/stores';
 import { Link } from 'expo-router';
 import React from 'react';
-import { Image, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
 interface LibraryItemProps {
   item: LibraryItemListRow;
@@ -15,7 +15,7 @@ export function GridItem({ item, isDark }: { item: LibraryItemListRow; isDark: b
       href={{ pathname: '/(tabs)/library/[item]', params: { item: item.id } }}
       asChild
     >
-      <TouchableOpacity style={{ width: '30%', aspectRatio: 1, marginBottom: 12 }}>
+      <Pressable style={{ width: '30%', aspectRatio: 1, marginBottom: 12 }}>
         <View style={{ flex: 1, borderRadius: 6, backgroundColor: isDark ? '#222' : '#eee', overflow: 'hidden' }}>
           {item.coverUri ? (
             <Image
@@ -31,7 +31,7 @@ export function GridItem({ item, isDark }: { item: LibraryItemListRow; isDark: b
             </View>
           )}
         </View>
-      </TouchableOpacity>
+      </Pressable>
     </Link>
   );
 }
@@ -42,7 +42,7 @@ export function ListItem({ item, isDark }: { item: LibraryItemListRow; isDark: b
       href={{ pathname: '/(tabs)/library/[item]', params: { item: item.id } }}
       asChild
     >
-      <TouchableOpacity style={{
+      <Pressable style={{
         flexDirection: 'row',
         padding: 12,
         backgroundColor: isDark ? '#1a1a1a' : '#fff',
@@ -102,7 +102,7 @@ export function ListItem({ item, isDark }: { item: LibraryItemListRow; isDark: b
             </Text>
           )}
         </View>
-      </TouchableOpacity>
+      </Pressable>
     </Link>
   );
 }

@@ -8,6 +8,7 @@
 import {
     useAuthorsStoreInitializer,
     useLibraryStoreInitializer,
+    usePlayerStoreInitializer,
     useSeriesStoreInitializer
 } from '@/stores';
 import React from 'react';
@@ -22,6 +23,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     useLibraryStoreInitializer(apiConfigured, dbInitialized);
     useAuthorsStoreInitializer(apiConfigured, dbInitialized);
     useSeriesStoreInitializer(apiConfigured, dbInitialized);
+    usePlayerStoreInitializer(); // Player doesn't need API/DB dependencies
 
     return <>{children}</>;
 }

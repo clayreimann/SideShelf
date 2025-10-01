@@ -8,23 +8,9 @@
  */
 
 // Base types used across multiple endpoints
-export interface ApiUser {
-  id: string;
-  username: string;
-  type: string;
-  token?: string;
+export interface ApiUser extends ApiMeResponse {
   accessToken?: string;
   refreshToken?: string;
-  mediaProgress: ApiMediaProgress[];
-  seriesHideFromContinueListening: string[];
-  bookmarks: ApiAudioBookmark[];
-  isActive: boolean;
-  isLocked: boolean;
-  lastSeen: number;
-  createdAt: number;
-  permissions: ApiUserPermissions;
-  librariesAccessible: string[];
-  itemTagsAccessible: string[];
 }
 
 export interface ApiUserPermissions {
@@ -347,9 +333,21 @@ export interface ApiLoginResponse {
 }
 
 export interface ApiMeResponse {
-  user: ApiUser;
-  userDefaultLibraryId: string;
-  serverSettings: Record<string, unknown>;
+  id: string;
+  username: string;
+  type: string;
+  token?: string;
+  mediaProgress: ApiMediaProgress[];
+  seriesHideFromContinueListening: string[];
+  bookmarks: ApiAudioBookmark[];
+  isActive: boolean;
+  isLocked: boolean;
+  lastSeen: number;
+  createdAt: number;
+  permissions: ApiUserPermissions;
+  librariesAccessible: string[];
+  itemTagsAccessible: string[];
+  hasOpenIDLink: boolean;
 }
 
 export interface ApiLibrariesResponse {

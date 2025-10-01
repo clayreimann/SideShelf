@@ -77,6 +77,12 @@ export interface LibrarySliceActions {
     setSortConfig: (config: SortConfig) => Promise<void>;
     /** Reset the slice to initial state */
     resetLibrary: () => void;
+
+    // Internal actions (prefixed with underscore)
+    /** Set ready state based on API and DB initialization */
+    _setLibraryReady: (apiConfigured: boolean, dbInitialized: boolean) => boolean;
+    /** Load data from AsyncStorage */
+    _loadLibrarySettingsFromStorage: () => Promise<void>;
 }
 
 /**
@@ -149,7 +155,14 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 const { library: { selectedLibraryId } } = get();
 
                 // Load all libraries from database cache
-                const libraries = await getAllLibraries();
+                let libraries = await getAllLibraries();
+
+                // If ready and no libraries in cache, fetch from API
+                if (apiConfigured && dbInitialized && libraries.length === 0) {
+                    console.log('[LibrarySlice] No cached libraries found, fetching from API...');
+                    libraries = await get()._refetchLibraries();
+                }
+
                 const selectedLibrary = libraries.find(l => l.id == selectedLibraryId)
                 let rawItems: LibraryItemListRow[] = [];
                 let items = [];
@@ -159,12 +172,30 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
                     console.log(`[LibrarySlice] Loaded ${rawItems.length} cached items for library: ${selectedLibrary?.name}`);
                 }
+
+                // If no library is selected but we have libraries, select the first one
+                let finalSelectedLibraryId = selectedLibraryId;
+                let finalSelectedLibrary = selectedLibrary;
+                if (!selectedLibraryId && libraries.length > 0) {
+                    finalSelectedLibraryId = libraries[0].id;
+                    finalSelectedLibrary = libraries[0];
+                    console.log(`[LibrarySlice] Auto-selecting first library: ${finalSelectedLibrary.name}`);
+
+                    // Persist the selection
+                    try {
+                        await AsyncStorage.setItem(STORAGE_KEYS.selectedLibraryId, finalSelectedLibraryId);
+                    } catch (error) {
+                        console.error('[LibrarySlice] Failed to persist auto-selected library:', error);
+                    }
+                }
+
                 set((state: LibrarySlice) => ({
                     ...state,
                     library: {
                         ...state.library,
                         initialized: true,
-                        selectedLibrary,
+                        selectedLibraryId: finalSelectedLibraryId,
+                        selectedLibrary: finalSelectedLibrary,
                         libraries,
                         rawItems,
                         items: sortLibraryItems(rawItems, state.library.sortConfig)

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 export interface HeaderControlsProps {
   isDark: boolean;
@@ -38,13 +38,13 @@ export default function HeaderControls({
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       {showViewToggle && onToggleViewMode && (
-        <TouchableOpacity onPress={onToggleViewMode} style={buttonStyle}>
+        <Pressable onPress={onToggleViewMode} style={buttonStyle}>
           <Text style={textStyle}>{computedViewToggleLabel}</Text>
-        </TouchableOpacity>
+        </Pressable>
       )}
-      <TouchableOpacity onPress={onSort} style={[buttonStyle, { marginRight: 0 }]}>
+      <Pressable onPress={onSort} style={[buttonStyle, { marginRight: 0 }]}>
         <Text style={textStyle}>{sortLabel}</Text>
-      </TouchableOpacity>
+      </Pressable>
     </View>
   );
 }

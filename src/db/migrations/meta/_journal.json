@@ -50,6 +50,20 @@
       "when": 1758634102961,
       "tag": "0006_certain_silverclaw",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1759200054688,
+      "tag": "0007_cultured_moira_mactaggert",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1759205611828,
+      "tag": "0008_illegal_guardian",
+      "breakpoints": true
     }
   ]
 }

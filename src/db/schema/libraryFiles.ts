@@ -17,10 +17,7 @@ export const libraryFiles = sqliteTable('library_files', {
   addedAt: integer('added_at'),
   updatedAt: integer('updated_at'),
   fileType: text('file_type'), // 'audio', 'metadata', 'image', 'ebook', 'unknown', etc.
-  // Downloaded file info
-  isDownloaded: integer('is_downloaded', { mode: 'boolean' }).default(false),
-  downloadPath: text('download_path'),
-  downloadedAt: integer('downloaded_at', { mode: 'timestamp' }),
+  // Note: Download state moved to localLibraryFileDownloads table to prevent loss during API updates
 });
 
 export type LibraryFileRow = typeof libraryFiles.$inferSelect;

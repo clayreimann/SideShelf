@@ -4,6 +4,7 @@ import { login as doLogin } from '@/lib/api/endpoints';
 import { useDb } from '@/providers/DbProvider';
 import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 
 type AuthState = {
     serverUrl: string | null;
@@ -121,6 +122,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const isAuthenticated = useMemo(() => !!state.accessToken && !!state.serverUrl, [state.accessToken, state.serverUrl]);
 
+    // Handle app state changes for progress syncing
+    useEffect(() => {
+        if (!isAuthenticated || !state.username) return;
+
+        const handleAppStateChange = (nextAppState: AppStateStatus) => {
+            if (nextAppState === 'active') {
+                console.log('[AuthProvider] App became active');
+                // TODO: Re-enable progress sync once API conformance is verified
+                // progressSyncService.syncAllOfflineData().catch(error => {
+                //     console.error('[AuthProvider] Failed to sync offline data on app foreground:', error);
+                // });
+            }
+        };
+
+        const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+        return () => {
+            subscription?.remove();
+        };
+    }, [isAuthenticated, state.username]);
+
     const setServerUrl = useCallback(async (url: string) => {
         const normalized = url.trim().replace(/\/$/, '');
         await saveItem(SECURE_KEYS.serverUrl, normalized);
@@ -143,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setState((s) => ({ ...s, serverUrl: base }));
 
             const user = userHelpers.marshalUserFromAuthResponse(response);
-            const mediaProgress = mediaProgressHelpers.marshalMediaProgressFromAuthResponse(response);
+            const mediaProgress = mediaProgressHelpers.marshalMediaProgressFromAuthResponse(response.user);
 
             await Promise.all([
                 userHelpers.upsertUser(user),

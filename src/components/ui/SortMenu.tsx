@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 
 // Generic sort option type
 export interface SortOption<T = string> {
@@ -79,7 +79,7 @@ export default function SortMenu<T = string>({
             {title}
           </Text>
           {sortOptions.map((option) => (
-            <TouchableOpacity
+            <Pressable
               key={option.field}
               onPress={() => handleSortChange(option.field)}
               style={{
@@ -103,7 +103,7 @@ export default function SortMenu<T = string>({
                   </Text>
                 )}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           ))}
         </View>
       </Pressable>

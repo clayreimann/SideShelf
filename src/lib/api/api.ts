@@ -10,6 +10,10 @@ export function setApiConfig(next: ApiConfig) {
   config = next;
 }
 
+export function getApiConfig(): ApiConfig | null {
+  return config;
+}
+
 function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/$/, '');
 }

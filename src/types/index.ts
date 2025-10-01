@@ -21,6 +21,9 @@
  * // Service types
  * import type { DownloadProgress, DownloadConfig } from '@/types/services';
  *
+ * // Player types
+ * import type { PlayerTrack, CurrentChapter } from '@/types/player';
+ *
  * // Utility types
  * import type { AuthState, ThemedStyles } from '@/types/utils';
  * ```

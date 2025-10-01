@@ -1,7 +1,13 @@
 import { db } from '@/db/client';
 import { audioFiles } from '@/db/schema/audioFiles';
 import type { ApiAudioFile } from '@/types/api';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import {
+    clearAudioFileDownloadStatus as clearAudioFileDownloadStatusLocal,
+    getAllDownloadedAudioFiles,
+    getAudioFileDownloadInfo,
+    markAudioFileAsDownloaded as markAudioFileDownloadedLocal
+} from './localData';
 
 export type NewAudioFileRow = typeof audioFiles.$inferInsert;
 export type AudioFileRow = typeof audioFiles.$inferSelect;
@@ -55,10 +61,6 @@ export function marshalAudioFileFromApi(mediaId: string, apiAudioFile: ApiAudioF
     tagComment: apiAudioFile.metaTags.tagComment,
     tagLanguage: apiAudioFile.metaTags.tagLanguage,
     tagASIN: apiAudioFile.metaTags.tagASIN,
-    // Downloaded file info defaults
-    isDownloaded: false,
-    downloadPath: null,
-    downloadedAt: null,
   };
 }
 
@@ -124,33 +126,41 @@ export async function markAudioFileAsDownloaded(
   audioFileId: string,
   downloadPath: string
 ): Promise<void> {
-  await db
-    .update(audioFiles)
-    .set({
-      isDownloaded: true,
-      downloadPath,
-      downloadedAt: new Date(),
-    })
-    .where(eq(audioFiles.id, audioFileId));
+  await markAudioFileDownloadedLocal(audioFileId, downloadPath);
 }
 
 // Get downloaded audio files for a media item
-export async function getDownloadedAudioFilesForMedia(mediaId: string): Promise<AudioFileRow[]> {
-  return db
+export async function getDownloadedAudioFilesForMedia(mediaId: string): Promise<(AudioFileRow & { downloadInfo: { downloadPath: string; downloadedAt: Date } })[]> {
+  const downloadedFiles = await getAllDownloadedAudioFiles();
+  const downloadedFileIds = new Set(downloadedFiles.map(d => d.audioFileId));
+
+  const audioFilesForMedia = await db
     .select()
     .from(audioFiles)
-    .where(and(eq(audioFiles.mediaId, mediaId), eq(audioFiles.isDownloaded, true)))
+    .where(eq(audioFiles.mediaId, mediaId))
     .orderBy(audioFiles.index);
+
+  return audioFilesForMedia
+    .filter(af => downloadedFileIds.has(af.id))
+    .map(af => {
+      const downloadInfo = downloadedFiles.find(d => d.audioFileId === af.id)!;
+      return {
+        ...af,
+        downloadInfo: {
+          downloadPath: downloadInfo.downloadPath,
+          downloadedAt: downloadInfo.downloadedAt,
+        }
+      };
+    });
 }
 
 // Clear download status for audio file
 export async function clearAudioFileDownloadStatus(audioFileId: string): Promise<void> {
-  await db
-    .update(audioFiles)
-    .set({
-      isDownloaded: false,
-      downloadPath: null,
-      downloadedAt: null,
-    })
-    .where(eq(audioFiles.id, audioFileId));
+  await clearAudioFileDownloadStatusLocal(audioFileId);
+}
+
+// Check if an audio file is downloaded
+export async function isAudioFileDownloaded(audioFileId: string): Promise<boolean> {
+  const downloadInfo = await getAudioFileDownloadInfo(audioFileId);
+  return downloadInfo?.isDownloaded || false;
 }
