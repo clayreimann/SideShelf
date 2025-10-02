@@ -1,4 +1,4 @@
-import { cacheCoverIfMissing } from '@/lib/covers';
+import { cacheCoverIfMissing, isCoverCached } from '@/lib/covers';
 import type { ApiBook, ApiPodcast } from '@/types/api';
 import { eq } from 'drizzle-orm';
 import { db } from '../client';
@@ -340,7 +340,7 @@ export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ d
     const itemsWithCachedCovers = new Set<string>();
     for (const item of items) {
       const cachedUrl = await getLocalCoverUrl(item.mediaId);
-      if (cachedUrl) {
+      if (cachedUrl && isCoverCached(item.libraryItemId)) {
         itemsWithCachedCovers.add(item.libraryItemId);
       }
     }
@@ -365,19 +365,5 @@ export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ d
   } catch (error) {
     console.error(`[mediaMetadata] Failed to cache covers for library ${libraryId}:`, error);
     return { downloadedCount: 0, totalCount: 0 };
-  }
-}
-
-/**
- * Clear imageUrl from all media metadata (useful when clearing cover cache)
- */
-export async function clearAllImageUrls(): Promise<void> {
-  try {
-    await db
-      .update(mediaMetadata)
-      .set({ imageUrl: null });
-    console.log('[mediaMetadata] Cleared all imageUrls from database');
-  } catch (error) {
-    console.error('[mediaMetadata] Failed to clear imageUrls:', error);
   }
 }

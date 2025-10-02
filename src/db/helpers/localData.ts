@@ -1,11 +1,11 @@
 import { db } from '@/db/client';
 import {
-    localAudioFileDownloads,
-    localCoverCache,
-    localLibraryFileDownloads,
-    type LocalAudioFileDownloadRow,
-    type LocalCoverCacheRow,
-    type LocalLibraryFileDownloadRow
+  localAudioFileDownloads,
+  localCoverCache,
+  localLibraryFileDownloads,
+  type LocalAudioFileDownloadRow,
+  type LocalCoverCacheRow,
+  type LocalLibraryFileDownloadRow
 } from '@/db/schema/localData';
 import { eq } from 'drizzle-orm';
 
@@ -58,6 +58,13 @@ export async function removeLocalCover(mediaId: string): Promise<void> {
  */
 export async function getAllLocalCovers(): Promise<LocalCoverCacheRow[]> {
   return db.select().from(localCoverCache);
+}
+
+/**
+ * Clear all cached covers
+ */
+export async function clearAllLocalCovers(): Promise<void> {
+  await db.delete(localCoverCache);
 }
 
 // ===== AUDIO FILE DOWNLOADS =====

@@ -1,42 +1,32 @@
-import { LibraryItemListRow } from '@/stores';
+import CoverImage from '@/components/ui/CoverImange';
+import { useThemedStyles } from '@/lib/theme';
+import { LibraryItemDisplayRow } from '@/types/components';
 import { Link } from 'expo-router';
 import React from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
-
 interface LibraryItemProps {
-  item: LibraryItemListRow;
-  isDark: boolean;
+  item: LibraryItemDisplayRow;
   variant?: 'grid' | 'list';
 }
 
-export function GridItem({ item, isDark }: { item: LibraryItemListRow; isDark: boolean }) {
+export function GridItem({ item, }: { item: LibraryItemDisplayRow; }) {
+  const { colors } = useThemedStyles();
   return (
     <Link
       href={{ pathname: '/(tabs)/library/[item]', params: { item: item.id } }}
       asChild
     >
       <Pressable style={{ width: '30%', aspectRatio: 1, marginBottom: 12 }}>
-        <View style={{ flex: 1, borderRadius: 6, backgroundColor: isDark ? '#222' : '#eee', overflow: 'hidden' }}>
-          {item.coverUri ? (
-            <Image
-              source={{ uri: item.coverUri }}
-              style={{ flex: 1, width: '100%', height: '100%' }}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ color: isDark ? '#bbb' : '#444', fontSize: 12, textAlign: 'center', paddingHorizontal: 6 }} numberOfLines={3}>
-                {item.title || 'Untitled'}
-              </Text>
-            </View>
-          )}
+        <View style={{ flex: 1, borderRadius: 6, backgroundColor: colors.coverBackground, overflow: 'hidden' }}>
+          <CoverImage uri={item.coverUri} title={item.title} fontSize={12} />
         </View>
       </Pressable>
     </Link>
   );
 }
 
-export function ListItem({ item, isDark }: { item: LibraryItemListRow; isDark: boolean }) {
+export function ListItem({ item }: { item: LibraryItemDisplayRow; }) {
+  const { colors } = useThemedStyles();
   return (
     <Link
       href={{ pathname: '/(tabs)/library/[item]', params: { item: item.id } }}
@@ -107,8 +97,8 @@ export function ListItem({ item, isDark }: { item: LibraryItemListRow; isDark: b
   );
 }
 
-export default function ApiLibraryItem({ item, isDark, variant = 'grid' }: LibraryItemProps) {
+export default function ApiLibraryItem({ item, variant = 'grid' }: LibraryItemProps) {
   return variant === 'grid' ?
-    <GridItem item={item} isDark={isDark} /> :
-    <ListItem item={item} isDark={isDark} />;
+    <GridItem item={item} /> :
+    <ListItem item={item} />;
 }

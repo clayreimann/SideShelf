@@ -1,12 +1,16 @@
 import { db } from '@/db/client';
+import { cacheLocalCover } from '@/db/helpers/localData';
 import { libraryItems } from '@/db/schema/libraryItems';
 import { fetchLibraryItemCoverHead } from '@/lib/api/endpoints';
 import { eq } from 'drizzle-orm';
 import { Directory, File, Paths } from 'expo-file-system';
 import { fetch } from 'expo/fetch';
 
+const coversDirectory = new Directory(Paths.cache, 'covers');
+
 export function getCoversDirectory(): Directory {
-  return new Directory(Paths.cache, 'covers');
+  coversDirectory.create({ intermediates: true, idempotent: true });
+  return coversDirectory;
 }
 
 export function getCoverUri(libraryItemId: string): string {
@@ -23,7 +27,6 @@ async function ensureCoversDirectory(): Promise<void> {
 }
 
 export async function cacheCoverIfMissing(libraryItemId: string): Promise<{ uri: string; wasDownloaded: boolean }> {
-  await ensureCoversDirectory();
   const dir = getCoversDirectory();
   const destFile = new File(dir, libraryItemId);
 
@@ -35,8 +38,10 @@ export async function cacheCoverIfMissing(libraryItemId: string): Promise<{ uri:
   try {
     const res = await fetchLibraryItemCoverHead(libraryItemId);
     if (!res.ok) return { uri: destFile.uri, wasDownloaded: false };
+
     const url = res.url;
     if (!url) return { uri: destFile.uri, wasDownloaded: false };
+
     const response = await fetch(url);
     const bytes = await response.bytes();
     destFile.write(bytes);
@@ -58,6 +63,8 @@ export async function cacheCoversForLibrary(libraryId: string): Promise<void> {
     if (!row.id) continue;
     try {
       await cacheCoverIfMissing(row.id);
+      // update the local cover in the database
+      await cacheLocalCover(row.id, getCoverUri(row.id));
     } catch {}
   }
 }
@@ -68,6 +75,7 @@ export async function cacheCoversForLibrary(libraryId: string): Promise<void> {
 export function isCoverCached(libraryItemId: string): boolean {
   const dir = getCoversDirectory();
   const file = new File(dir, libraryItemId);
+  console.log(`[covers] Checking if cover is cached for ${libraryItemId}: ${file.exists}`);
   return file.exists;
 }
 

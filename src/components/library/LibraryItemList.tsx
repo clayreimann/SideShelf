@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/lib/theme';
 import { LibraryItemListRow } from '@/stores';
 import React, { useCallback, useState } from 'react';
 import { FlatList, RefreshControl, View } from 'react-native';
-import { GridItem, ListItem } from './LibraryItem';
+import LibraryItem from './LibraryItem';
 
 type ViewMode = 'grid' | 'list';
 
@@ -38,9 +38,7 @@ export default function LibraryItemList({
         key={viewMode} // Force re-render when view mode changes
         columnWrapperStyle={viewMode === 'grid' ? { gap: 12, paddingHorizontal: 12 } : undefined}
         renderItem={({ item }: { item: LibraryItemListRow }) =>
-          viewMode === 'grid' ?
-            <GridItem item={item} isDark={isDark} /> :
-            <ListItem item={item} isDark={isDark} />
+          <LibraryItem item={item} variant={viewMode} />
         }
         refreshControl={
           onRefresh ? (
@@ -56,7 +54,8 @@ export default function LibraryItemList({
           {
             paddingTop: 8,
             paddingBottom: 24,
-            ...(viewMode === 'list' && { paddingHorizontal: 0 })
+            ...(viewMode === 'list' && { paddingHorizontal: 0 }),
+            justifyContent: 'center',
           }
         ]}
         indicatorStyle={isDark ? 'white' : 'black'}

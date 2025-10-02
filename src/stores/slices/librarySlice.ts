@@ -18,7 +18,6 @@ import {
 } from '@/db/helpers/libraries';
 import {
     getLibraryItemsForList,
-    LibraryItemListRow,
     marshalLibraryItemsFromResponse,
     transformItemsToDisplayFormat,
     upsertLibraryItems
@@ -28,6 +27,7 @@ import { fetchLibraries, fetchLibraryItems } from '@/lib/api/endpoints';
 import type { ApiBook, ApiPodcast } from '@/types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { LibraryItemDisplayRow } from '@/types/components';
 import type {
     LoadingStates,
     SliceCreator,
@@ -48,9 +48,9 @@ export interface LibrarySliceState {
         /** All available libraries */
         libraries: LibraryRow[];
         /** Raw library items (unsorted) */
-        rawItems: LibraryItemListRow[];
+        rawItems: LibraryItemDisplayRow[];
         /** Sorted library items (computed from rawItems and sortConfig) */
-        items: LibraryItemListRow[];
+        items: LibraryItemDisplayRow[];
         /** Current sort configuration */
         sortConfig: SortConfig;
         /** Loading states for different operations */
@@ -152,7 +152,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
             if (dbInitialized) {
                 console.log('[LibrarySlice] Loading cached libraries and items...');
 
-                const { library: { selectedLibraryId } } = get();
+                const { library: { selectedLibraryId } }: LibrarySliceState = get();
 
                 // Load all libraries from database cache
                 let libraries = await getAllLibraries();
@@ -163,19 +163,9 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                     libraries = await get()._refetchLibraries();
                 }
 
-                const selectedLibrary = libraries.find(l => l.id == selectedLibraryId)
-                let rawItems: LibraryItemListRow[] = [];
-                let items = [];
-                if (selectedLibraryId) {
-                    items = await getLibraryItemsForList(selectedLibraryId);
-                    rawItems = transformItemsToDisplayFormat(items);
-
-                    console.log(`[LibrarySlice] Loaded ${rawItems.length} cached items for library: ${selectedLibrary?.name}`);
-                }
-
                 // If no library is selected but we have libraries, select the first one
                 let finalSelectedLibraryId = selectedLibraryId;
-                let finalSelectedLibrary = selectedLibrary;
+                let finalSelectedLibrary = libraries.find(l => l.id == selectedLibraryId);
                 if (!selectedLibraryId && libraries.length > 0) {
                     finalSelectedLibraryId = libraries[0].id;
                     finalSelectedLibrary = libraries[0];
@@ -188,6 +178,16 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                         console.error('[LibrarySlice] Failed to persist auto-selected library:', error);
                     }
                 }
+
+                let rawItems: LibraryItemDisplayRow[] = [];
+                let items = [];
+                if (finalSelectedLibraryId) {
+                    items = await getLibraryItemsForList(finalSelectedLibraryId);
+                    rawItems = transformItemsToDisplayFormat(items);
+
+                    console.log(`[LibrarySlice] Loaded ${rawItems.length} cached items for library: ${finalSelectedLibrary?.name}`);
+                }
+
 
                 set((state: LibrarySlice) => ({
                     ...state,
@@ -332,7 +332,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
      * This loads items from the database only, useful for quick loading
      */
     _loadCachedItems: async () => {
-        const state = get();
+        const state: LibrarySliceState = get();
         const { selectedLibraryId } = state.library;
 
         if (!selectedLibraryId) {
@@ -442,7 +442,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
      * Refresh items for the currently selected library
      */
     _refetchItems: async () => {
-        const state = get();
+        const state: LibrarySliceState = get();
         const { library: { selectedLibraryId, selectedLibrary, ready } } = state;
 
         if (!ready || !selectedLibraryId || !selectedLibrary) {

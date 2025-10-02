@@ -9,15 +9,17 @@
  * - Playback rate and volume controls
  */
 
+import JumpTrackButton from '@/components/player/JumpTrackButton';
+import PlayPauseButton from '@/components/player/PlayPauseButton';
+import SkipButton from '@/components/player/SkipButton';
 import { ProgressBar } from '@/components/ui';
+import CoverImage from '@/components/ui/CoverImange';
 import { useThemedStyles } from '@/lib/theme';
 import { playerService } from '@/services/PlayerService';
 import { usePlayer } from '@/stores/appStore';
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { router, Stack } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
-  Image,
   Text,
   TouchableOpacity,
   useWindowDimensions,
@@ -172,45 +174,8 @@ export default function FullScreenPlayer() {
         {/* Cover and Track Info */}
         <View style={{ alignItems: 'center' }}>
           {/* Cover Image */}
-          <View style={{
-            width: coverSize,
-            height: coverSize,
-            borderRadius: 12,
-            backgroundColor: isDark ? '#333' : '#f0f0f0',
-            marginBottom: 24,
-            overflow: 'hidden',
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 0,
-              height: 4,
-            },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 8,
-          }}>
-            {currentTrack.coverUri ? (
-              <Image
-                source={{ uri: currentTrack.coverUri }}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                }}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
-                <Text style={{
-                  fontSize: 48,
-                  color: isDark ? '#666' : '#999',
-                }}>
-                  📚
-                </Text>
-              </View>
-            )}
+          <View style={{ width: coverSize, height: coverSize, borderRadius: 12, marginBottom: 24, overflow: 'hidden' }}>
+            <CoverImage uri={currentTrack.coverUri} title={currentTrack.title} fontSize={48} />
           </View>
 
           {/* Track Info */}
@@ -240,22 +205,22 @@ export default function FullScreenPlayer() {
 
         {/* Progress and Controls */}
         <View>
-            <ProgressBar
-              progress={chapterPosition / chapterDuration}
-              variant="large"
-              interactive={true}
-              minValue={currentChapter?.chapter.start || 0}
-              maxValue={currentChapter?.chapter.end || chapterDuration}
-              onSeekStart={handleSeekStart}
-              onSeekChange={handleSeekChange}
-              onSeekComplete={handleSeekComplete}
-              showTimeLabels={true}
-              currentTime={chapterPosition}
-              duration={chapterDuration}
-              containerStyle={{ marginBottom: 8 }}
-              showPercentage={true}
-              customPercentageText={`${formatTimeWithUnits(duration - currentPosition, false)} remaining`}
-            />
+          <ProgressBar
+            progress={chapterPosition / chapterDuration}
+            variant="large"
+            interactive={true}
+            minValue={currentChapter?.chapter.start || 0}
+            maxValue={currentChapter?.chapter.end || chapterDuration}
+            onSeekStart={handleSeekStart}
+            onSeekChange={handleSeekChange}
+            onSeekComplete={handleSeekComplete}
+            showTimeLabels={true}
+            currentTime={chapterPosition}
+            duration={chapterDuration}
+            containerStyle={{ marginBottom: 8 }}
+            showPercentage={true}
+            customPercentageText={`${formatTimeWithUnits(duration - currentPosition, false)} remaining`}
+          />
 
           {/* Main Controls */}
           <View style={{
@@ -264,74 +229,11 @@ export default function FullScreenPlayer() {
             alignItems: 'center',
             marginBottom: 32,
           }}>
-            {/* Start of track */}
-            <TouchableOpacity
-              style={{
-                width: 60,
-                height: 60,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-              onPress={handleStartOfChapter}
-            >
-              <FontAwesome6 name="chevron-left" size={24} color={isDark ? 'white' : 'black'} />
-            </TouchableOpacity>
-
-            {/* Skip Backward */}
-            <TouchableOpacity
-              style={{
-                width: 60,
-                height: 60,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-              onPress={handleSkipBackward}
-            >
-              <FontAwesome6 name="arrow-rotate-left" size={24} color={isDark ? 'white' : 'black'} />
-              {/* <Text style={[styles.text, { fontSize: 10, opacity: 0.7 }]}>15s</Text> */}
-            </TouchableOpacity>
-
-            {/* Play/Pause */}
-            <TouchableOpacity
-              style={{
-                width: 80,
-                height: 80,
-                justifyContent: 'center',
-                alignItems: 'center',
-                marginHorizontal: 32,
-              }}
-              onPress={handlePlayPause}
-            >
-              <FontAwesome6 name={isPlaying ? 'pause' : 'play'} size={32} color={isDark ? 'white' : 'black'} />
-            </TouchableOpacity>
-
-            {/* Skip Forward */}
-            <TouchableOpacity
-              style={{
-                width: 60,
-                height: 60,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-              onPress={handleSkipForward}
-            >
-              <FontAwesome6 name="arrow-rotate-right" size={24} color={isDark ? 'white' : 'black'} />
-              {/* <Text style={[styles.text, { fontSize: 10, opacity: 0.7 }]}>30s</Text> */}
-            </TouchableOpacity>
-
-            {/* Start of track */}
-            <TouchableOpacity
-              style={{
-                width: 60,
-                height: 60,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-              onPress={handleNextChapter}
-            >
-              <FontAwesome6 name="chevron-right" size={24} color={isDark ? 'white' : 'black'} />
-            </TouchableOpacity>
-
+            <JumpTrackButton direction="backward" onPress={handleStartOfChapter} hitBoxSize={60} />
+            <SkipButton direction="backward" onPress={handleSkipBackward} hitBoxSize={60} />
+            <PlayPauseButton isPlaying={isPlaying} onPress={handlePlayPause} hitBoxSize={100} iconSize={48} />
+            <SkipButton direction="forward" onPress={handleSkipForward} hitBoxSize={60} />
+            <JumpTrackButton direction="forward" onPress={handleNextChapter} hitBoxSize={60} />
           </View>
 
           {/* Secondary Controls */}

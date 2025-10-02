@@ -2,14 +2,12 @@ import { db } from '@/db/client';
 import { libraryItems } from '@/db/schema/libraryItems';
 import { localCoverCache } from '@/db/schema/localData';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
-import { getCoverUri } from '@/lib/covers';
 import type { ApiLibraryItem, ApiLibraryItemsResponse } from '@/types/api';
-import type { LibraryItemListRow } from '@/types/database';
+import type { LibraryItemDisplayRow } from '@/types/components';
+import type { LibraryItemRow, NewLibraryItemRow } from '@/types/database';
 import { and, eq, inArray, not } from 'drizzle-orm';
 import { mediaAuthors } from '../schema/mediaJoins';
 
-export type NewLibraryItemRow = typeof libraryItems.$inferInsert;
-export type LibraryItemRow = typeof libraryItems.$inferSelect;
 
 // Marshal a single ApiLibraryItem from API to database row
 export function marshalLibraryItemFromApi(item: ApiLibraryItem): NewLibraryItemRow {
@@ -181,7 +179,30 @@ export async function getLibraryItemsNeedingRefresh(limit: number = 50): Promise
 
 
 // Get library items with full metadata for list display
-export async function getLibraryItemsForList(libraryId?: string): Promise<LibraryItemListRow[]> {
+export async function getLibraryItemsForList(libraryId: string): Promise<{
+  id: string;
+  libraryId: string;
+  mediaType: string;
+  addedAt: number;
+  updatedAt: number;
+  isMissing: boolean;
+  isInvalid: boolean;
+  title: string;
+  subtitle: string;
+  author: string;
+  authorName: string;
+  authorNameLF: string;
+  narrator: string;
+  releaseDate: string;
+  publishedDate: string;
+  publishedYear: string;
+  duration: number;
+  coverUri: string;
+  description: string;
+  language: string;
+  explicit: boolean;
+  seriesName: string;
+}[]> {
   const baseQuery = db
     .select({
       id: libraryItems.id,
@@ -198,7 +219,6 @@ export async function getLibraryItemsForList(libraryId?: string): Promise<Librar
       authorName: mediaMetadata.authorName, // For books
       authorNameLF: mediaMetadata.authorNameLF, // For sorting by author last name first
       narrator: mediaMetadata.narratorName,
-      narratorName: mediaMetadata.narratorName,
       releaseDate: mediaMetadata.publishedDate,
       publishedDate: mediaMetadata.publishedDate,
       publishedYear: mediaMetadata.publishedYear, // For sorting by published year
@@ -213,31 +233,15 @@ export async function getLibraryItemsForList(libraryId?: string): Promise<Librar
     .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
     .leftJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId));
 
-  if (libraryId) {
-    return await baseQuery
-      .where(eq(libraryItems.libraryId, libraryId))
-      .orderBy(libraryItems.addedAt);
-  }
-
-  return await baseQuery.orderBy(libraryItems.addedAt);
+  return await baseQuery
+    .where(eq(libraryItems.libraryId, libraryId))
+    .orderBy(libraryItems.addedAt);
 }
 
 /**
  * Transform database library items to display format for UI components
  */
-export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof getLibraryItemsForList>>): Array<{
-  id: string;
-  mediaType: string | null;
-  title: string;
-  author: string;
-  authorNameLF: string | null;
-  narrator: string | null;
-  releaseDate: string | null;
-  publishedYear: string | null;
-  addedAt: number | null;
-  duration: number;
-  coverUri: string;
-}> {
+export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof getLibraryItemsForList>>): Array<LibraryItemDisplayRow> {
   return dbItems.map(item => ({
     id: item.id,
     mediaType: item.mediaType,
@@ -249,6 +253,6 @@ export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof
     publishedYear: item.publishedYear,
     addedAt: item.addedAt,
     duration: item.duration || 0,
-    coverUri: item.coverUri || getCoverUri(item.id), // Fallback to getCoverUri if no cached cover
+    coverUri: item.coverUri,
   }));
 }

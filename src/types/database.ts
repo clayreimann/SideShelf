@@ -70,37 +70,6 @@ export type NewMediaNarratorRow = typeof mediaNarrators.$inferInsert;
 // Specialized types for database operations
 
 /**
- * Type for library item list display with full metadata
- * This type includes all the fields needed for displaying library items in lists
- */
-export type LibraryItemListRow = {
-  id: string;
-  libraryId: string;
-  mediaType: string | null;
-  addedAt: number | null;
-  updatedAt: number | null;
-  isMissing: boolean | null;
-  isInvalid: boolean | null;
-  // Media metadata fields
-  title: string | null;
-  subtitle: string | null;
-  author: string | null;
-  authorName: string | null;
-  authorNameLF: string | null;
-  narrator: string | null;
-  narratorName: string | null;
-  releaseDate: string | null;
-  publishedDate: string | null;
-  publishedYear: string | null;
-  duration: number | null;
-  coverUri: string | null;
-  description: string | null;
-  language: string | null;
-  explicit: boolean | null;
-  seriesName: string | null;
-};
-
-/**
  * Home screen item interface for displaying items on the home screen
  */
 export interface HomeScreenItem {

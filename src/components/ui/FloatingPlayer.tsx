@@ -8,13 +8,14 @@
  * - Tapping anywhere else opens the full-screen modal
  */
 
+import PlayPauseButton from '@/components/player/PlayPauseButton';
+import CoverImage from '@/components/ui/CoverImange';
 import { useThemedStyles } from '@/lib/theme';
 import { playerService } from '@/services/PlayerService';
 import { useAppStore } from '@/stores/appStore';
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import { router } from 'expo-router';
 import React from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 export default function FloatingPlayer() {
   const { styles, isDark } = useThemedStyles();
@@ -67,37 +68,8 @@ export default function FloatingPlayer() {
       {/* Tappable area for opening modal */}
       <Pressable style={{ flex: 1, flexDirection: 'row', alignItems: 'center', }} onPress={handlePlayerPress}>
         {/* Cover Image */}
-        <View style={{
-          width: 48,
-          height: 48,
-          borderRadius: 6,
-          backgroundColor: isDark ? '#333' : '#f0f0f0',
-          marginRight: 12,
-          overflow: 'hidden',
-        }}>
-          {currentTrack.coverUri ? (
-            <Image
-              source={{ uri: currentTrack.coverUri }}
-              style={{
-                width: '100%',
-                height: '100%',
-              }}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={{
-              flex: 1,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <Text style={{
-                fontSize: 12,
-                color: isDark ? '#888' : '#666',
-              }}>
-                📚
-              </Text>
-            </View>
-          )}
+        <View style={{width: 48,height: 48,borderRadius: 6,marginRight: 12,overflow: 'hidden',}}>
+          <CoverImage uri={currentTrack.coverUri} title={currentTrack.title} fontSize={48} />
         </View>
 
         {/* Track Info */}
@@ -112,9 +84,7 @@ export default function FloatingPlayer() {
       </Pressable>
 
       {/* Play/Pause Button */}
-      <Pressable style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center', }} onPress={handlePlayPausePress}>
-        <FontAwesome6 name={isPlaying ? 'pause' : 'play'} size={32} color={isDark ? 'white' : 'black'} />
-      </Pressable>
+      <PlayPauseButton isPlaying={isPlaying} onPress={handlePlayPausePress} />
     </View>
   );
 }

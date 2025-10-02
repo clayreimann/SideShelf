@@ -5,7 +5,7 @@
  * throughout the application.
  */
 
-import type { LibraryItemListRow, LibraryRow } from './database';
+import type { LibraryRow } from './database';
 
 // Library component types
 export interface LibraryItemDetailProps {
@@ -14,15 +14,29 @@ export interface LibraryItemDetailProps {
 }
 
 export interface LibraryItemProps {
-  item: LibraryItemListRow;
+  item: LibraryItemDisplayRow;
   isDark: boolean;
   variant?: 'grid' | 'list';
+}
+
+export interface LibraryItemDisplayRow {
+  id: string;
+  mediaType: string | null;
+  title: string | null;
+  author: string | null;
+  authorNameLF: string | null;
+  narrator: string | null;
+  releaseDate: string | null;
+  publishedYear: string | null;
+  addedAt: number | null;
+  duration: number | null;
+  coverUri: string | null;
 }
 
 export type ViewMode = 'grid' | 'list';
 
 export interface LibraryItemListProps {
-  items: LibraryItemListRow[];
+  items: LibraryItemDisplayRow[];
   isLoading?: boolean;
   onRefresh?: () => Promise<void>;
   viewMode?: ViewMode;

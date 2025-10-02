@@ -1,5 +1,5 @@
 import { statisticsHelpers } from '@/db/helpers';
-import { clearAllImageUrls } from '@/db/helpers/mediaMetadata';
+import { clearAllLocalCovers } from '@/db/helpers/localData';
 import { clearAllCoverCache } from '@/lib/covers';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
@@ -41,7 +41,7 @@ export default function AdvancedScreen() {
   const clearCoverCache = useCallback(async () => {
     try {
       await clearAllCoverCache();
-      await clearAllImageUrls();
+      await clearAllLocalCovers();
       console.log('Cover cache and database imageUrls cleared successfully');
     } catch (error) {
       console.error('Failed to clear cover cache:', error);

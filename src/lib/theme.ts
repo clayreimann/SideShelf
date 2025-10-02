@@ -10,6 +10,7 @@ export function useThemedStyles() {
 function createThemedStyles(isDark: boolean) {
   const colors = {
     background: isDark ? '#222' : '#ffffff',
+    coverBackground: isDark ? '#222' : '#eee',
     textPrimary: isDark ? '#ffffff' : '#000000',
     separator: isDark ? 'rgba(255,255,255,0.15)' : '#ccc',
     link: isDark ? '#9CDCFE' : '#0066CC',
