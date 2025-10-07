@@ -1,5 +1,6 @@
 import { statisticsHelpers } from '@/db/helpers';
 import { clearAllLocalCovers } from '@/db/helpers/localData';
+import { getDeviceInfo } from '@/lib/api/endpoints';
 import { clearAllCoverCache } from '@/lib/covers';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
@@ -28,6 +29,18 @@ export default function AdvancedScreen() {
     series: 0,
     tags: 0,
   });
+  const [deviceInfo, setDeviceInfo] = useState<{
+    osName: string;
+    osVersion: string;
+    deviceName: string;
+    deviceType: string;
+    manufacturer: string;
+    model: string;
+    sdkVersion: number | undefined;
+    clientName: string;
+    clientVersion: string;
+    deviceId: string;
+  } | null>(null);
 
   const refreshCounts = useCallback(async () => {
     try {
@@ -48,12 +61,22 @@ export default function AdvancedScreen() {
     }
   }, []);
 
+  const refreshDeviceInfo = useCallback(async () => {
+    try {
+      const info = await getDeviceInfo();
+      setDeviceInfo(info);
+    } catch (error) {
+      console.error('Failed to fetch device info:', error);
+    }
+  }, []);
+
   useEffect(() => {
     refreshCounts();
-  }, [refreshCounts]);
+    refreshDeviceInfo();
+  }, [refreshCounts, refreshDeviceInfo]);
 
   const data = useMemo<ActionItem[]>(() => {
-    return [
+    const items: ActionItem[] = [
       {
         label: `Libraries found: ${libraries.length}`,
         onPress: () => {},
@@ -94,6 +117,58 @@ export default function AdvancedScreen() {
         onPress: () => {},
         disabled: true,
       },
+    ];
+
+    // Add device info section
+    if (deviceInfo) {
+      items.push(
+        {
+          label: `Device: ${deviceInfo.deviceName}`,
+          onPress: () => {},
+          disabled: true,
+        },
+        {
+          label: `OS: ${deviceInfo.osName} ${deviceInfo.osVersion}`,
+          onPress: () => {},
+          disabled: true,
+        },
+        {
+          label: `Type: ${deviceInfo.deviceType}`,
+          onPress: () => {},
+          disabled: true,
+        },
+        {
+          label: `Manufacturer: ${deviceInfo.manufacturer}`,
+          onPress: () => {},
+          disabled: true,
+        },
+        {
+          label: `Model: ${deviceInfo.model}`,
+          onPress: () => {},
+          disabled: true,
+        },
+        {
+          label: `SDK Version: ${deviceInfo.sdkVersion ?? 'N/A'}`,
+          onPress: () => {},
+          disabled: true,
+        },
+        {
+          label: `Client: ${deviceInfo.clientName} ${deviceInfo.clientVersion}`,
+          onPress: () => {},
+          disabled: true,
+        },
+        {
+          label: `Device ID: ${deviceInfo.deviceId}`,
+          onPress: async () => {
+            const { setStringAsync } = await import('expo-clipboard');
+            await setStringAsync(deviceInfo.deviceId);
+          },
+          disabled: false,
+        }
+      );
+    }
+
+    items.push(
       {
         label: 'Copy access token to clipboard',
         onPress: async () => {
@@ -124,8 +199,10 @@ export default function AdvancedScreen() {
         onPress: resetDatabase,
         disabled: false,
       },
-    ];
-  }, [selectedLibrary, libraries, counts, refresh, refreshCounts, resetDatabase, accessToken, clearCoverCache]);
+    );
+
+    return items;
+  }, [selectedLibrary, libraries, counts, deviceInfo, refresh, refreshCounts, resetDatabase, accessToken, clearCoverCache]);
 
   return (
     <>

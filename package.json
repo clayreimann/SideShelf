@@ -1,7 +1,18 @@
 {
   "name": "abs-react-native",
+  "description": "A modern React Native client for Audiobookshelf - the self-hosted audiobook and podcast server",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "license": "MIT",
+  "keywords": ["audiobookshelf", "audiobook", "podcast", "react-native", "expo", "mobile"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/abs-react-native.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/abs-react-native/issues"
+  },
+  "homepage": "https://github.com/your-username/abs-react-native#readme",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -45,6 +56,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.4",
+    "react-native-device-info": "^14.1.1",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-get-random-values": "^1.11.0",
     "react-native-reanimated": "~4.1.0",

@@ -64,6 +64,20 @@
       "when": 1759205611828,
       "tag": "0008_illegal_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1759520897236,
+      "tag": "0009_messy_madame_masque",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1759786053662,
+      "tag": "0010_melted_microchip",
+      "breakpoints": true
     }
   ]
 }

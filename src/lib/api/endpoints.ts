@@ -7,8 +7,10 @@ import type {
   ApiLibraryResponse,
   ApiLibraryResponseWithFilterData,
   ApiLoginResponse,
-  ApiMeResponse
+  ApiMeResponse,
+  ApiPlaySessionResponse
 } from '@/types/api';
+import DeviceInfo from 'react-native-device-info';
 import { apiFetch } from './api';
 
 export async function fetchMe(): Promise<ApiMeResponse> {
@@ -120,6 +122,204 @@ export async function updateMediaProgress(
   }
 }
 
+const PLAY_METHOD = {
+  Direct_Play: 0,
+  Direct_Stream: 1,
+  Transcode: 2,
+  Local: 3,
+}
+
+type DeviceInfo = {
+  osName: string;
+  osVersion: string;
+  deviceName: string;
+  deviceType: string;
+  manufacturer: string;
+  model: string;
+  sdkVersion: number | undefined;
+  clientName: string;
+  clientVersion: string;
+  deviceId: string;
+}
+
+let CACHED_DEVICE_INFO: DeviceInfo | null = null;
+
+
+export async function getDeviceInfo(): Promise<DeviceInfo> {
+  if (CACHED_DEVICE_INFO) {
+    return CACHED_DEVICE_INFO;
+  }
+  const osName = DeviceInfo.getSystemName();
+  const osVersion = DeviceInfo.getSystemVersion();
+  const deviceName = await DeviceInfo.getDeviceName();
+  const deviceType = DeviceInfo.getDeviceType();
+  const manufacturer = await DeviceInfo.getManufacturer();
+  const model = DeviceInfo.getModel();
+  const sdkVersion = osName === 'iOS' ? undefined : await DeviceInfo.getApiLevel();
+  const clientName = 'SideShelf';
+  const clientVersion = DeviceInfo.getVersion();
+  const deviceId = DeviceInfo.getDeviceId();
+  const deviceInfo = {
+    osName,
+    osVersion,
+    deviceName,
+    deviceType,
+    manufacturer,
+    model,
+    sdkVersion,
+    clientName,
+    clientVersion,
+    deviceId
+  };
+  CACHED_DEVICE_INFO = deviceInfo;
+  return deviceInfo;
+}
+/**
+ * Create a new local session on the server
+ * @param sessionId - UUIDv4 identifier for the local session
+ * @param userId - The user ID
+ * @param libraryId - The library ID
+ * @param libraryItemId - The library item to create a session for
+ * @param currentTime - Current playback position in seconds
+ * @param timeListened - Total time listened in this session (usually 0 for new sessions)
+ * @returns The created session object with ID
+ */
+export async function createLocalSession(
+  sessionId: string,
+  userId: string,
+  libraryId: string,
+  libraryItemId: string,
+  currentTime: number,
+  timeListened: number = 0
+): Promise<{ id: string }> {
+  const response = await apiFetch('/api/session/local', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: sessionId,
+      userId,
+      libraryId,
+      libraryItemId,
+      currentTime,
+      timeListened,
+      playMethod: PLAY_METHOD.Local,
+      deviceInfo: await getDeviceInfo(),
+      mediaPlayer: 'react-native-track-player',
+    }),
+  });
+
+  if (!response.ok) {
+    // Get the response text first, then try to parse as JSON
+    const responseText = await response.text();
+    let errorMessage = 'Failed to create local session';
+
+    try {
+      const error: ApiError = JSON.parse(responseText);
+      errorMessage = error.message || error.error || errorMessage;
+    } catch {
+      // If JSON parsing fails, use the raw text response
+      if (responseText.includes('Media item not found')) {
+        errorMessage = 'Media item not found';
+      } else {
+        errorMessage = responseText || errorMessage;
+      }
+    }
+
+    console.error(`[createLocalSession] Error for library item ${libraryItemId}: ${errorMessage}`);
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
+/**
+ * Sync an existing session's progress to the server
+ * @param sessionId - The server session ID
+ * @param currentTime - Current playback position in seconds
+ * @param timeListened - Total time listened in this session
+ * @param duration - Total duration of the media (optional, for validation)
+ */
+export async function syncSession(
+  sessionId: string,
+  currentTime: number,
+  timeListened: number,
+  duration?: number
+): Promise<void> {
+  const body: any = {
+    currentTime,
+    timeListened,
+  };
+
+  // Include duration if provided (matches iOS implementation)
+  if (duration !== undefined) {
+    body.duration = duration;
+  }
+
+  const response = await apiFetch(`/api/session/${sessionId}/sync`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.message || error.error || 'Failed to sync session');
+  }
+}
+
+/**
+ * Close a session on the server
+ * @param sessionId - The server session ID to close
+ */
+export async function closeSession(sessionId: string): Promise<void> {
+  const response = await apiFetch(`/api/session/${sessionId}/close`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.message || error.error || 'Failed to close session');
+  }
+}
+
+/**
+ * Start a play session and get streaming URLs
+ * @param libraryItemId - The library item to start playing
+ * @returns The play session response with streaming URLs
+ */
+export async function startPlaySession(libraryItemId: string): Promise<ApiPlaySessionResponse> {
+  const response = await apiFetch(`/api/items/${libraryItemId}/play`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      deviceInfo: await getDeviceInfo(),
+      supportedMimeTypes: [
+        'audio/mpeg',
+        'audio/mp4',
+        'audio/aac',
+        'audio/flac',
+        'audio/ogg',
+        'audio/wav',
+      ],
+      mediaPlayer: 'react-native-track-player',
+      forceDirectPlay: true, // Prefer direct streaming over transcoding
+    }),
+  });
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.message || error.error || 'Failed to start play session');
+  }
+
+  return response.json();
+}
+
 export async function login(baseUrl: string, username: string, password: string): Promise<ApiLoginResponse> {
   const base = baseUrl.trim().replace(/\/$/, '');
   const url = `${base}/login`;
@@ -142,7 +342,7 @@ export async function login(baseUrl: string, username: string, password: string)
     try {
       const err = JSON.parse(text);
       message = err?.error || err?.message || message;
-    } catch {}
+    } catch { }
     throw new Error(message);
   }
   return response.json();

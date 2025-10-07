@@ -4,18 +4,18 @@ import { getUserByUsername } from '@/db/helpers/users';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { libraryItemBatchService } from '@/services/libraryItemBatchService';
-import { progressSyncService } from '@/services/ProgressSyncService';
+import { unifiedProgressService } from '@/services/UnifiedProgressService';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  RefreshControl,
-  SectionList,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    RefreshControl,
+    SectionList,
+    Text,
+    View,
 } from "react-native";
 
 interface HomeSection {
@@ -44,7 +44,7 @@ export default function HomeScreen() {
         return;
       }
 
-      await progressSyncService.fetchAndSyncProgress();
+      await unifiedProgressService.fetchServerProgress();
 
       // Get home screen data
       const data = await getHomeScreenData(user.id);

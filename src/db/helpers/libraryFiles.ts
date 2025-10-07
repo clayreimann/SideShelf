@@ -1,12 +1,13 @@
 import { db } from '@/db/client';
 import { libraryFiles } from '@/db/schema/libraryFiles';
+import { isFileDownloadedAndExists } from '@/lib/fileSystem';
 import type { ApiLibraryFile } from '@/types/api';
 import { and, eq } from 'drizzle-orm';
 import {
-    clearLibraryFileDownloadStatus as clearLibraryFileDownloadStatusLocal,
-    getAllDownloadedLibraryFiles,
-    getLibraryFileDownloadInfo,
-    markLibraryFileAsDownloaded as markLibraryFileDownloadedLocal
+  clearLibraryFileDownloadStatus as clearLibraryFileDownloadStatusLocal,
+  getAllDownloadedLibraryFiles,
+  getLibraryFileDownloadInfo,
+  markLibraryFileAsDownloaded as markLibraryFileDownloadedLocal
 } from './localData';
 
 export type NewLibraryFileRow = typeof libraryFiles.$inferInsert;
@@ -131,10 +132,15 @@ export async function getAudioLibraryFilesForItem(libraryItemId: string): Promis
     .orderBy(libraryFiles.filename);
 }
 
-// Check if a library file is downloaded
+// Check if a library file is downloaded and actually exists on disk
 export async function isLibraryFileDownloaded(libraryFileId: string): Promise<boolean> {
   const downloadInfo = await getLibraryFileDownloadInfo(libraryFileId);
-  return downloadInfo?.isDownloaded || false;
+  return isFileDownloadedAndExists(
+    downloadInfo,
+    libraryFileId,
+    clearLibraryFileDownloadStatusLocal,
+    'LibraryFiles'
+  );
 }
 
 // Clear download status for library file

@@ -1,5 +1,5 @@
 import { processFullLibraryItems } from '@/db/helpers/fullLibraryItems';
-import { getLibraryItemsNeedingFullData, getLibraryItemsNeedingRefresh } from '@/db/helpers/libraryItems';
+import { getLibraryItemsNeedingRefresh } from '@/db/helpers/libraryItems';
 import { fetchLibraryItemsBatch } from '@/lib/api/endpoints';
 
 export class LibraryItemBatchService {
@@ -57,33 +57,21 @@ export class LibraryItemBatchService {
         this.isProcessing = true;
         this.lastProcessTime = now;
 
+        let noMedia: string[] = [];
         try {
-            console.log('[LibraryItemBatchService] Starting background queue processing');
+            noMedia = await getLibraryItemsNeedingRefresh(this.BATCH_SIZE);
 
-            // Second priority: items that don't have full metadata yet
-            let itemIds = await getLibraryItemsNeedingFullData(this.BATCH_SIZE);
-            console.log(`[LibraryItemBatchService] Found ${itemIds.length} items without metadata`);
-
-            // Third priority: try alternative approach if still no items
-            if (itemIds.length === 0) {
-                console.log('[LibraryItemBatchService] No items without metadata, trying alternative refresh approach');
-                itemIds = await getLibraryItemsNeedingRefresh(this.BATCH_SIZE);
-                console.log(`[LibraryItemBatchService] Found ${itemIds.length} items needing refresh (alternative approach)`);
-            }
-
-            if (itemIds.length === 0) {
+            if (noMedia.length === 0) {
                 console.log('[LibraryItemBatchService] No items need processing');
                 return;
             }
 
-            console.log(`[LibraryItemBatchService] Found ${itemIds.length} items needing processing`);
-
-            const libraryItems = await fetchLibraryItemsBatch(itemIds);
+            const libraryItems = await fetchLibraryItemsBatch(noMedia);
             await processFullLibraryItems(libraryItems);
 
             console.log(`[LibraryItemBatchService] Successfully processed ${libraryItems.length} items in background`);
         } catch (error) {
-            console.error('[LibraryItemBatchService] Error in background queue processing:', error);
+            console.error(`[LibraryItemBatchService] Error in background queue processing ${noMedia.length}:`, error);
         } finally {
             this.isProcessing = false;
         }

@@ -17,13 +17,14 @@ import { formatBytes, formatSpeed, formatTimeRemaining } from '@/lib/helpers/for
 import { useAuth } from '@/providers/AuthProvider';
 import { DownloadProgress, downloadService } from '@/services/DownloadService';
 import { playerService } from '@/services/PlayerService';
+import { unifiedProgressService } from '@/services/UnifiedProgressService';
 import { useAppStore } from '@/stores/appStore';
 import type { PlayerTrack } from '@/types/player';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import Octicons from '@expo/vector-icons/Octicons';
 import { Stack } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, useWindowDimensions } from 'react-native';
 import RenderHtml from 'react-native-render-html';
 
@@ -52,6 +53,33 @@ function Separator() {
     <Text style={{ color: isDark ? '#bbb' : '#444', fontSize: 24, textAlign: 'center' }}>•</Text>
   </View>;
 }
+
+// Memoized RenderHtml component to prevent frequent re-renders of TRenderEngineProvider
+const MemoizedRenderHtml = React.memo(({ contentWidth, description, textColor }: {
+  contentWidth: number;
+  description: string;
+  textColor: string;
+}) => {
+  const htmlSource = useMemo(() => ({ html: description }), [description]);
+  const baseStyle = useMemo(() => ({ color: textColor, fontSize: 16 }), [textColor]);
+  const tagsStyles = useMemo(() => ({
+    p: { marginBottom: 12, lineHeight: 24 },
+    div: { marginBottom: 8 },
+    br: { marginBottom: 8 },
+    b: { fontWeight: 'bold' },
+    strong: { fontWeight: 'bold' },
+    i: { fontStyle: 'italic' }
+  }), []);
+
+  return (
+    <RenderHtml
+      contentWidth={contentWidth}
+      source={htmlSource}
+      baseStyle={baseStyle}
+      tagsStyles={tagsStyles}
+    />
+  );
+});
 
 export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItemDetailProps) {
   const { styles, isDark } = useThemedStyles();
@@ -140,8 +168,8 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       if (!username || !item) return;
 
       try {
-        // TODO: Re-enable progress sync once API conformance is verified
-        // await progressSyncService.fetchAndSyncProgress(username);
+        // Fetch latest progress from server
+        await unifiedProgressService.fetchServerProgress();
 
         // Get the local progress data
         const user = await getUserByUsername(username);
@@ -734,18 +762,10 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       {/* Collapsible Description */}
       {description && (
         <CollapsibleSection title="Description" defaultExpanded={true}>
-          <RenderHtml
+          <MemoizedRenderHtml
             contentWidth={width - 64}
-            source={{ html: description }}
-            baseStyle={{ color: styles.text.color, fontSize: 16 }}
-            tagsStyles={{
-              p: { marginBottom: 12, lineHeight: 24, },
-              div: { marginBottom: 8, },
-              br: { marginBottom: 8, },
-              b: { fontWeight: 'bold', },
-              strong: { fontWeight: 'bold', },
-              i: { fontStyle: 'italic', }
-            }}
+            description={description}
+            textColor={styles.text.color}
           />
         </CollapsibleSection>
       )}

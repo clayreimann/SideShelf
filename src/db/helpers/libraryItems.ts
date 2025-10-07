@@ -6,6 +6,7 @@ import type { ApiLibraryItem, ApiLibraryItemsResponse } from '@/types/api';
 import type { LibraryItemDisplayRow } from '@/types/components';
 import type { LibraryItemRow, NewLibraryItemRow } from '@/types/database';
 import { and, eq, inArray, not } from 'drizzle-orm';
+import { audioFiles } from '../schema/audioFiles';
 import { mediaAuthors } from '../schema/mediaJoins';
 
 
@@ -131,10 +132,8 @@ export async function deleteAllLibraryItems(): Promise<void> {
 
 // Get library items that don't have full metadata yet (no author linkage since that's probably the only guaranteed linkage) (for background processing)
 export async function getLibraryItemsNeedingFullData(limit: number = 50): Promise<string[]> {
-  console.log(`[getLibraryItemsNeedingFullData] Looking for items without metadata (limit: ${limit})`);
-
   const itemsWithFullData = await db
-    .select({ id: libraryItems.id, mediaMetadataId: mediaMetadata.id })
+    .select({ id: libraryItems.id, mediaMetadataId: mediaMetadata.id, mediaAuthorsId: mediaAuthors.authorId })
     .from(libraryItems)
     .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
     .innerJoin(mediaAuthors, eq(mediaMetadata.id, mediaAuthors.mediaId));
@@ -142,38 +141,35 @@ export async function getLibraryItemsNeedingFullData(limit: number = 50): Promis
   const itemsWithoutFullData = await db
     .select({ id: libraryItems.id })
     .from(libraryItems)
-    .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
+    .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
     .where(and(
+      eq(libraryItems.mediaType, 'book'),
       not(inArray(mediaMetadata.id, itemsWithFullData.map(r => r.mediaMetadataId))),
-      eq(libraryItems.mediaType, 'book')
     ))
     .limit(limit);
 
-  console.log(`[getLibraryItemsNeedingFullData] Found ${itemsWithoutFullData.length} items without metadata`);
   return itemsWithoutFullData.map(r => r.id);
 }
 
 // Get library items that might need full data refresh (alternative approach)
 export async function getLibraryItemsNeedingRefresh(limit: number = 50): Promise<string[]> {
-  console.log(`[getLibraryItemsNeedingRefresh] Looking for items that might need refresh (limit: ${limit})`);
-
-  // Get items that either:
-  // 1. Don't have metadata at all
-  // 2. Have metadata but no audio files or chapters (incomplete data)
   const results = await db
     .select({
       id: libraryItems.id,
       hasMetadata: mediaMetadata.id,
+      hasAuthors: mediaAuthors.authorId,
+      hasAudioFiles: audioFiles.id,
     })
     .from(libraryItems)
     .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
+    .leftJoin(mediaAuthors, eq(mediaMetadata.id, mediaAuthors.mediaId))
+    .leftJoin(audioFiles, eq(audioFiles.mediaId, mediaMetadata.id))
     .where(eq(libraryItems.mediaType, 'book')) // Focus on books for now
     .limit(limit * 2); // Get more to filter from
 
   // Filter to items that need processing
-  const needsProcessing = results.filter(item => !item.hasMetadata);
+  const needsProcessing = results.filter(item => !item.hasMetadata || !item.hasAuthors || !item.hasAudioFiles);
 
-  console.log(`[getLibraryItemsNeedingRefresh] Found ${needsProcessing.length} items needing refresh`);
   return needsProcessing.slice(0, limit).map(r => r.id);
 }
 

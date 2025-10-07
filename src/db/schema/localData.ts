@@ -62,6 +62,7 @@ export const localListeningSessions = sqliteTable('local_listening_sessions', {
   endTime: real('end_time'), // Position in seconds when session ended (null if active)
   currentTime: real('current_time').notNull(), // Current position in seconds
   duration: real('duration').notNull(), // Total media duration in seconds
+  timeListening: real('time_listening').notNull().default(0), // Cumulative listening time in seconds
 
   // Playback info
   playbackRate: real('playback_rate').notNull().default(1.0),
@@ -71,6 +72,8 @@ export const localListeningSessions = sqliteTable('local_listening_sessions', {
   isSynced: integer('is_synced', { mode: 'boolean' }).notNull().default(false),
   syncAttempts: integer('sync_attempts').notNull().default(0),
   lastSyncAttempt: integer('last_sync_attempt', { mode: 'timestamp' }),
+  lastSyncTime: integer('last_sync_time', { mode: 'timestamp' }), // Last successful sync time
+  serverSessionId: text('server_session_id'), // Server session ID if synced
   syncError: text('sync_error'), // Last sync error message if any
 
   // Metadata

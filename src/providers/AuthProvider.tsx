@@ -2,6 +2,7 @@ import { authHelpers, mediaProgressHelpers, userHelpers } from '@/db/helpers';
 import { setApiConfig } from '@/lib/api/api';
 import { login as doLogin } from '@/lib/api/endpoints';
 import { useDb } from '@/providers/DbProvider';
+import { unifiedProgressService } from '@/services/UnifiedProgressService';
 import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
@@ -129,10 +130,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const handleAppStateChange = (nextAppState: AppStateStatus) => {
             if (nextAppState === 'active') {
                 console.log('[AuthProvider] App became active');
-                // TODO: Re-enable progress sync once API conformance is verified
-                // progressSyncService.syncAllOfflineData().catch(error => {
-                //     console.error('[AuthProvider] Failed to sync offline data on app foreground:', error);
-                // });
+                // Sync progress when app becomes active
+                unifiedProgressService.fetchServerProgress().catch(error => {
+                    console.error('[AuthProvider] Failed to sync progress on app foreground:', error);
+                });
             }
         };
 

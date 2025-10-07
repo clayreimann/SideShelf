@@ -8,6 +8,55 @@
  */
 
 // Base types used across multiple endpoints
+
+/**
+ * Play session audio track from Audiobookshelf API
+ */
+export interface ApiPlaySessionAudioTrack {
+  index: number;
+  startOffset: number;
+  duration: number;
+  title: string;
+  contentUrl: string;
+  mimeType: string;
+  metadata: {
+    filename: string;
+    ext: string;
+    path: string;
+    relPath: string;
+    size: number;
+    mtimeMs: number;
+    ctimeMs: number;
+    birthtimeMs: number;
+  };
+}
+
+/**
+ * Play session response from Audiobookshelf API
+ */
+export interface ApiPlaySessionResponse {
+  id: string;
+  userId: string;
+  libraryId: string;
+  libraryItemId: string;
+  episodeId?: string;
+  mediaType: 'book' | 'podcast';
+  mediaMetadata: {
+    title: string;
+    author: string;
+    description?: string;
+    releaseDate?: string;
+    genres?: string[];
+  };
+  chapters: any[];
+  displayTitle: string;
+  displayAuthor: string;
+  coverPath: string;
+  duration: number;
+  playMethod: number;
+  audioTracks: ApiPlaySessionAudioTrack[];
+  videoTrack?: any;
+}
 export interface ApiUser extends ApiMeResponse {
   accessToken?: string;
   refreshToken?: string;

@@ -8,8 +8,12 @@
  * - Integration with Zustand player store
  */
 
-import { apiFetch, getApiConfig } from '@/lib/api/api';
+import { clearAudioFileDownloadStatus } from '@/db/helpers/audioFiles';
+import { getApiConfig } from '@/lib/api/api';
+import { startPlaySession } from '@/lib/api/endpoints';
+import { verifyFileExists } from '@/lib/fileSystem';
 import { useAppStore } from '@/stores/appStore';
+import type { ApiPlaySessionResponse } from '@/types/api';
 import type { PlayerTrack } from '@/types/player';
 import TrackPlayer, {
   AndroidAudioContentType,
@@ -21,56 +25,8 @@ import TrackPlayer, {
   State,
   Track,
 } from 'react-native-track-player';
-import { sessionTrackingService } from './SessionTrackingService';
+import { unifiedProgressService } from './UnifiedProgressService';
 // Note: We can't use useAuth hook in a service, so we'll handle auth differently
-
-/**
- * Audiobookshelf play session response types
- */
-interface PlaySessionAudioTrack {
-  index: number;
-  startOffset: number;
-  duration: number;
-  title: string;
-  contentUrl: string;
-  mimeType: string;
-  metadata: {
-    filename: string;
-    ext: string;
-    path: string;
-    relPath: string;
-    size: number;
-    mtimeMs: number;
-    ctimeMs: number;
-    birthtimeMs: number;
-  };
-}
-
-interface PlaySessionResponse {
-  id: string;
-  userId: string;
-  libraryId: string;
-  libraryItemId: string;
-  episodeId?: string;
-  mediaType: 'book' | 'podcast';
-  mediaMetadata: {
-    title: string;
-    author: string;
-    description?: string;
-    releaseDate?: string;
-    genres?: string[];
-  };
-  chapters: any[];
-  displayTitle: string;
-  displayAuthor: string;
-  coverPath: string;
-  duration: number;
-  playMethod: number;
-  mediaPlayer: string;
-  audioTracks: PlaySessionAudioTrack[];
-  videoTrack?: any;
-  libraryItem: any;
-}
 
 /**
  * Track player service class
@@ -78,10 +34,12 @@ interface PlaySessionResponse {
 export class PlayerService {
   private static instance: PlayerService | null = null;
   private initialized = false;
-  private progressUpdateInterval: ReturnType<typeof setInterval> | null = null;
+  private listenersSetup = false;
+  private eventSubscriptions: Array<{ remove: () => void }> = [];
   private currentTrack: PlayerTrack | null = null;
   private currentUsername: string | null = null;
   private cachedApiInfo: { baseUrl: string; accessToken: string } | null = null;
+  private currentPlaySessionId: string | null = null; // Track the current server session ID
 
   private constructor() {}
 
@@ -109,8 +67,18 @@ export class PlayerService {
    * Clean up resources
    */
   private cleanup(): void {
-    this.stopProgressTracking();
+    // Remove all event listeners
+    this.eventSubscriptions.forEach(subscription => {
+      try {
+        subscription.remove();
+      } catch (error) {
+        console.warn('[PlayerService] Error removing subscription:', error);
+      }
+    });
+    this.eventSubscriptions.length = 0; // Clear the array
+
     this.initialized = false;
+    this.listenersSetup = false;
   }
 
   /**
@@ -130,9 +98,8 @@ export class PlayerService {
         const state = await TrackPlayer.getPlaybackState();
         console.log('[PlayerService] Track player already exists, reusing existing instance');
 
-        // Player exists, just set up our event listeners and tracking
+        // Player exists, just set up our event listeners
         this.setupEventListeners();
-        this.startProgressTracking();
         this.initialized = true;
         console.log('[PlayerService] Reused existing track player successfully');
         return;
@@ -175,9 +142,6 @@ export class PlayerService {
       // Set up event listeners
       this.setupEventListeners();
 
-      // Start progress tracking
-      this.startProgressTracking();
-
       this.initialized = true;
       console.log('[PlayerService] Track player initialized successfully');
     } catch (error) {
@@ -185,9 +149,8 @@ export class PlayerService {
       if (error instanceof Error && error.message.includes('already been initialized')) {
         console.log('[PlayerService] Player was already initialized elsewhere, setting up listeners');
         try {
-          // Set up our event listeners and tracking on the existing player
+          // Set up our event listeners on the existing player
           this.setupEventListeners();
-          this.startProgressTracking();
           this.initialized = true;
           console.log('[PlayerService] Successfully attached to existing player');
           return;
@@ -208,8 +171,12 @@ export class PlayerService {
     try {
       console.log('[PlayerService] Loading track:', track.title);
 
+      // Set loading state in the store
+      const store = useAppStore.getState();
+      store._setTrackLoading(true);
+
       // End any existing session
-      await sessionTrackingService.endCurrentSession();
+      await unifiedProgressService.endCurrentSession();
 
       // Clear current queue
       await TrackPlayer.reset();
@@ -218,7 +185,30 @@ export class PlayerService {
       const tracks = await this.buildTrackList(track);
 
       if (tracks.length === 0) {
-        throw new Error('No playable audio files found');
+        // Provide more detailed error information
+        const hasDownloadedFiles = track.audioFiles.some(af => af.downloadInfo?.isDownloaded);
+
+        // Check if we tried to get streaming URLs
+        const needsStreaming = track.audioFiles.some(
+          audioFile => !audioFile.downloadInfo?.isDownloaded
+        );
+
+        let errorMessage = 'No playable audio files found';
+        if (hasDownloadedFiles && !needsStreaming) {
+          errorMessage += '. Downloaded files are missing from device storage. Please re-download the content.';
+        } else if (!hasDownloadedFiles && needsStreaming) {
+          errorMessage += '. Content is not downloaded and streaming is not available. Please check your internet connection.';
+        } else if (hasDownloadedFiles && needsStreaming) {
+          errorMessage += '. Downloaded files are missing and streaming failed. Please check your internet connection or re-download the content.';
+        }
+
+        console.error('[PlayerService] No playable tracks available:', {
+          totalAudioFiles: track.audioFiles.length,
+          downloadedFiles: track.audioFiles.filter(af => af.downloadInfo?.isDownloaded).length,
+          needsStreaming
+        });
+
+        throw new Error(errorMessage);
       }
 
       // Add tracks to queue
@@ -228,24 +218,39 @@ export class PlayerService {
       this.currentTrack = track;
       this.currentUsername = username || null;
 
+      // Get resume position and seek to it
+      let resumePosition = 0;
+      if (username) {
+        resumePosition = await unifiedProgressService.getResumePosition(track.libraryItemId, username);
+        if (resumePosition > 0) {
+          console.log(`[PlayerService] Seeking to resume position: ${resumePosition}s`);
+          await TrackPlayer.seekTo(resumePosition);
+        }
+      }
+
       // Start playback
       await TrackPlayer.play();
 
       // Start session tracking if we have username
       if (username) {
-        const progress = await TrackPlayer.getProgress();
-        await sessionTrackingService.startSession(
+        await unifiedProgressService.startSession(
           username,
           track.libraryItemId,
           track.mediaId,
-          progress.position,
-          track.duration
+          resumePosition,
+          track.duration,
+          1.0, // playbackRate
+          1.0, // volume
+          this.currentPlaySessionId || undefined // Pass existing streaming session ID if available
         );
       }
 
       console.log('[PlayerService] Track loaded and playing');
     } catch (error) {
       console.error('[PlayerService] Failed to load track:', error);
+      // Clear loading state on error
+      const store = useAppStore.getState();
+      store._setTrackLoading(false);
       throw error;
     }
   }
@@ -305,7 +310,7 @@ export class PlayerService {
     // End session tracking
     if (this.currentTrack && this.currentUsername) {
       const progress = await TrackPlayer.getProgress();
-      await sessionTrackingService.endCurrentSession(progress.position);
+      await unifiedProgressService.endCurrentSession(progress.position);
     }
 
     await TrackPlayer.stop();
@@ -313,6 +318,7 @@ export class PlayerService {
 
     this.currentTrack = null;
     this.currentUsername = null;
+    this.clearPlaySessionId(); // Clear the session ID when stopping
   }
 
   /**
@@ -321,78 +327,97 @@ export class PlayerService {
   private async buildTrackList(playerTrack: PlayerTrack): Promise<Track[]> {
     const tracks: Track[] = [];
 
-    // Check if any files need streaming
-    const needsStreaming = playerTrack.audioFiles.some(
-      audioFile => !audioFile.downloadInfo?.isDownloaded
-    );
+    // First, check which files we have locally
+    const locallyAvailableFiles = new Set<string>();
+    for (const audioFile of playerTrack.audioFiles) {
+      if (audioFile.downloadInfo?.isDownloaded && audioFile.downloadInfo.downloadPath) {
+        const fileExists = await verifyFileExists(audioFile.downloadInfo.downloadPath);
+        if (fileExists) {
+          locallyAvailableFiles.add(audioFile.id);
+        } else {
+          console.warn('[PlayerService] File marked as downloaded but missing:', audioFile.downloadInfo.downloadPath);
 
-    let streamingTracks: PlaySessionAudioTrack[] = [];
-    if (needsStreaming) {
-      try {
-        streamingTracks = await this.getStreamingUrls(playerTrack.libraryItemId);
-        console.log('[PlayerService] Got streaming tracks:', streamingTracks.length);
-      // Log the first track for debugging
-      if (streamingTracks.length > 0) {
-        console.log('[PlayerService] Sample streaming track:', {
-          contentUrl: streamingTracks[0].contentUrl,
-          filename: streamingTracks[0].metadata.filename,
-          mimeType: streamingTracks[0].mimeType
-        });
-      }
-      } catch (error) {
-        console.error('[PlayerService] Failed to get streaming URLs, falling back to local files only:', error);
+          // Clean up database
+          try {
+            await clearAudioFileDownloadStatus(audioFile.id);
+            console.log('[PlayerService] Cleared download status for missing file:', audioFile.id);
+          } catch (error) {
+            console.error('[PlayerService] Failed to clear download status:', error);
+          }
+        }
       }
     }
 
-    for (const audioFile of playerTrack.audioFiles) {
-      let url: string;
+    // Only get streaming URLs if we don't have all files locally
+    let playSession: ApiPlaySessionResponse | null = null;
+    const needsStreaming = playerTrack.audioFiles.some(audioFile => !locallyAvailableFiles.has(audioFile.id));
 
-      if (audioFile.downloadInfo?.isDownloaded && audioFile.downloadInfo.downloadPath) {
-        // Use local file
+    if (needsStreaming) {
+      try {
+        playSession = await startPlaySession(playerTrack.libraryItemId);
+        this.currentPlaySessionId = playSession.id; // Store session ID for progress tracking
+        console.log('[PlayerService] Started play session:', playSession.id);
+        console.log('[PlayerService] Got streaming tracks:', playSession.audioTracks.length);
+
+        if (playSession.audioTracks.length > 0) {
+          console.log('[PlayerService] Sample streaming track:', {
+            contentUrl: playSession.audioTracks[0].contentUrl,
+            filename: playSession.audioTracks[0].metadata.filename,
+            mimeType: playSession.audioTracks[0].mimeType
+          });
+        }
+      } catch (error) {
+        console.error('[PlayerService] Failed to start play session:', error);
+      }
+    }
+
+    // Get API info once for all streaming URLs
+    if (playSession && !this.cachedApiInfo) {
+      this.cachedApiInfo = this.getApiInfo();
+    }
+
+    // Process each audio file in a single loop
+    for (const audioFile of playerTrack.audioFiles) {
+      let url: string | undefined;
+      let sourceType: 'local' | 'streaming' = 'local';
+
+      // First, try to use local file if available
+      if (locallyAvailableFiles.has(audioFile.id) && audioFile.downloadInfo?.downloadPath) {
         url = `file://${audioFile.downloadInfo.downloadPath}`;
-        console.log('[PlayerService] Using local file:', url);
-      } else {
-        // Find matching streaming track by filename or index
-        const streamingTrack = streamingTracks.find(
+        sourceType = 'local';
+      }
+      // If no local file, try streaming
+      else if (playSession && playSession.audioTracks.length > 0) {
+        const streamingTrack = playSession.audioTracks.find(
           track =>
             track.metadata.filename === audioFile.filename ||
             track.index === audioFile.index
         );
 
-        if (streamingTrack) {
-          // Use streaming URL - need to construct full URL with base URL and auth token
-          // The contentUrl from API is relative (e.g., "/s/item/li_xxx/filename.mp3")
-          // We'll get the API info once for all tracks to avoid multiple API calls
-          if (!this.cachedApiInfo) {
-            this.cachedApiInfo = this.getApiInfo();
-          }
-
-          if (this.cachedApiInfo) {
-            // Add the access token as a query parameter for authentication
-            const separator = streamingTrack.contentUrl.includes('?') ? '&' : '?';
-            url = `${this.cachedApiInfo.baseUrl}${streamingTrack.contentUrl}${separator}token=${this.cachedApiInfo.accessToken}`;
-            console.log('[PlayerService] Using streaming URL for:', audioFile.filename, '-> ', url.replace(this.cachedApiInfo.accessToken, '<token>'));
-          } else {
-            console.error('[PlayerService] No API info available for streaming');
-            continue;
-          }
-        } else {
-          console.warn('[PlayerService] No streaming URL found for:', audioFile.filename);
-          continue; // Skip this file if we can't stream it
+        if (streamingTrack && this.cachedApiInfo) {
+          const separator = streamingTrack.contentUrl.includes('?') ? '&' : '?';
+          url = `${this.cachedApiInfo.baseUrl}${streamingTrack.contentUrl}${separator}token=${this.cachedApiInfo.accessToken}`;
+          sourceType = 'streaming';
         }
       }
 
-      tracks.push({
-        id: audioFile.id,
-        url,
-        title: audioFile.tagTitle || audioFile.filename,
-        artist: playerTrack.author,
-        album: playerTrack.title,
-        artwork: playerTrack.coverUri || undefined,
-        duration: audioFile.duration || undefined,
-        // Custom metadata for react-native-track-player
-        // Note: These will be available in the track object
-      });
+      // Add track if we have a valid URL
+      if (url) {
+        console.log(`[PlayerService] Using ${sourceType} file for ${audioFile.filename}:`,
+          sourceType === 'streaming' ? url.replace(this.cachedApiInfo?.accessToken || '', '<token>') : url);
+
+        tracks.push({
+          id: audioFile.id,
+          url,
+          title: audioFile.tagTitle || audioFile.filename,
+          artist: playerTrack.author,
+          album: playerTrack.title,
+          artwork: playerTrack.coverUri || undefined,
+          duration: audioFile.duration || undefined,
+        });
+      } else {
+        console.warn('[PlayerService] No playable source found for:', audioFile.filename);
+      }
     }
 
     return tracks;
@@ -420,126 +445,51 @@ export class PlayerService {
   }
 
   /**
-   * Get streaming URLs by starting a play session
+   * Get the current play session ID (for progress tracking)
    */
-  private async getStreamingUrls(libraryItemId: string): Promise<PlaySessionAudioTrack[]> {
-    try {
-      console.log('[PlayerService] Starting play session for library item:', libraryItemId);
+  getCurrentPlaySessionId(): string | null {
+    return this.currentPlaySessionId;
+  }
 
-      // Call the Audiobookshelf play endpoint
-      const response = await apiFetch(`/api/items/${libraryItemId}/play`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          deviceInfo: {
-            clientName: 'SideShelf',
-            clientVersion: '1.0.0',
-            deviceId: 'react-native-app',
-          },
-          supportedMimeTypes: [
-            'audio/mpeg',
-            'audio/mp4',
-            'audio/aac',
-            'audio/flac',
-            'audio/ogg',
-            'audio/wav',
-          ],
-          mediaPlayer: 'react-native-track-player',
-          forceDirectPlay: true, // Prefer direct streaming over transcoding
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to start play session: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-
-      const playSession: PlaySessionResponse = await response.json();
-      console.log('[PlayerService] Play session started:', playSession.id);
-      console.log('[PlayerService] Audio tracks available:', playSession.audioTracks.length);
-
-      if (!playSession.audioTracks || playSession.audioTracks.length === 0) {
-        throw new Error('No audio tracks available in play session');
-      }
-
-      return playSession.audioTracks;
-    } catch (error) {
-      console.error('[PlayerService] Failed to get streaming URLs:', error);
-      throw error;
-    }
+  /**
+   * Clear the current play session ID
+   */
+  clearPlaySessionId(): void {
+    this.currentPlaySessionId = null;
   }
 
   /**
    * Set up event listeners
    */
   private setupEventListeners(): void {
+    if (this.listenersSetup) {
+      console.log('[PlayerService] Event listeners already set up, skipping');
+      return;
+    }
+
+    console.log('[PlayerService] Setting up event listeners');
+    this.listenersSetup = true;
+
     // Playback state changes
-    TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+    this.eventSubscriptions.push(TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
       const store = useAppStore.getState();
       const isPlaying = event.state === State.Playing;
       store.updatePlayingState(isPlaying);
-    });
-
-    // Track changes
-    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {
-      console.log('[PlayerService] Track changed:', event);
-      // Handle track changes if needed
-    });
+    }));
 
     // Playback errors
-    TrackPlayer.addEventListener(Event.PlaybackError, (event) => {
+    this.eventSubscriptions.push(TrackPlayer.addEventListener(Event.PlaybackError, (event) => {
       console.error('[PlayerService] Playback error:', event);
       // Handle playback errors
-    });
+    }));
 
     // Queue ended
-    TrackPlayer.addEventListener(Event.PlaybackQueueEnded, (event) => {
+    this.eventSubscriptions.push(TrackPlayer.addEventListener(Event.PlaybackQueueEnded, (event) => {
       console.log('[PlayerService] Queue ended:', event);
       // Handle queue end
-    });
+    }));
   }
 
-  /**
-   * Start progress tracking
-   */
-  private startProgressTracking(): void {
-    if (this.progressUpdateInterval) {
-      clearInterval(this.progressUpdateInterval);
-    }
-
-    this.progressUpdateInterval = setInterval(async () => {
-      try {
-        const progress = await TrackPlayer.getProgress();
-        const store = useAppStore.getState();
-        const state = await TrackPlayer.getPlaybackState();
-
-        // Update store
-        store.updatePosition(progress.position);
-
-        // Update session tracking if we have current track and username
-        if (this.currentTrack && this.currentUsername) {
-          const playbackRate = await TrackPlayer.getRate();
-          const volume = await TrackPlayer.getVolume();
-          const isPlaying = state.state === State.Playing;
-
-          // Get current chapter if available
-          const currentChapter = this.getCurrentChapter(progress.position);
-
-          await sessionTrackingService.updateProgress(
-            progress.position,
-            playbackRate,
-            volume,
-            currentChapter?.id,
-            isPlaying
-          );
-        }
-      } catch (error) {
-        // Ignore errors during progress updates
-      }
-    }, 1000);
-  }
 
   /**
    * Get current chapter based on position
@@ -556,15 +506,6 @@ export class PlayerService {
     return chapter ? { id: chapter.id, title: chapter.title } : null;
   }
 
-  /**
-   * Stop progress tracking
-   */
-  private stopProgressTracking(): void {
-    if (this.progressUpdateInterval) {
-      clearInterval(this.progressUpdateInterval);
-      this.progressUpdateInterval = null;
-    }
-  }
 
 }
 

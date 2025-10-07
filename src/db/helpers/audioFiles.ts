@@ -1,12 +1,13 @@
 import { db } from '@/db/client';
 import { audioFiles } from '@/db/schema/audioFiles';
+import { isFileDownloadedAndExists } from '@/lib/fileSystem';
 import type { ApiAudioFile } from '@/types/api';
 import { eq } from 'drizzle-orm';
 import {
-    clearAudioFileDownloadStatus as clearAudioFileDownloadStatusLocal,
-    getAllDownloadedAudioFiles,
-    getAudioFileDownloadInfo,
-    markAudioFileAsDownloaded as markAudioFileDownloadedLocal
+  clearAudioFileDownloadStatus as clearAudioFileDownloadStatusLocal,
+  getAllDownloadedAudioFiles,
+  getAudioFileDownloadInfo,
+  markAudioFileAsDownloaded as markAudioFileDownloadedLocal
 } from './localData';
 
 export type NewAudioFileRow = typeof audioFiles.$inferInsert;
@@ -159,8 +160,13 @@ export async function clearAudioFileDownloadStatus(audioFileId: string): Promise
   await clearAudioFileDownloadStatusLocal(audioFileId);
 }
 
-// Check if an audio file is downloaded
+// Check if an audio file is downloaded and actually exists on disk
 export async function isAudioFileDownloaded(audioFileId: string): Promise<boolean> {
   const downloadInfo = await getAudioFileDownloadInfo(audioFileId);
-  return downloadInfo?.isDownloaded || false;
+  return isFileDownloadedAndExists(
+    downloadInfo,
+    audioFileId,
+    clearAudioFileDownloadStatusLocal,
+    'AudioFiles'
+  );
 }

@@ -1,4 +1,4 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File, Paths, getInfoAsync } from 'expo-file-system';
 
 /**
  * Get the downloads directory for a specific library item
@@ -26,6 +26,64 @@ export function downloadFileExists(libraryItemId: string, filename: string): boo
   const dir = getDownloadsDirectory(libraryItemId);
   const file = new File(dir, filename);
   return file.exists;
+}
+
+/**
+ * Verify that a file actually exists at the given path
+ * This is important for cache directories where the OS might delete files
+ */
+export async function verifyFileExists(filePath: string): Promise<boolean> {
+  try {
+    const info = await getInfoAsync(filePath);
+    return info.exists;
+  } catch (error) {
+    console.warn('[FileSystem] Error checking file existence:', error);
+    return false;
+  }
+}
+
+/**
+ * Generic function to check if a file is downloaded and actually exists on disk
+ * Works with any download info that has isDownloaded flag and downloadPath
+ */
+export async function isFileDownloadedAndExists(
+  downloadInfo: { isDownloaded: boolean; downloadPath: string } | null | undefined,
+  fileId: string,
+  clearDownloadStatusFn: (fileId: string) => Promise<void>,
+  logPrefix: string = 'FileSystem'
+): Promise<boolean> {
+  if (!downloadInfo?.isDownloaded) {
+    return false;
+  }
+
+  // Verify the file actually exists on disk
+  const fileExists = await verifyFileExists(downloadInfo.downloadPath);
+  if (!fileExists) {
+    console.warn(`[${logPrefix}] File marked as downloaded but missing: ${downloadInfo.downloadPath}`);
+
+    try {
+      await clearDownloadStatusFn(fileId);
+      console.log(`[${logPrefix}] Cleared download status for missing file: ${fileId}`);
+    } catch (error) {
+      console.error(`[${logPrefix}] Failed to clear download status:`, error);
+    }
+  }
+
+  return fileExists;
+}
+
+/**
+ * Verify that a downloaded audio file actually exists
+ */
+export function verifyDownloadedFileExists(libraryItemId: string, filename: string): boolean {
+  try {
+    const dir = getDownloadsDirectory(libraryItemId);
+    const file = new File(dir, filename);
+    return file.exists;
+  } catch (error) {
+    console.warn('[FileSystem] Error verifying downloaded file:', error);
+    return false;
+  }
 }
 
 /**

@@ -23,7 +23,8 @@ export interface HomeScreenItem {
 
 // Get items with in-progress media progress (Continue Listening)
 export async function getContinueListeningItems(userId: string, limit: number = 20): Promise<HomeScreenItem[]> {
-    const items = await db
+    // First get all progress entries for this user
+    const allProgress = await db
         .select({
             id: libraryItems.id,
             title: mediaMetadata.title,
@@ -36,6 +37,7 @@ export async function getContinueListeningItems(userId: string, limit: number = 
             duration: mediaMetadata.duration,
             isFinished: mediaProgress.isFinished,
             lastUpdate: mediaProgress.lastUpdate,
+            episodeId: mediaProgress.episodeId,
         })
         .from(libraryItems)
         .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
@@ -44,13 +46,34 @@ export async function getContinueListeningItems(userId: string, limit: number = 
             eq(mediaProgress.userId, userId)
         ))
         .where(and(
-            eq(libraryItems.mediaType, 'book'),
             eq(mediaProgress.isFinished, false),
             eq(mediaProgress.hideFromContinueListening, false),
             gt(mediaProgress.progress, 0)
         ))
-        .orderBy(desc(mediaProgress.lastUpdate))
-        .limit(limit);
+        .orderBy(desc(mediaProgress.lastUpdate));
+
+    // Deduplicate by libraryItemId, keeping the most recent progress for each item
+    const deduplicatedItems = new Map<string, typeof allProgress[0]>();
+
+    for (const item of allProgress) {
+        const existing = deduplicatedItems.get(item.id);
+        if (!existing || (item.lastUpdate && existing.lastUpdate && item.lastUpdate > existing.lastUpdate)) {
+            // For books, we want the main book progress (episodeId = null)
+            // For podcasts, we want the most recent episode progress
+            if (item.episodeId === null || !existing || existing.episodeId !== null) {
+                deduplicatedItems.set(item.id, item);
+            }
+        }
+    }
+
+    // Convert to array and apply limit
+    const items = Array.from(deduplicatedItems.values())
+        .sort((a, b) => {
+            const aTime = a.lastUpdate?.getTime() || 0;
+            const bTime = b.lastUpdate?.getTime() || 0;
+            return bTime - aTime;
+        })
+        .slice(0, limit);
 
     return items.map(item => ({
         id: item.id,
@@ -108,7 +131,8 @@ export async function getDownloadedItems(limit: number = 20): Promise<HomeScreen
 
 // Get items with completed media progress (Listen Again)
 export async function getListenAgainItems(userId: string, limit: number = 20): Promise<HomeScreenItem[]> {
-    const items = await db
+    // First get all finished progress entries for this user
+    const allFinished = await db
         .select({
             id: libraryItems.id,
             title: mediaMetadata.title,
@@ -120,6 +144,7 @@ export async function getListenAgainItems(userId: string, limit: number = 20): P
             duration: mediaMetadata.duration,
             isFinished: mediaProgress.isFinished,
             finishedAt: mediaProgress.finishedAt,
+            episodeId: mediaProgress.episodeId,
         })
         .from(libraryItems)
         .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
@@ -127,12 +152,31 @@ export async function getListenAgainItems(userId: string, limit: number = 20): P
             eq(mediaProgress.libraryItemId, libraryItems.id),
             eq(mediaProgress.userId, userId)
         ))
-        .where(and(
-            eq(libraryItems.mediaType, 'book'),
-            eq(mediaProgress.isFinished, true)
-        ))
-        .orderBy(desc(mediaProgress.finishedAt))
-        .limit(limit);
+        .where(eq(mediaProgress.isFinished, true))
+        .orderBy(desc(mediaProgress.finishedAt));
+
+    // Deduplicate by libraryItemId, keeping the most recently finished for each item
+    const deduplicatedItems = new Map<string, typeof allFinished[0]>();
+
+    for (const item of allFinished) {
+        const existing = deduplicatedItems.get(item.id);
+        if (!existing || (item.finishedAt && existing.finishedAt && item.finishedAt > existing.finishedAt)) {
+            // For books, prefer the main book progress (episodeId = null)
+            // For podcasts, keep the most recently finished episode
+            if (item.episodeId === null || !existing || existing.episodeId !== null) {
+                deduplicatedItems.set(item.id, item);
+            }
+        }
+    }
+
+    // Convert to array and apply limit
+    const items = Array.from(deduplicatedItems.values())
+        .sort((a, b) => {
+            const aTime = a.finishedAt?.getTime() || 0;
+            const bTime = b.finishedAt?.getTime() || 0;
+            return bTime - aTime;
+        })
+        .slice(0, limit);
 
     return items.map(item => ({
         id: item.id,

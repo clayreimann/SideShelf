@@ -3,32 +3,33 @@ import { getAudioFilesWithDownloadInfo } from '@/db/helpers/combinedQueries';
 import { getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
 import { cacheCoverIfMissing } from '@/lib/covers';
 import {
-    calculateSmoothedSpeed,
-    clearDebounceTimer,
-    createSpeedTracker,
-    DEFAULT_DOWNLOAD_CONFIG
+  calculateSmoothedSpeed,
+  clearDebounceTimer,
+  createSpeedTracker,
+  DEFAULT_DOWNLOAD_CONFIG
 } from '@/lib/downloads/speedTracker';
 import {
-    constructDownloadUrl,
-    downloadFileExists,
-    ensureDownloadsDirectory,
-    getDownloadPath,
-    getDownloadsDirectory
+  constructDownloadUrl,
+  downloadFileExists,
+  ensureDownloadsDirectory,
+  getDownloadPath,
+  getDownloadsDirectory,
+  verifyFileExists
 } from '@/lib/fileSystem';
 import type {
-    DownloadConfig,
-    DownloadInfo,
-    DownloadProgress,
-    DownloadProgressCallback,
-    DownloadSpeedTracker,
-    DownloadTaskInfo
+  DownloadConfig,
+  DownloadInfo,
+  DownloadProgress,
+  DownloadProgressCallback,
+  DownloadSpeedTracker,
+  DownloadTaskInfo
 } from '@/types/services';
 import RNBackgroundDownloader, { DownloadTask } from '@kesha-antonov/react-native-background-downloader';
 
 // Re-export types for backward compatibility
 export type {
-    DownloadConfig, DownloadInfo, DownloadProgress, DownloadProgressCallback,
-    DownloadSpeedTracker, DownloadTaskInfo
+  DownloadConfig, DownloadInfo, DownloadProgress, DownloadProgressCallback,
+  DownloadSpeedTracker, DownloadTaskInfo
 };
 
 // Remove duplicate type definitions - they're now in @/types/services
@@ -418,8 +419,24 @@ export class DownloadService {
       const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       if (audioFiles.length === 0) return false;
 
-      // Check if all audio files are marked as downloaded
-      const isDownloaded = audioFiles.every(file => file.downloadInfo?.isDownloaded);
+      // Check if all audio files are marked as downloaded AND actually exist on disk
+      const downloadCheckPromises = audioFiles.map(async (file) => {
+        if (!file.downloadInfo?.isDownloaded) {
+          return false;
+        }
+
+        // Verify the file actually exists on disk
+        const fileExists = await verifyFileExists(file.downloadInfo.downloadPath);
+        if (!fileExists) {
+          console.warn(`[DownloadService] File marked as downloaded but missing: ${file.downloadInfo.downloadPath}`);
+          // TODO: Could mark as not downloaded in database here
+        }
+        return fileExists;
+      });
+
+      const downloadResults = await Promise.all(downloadCheckPromises);
+      const isDownloaded = downloadResults.every(result => result);
+
       console.log(`[DownloadService] Checking if library item is downloaded for ${libraryItemId}: ${isDownloaded}`);
       return isDownloaded;
     } catch (error) {

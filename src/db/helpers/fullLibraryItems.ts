@@ -10,7 +10,7 @@ import { mediaMetadata } from '@/db/schema/mediaMetadata';
 import { narrators } from '@/db/schema/narrators';
 import { series } from '@/db/schema/series';
 import { tags } from '@/db/schema/tags';
-import type { ApiSeries as ApiSeries, ApiAuthor, ApiBook, ApiLibraryItem, ApiPodcast } from '@/types/api';
+import type { ApiAuthor, ApiBook, ApiLibraryItem, ApiPodcast, ApiSeries } from '@/types/api';
 import { and, eq, isNull } from 'drizzle-orm';
 
 // Import our new helpers
@@ -263,7 +263,7 @@ export async function processFullLibraryItems(apiItems: ApiLibraryItem[]): Promi
         const apiItem = apiItems[i];
         try {
             await processFullLibraryItem(apiItem);
-            console.log(`[fullLibraryItems] Processed item: ${apiItem.id} (${i + 1}/${apiItems.length})`);
+            // console.log(`[fullLibraryItems] Processed item: ${apiItem.id} (${i + 1}/${apiItems.length})`);
 
             // Yield control back to the event loop every few items to keep UI responsive
             if ((i + 1) % 3 === 0) {
@@ -274,8 +274,6 @@ export async function processFullLibraryItems(apiItems: ApiLibraryItem[]): Promi
             return
         }
     }
-
-    console.log(`[fullLibraryItems] Finished processing ${apiItems.length} items`);
 }
 
 // Get library items that need full data refresh (have basic metadata but missing audio files/chapters)

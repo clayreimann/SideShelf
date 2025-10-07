@@ -10,6 +10,8 @@ import m0005 from './0005_serious_madelyne_pryor.sql';
 import m0006 from './0006_certain_silverclaw.sql';
 import m0007 from './0007_cultured_moira_mactaggert.sql';
 import m0008 from './0008_illegal_guardian.sql';
+import m0009 from './0009_messy_madame_masque.sql';
+import m0010 from './0010_melted_microchip.sql';
 
   export default {
     journal,
@@ -22,7 +24,9 @@ m0004,
 m0005,
 m0006,
 m0007,
-m0008
+m0008,
+m0009,
+m0010
     }
   }
   

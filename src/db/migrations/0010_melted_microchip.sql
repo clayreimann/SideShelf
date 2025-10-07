@@ -1,0 +1,1 @@
+ALTER TABLE `local_listening_sessions` ADD `time_listening` real DEFAULT 0 NOT NULL;

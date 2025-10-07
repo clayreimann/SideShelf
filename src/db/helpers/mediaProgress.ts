@@ -1,7 +1,7 @@
 import { db } from '@/db/client';
 import { mediaProgress } from '@/db/schema/mediaProgress';
 import type { ApiMediaProgress, ApiMeResponse, ApiUser } from '@/types/api';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 export type NewMediaProgressRow = typeof mediaProgress.$inferInsert;
 export type MediaProgressRow = typeof mediaProgress.$inferSelect;
@@ -73,6 +73,7 @@ export async function getMediaProgressForLibraryItem(
         eq(mediaProgress.userId, userId)
       )
     )
+    .orderBy(desc(mediaProgress.lastUpdate))
     .limit(1);
 
   return results[0] || null;

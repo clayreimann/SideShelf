@@ -42,6 +42,7 @@ export async function startListeningSession(
         endTime: null,
         currentTime: startTime,
         duration,
+        timeListening: 0,
         playbackRate,
         volume,
         isSynced: false,
@@ -56,6 +57,18 @@ export async function startListeningSession(
 
     console.log(`[LocalListeningSessions] Started session ${sessionId} for ${libraryItemId}`);
     return sessionId;
+}
+
+/**
+ * Get a listening session by ID
+ */
+export async function getListeningSession(sessionId: string): Promise<LocalListeningSessionRow | null> {
+    const session = await db
+        .select()
+        .from(localListeningSessions)
+        .where(eq(localListeningSessions.id, sessionId))
+        .limit(1);
+    return session[0] || null;
 }
 
 /**
@@ -106,6 +119,43 @@ export async function updateSessionProgress(
     await db
         .update(localListeningSessions)
         .set(updateData)
+        .where(eq(localListeningSessions.id, sessionId));
+}
+
+/**
+ * Update session listening time (cumulative time spent listening)
+ */
+export async function updateSessionListeningTime(
+    sessionId: string,
+    additionalTime: number
+): Promise<void> {
+    // Get current session to add to existing timeListening
+    const session = await getListeningSession(sessionId);
+    if (!session) {
+        throw new Error(`Session ${sessionId} not found`);
+    }
+
+    const newTimeListening = (session.timeListening || 0) + additionalTime;
+
+    await db
+        .update(localListeningSessions)
+        .set({
+            timeListening: newTimeListening,
+            updatedAt: new Date(),
+        })
+        .where(eq(localListeningSessions.id, sessionId));
+}
+
+/**
+ * Reset session listening time (used after successful sync)
+ */
+export async function resetSessionListeningTime(sessionId: string): Promise<void> {
+    await db
+        .update(localListeningSessions)
+        .set({
+            timeListening: 0,
+            updatedAt: new Date(),
+        })
         .where(eq(localListeningSessions.id, sessionId));
 }
 
@@ -163,6 +213,25 @@ export async function getActiveSession(
 }
 
 /**
+ * Get all active sessions for a user
+ */
+export async function getAllActiveSessionsForUser(
+    userId: string
+): Promise<LocalListeningSessionRow[]> {
+    const sessions = await db
+        .select()
+        .from(localListeningSessions)
+        .where(
+            and(
+                eq(localListeningSessions.userId, userId),
+                isNull(localListeningSessions.sessionEnd)
+            )
+        );
+
+    return sessions;
+}
+
+/**
  * Get all unsynced sessions
  */
 export async function getUnsyncedSessions(): Promise<LocalListeningSessionRow[]> {
@@ -171,6 +240,23 @@ export async function getUnsyncedSessions(): Promise<LocalListeningSessionRow[]>
         .from(localListeningSessions)
         .where(eq(localListeningSessions.isSynced, false))
         .orderBy(asc(localListeningSessions.sessionStart));
+}
+
+/**
+ * Update server session ID for a local session
+ */
+export async function updateServerSessionId(sessionId: string, serverSessionId: string): Promise<void> {
+    const now = new Date();
+
+    await db
+        .update(localListeningSessions)
+        .set({
+            serverSessionId,
+            updatedAt: now,
+        })
+        .where(eq(localListeningSessions.id, sessionId));
+
+    console.log(`[LocalListeningSessions] Updated server session ID for ${sessionId}: ${serverSessionId}`);
 }
 
 /**
@@ -183,6 +269,7 @@ export async function markSessionAsSynced(sessionId: string): Promise<void> {
         .update(localListeningSessions)
         .set({
             isSynced: true,
+            lastSyncTime: now,
             updatedAt: now,
         })
         .where(eq(localListeningSessions.id, sessionId));
