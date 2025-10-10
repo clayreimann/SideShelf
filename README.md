@@ -172,11 +172,6 @@ See our [TODO.md](./TODO.md) for detailed development plans and feature roadmap.
 - **Series Management**: Better series organization and tracking
 - **CarPlay/Android Auto**: Vehicle integration support
 
-## 🐛 Known Issues
-
-- Background downloads may be interrupted on iOS due to system limitations
-- Some older Android devices may experience performance issues with large libraries
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
@@ -186,6 +181,7 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 - [Audiobookshelf](https://www.audiobookshelf.org/) - The amazing self-hosted audiobook server
 - [Expo](https://expo.dev/) - For making React Native development delightful
 - [react-native-track-player](https://react-native-track-player.js.org/) - For excellent audio playback capabilities
+- [App icons](https://icon.kitchen/i/H4sIAAAAAAAAAzWPTQ6DIBCF7zLduqBt0r%2BtaXoBd03ToAyUiIxBsGmMd%2B%2BgkQWEb968eTPBKF3CAW4TKBna6oMdwi2GhAVoUzrbyxBzdUB%2BgFJ01qOCAmxDnkmHPr1rohbmAmpTkqPAeHc8XcXxzLraVL%2BePcEEqSz6uLDH9mHrJvfsc5MQUgjBggUdVnRZkfTGsc1V8Bxt7lpjEzk3oMNRRmQF592m6%2BXkSB2p5PKCT3ZQgeySnQa%2Bv1jDa%2F4DLrhsnwMBAAA%3D)
 
 ## 📞 Support
 

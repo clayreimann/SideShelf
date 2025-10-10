@@ -1,5 +1,5 @@
 import { db } from '@/db/client';
-import { cacheLocalCover, markAudioFileAsDownloaded, markLibraryFileAsDownloaded } from './localData';
+import { markAudioFileAsDownloaded, markLibraryFileAsDownloaded, setLocalCoverCached } from './localData';
 
 /**
  * Migration helper to preserve existing download data and cover URLs
@@ -25,7 +25,7 @@ export async function preserveExistingLocalData(): Promise<void> {
       const imageUrl = row[1] as string;
 
       try {
-        await cacheLocalCover(mediaId, imageUrl);
+        await setLocalCoverCached(mediaId, imageUrl);
         console.log(`[migrationHelpers] Preserved cover for media ${mediaId}: ${imageUrl}`);
       } catch (error) {
         console.error(`[migrationHelpers] Failed to preserve cover for media ${mediaId}:`, error);

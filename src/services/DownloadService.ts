@@ -32,57 +32,6 @@ export type {
   DownloadSpeedTracker, DownloadTaskInfo
 };
 
-// Remove duplicate type definitions - they're now in @/types/services
-/*
-export interface DownloadProgress {
-  libraryItemId: string;
-  totalFiles: number;
-  downloadedFiles: number;
-  currentFile: string;
-  fileProgress: number; // 0-1 progress for current file
-  totalProgress: number; // 0-1 overall progress
-  bytesDownloaded: number;
-  totalBytes: number;
-  fileBytesDownloaded: number;
-  fileTotalBytes: number;
-  downloadSpeed: number; // bytes per second
-  speedSampleCount: number; // number of speed samples collected
-  status: 'downloading' | 'paused' | 'completed' | 'error' | 'cancelled';
-  error?: string;
-  canPause?: boolean;
-  canResume?: boolean;
-}
-
-export interface DownloadTaskInfo {
-  task: DownloadTask;
-  audioFileId: string;
-  filename: string;
-  size: number;
-}
-
-export type DownloadProgressCallback = (progress: DownloadProgress) => void;
-
-export interface DownloadSpeedTracker {
-  smoothedSpeed: number;
-  sampleCount: number;
-  lastUpdateTime: number;
-  lastBytesDownloaded: number;
-  debounceTimer?: ReturnType<typeof setTimeout>;
-  hasShownInitialProgress: boolean;
-  lastProgressUpdate?: DownloadProgress;
-}
-
-export interface DownloadInfo {
-  tasks: DownloadTaskInfo[];
-  progressCallbacks: Set<DownloadProgressCallback>;
-  totalBytes: number;
-  downloadedBytes: number;
-  isPaused: boolean;
-  speedTracker: DownloadSpeedTracker;
-  expectedTotalFiles?: number; // Total files expected (from database), not just active tasks
-}
-
-*/
 
 export class DownloadService {
   private static instance: DownloadService;
@@ -212,7 +161,7 @@ export class DownloadService {
       // Get metadata and audio files
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) {
-        throw new Error('ApiLibrary item metadata not found');
+        throw new Error('Library item metadata not found');
       }
 
       const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
@@ -257,10 +206,7 @@ export class DownloadService {
         );
       };
 
-      // Download cover image first (but don't count it as a file)
-      updateProgress('Cover image', 0, 0, 'downloading');
       await cacheCoverIfMissing(libraryItemId);
-      // Don't increment downloadedFiles for cover
 
       // Start all downloads concurrently
       const downloadPromises = audioFiles.map(async (audioFile: any) => {

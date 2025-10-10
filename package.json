@@ -4,7 +4,14 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "license": "MIT",
-  "keywords": ["audiobookshelf", "audiobook", "podcast", "react-native", "expo", "mobile"],
+  "keywords": [
+    "audiobookshelf",
+    "audiobook",
+    "podcast",
+    "react-native",
+    "expo",
+    "mobile"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/your-username/abs-react-native.git"
@@ -17,6 +24,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo prebuild --clean && expo run:ios",
+    "ios:device": "expo run:ios --device",
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest --watchAll=false",
@@ -28,7 +36,7 @@
   "dependencies": {
     "@expo/config-plugins": "^54.0.1",
     "@expo/vector-icons": "^15.0.2",
-    "@kesha-antonov/react-native-background-downloader": "^3.2.5",
+    "@kesha-antonov/react-native-background-downloader": "github:clayreimann/react-native-background-downloader#spike-event-queue",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "^11.4.1",
     "@react-navigation/bottom-tabs": "^7.4.0",

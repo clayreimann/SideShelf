@@ -8,85 +8,113 @@ import type {
   ApiLibraryResponseWithFilterData,
   ApiLoginResponse,
   ApiMeResponse,
-  ApiPlaySessionResponse
-} from '@/types/api';
-import DeviceInfo from 'react-native-device-info';
-import { apiFetch } from './api';
+  ApiPlaySessionResponse,
+} from "@/types/api";
+import DeviceInfo from "react-native-device-info";
+import { apiFetch } from "./api";
 
 export async function fetchMe(): Promise<ApiMeResponse> {
-  const response = await apiFetch('/api/me');
+  const response = await apiFetch("/api/me");
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to fetch user data');
+    throw new Error(
+      error.message || error.error || "Failed to fetch user data"
+    );
   }
   return response.json();
 }
 
 export async function fetchLibraries(): Promise<ApiLibrariesResponse> {
-  const response = await apiFetch('/api/libraries');
+  const response = await apiFetch("/api/libraries");
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to fetch libraries');
+    throw new Error(
+      error.message || error.error || "Failed to fetch libraries"
+    );
   }
   return response.json();
 }
 
-export async function fetchLibrary(libraryId: string): Promise<ApiLibraryResponse> {
-  const url = `/api/libraries/${libraryId}`
+export async function fetchLibrary(
+  libraryId: string
+): Promise<ApiLibraryResponse> {
+  const url = `/api/libraries/${libraryId}`;
 
   const response = await apiFetch(url);
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to fetch library');
+    throw new Error(error.message || error.error || "Failed to fetch library");
   }
   return response.json();
 }
 
-export async function fetchLibraryWithFilterData(libraryId: string): Promise<ApiLibraryResponseWithFilterData> {
-  const response = await apiFetch(`/api/libraries/${libraryId}?include=filterdata`);
+export async function fetchLibraryWithFilterData(
+  libraryId: string
+): Promise<ApiLibraryResponseWithFilterData> {
+  const response = await apiFetch(
+    `/api/libraries/${libraryId}?include=filterdata`
+  );
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to fetch library with filterdata');
+    throw new Error(
+      error.message || error.error || "Failed to fetch library with filterdata"
+    );
   }
   return response.json();
 }
 
-export async function fetchLibraryItems(libraryId: string): Promise<ApiLibraryItemsResponse> {
+export async function fetchLibraryItems(
+  libraryId: string
+): Promise<ApiLibraryItemsResponse> {
   const response = await apiFetch(`/api/libraries/${libraryId}/items`);
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to fetch library items');
+    throw new Error(
+      error.message || error.error || "Failed to fetch library items"
+    );
   }
   return response.json();
 }
 
-export async function fetchLibraryItem(libraryItemId: string): Promise<ApiLibraryItemResponse> {
+export async function fetchLibraryItem(
+  libraryItemId: string
+): Promise<ApiLibraryItemResponse> {
   const response = await apiFetch(`/api/items/${libraryItemId}`);
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to fetch library item');
+    throw new Error(
+      error.message || error.error || "Failed to fetch library item"
+    );
   }
   return response.json();
 }
 
 // HEAD request to get the resolved cover URL; caller can use response.url
-export async function fetchLibraryItemCoverHead(libraryItemId: string): Promise<Response> {
-  return await apiFetch(`/api/items/${libraryItemId}/cover`, { method: 'HEAD' });
+export async function fetchLibraryItemCoverHead(
+  libraryItemId: string
+): Promise<Response> {
+  return await apiFetch(`/api/items/${libraryItemId}/cover`, {
+    method: "HEAD",
+  });
 }
 
 // Batch fetch library items with full details (includes authors, series, audioFiles, chapters, libraryFiles)
-export async function fetchLibraryItemsBatch(libraryItemIds: string[]): Promise<ApiLibraryItem[]> {
-  const response = await apiFetch('/api/items/batch/get', {
-    method: 'POST',
+export async function fetchLibraryItemsBatch(
+  libraryItemIds: string[]
+): Promise<ApiLibraryItem[]> {
+  const response = await apiFetch("/api/items/batch/get", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({ libraryItemIds }),
   });
 
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to batch fetch library items');
+    throw new Error(
+      error.message || error.error || "Failed to batch fetch library items"
+    );
   }
 
   const data = await response.json();
@@ -104,9 +132,9 @@ export async function updateMediaProgress(
   isFinished: boolean = false
 ): Promise<void> {
   const response = await apiFetch(`/api/me/progress/${libraryItemId}`, {
-    method: 'PATCH',
+    method: "PATCH",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       currentTime,
@@ -118,7 +146,9 @@ export async function updateMediaProgress(
 
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to update media progress');
+    throw new Error(
+      error.message || error.error || "Failed to update media progress"
+    );
   }
 }
 
@@ -127,7 +157,7 @@ const PLAY_METHOD = {
   Direct_Stream: 1,
   Transcode: 2,
   Local: 3,
-}
+};
 
 type DeviceInfo = {
   osName: string;
@@ -140,10 +170,9 @@ type DeviceInfo = {
   clientName: string;
   clientVersion: string;
   deviceId: string;
-}
+};
 
 let CACHED_DEVICE_INFO: DeviceInfo | null = null;
-
 
 export async function getDeviceInfo(): Promise<DeviceInfo> {
   if (CACHED_DEVICE_INFO) {
@@ -155,8 +184,9 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
   const deviceType = DeviceInfo.getDeviceType();
   const manufacturer = await DeviceInfo.getManufacturer();
   const model = DeviceInfo.getModel();
-  const sdkVersion = osName === 'iOS' ? undefined : await DeviceInfo.getApiLevel();
-  const clientName = 'SideShelf';
+  const sdkVersion =
+    osName === "iOS" ? undefined : await DeviceInfo.getApiLevel();
+  const clientName = "SideShelf";
   const clientVersion = DeviceInfo.getVersion();
   const deviceId = DeviceInfo.getDeviceId();
   const deviceInfo = {
@@ -169,7 +199,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
     sdkVersion,
     clientName,
     clientVersion,
-    deviceId
+    deviceId,
   };
   CACHED_DEVICE_INFO = deviceInfo;
   return deviceInfo;
@@ -192,8 +222,8 @@ export async function createLocalSession(
   currentTime: number,
   timeListened: number = 0
 ): Promise<{ id: string }> {
-  const response = await apiFetch('/api/session/local', {
-    method: 'POST',
+  const response = await apiFetch("/api/session/local", {
+    method: "POST",
     body: JSON.stringify({
       id: sessionId,
       userId,
@@ -203,28 +233,30 @@ export async function createLocalSession(
       timeListened,
       playMethod: PLAY_METHOD.Local,
       deviceInfo: await getDeviceInfo(),
-      mediaPlayer: 'react-native-track-player',
+      mediaPlayer: "react-native-track-player",
     }),
   });
 
   if (!response.ok) {
     // Get the response text first, then try to parse as JSON
     const responseText = await response.text();
-    let errorMessage = 'Failed to create local session';
+    let errorMessage = "Failed to create local session";
 
     try {
       const error: ApiError = JSON.parse(responseText);
       errorMessage = error.message || error.error || errorMessage;
     } catch {
       // If JSON parsing fails, use the raw text response
-      if (responseText.includes('Media item not found')) {
-        errorMessage = 'Media item not found';
+      if (responseText.includes("Media item not found")) {
+        errorMessage = "Media item not found";
       } else {
         errorMessage = responseText || errorMessage;
       }
     }
 
-    console.error(`[createLocalSession] Error for library item ${libraryItemId}: ${errorMessage}`);
+    console.error(
+      `[createLocalSession] Error for library item ${libraryItemId}: ${errorMessage}`
+    );
     throw new Error(errorMessage);
   }
 
@@ -255,16 +287,16 @@ export async function syncSession(
   }
 
   const response = await apiFetch(`/api/session/${sessionId}/sync`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
   });
 
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to sync session');
+    throw new Error(error.message || error.error || "Failed to sync session");
   }
 }
 
@@ -274,15 +306,15 @@ export async function syncSession(
  */
 export async function closeSession(sessionId: string): Promise<void> {
   const response = await apiFetch(`/api/session/${sessionId}/close`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
   });
 
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to close session');
+    throw new Error(error.message || error.error || "Failed to close session");
   }
 }
 
@@ -291,58 +323,95 @@ export async function closeSession(sessionId: string): Promise<void> {
  * @param libraryItemId - The library item to start playing
  * @returns The play session response with streaming URLs
  */
-export async function startPlaySession(libraryItemId: string): Promise<ApiPlaySessionResponse> {
+export async function startPlaySession(
+  libraryItemId: string
+): Promise<ApiPlaySessionResponse> {
   const response = await apiFetch(`/api/items/${libraryItemId}/play`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       deviceInfo: await getDeviceInfo(),
       supportedMimeTypes: [
-        'audio/mpeg',
-        'audio/mp4',
-        'audio/aac',
-        'audio/flac',
-        'audio/ogg',
-        'audio/wav',
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/aac",
+        "audio/flac",
+        "audio/ogg",
+        "audio/wav",
       ],
-      mediaPlayer: 'react-native-track-player',
+      mediaPlayer: "react-native-track-player",
       forceDirectPlay: true, // Prefer direct streaming over transcoding
     }),
   });
 
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || 'Failed to start play session');
+    throw new Error(
+      error.message || error.error || "Failed to start play session"
+    );
   }
 
   return response.json();
 }
 
-export async function login(baseUrl: string, username: string, password: string): Promise<ApiLoginResponse> {
-  const base = baseUrl.trim().replace(/\/$/, '');
+export async function doPing(params: { baseUrl: string }): Promise<boolean> {
+  try {
+    const { baseUrl } = params;
+    const base = baseUrl.trim().replace(/\/$/, "");
+
+    console.log("[ping] Pinging server at:", base);
+    const response = await Promise.race([
+      fetch(`${base}/ping`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      }),
+      new Promise<Response>((_, r) => setTimeout(() => r(new Error("Ping timeout")), 5000)),
+    ]);
+    if (!response.ok) {
+      console.log("[ping] Ping failed:", response.status, response.statusText);
+      return false;
+    }
+    const data = await response.json();
+    console.log("[ping] Ping response:", data);
+    return data?.success;
+  } catch (e) {
+    console.log("[ping] Ping error:", e);
+    return false;
+  }
+}
+
+export async function login(
+  baseUrl: string,
+  username: string,
+  password: string
+): Promise<ApiLoginResponse> {
+  const base = baseUrl.trim().replace(/\/$/, "");
   const url = `${base}/login`;
-  console.log('[auth] Login URL:', url);
+  console.log("[auth] Login URL:", url);
   const response = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'x-return-tokens': 'true',
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "x-return-tokens": "true",
     },
     body: JSON.stringify({ username, password }),
   });
-  console.log('[auth] Login response:', response.status, response.statusText);
+  console.log("[auth] Login response:", response.status, response.statusText);
 
   if (!response.ok) {
     const text = await response.clone().text();
-    console.log('[auth] Login error body:', text);
-    let message = 'Login failed';
+    console.log("[auth] Login error body:", text);
+    let message = "Login failed";
     try {
       const err = JSON.parse(text);
       message = err?.error || err?.message || message;
-    } catch { }
+    } catch {}
     throw new Error(message);
   }
   return response.json();

@@ -24,7 +24,7 @@ export default function HeaderControls({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 6,
-    backgroundColor: isDark ? '#333' : '#f0f0f0',
+    // backgroundColor: isDark ? '#333' : '#f0f0f0',
     marginRight: 8,
   };
 

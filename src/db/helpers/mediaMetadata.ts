@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../client';
 import { libraryItems } from '../schema/libraryItems';
 import { mediaMetadata, MediaMetadataRow, NewMediaMetadataRow } from '../schema/mediaMetadata';
-import { cacheLocalCover, getLocalCoverUrl } from './localData';
+import { getLocalCoverUrl, setLocalCoverCached } from './localData';
 
 /**
  * Marshal book data from API to media metadata row
@@ -309,7 +309,7 @@ export async function cacheCoverAndUpdateMetadata(libraryItemId: string): Promis
 
     // Only update the local cache if the cover was actually downloaded or if it already exists
     if (result.uri) {
-      await cacheLocalCover(mediaId, result.uri);
+      await setLocalCoverCached(mediaId, result.uri);
       console.log(`[mediaMetadata] Cached cover for ${libraryItemId} (media: ${mediaId}): ${result.uri} (downloaded: ${result.wasDownloaded})`);
       return result.wasDownloaded;
     }
@@ -341,6 +341,8 @@ export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ d
     for (const item of items) {
       const cachedUrl = await getLocalCoverUrl(item.mediaId);
       if (cachedUrl && isCoverCached(item.libraryItemId)) {
+        // ensure the cover cache is recorded in local database
+        await setLocalCoverCached(item.mediaId, cachedUrl);
         itemsWithCachedCovers.add(item.libraryItemId);
       }
     }

@@ -414,6 +414,22 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 library: { ...state.library, libraries }
             }));
 
+            if (!state.library.selectedLibraryId && libraries.length > 0) {
+                // If no library is selected but we have libraries, select the first one
+                console.log('[LibrarySlice] Defaulting to first library')
+                const selectedLibrary = libraries[0];
+                set((state: LibrarySlice) => ({
+                    ...state,
+                    library: {
+                        ...state.library,
+                        selectedLibraryId: selectedLibrary.id,
+                        selectedLibrary
+                    }
+                }));
+
+                await get()._loadCachedItems();
+            }
+
             console.log(`[LibrarySlice] Successfully refreshed ${libraries.length} libraries`);
             return libraries;
         } catch (error) {
@@ -503,23 +519,24 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
             }));
 
             // Cache covers in the background (don't await to avoid blocking UI)
-            cacheCoversForLibraryItems(selectedLibraryId).then((result) => {
+            cacheCoversForLibraryItems(selectedLibraryId).then(async (result) => {
                 console.log(`[LibrarySlice] Cover caching completed. Downloaded: ${result.downloadedCount}/${result.totalCount}`);
 
                 // Always refresh the UI after cover caching to show cached covers
                 // This ensures that covers persist after refresh and get updated when newly cached
                 console.log('[LibrarySlice] Refreshing display with cached covers');
-                getLibraryItemsForList(selectedLibraryId).then(updatedItems => {
-                    const updatedDisplayItems = transformItemsToDisplayFormat(updatedItems);
-                    set((state: LibrarySlice) => ({
-                        ...state,
-                        library: {
-                            ...state.library,
-                            rawItems: updatedDisplayItems,
-                            items: sortLibraryItems(updatedDisplayItems, state.library.sortConfig)
-                        }
-                    }));
-                });
+                const updatedItems = await getLibraryItemsForList(selectedLibraryId)
+                const updatedDisplayItems = transformItemsToDisplayFormat(updatedItems);
+                console.log(`[LibrarySlice] Refreshing display with ${updatedDisplayItems.length} items after cover caching ${updatedDisplayItems.filter(i => i.coverUri).length} with covers`);
+                
+                set((state: LibrarySlice) => ({
+                    ...state,
+                    library: {
+                        ...state.library,
+                        rawItems: updatedDisplayItems,
+                        items: sortLibraryItems(updatedDisplayItems, state.library.sortConfig)
+                    }
+                }));
             }).catch(error => {
                 console.error('[LibrarySlice] Cover caching failed:', error);
             });

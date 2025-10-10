@@ -1,4 +1,4 @@
-import { Directory, File, Paths, getInfoAsync } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 
 /**
  * Get the downloads directory for a specific library item
@@ -34,8 +34,7 @@ export function downloadFileExists(libraryItemId: string, filename: string): boo
  */
 export async function verifyFileExists(filePath: string): Promise<boolean> {
   try {
-    const info = await getInfoAsync(filePath);
-    return info.exists;
+    return new File(filePath).exists;
   } catch (error) {
     console.warn('[FileSystem] Error checking file existence:', error);
     return false;
@@ -101,5 +100,5 @@ export function constructDownloadUrl(
  * Get the full path for a downloaded file
  */
 export function getDownloadPath(libraryItemId: string, filename: string): string {
-  return `${getDownloadsDirectory(libraryItemId).uri}/${filename}`;
+  return Paths.join(getDownloadsDirectory(libraryItemId).uri, filename);
 }

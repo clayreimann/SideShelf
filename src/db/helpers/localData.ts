@@ -14,8 +14,9 @@ import { eq } from 'drizzle-orm';
 /**
  * Cache a cover URL for a media item
  */
-export async function cacheLocalCover(mediaId: string, localCoverUrl: string): Promise<void> {
+export async function setLocalCoverCached(mediaId: string, localCoverUrl: string): Promise<void> {
   const now = new Date();
+  console.log(`[localData] Caching local cover for mediaId=${mediaId}: ${localCoverUrl}`);
   await db
     .insert(localCoverCache)
     .values({

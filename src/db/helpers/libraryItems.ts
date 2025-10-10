@@ -203,7 +203,7 @@ export async function getLibraryItemsForList(libraryId: string): Promise<{
     .select({
       id: libraryItems.id,
       libraryId: libraryItems.libraryId,
-      mediaType: libraryItems.mediaType,
+      mediaType: libraryItems.mediaType ?? '',
       addedAt: libraryItems.addedAt,
       updatedAt: libraryItems.updatedAt,
       isMissing: libraryItems.isMissing,

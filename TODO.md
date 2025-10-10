@@ -2,29 +2,49 @@
 
 ## 🚀 High Priority Features
 
+### Build issues
+- [ ] Separate branch of downloader library on my fork to enable consistent building
+- [ ] Embed fonts in app build
+- [ ] Manage creds in expo CLI
+
+### Misc/Bugs
+- [ ] When the mini-player is shown add padding to the bottom of views so that you can scroll all the way to the bottom
+- [ ] New login initialization still doesn't work well, 
+  - [ ] home screen isn't refreshed after log in
+  - [ ] no library is selected by default
+  - [ ] authors don't populate
+  - [ ] series don't populate
+- [ ] Authors refresh UX is broken
+- [ ] Series refresh UX is broken
+- [ ] Long author/narrator strings just go off screen
+- [ ] Animate the description expand/collapse
+  - [ ] Remove section header and just expand/collapse when tapping on text, show a snippet and fade the bottom out
+- [ ] In extracted buttons, use SFSymbols on ios and fallback to icons on android
+  - [ ] Only wait for icon fonts loading on android
+
 ### Playback Tracking & Sync
 - [ ] **Playback Tracking Store Implementation**
-  - [ ] Create centralized progress tracking store
-  - [ ] Implement local progress persistence with resume functionality
-  - [ ] Add periodic server sync during playback
+  - [x] Create centralized progress tracking store
+  - [x] Implement local progress persistence with resume functionality
+  - [x] Add periodic server sync during playback
   - [ ] Handle offline/online sync conflicts
   - [ ] Display listening sessions on item details screen (split sessions if paused >15min)
 
   #### Playback Tracking Store Implementation
-  - [ ] Database Schema Updates:
-    - [ ] Enhance existing localListeningSessions table
-    - [ ] Add playbackProgress table for real-time tracking
-    - [ ] Create performance indexes
-  - [ ] Service Architecture:
-    - [ ] Create PlaybackTrackingService singleton
-    - [ ] Implement progress persistence and retrieval
-    - [ ] Add periodic sync with server
-    - [ ] Handle offline/online state transitions
+  - [x] Database Schema Updates:
+    - [x] Enhance existing localListeningSessions table
+    - [x] Add playbackProgress table for real-time tracking
+    - [x] Create performance indexes
+  - [x] Service Architecture:
+    - [x] Create PlaybackTrackingService singleton
+    - [x] Implement progress persistence and retrieval
+    - [x] Add periodic sync with server
+    - [x] Handle offline/online state transitions
     - [ ] Handle conflicts between local and server progress
   **Integration Points:**
-    - [ ] Hook into existing PlayerService for progress updates
-    - [ ] Connect with SessionTrackingService for session management
-    - [ ] Integrate with existing progress sync mechanisms
+    - [x] Hook into existing PlayerService for progress updates
+    - [x] Connect with SessionTrackingService for session management
+    - [x] Integrate with existing progress sync mechanisms
 
 ### Real-time Updates
 - [ ] **WebSocket Integration**

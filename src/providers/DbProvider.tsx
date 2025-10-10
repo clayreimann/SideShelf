@@ -24,10 +24,14 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     error: error ?? null,
     db: db,
     resetDatabase: () => {
-      db.$client.execSync('DELETE FROM users');
-      db.$client.execSync('DELETE FROM libraries');
-      db.$client.execSync('DELETE FROM library_items');
-      db.$client.execSync('DELETE FROM media_progress');
+        const tableNames = db.all<{name: string}>("SELECT name FROM sqlite_master WHERE type='table';")
+          .map((row: any) => row.name)
+          .filter((name: string) => name !== 'sqlite_sequence' && name !== '__drizzle_migrations');
+      console.log('Resetting database, clearing tables:', tableNames);
+      tableNames.forEach((name) => {
+        db.$client.execSync(`DELETE FROM ${name};`);
+      });
+      
     },
   }), [success, error]);
 

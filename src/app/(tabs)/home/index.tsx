@@ -1,21 +1,20 @@
-import { ProgressBar } from '@/components/ui';
+import Item from '@/components/home/Item';
 import { getHomeScreenData, getItemsWithProgressNeedingFullRefresh, type HomeScreenItem } from '@/db/helpers/homeScreen';
 import { getUserByUsername } from '@/db/helpers/users';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { libraryItemBatchService } from '@/services/libraryItemBatchService';
 import { unifiedProgressService } from '@/services/UnifiedProgressService';
+import { usePlayer } from '@/stores';
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    RefreshControl,
-    SectionList,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  SectionList,
+  Text,
+  View
 } from "react-native";
 
 interface HomeSection {
@@ -26,7 +25,7 @@ interface HomeSection {
 export default function HomeScreen() {
   const { styles, colors } = useThemedStyles();
   const { username, isAuthenticated } = useAuth();
-  const router = useRouter();
+  const { currentTrack } = usePlayer();
   const [sections, setSections] = useState<HomeSection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -119,59 +118,12 @@ export default function HomeScreen() {
     loadHomeData(false);
   }, [loadHomeData]);
 
-  const renderItem = ({ item }: { item: HomeScreenItem }) => (
-    <Pressable
-      style={[styles.listItem, { backgroundColor: colors.headerBackground, marginBottom: 12, borderRadius: 8 }]}
-      onPress={() => router.push(`/library/${item.id}`)}
-    >
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.text, { fontWeight: '600', fontSize: 16 }]} numberOfLines={1}>
-          {item.title}
-        </Text>
-
-        {item.authorName && (
-          <Text style={[styles.text, { opacity: 0.7, fontSize: 14, marginTop: 2 }]} numberOfLines={1}>
-            {item.authorName}
-          </Text>
-        )}
-
-        {item.seriesName && (
-          <Text style={[styles.text, { opacity: 0.6, fontSize: 12, marginTop: 2 }]} numberOfLines={1}>
-            {item.seriesName}
-          </Text>
-        )}
-
-        {/* Progress bar for continue listening items */}
-        {item.progress !== undefined && item.progress > 0 && (
-          <View style={{ marginTop: 8 }}>
-            <ProgressBar progress={item.progress} variant="small" showPercentage={true} />
-            <Text style={[styles.text, { opacity: 0.6, fontSize: 11, marginTop: 2 }]}>
-              Finished: {item.isFinished ? 'Yes' : 'No'}
-            </Text>
-          </View>
-        )}
-
-        {/* Downloaded indicator */}
-        {item.isDownloaded && (
-          <Text style={[styles.text, {
-            opacity: 0.8,
-            fontSize: 11,
-            marginTop: 4,
-            color: colors.link
-          }]}>
-            ⬇ Downloaded
-          </Text>
-        )}
-      </View>
-    </Pressable>
-  );
-
   const renderSectionHeader = ({ section }: { section: HomeSection }) => (
     <View style={{ marginBottom: 12, marginTop: 20, paddingHorizontal: 16 }}>
       <Text style={[styles.text, {
         fontSize: 20,
         fontWeight: '700',
-        color: colors.textPrimary
+        backgroundColor: colors.background
       }]}>
         {section.title}
       </Text>
@@ -211,10 +163,10 @@ export default function HomeScreen() {
   return (
     <SectionList
       sections={sections}
-      renderItem={renderItem}
+      renderItem={Item}
       renderSectionHeader={renderSectionHeader}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.flatListContainer}
+      contentContainerStyle={[styles.flatListContainer, { paddingBottom: currentTrack ? 160 : 100 } ]}
       refreshControl={
         <RefreshControl
           refreshing={isRefreshing}

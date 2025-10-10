@@ -57,7 +57,7 @@ function createThemedStyles(isDark: boolean) {
       },
       listItem: {
         paddingHorizontal: 20,
-        paddingVertical: 10,
+        paddingVertical: 15,
         borderBottomWidth: 1,
         borderBottomColor: colors.separator,
         width: '100%',

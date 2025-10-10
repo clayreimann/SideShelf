@@ -9,6 +9,7 @@ export interface CoverImageProps {
 
 export default function CoverImage({ uri, title, fontSize }: CoverImageProps) {
     const { colors } = useThemedStyles();
+        
     return <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
         {uri ? (
             <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />

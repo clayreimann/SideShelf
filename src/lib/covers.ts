@@ -1,5 +1,5 @@
 import { db } from '@/db/client';
-import { cacheLocalCover } from '@/db/helpers/localData';
+import { setLocalCoverCached } from '@/db/helpers/localData';
 import { libraryItems } from '@/db/schema/libraryItems';
 import { fetchLibraryItemCoverHead } from '@/lib/api/endpoints';
 import { eq } from 'drizzle-orm';
@@ -64,7 +64,7 @@ export async function cacheCoversForLibrary(libraryId: string): Promise<void> {
     try {
       await cacheCoverIfMissing(row.id);
       // update the local cover in the database
-      await cacheLocalCover(row.id, getCoverUri(row.id));
+      await setLocalCoverCached(row.id, getCoverUri(row.id));
     } catch {}
   }
 }
@@ -75,7 +75,6 @@ export async function cacheCoversForLibrary(libraryId: string): Promise<void> {
 export function isCoverCached(libraryItemId: string): boolean {
   const dir = getCoversDirectory();
   const file = new File(dir, libraryItemId);
-  console.log(`[covers] Checking if cover is cached for ${libraryItemId}: ${file.exists}`);
   return file.exists;
 }
 

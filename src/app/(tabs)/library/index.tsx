@@ -4,9 +4,9 @@ import { useThemedStyles } from '@/lib/theme';
 import { SortField, useLibrary } from '@/stores';
 import { Stack } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Button, Text, View } from 'react-native';
 
-export default function AboutScreen() {
+export default function LibraryScreen() {
   const { styles, isDark } = useThemedStyles();
   const { libraries, items, selectLibrary, selectedLibrary, isLoadingItems, refresh, sortConfig, setSortConfig } = useLibrary();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -30,7 +30,7 @@ export default function AboutScreen() {
   // ApiLibrary sort options
   const librarySortOptions = [
     { field: 'title' as SortField, label: 'Title' },
-    { field: 'author' as SortField, label: 'ApiAuthor' },
+    { field: 'author' as SortField, label: 'Author' },
     { field: 'publishedYear' as SortField, label: 'Published Year' },
     { field: 'addedAt' as SortField, label: 'Date Added' },
   ];
@@ -38,12 +38,13 @@ export default function AboutScreen() {
   if (!libraries.length) {
     return (
       <View style={styles.container}>
-        <Text style={styles.text}>No libraries found, are you sure you are signed in?</Text>
+        <Text style={styles.text}>No libraries found.</Text>
+        <Button title='Refresh' onPress={onRefresh} />
       </View>
     );
   }
 
-  const title = selectedLibrary?.name || 'ApiLibrary';
+  const title = selectedLibrary?.name || 'Library';
 
   return (
     <>

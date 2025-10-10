@@ -1,7 +1,7 @@
 import { db } from '@/db/client';
 import { audioFiles } from '@/db/schema/audioFiles';
 import { libraryItems } from '@/db/schema/libraryItems';
-import { localAudioFileDownloads } from '@/db/schema/localData';
+import { localAudioFileDownloads, localCoverCache } from '@/db/schema/localData';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
 import { mediaProgress } from '@/db/schema/mediaProgress';
 import { and, desc, eq, gt, inArray, not } from 'drizzle-orm';
@@ -31,7 +31,7 @@ export async function getContinueListeningItems(userId: string, limit: number = 
             subtitle: mediaMetadata.subtitle,
             authorName: mediaMetadata.authorName,
             seriesName: mediaMetadata.seriesName,
-            imageUrl: mediaMetadata.imageUrl,
+            imageUrl: localCoverCache.localCoverUrl,
             progress: mediaProgress.progress,
             currentTime: mediaProgress.currentTime,
             duration: mediaMetadata.duration,
@@ -45,6 +45,7 @@ export async function getContinueListeningItems(userId: string, limit: number = 
             eq(mediaProgress.libraryItemId, libraryItems.id),
             eq(mediaProgress.userId, userId)
         ))
+        .innerJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId))
         .where(and(
             eq(mediaProgress.isFinished, false),
             eq(mediaProgress.hideFromContinueListening, false),
@@ -100,12 +101,13 @@ export async function getDownloadedItems(limit: number = 20): Promise<HomeScreen
             subtitle: mediaMetadata.subtitle,
             authorName: mediaMetadata.authorName,
             seriesName: mediaMetadata.seriesName,
-            imageUrl: mediaMetadata.imageUrl,
+            imageUrl: localCoverCache.localCoverUrl,
             duration: mediaMetadata.duration,
         })
         .from(libraryItems)
         .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
         .innerJoin(audioFiles, eq(mediaMetadata.id, audioFiles.mediaId))
+        .innerJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId))
         .innerJoin(localAudioFileDownloads, eq(audioFiles.id, localAudioFileDownloads.audioFileId))
         .where(and(
             eq(libraryItems.mediaType, 'book'),
@@ -139,7 +141,7 @@ export async function getListenAgainItems(userId: string, limit: number = 20): P
             subtitle: mediaMetadata.subtitle,
             authorName: mediaMetadata.authorName,
             seriesName: mediaMetadata.seriesName,
-            imageUrl: mediaMetadata.imageUrl,
+            imageUrl: localCoverCache.localCoverUrl,
             progress: mediaProgress.progress,
             duration: mediaMetadata.duration,
             isFinished: mediaProgress.isFinished,
@@ -148,6 +150,7 @@ export async function getListenAgainItems(userId: string, limit: number = 20): P
         })
         .from(libraryItems)
         .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
+        .innerJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId))
         .innerJoin(mediaProgress, and(
             eq(mediaProgress.libraryItemId, libraryItems.id),
             eq(mediaProgress.userId, userId)

@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/lib/theme';
-import { LibraryItemListRow } from '@/stores';
+import { LibraryItemListRow, usePlayer } from '@/stores';
 import React, { useCallback, useState } from 'react';
 import { FlatList, RefreshControl, View } from 'react-native';
 import LibraryItem from './LibraryItem';
@@ -20,6 +20,7 @@ export default function LibraryItemList({
   viewMode = 'grid'
 }: LibraryItemListProps) {
   const { styles, isDark } = useThemedStyles();
+  const { currentTrack } = usePlayer();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -53,7 +54,7 @@ export default function LibraryItemList({
           styles.flatListContainer,
           {
             paddingTop: 8,
-            paddingBottom: 24,
+            paddingBottom: currentTrack ? 160 : 100,
             ...(viewMode === 'list' && { paddingHorizontal: 0 }),
             justifyContent: 'center',
           }

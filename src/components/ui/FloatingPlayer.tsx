@@ -12,22 +12,20 @@ import PlayPauseButton from '@/components/player/PlayPauseButton';
 import CoverImage from '@/components/ui/CoverImange';
 import { useThemedStyles } from '@/lib/theme';
 import { playerService } from '@/services/PlayerService';
-import { useAppStore } from '@/stores/appStore';
+import { usePlayer } from '@/stores/appStore';
 import { router } from 'expo-router';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 export default function FloatingPlayer() {
   const { styles, isDark } = useThemedStyles();
-  const { player, togglePlayPause } = useAppStore();
+  const { currentTrack, currentChapter, togglePlayPause } = usePlayer();
 
   // Don't show if no track is loaded
-  if (!player.currentTrack) {
+  if (!currentTrack) {
     return null;
   }
-
-  const { currentTrack, currentChapter, isPlaying } = player;
-
+  
   const handlePlayPausePress = async () => {
     try {
       await playerService.togglePlayPause();
@@ -46,7 +44,7 @@ export default function FloatingPlayer() {
   return (
     <View style={{
       position: 'absolute',
-      bottom: 100, // Above tab bar (adjust based on your tab bar height)
+      bottom: 100, // Above tab bar
       left: 0,
       right: 0,
       height: 64,
@@ -83,8 +81,7 @@ export default function FloatingPlayer() {
         </View>
       </Pressable>
 
-      {/* Play/Pause Button */}
-      <PlayPauseButton isPlaying={isPlaying} onPress={handlePlayPausePress} />
+      <PlayPauseButton onPress={handlePlayPausePress} />
     </View>
   );
 }
