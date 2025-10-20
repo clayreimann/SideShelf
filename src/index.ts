@@ -81,7 +81,7 @@ async function initializeTrackPlayer(): Promise<void> {
  * Re-export commonly used services for convenience
  */
 export { playerService } from '@/services/PlayerService';
-export { unifiedProgressService } from '@/services/UnifiedProgressService';
+export { unifiedProgressService } from '@/services/ProgressService';
 
 // Future service exports will go here:
 // export { downloadService } from '@/services/DownloadService';

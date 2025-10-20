@@ -59,8 +59,8 @@ export interface SessionInfo {
   isDownloaded: boolean;
 }
 
-export class UnifiedProgressService {
-  private static instance: UnifiedProgressService;
+export class ProgressService {
+  private static instance: ProgressService;
   private currentSession: SessionInfo | null = null;
   private currentUsername: string | null = null;
   private syncInterval: ReturnType<typeof setInterval> | null = null;
@@ -83,11 +83,11 @@ export class UnifiedProgressService {
     this.startPeriodicSync();
   }
 
-  static getInstance(): UnifiedProgressService {
-    if (!UnifiedProgressService.instance) {
-      UnifiedProgressService.instance = new UnifiedProgressService();
+  static getInstance(): ProgressService {
+    if (!ProgressService.instance) {
+      ProgressService.instance = new ProgressService();
     }
-    return UnifiedProgressService.instance;
+    return ProgressService.instance;
   }
 
   /**
@@ -118,8 +118,16 @@ export class UnifiedProgressService {
 
       console.log(`[UnifiedProgressService] Found library item: ${libraryItem.mediaType} in library ${libraryItem.libraryId}`);
 
-      // End any existing session first
-      await this.endCurrentSession();
+      if (this.currentSession) {
+        if (this.currentSession.libraryItemId === libraryItemId) {
+          console.log('[UnifiedProgressService] Session already active for this item, ignoring start request');
+          return;
+        } else {
+          // End any existing session first
+          console.log('[UnifiedProgressService] Different session active, ending current session first');
+          await this.endCurrentSession();
+        }
+      }
 
       // Get user ID
       const user = await getUserByUsername(username);
@@ -676,4 +684,4 @@ export class UnifiedProgressService {
 }
 
 // Export singleton instance
-export const unifiedProgressService = UnifiedProgressService.getInstance();
+export const unifiedProgressService = ProgressService.getInstance();

@@ -3,7 +3,7 @@ import { useThemedStyles } from "@/lib/theme";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
-import { unifiedProgressService } from "@/services/UnifiedProgressService";
+import { unifiedProgressService } from "@/services/ProgressService";
 import {
   FontAwesome6,
   MaterialCommunityIcons,

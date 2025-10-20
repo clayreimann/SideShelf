@@ -8,7 +8,7 @@
 
 import { useAppStore } from '@/stores/appStore';
 import TrackPlayer, { Event, State } from 'react-native-track-player';
-import { unifiedProgressService } from './UnifiedProgressService';
+import { unifiedProgressService } from './ProgressService';
 
 module.exports = async function() {
   let lastActiveTrackId: string | null = null;

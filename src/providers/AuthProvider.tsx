@@ -2,7 +2,7 @@ import { authHelpers, mediaProgressHelpers, userHelpers } from '@/db/helpers';
 import { setApiConfig } from '@/lib/api/api';
 import { login as doLogin } from '@/lib/api/endpoints';
 import { useDb } from '@/providers/DbProvider';
-import { unifiedProgressService } from '@/services/UnifiedProgressService';
+import { unifiedProgressService } from '@/services/ProgressService';
 import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';

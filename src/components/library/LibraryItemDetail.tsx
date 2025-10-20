@@ -33,7 +33,7 @@ import {
 import { useAuth } from "@/providers/AuthProvider";
 import { DownloadProgress, downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
-import { unifiedProgressService } from "@/services/UnifiedProgressService";
+import { unifiedProgressService } from "@/services/ProgressService";
 import { usePlayer } from "@/stores/appStore";
 import type { PlayerTrack } from "@/types/player";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";

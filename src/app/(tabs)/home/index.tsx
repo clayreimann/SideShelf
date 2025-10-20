@@ -4,7 +4,7 @@ import { getUserByUsername } from '@/db/helpers/users';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { libraryItemBatchService } from '@/services/libraryItemBatchService';
-import { unifiedProgressService } from '@/services/UnifiedProgressService';
+import { unifiedProgressService } from '@/services/ProgressService';
 import { usePlayer } from '@/stores';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState } from 'react';

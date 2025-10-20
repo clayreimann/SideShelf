@@ -222,19 +222,24 @@ export async function createLocalSession(
   currentTime: number,
   timeListened: number = 0
 ): Promise<{ id: string }> {
+  const deviceInfo = await getDeviceInfo();
+  const body = JSON.stringify({
+    id: sessionId,
+    userId,
+    libraryId,
+    libraryItemId,
+    currentTime,
+    timeListened,
+    playMethod: PLAY_METHOD.Local,
+    deviceInfo,
+    mediaPlayer: "react-native-track-player",
+  });
   const response = await apiFetch("/api/session/local", {
     method: "POST",
-    body: JSON.stringify({
-      id: sessionId,
-      userId,
-      libraryId,
-      libraryItemId,
-      currentTime,
-      timeListened,
-      playMethod: PLAY_METHOD.Local,
-      deviceInfo: await getDeviceInfo(),
-      mediaPlayer: "react-native-track-player",
-    }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body,
   });
 
   if (!response.ok) {
@@ -260,7 +265,7 @@ export async function createLocalSession(
     throw new Error(errorMessage);
   }
 
-  return response.json();
+  return {id: sessionId};
 }
 
 /**
@@ -276,7 +281,7 @@ export async function syncSession(
   timeListened: number,
   duration?: number
 ): Promise<void> {
-  const body: any = {
+  let body: any = {
     currentTime,
     timeListened,
   };
@@ -286,12 +291,14 @@ export async function syncSession(
     body.duration = duration;
   }
 
+  body = JSON.stringify(body);
+
   const response = await apiFetch(`/api/session/${sessionId}/sync`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body,
   });
 
   if (!response.ok) {
@@ -370,7 +377,9 @@ export async function doPing(params: { baseUrl: string }): Promise<boolean> {
           Accept: "application/json",
         },
       }),
-      new Promise<Response>((_, r) => setTimeout(() => r(new Error("Ping timeout")), 5000)),
+      new Promise<Response>((_, r) =>
+        setTimeout(() => r(new Error("Ping timeout")), 5000)
+      ),
     ]);
     if (!response.ok) {
       console.log("[ping] Ping failed:", response.status, response.statusText);

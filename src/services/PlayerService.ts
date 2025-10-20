@@ -25,7 +25,7 @@ import TrackPlayer, {
   State,
   Track,
 } from 'react-native-track-player';
-import { unifiedProgressService } from './UnifiedProgressService';
+import { unifiedProgressService } from './ProgressService';
 // Note: We can't use useAuth hook in a service, so we'll handle auth differently
 
 /**
