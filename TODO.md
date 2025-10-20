@@ -7,14 +7,17 @@
 - [x] Separate branch of downloader library on my fork to enable consistent building
 - [x] Embed fonts in app build
 - [ ] Manage creds in expo CLI
-- [ ] Fetch currently playing item status from TrackPlayer
+- [ ] Fetch currently playing/most recent item status from TrackPlayer
 - [ ] PlayerService should be the single entrypoint to play/pause tracks.
   - [ ] PlayerService updates store state for accurate tracking
   - [ ] PlayerService stores/remembers the last played item so that the floating player can be
         populated on start (for downloaded media)
   - [ ] ProgressService should not close the current session if the new session is for the same 
         item (unless timeout expired)
+  - [ ] ProgressService should check on startup for dangling sessions (crash or memory pressure quit) and close them
 - [ ] PlayerService.PlayerTrack should take the resume position
+- [ ] PlayerService should update the track metadata with new chapter information
+- [x] Provide prompt to reauthorize when refresh token is expired
 
 ### Misc/Bugs
 
@@ -31,6 +34,7 @@
   - [ ] Remove section header and just expand/collapse when tapping on text, show a snippet and fade the bottom out
 - [ ] In extracted buttons, use SFSymbols on ios and fallback to icons on android
   - [ ] Only wait for icon fonts loading on android
+- [ ] Mark cover as not available if file is missing
 
 ### Playback Tracking & Sync
 
@@ -77,6 +81,8 @@
   - [ ] Podcast-specific playback controls (skip silence, variable speed)
   - [ ] RSS feed integration and auto-updates
   - [ ] Podcast-specific progress tracking
+- [ ] Don't add library as a sort/display filter. Have separate library and podcast tabs so users don't need
+      to switch back and forth between libraries
 
 ## 🎵 Player Features
 

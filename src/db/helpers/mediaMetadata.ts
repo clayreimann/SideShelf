@@ -1,4 +1,4 @@
-import { cacheCoverIfMissing, isCoverCached } from '@/lib/covers';
+import { cacheCoverIfMissing, getCoverUri, isCoverCached } from '@/lib/covers';
 import type { ApiBook, ApiPodcast } from '@/types/api';
 import { eq } from 'drizzle-orm';
 import { db } from '../client';
@@ -342,7 +342,8 @@ export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ d
       const cachedUrl = await getLocalCoverUrl(item.mediaId);
       if (cachedUrl && isCoverCached(item.libraryItemId)) {
         // ensure the cover cache is recorded in local database
-        await setLocalCoverCached(item.mediaId, cachedUrl);
+        console.log(`[mediaMetadata] Cover already cached for ${item.libraryItemId} (media: ${item.mediaId}): ${cachedUrl}`);
+        await setLocalCoverCached(item.mediaId, getCoverUri(item.libraryItemId));
         itemsWithCachedCovers.add(item.libraryItemId);
       }
     }

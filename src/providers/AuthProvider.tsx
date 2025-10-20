@@ -18,6 +18,7 @@ type AuthContextValue = AuthState & {
     initialized: boolean;
     isAuthenticated: boolean;
     apiConfigured: boolean;
+    loginMessage?: string;
     setServerUrl: (url: string) => Promise<void>;
     login: (params: { serverUrl: string; username: string; password: string }) => Promise<void>;
     logout: () => Promise<void>;
@@ -65,6 +66,7 @@ async function persistTokensAndState(
         ...s,
         accessToken,
         refreshToken,
+        loginMessage: undefined,
         username: username !== undefined ? username : s.username,
     }));
 }
@@ -108,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 if (!response.ok) {
                     const text = await response.clone().text();
                     console.log(`[AuthProvider] Refresh access token failed: ${text}`);
+                    setState(s => ({ ...s, accessToken: null, refreshToken: null, loginMessage: 'Session expired' }));
                     return false;
                 }
                 const data = await response.json();

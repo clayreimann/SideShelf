@@ -8,7 +8,7 @@ import { useAuth } from '../providers/AuthProvider';
 export default function LoginModal() {
   const router = useRouter();
   const { colors } = useThemedStyles();
-  const { initialized, isAuthenticated, serverUrl, username: usernameFromAuth, login } = useAuth();
+  const { initialized, isAuthenticated, serverUrl, username: usernameFromAuth, loginMessage, login } = useAuth();
   const [didPing, setDidPing] = useState(false);
   const [baseUrl, setBaseUrl] = useState(serverUrl ?? '');
   const [username, setUsername] = useState(usernameFromAuth ?? '');
@@ -84,7 +84,7 @@ export default function LoginModal() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
       <Stack.Screen options={{ headerTitle: 'Sign in' }} />
       <View style={styles.content}>
-        <Text style={{...styles.title, color: colors.textPrimary }}>Connect to Audiobookshelf</Text>
+        <Text style={{...styles.title, color: colors.textPrimary }}>{loginMessage ?? 'Connect to Audiobookshelf'}</Text>
         <TextInput
           placeholder="Server URL (e.g. https://abs.example.com)"
           autoCapitalize="none"

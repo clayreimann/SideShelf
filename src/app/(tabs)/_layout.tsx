@@ -9,7 +9,7 @@ import { View } from 'react-native';
 
 export default function TabLayout() {
     const router = useRouter();
-    const { initialized, isAuthenticated } = useAuth();
+    const { initialized, isAuthenticated, loginMessage } = useAuth();
     const { tabs, isDark } = useThemedStyles();
     useEffect(() => {
         if (initialized && !isAuthenticated) {
@@ -19,10 +19,17 @@ export default function TabLayout() {
     useEffect(() => {
         DownloadService.getInstance().initialize();
     }, []);
+    useEffect(() => {
+    if (loginMessage) {
+        console.log(`[TabIndex] Redirecting to login due to loginMessage: ${loginMessage}`);
+        router.navigate('/login');
+    }
+    }, [loginMessage]);
+    
     return (
         <View style={{ flex: 1 }}>
             <NativeTabs
-                blurEffect={isDark ? 'systemThickMaterialDark' : 'systemThickMaterialLight'}
+                blurEffect={isDark ? 'systemChromeMaterialDark' : 'systemChromeMaterialLight'}
                 iconColor={tabs.iconColor}
                 labelStyle={{ color: tabs.labelColor }}
                 badgeTextColor={tabs.badgeTextColor}
