@@ -6,6 +6,7 @@ import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { useDb } from "@/providers/DbProvider";
 import { useLibrary } from "@/stores";
+import * as Clipboard from "expo-clipboard";
 import { Stack } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, SectionList, Text, View } from "react-native";
@@ -184,9 +185,8 @@ export default function AdvancedScreen() {
         {
           label: "Copy access token to clipboard",
           onPress: async () => {
-            const { setStringAsync } = await import("expo-clipboard");
             if (accessToken) {
-              await setStringAsync(accessToken);
+              await Clipboard.setStringAsync(accessToken);
             }
           },
           disabled: !accessToken,
@@ -244,12 +244,13 @@ export default function AdvancedScreen() {
         renderItem={({ item }: { item: ActionItem }) => (
           <View style={styles.listItem}>
             <Pressable onPress={item.onPress} disabled={item.disabled}>
-              <Text style={styles.text}>{item.label}</Text>
+              <Text style={item.disabled ? styles.text : styles.link}>{item.label}</Text>
             </Pressable>
           </View>
         )}
         contentContainerStyle={styles.flatListContainer}
         indicatorStyle={isDark ? "white" : "black"}
+        stickySectionHeadersEnabled={false}
       />
       <Stack.Screen options={{ title: "Advanced" }} />
     </>
