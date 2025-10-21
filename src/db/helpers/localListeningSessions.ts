@@ -286,7 +286,7 @@ export async function recordSyncFailure(
 ): Promise<void> {
     const now = new Date();
 
-    const attempts = await db.$count(localListeningSessions.syncAttempts);
+    const attempts = await getListeningSession(sessionId).then(session => session?.syncAttempts || 0);
     await db
         .update(localListeningSessions)
         .set({
