@@ -21,7 +21,10 @@
           "NSAllowsArbitraryLoads": true
         },
         "NSLocalNetworkUsageDescription": "This app needs access to your local network to download files.",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "cloud.madtown.sideshelf"
     },
@@ -62,14 +65,21 @@
             "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome6_Solid.ttf",
             "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome6_Brands.ttf",
             "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf",
-            "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Octicons.ttf",
+            "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Octicons.ttf"
           ]
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "33b45096-c026-4645-9d7e-645575d1829f"
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-# Audiobookshelf React Native Client
+# SideShelf
 
 A modern, feature-rich React Native client for [Audiobookshelf](https://www.audiobookshelf.org/) - the self-hosted audiobook and podcast server.
 
@@ -8,14 +8,12 @@ This app provides a native mobile experience for your Audiobookshelf library, fe
 
 ### ✨ Key Features
 
-- **📚 Complete Library Management**: Browse, search, and organize your audiobook and podcast collections
+- **📚 Complete Library Management**: Browse and search your audiobook and podcast collections
 - **⬇️ Offline Downloads**: Download content for offline listening with intelligent storage management
-- **🎵 Advanced Audio Player**: Full-featured player with progress tracking, playback speed control, and chapter navigation
+- **🎵 Advanced Audio Player**: Full-featured player with progress tracking, and playback speed controls
 - **🔄 Real-time Sync**: Seamless progress synchronization across all your devices
-- **📊 Progress Tracking**: Detailed listening statistics and progress visualization
 - **🎨 Beautiful UI**: Modern design with dark/light theme support and customizable layouts
 - **🔍 Smart Search**: Find content quickly with advanced filtering and sorting options
-- **📱 Platform Native**: Optimized for both iOS and Android with platform-specific features
 
 ## 🚀 Getting Started
 
@@ -56,9 +54,6 @@ For development with database features:
 ```bash
 # Generate database migrations
 npm run drizzle:generate
-
-# Push database changes
-npm run drizzle:push
 ```
 
 ## 🏗️ Architecture
@@ -91,7 +86,7 @@ src/
 
 - **PlayerService**: Audio playback management with TrackPlayer integration
 - **DownloadService**: Content download management with progress tracking
-- **UnifiedProgressService**: Progress tracking and server synchronization
+- **ProgressService**: Progress tracking and server synchronization
 - **AuthProvider**: Authentication and token management
 
 ## 📖 Usage
