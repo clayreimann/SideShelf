@@ -1,4 +1,5 @@
 import { db } from '@/db/client';
+import { resolveAppPath, toAppRelativePath } from '@/lib/fileSystem';
 import {
   localAudioFileDownloads,
   localCoverCache,
@@ -16,19 +17,20 @@ import { eq } from 'drizzle-orm';
  */
 export async function setLocalCoverCached(mediaId: string, localCoverUrl: string): Promise<void> {
   const now = new Date();
+  const storedPath = toAppRelativePath(localCoverUrl);
   console.log(`[localData] Caching local cover for mediaId=${mediaId}: ${localCoverUrl}`);
   await db
     .insert(localCoverCache)
     .values({
       mediaId,
-      localCoverUrl,
+      localCoverUrl: storedPath,
       cachedAt: now,
       updatedAt: now,
     })
     .onConflictDoUpdate({
       target: localCoverCache.mediaId,
       set: {
-        localCoverUrl,
+        localCoverUrl: storedPath,
         updatedAt: now,
       },
     });
@@ -44,7 +46,12 @@ export async function getLocalCoverUrl(mediaId: string): Promise<string | null> 
     .where(eq(localCoverCache.mediaId, mediaId))
     .limit(1);
 
-  return result[0]?.localCoverUrl || null;
+  const row = result[0];
+  if (!row) {
+    return null;
+  }
+
+  return resolveAppPath(row.localCoverUrl);
 }
 
 /**
@@ -58,7 +65,12 @@ export async function removeLocalCover(mediaId: string): Promise<void> {
  * Get all cached covers
  */
 export async function getAllLocalCovers(): Promise<LocalCoverCacheRow[]> {
-  return db.select().from(localCoverCache);
+  const rows = await db.select().from(localCoverCache);
+
+  return rows.map(row => ({
+    ...row,
+    localCoverUrl: resolveAppPath(row.localCoverUrl),
+  }));
 }
 
 /**
@@ -78,12 +90,13 @@ export async function markAudioFileAsDownloaded(
   downloadPath: string
 ): Promise<void> {
   const now = new Date();
+  const storedPath = toAppRelativePath(downloadPath);
   await db
     .insert(localAudioFileDownloads)
     .values({
       audioFileId,
       isDownloaded: true,
-      downloadPath,
+      downloadPath: storedPath,
       downloadedAt: now,
       updatedAt: now,
     })
@@ -91,7 +104,7 @@ export async function markAudioFileAsDownloaded(
       target: localAudioFileDownloads.audioFileId,
       set: {
         isDownloaded: true,
-        downloadPath,
+        downloadPath: storedPath,
         downloadedAt: now,
         updatedAt: now,
       },
@@ -108,7 +121,15 @@ export async function getAudioFileDownloadInfo(audioFileId: string): Promise<Loc
     .where(eq(localAudioFileDownloads.audioFileId, audioFileId))
     .limit(1);
 
-  return result[0] || null;
+  const row = result[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    downloadPath: resolveAppPath(row.downloadPath),
+  };
 }
 
 /**
@@ -130,10 +151,15 @@ export async function clearAudioFileDownloadStatus(audioFileId: string): Promise
  * Get all downloaded audio files
  */
 export async function getAllDownloadedAudioFiles(): Promise<LocalAudioFileDownloadRow[]> {
-  return db
+  const rows = await db
     .select()
     .from(localAudioFileDownloads)
     .where(eq(localAudioFileDownloads.isDownloaded, true));
+
+  return rows.map(row => ({
+    ...row,
+    downloadPath: resolveAppPath(row.downloadPath),
+  }));
 }
 
 // ===== LIBRARY FILE DOWNLOADS =====
@@ -146,12 +172,13 @@ export async function markLibraryFileAsDownloaded(
   downloadPath: string
 ): Promise<void> {
   const now = new Date();
+  const storedPath = toAppRelativePath(downloadPath);
   await db
     .insert(localLibraryFileDownloads)
     .values({
       libraryFileId,
       isDownloaded: true,
-      downloadPath,
+      downloadPath: storedPath,
       downloadedAt: now,
       updatedAt: now,
     })
@@ -159,7 +186,7 @@ export async function markLibraryFileAsDownloaded(
       target: localLibraryFileDownloads.libraryFileId,
       set: {
         isDownloaded: true,
-        downloadPath,
+        downloadPath: storedPath,
         downloadedAt: now,
         updatedAt: now,
       },
@@ -176,7 +203,15 @@ export async function getLibraryFileDownloadInfo(libraryFileId: string): Promise
     .where(eq(localLibraryFileDownloads.libraryFileId, libraryFileId))
     .limit(1);
 
-  return result[0] || null;
+  const row = result[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    downloadPath: resolveAppPath(row.downloadPath),
+  };
 }
 
 /**
@@ -198,10 +233,15 @@ export async function clearLibraryFileDownloadStatus(libraryFileId: string): Pro
  * Get all downloaded library files
  */
 export async function getAllDownloadedLibraryFiles(): Promise<LocalLibraryFileDownloadRow[]> {
-  return db
+  const rows = await db
     .select()
     .from(localLibraryFileDownloads)
     .where(eq(localLibraryFileDownloads.isDownloaded, true));
+
+  return rows.map(row => ({
+    ...row,
+    downloadPath: resolveAppPath(row.downloadPath),
+  }));
 }
 
 // ===== MIGRATION HELPERS =====

@@ -1,6 +1,54 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
 /**
+ * Get the base directory used for app-managed files.
+ */
+function getAppBaseDirectory(): Directory {
+  return Paths.cache;
+}
+
+/**
+ * Convert an absolute path that lives under the app base directory into
+ * a relative path for storage. Paths outside of the base directory are
+ * returned unchanged.
+ */
+export function toAppRelativePath(path: string): string {
+  if (!path) {
+    return path;
+  }
+
+  if (!Paths.isAbsolute(path)) {
+    return path;
+  }
+
+  const baseDirectory = getAppBaseDirectory();
+  const relative = Paths.relative(baseDirectory.uri, path);
+
+  if (!relative || relative.startsWith('..') || Paths.isAbsolute(relative)) {
+    return path;
+  }
+
+  return relative;
+}
+
+/**
+ * Resolve a possibly relative path (stored in the database) to an absolute
+ * path within the app base directory.
+ */
+export function resolveAppPath(path: string): string {
+  if (!path) {
+    return path;
+  }
+
+  if (Paths.isAbsolute(path)) {
+    return path;
+  }
+
+  const baseDirectory = getAppBaseDirectory();
+  return Paths.join(baseDirectory.uri, path);
+}
+
+/**
  * Get the downloads directory for a specific library item
  */
 export function getDownloadsDirectory(libraryItemId: string): Directory {
@@ -34,7 +82,8 @@ export function downloadFileExists(libraryItemId: string, filename: string): boo
  */
 export async function verifyFileExists(filePath: string): Promise<boolean> {
   try {
-    return new File(filePath).exists;
+    const resolvedPath = resolveAppPath(filePath);
+    return new File(resolvedPath).exists;
   } catch (error) {
     console.warn('[FileSystem] Error checking file existence:', error);
     return false;
@@ -58,7 +107,8 @@ export async function isFileDownloadedAndExists(
   // Verify the file actually exists on disk
   const fileExists = await verifyFileExists(downloadInfo.downloadPath);
   if (!fileExists) {
-    console.warn(`[${logPrefix}] File marked as downloaded but missing: ${downloadInfo.downloadPath}`);
+    const resolvedPath = resolveAppPath(downloadInfo.downloadPath);
+    console.warn(`[${logPrefix}] File marked as downloaded but missing: ${resolvedPath}`);
 
     try {
       await clearDownloadStatusFn(fileId);

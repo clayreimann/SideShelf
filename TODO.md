@@ -6,7 +6,11 @@
 
 - [x] Separate branch of downloader library on my fork to enable consistent building
 - [x] Embed fonts in app build
-- [ ] Manage creds in expo CLI
+- [x] Provide prompt to reauthorize when refresh token is expired
+- [x] Manage creds in expo CLI
+- [x] Downloaded files should only store paths relative to app bundle and we should resolve absolute file paths at runtime
+- [x] Conditionally use native tabs for ios 26+
+- [ ] Sessions for downloaded media are not being correctly created, streaming progress works fine, but progress from local items appears to create the session but subsequent syncs fail
 - [ ] Fetch currently playing/most recent item status from TrackPlayer
 - [ ] PlayerService should be the single entrypoint to play/pause tracks.
   - [ ] PlayerService updates store state for accurate tracking
@@ -17,7 +21,6 @@
   - [ ] ProgressService should check on startup for dangling sessions (crash or memory pressure quit) and close them
 - [ ] PlayerService.PlayerTrack should take the resume position
 - [ ] PlayerService should update the track metadata with new chapter information
-- [x] Provide prompt to reauthorize when refresh token is expired
 
 ### Misc/Bugs
 
@@ -35,6 +38,9 @@
 - [ ] In extracted buttons, use SFSymbols on ios and fallback to icons on android
   - [ ] Only wait for icon fonts loading on android
 - [ ] Mark cover as not available if file is missing
+- [ ] Add chapter jump feature
+- [ ] Add listening stats page
+- [ ] Add library search
 
 ### Playback Tracking & Sync
 

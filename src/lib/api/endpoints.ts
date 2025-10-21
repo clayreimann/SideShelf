@@ -187,7 +187,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
   const sdkVersion =
     osName === "iOS" ? undefined : await DeviceInfo.getApiLevel();
   const clientName = "SideShelf";
-  const clientVersion = DeviceInfo.getVersion();
+  const clientVersion = `${DeviceInfo.getVersion()} (${DeviceInfo.getBuildNumber()})`;
   const deviceId = DeviceInfo.getDeviceId();
   const deviceInfo = {
     osName,
@@ -219,27 +219,32 @@ export async function createLocalSession(
   userId: string,
   libraryId: string,
   libraryItemId: string,
+  startTime: number,
   currentTime: number,
   timeListened: number = 0
 ): Promise<{ id: string }> {
   const deviceInfo = await getDeviceInfo();
-  const body = JSON.stringify({
+  const body = {
     id: sessionId,
     userId,
     libraryId,
     libraryItemId,
+    startTime,
     currentTime,
     timeListened,
     playMethod: PLAY_METHOD.Local,
     deviceInfo,
     mediaPlayer: "react-native-track-player",
-  });
+  };
+  console.log(
+    `[createLocalSession] Creating local session for library item ${libraryItemId} with session ID ${sessionId}`, body
+  );
   const response = await apiFetch("/api/session/local", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body,
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -264,6 +269,11 @@ export async function createLocalSession(
     );
     throw new Error(errorMessage);
   }
+
+  const result = await response.json();
+  console.log(
+    `[createLocalSession] Created local session with ID ${result.id} for library item ${libraryItemId}`, result
+  );
 
   return {id: sessionId};
 }

@@ -11,7 +11,7 @@
 import { clearAudioFileDownloadStatus } from '@/db/helpers/audioFiles';
 import { getApiConfig } from '@/lib/api/api';
 import { startPlaySession } from '@/lib/api/endpoints';
-import { verifyFileExists } from '@/lib/fileSystem';
+import { resolveAppPath, verifyFileExists } from '@/lib/fileSystem';
 import { useAppStore } from '@/stores/appStore';
 import type { ApiPlaySessionResponse } from '@/types/api';
 import type { PlayerTrack } from '@/types/player';
@@ -331,11 +331,13 @@ export class PlayerService {
     const locallyAvailableFiles = new Set<string>();
     for (const audioFile of playerTrack.audioFiles) {
       if (audioFile.downloadInfo?.isDownloaded && audioFile.downloadInfo.downloadPath) {
-        const fileExists = await verifyFileExists(audioFile.downloadInfo.downloadPath);
+        const storedPath = audioFile.downloadInfo.downloadPath;
+        const fileExists = await verifyFileExists(storedPath);
         if (fileExists) {
           locallyAvailableFiles.add(audioFile.id);
         } else {
-          console.warn('[PlayerService] File marked as downloaded but missing:', audioFile.downloadInfo.downloadPath);
+          const resolvedPath = resolveAppPath(storedPath);
+          console.warn('[PlayerService] File marked as downloaded but missing:', resolvedPath);
 
           // Clean up database
           try {
@@ -383,7 +385,7 @@ export class PlayerService {
 
       // First, try to use local file if available
       if (locallyAvailableFiles.has(audioFile.id) && audioFile.downloadInfo?.downloadPath) {
-        url = `file://${audioFile.downloadInfo.downloadPath}`;
+        url = resolveAppPath(audioFile.downloadInfo.downloadPath);
         sourceType = 'local';
       }
       // If no local file, try streaming

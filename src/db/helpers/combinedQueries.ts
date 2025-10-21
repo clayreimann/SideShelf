@@ -3,6 +3,7 @@ import { audioFiles } from '@/db/schema/audioFiles';
 import { libraryFiles } from '@/db/schema/libraryFiles';
 import { localAudioFileDownloads, localCoverCache, localLibraryFileDownloads } from '@/db/schema/localData';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
+import { resolveAppPath } from '@/lib/fileSystem';
 import { eq } from 'drizzle-orm';
 
 /**
@@ -139,9 +140,9 @@ export async function getAudioFilesWithDownloadInfo(mediaId: string): Promise<Au
     tagComment: row.tagComment,
     tagLanguage: row.tagLanguage,
     tagASIN: row.tagASIN,
-    downloadInfo: row.downloadIsDownloaded ? {
+    downloadInfo: row.downloadIsDownloaded && row.downloadPath ? {
       isDownloaded: row.downloadIsDownloaded,
-      downloadPath: row.downloadPath!,
+      downloadPath: resolveAppPath(row.downloadPath),
       downloadedAt: row.downloadedAt!,
       updatedAt: row.downloadUpdatedAt!,
     } : undefined,
@@ -197,12 +198,14 @@ export async function getLibraryFilesWithDownloadInfo(libraryItemId: string): Pr
     addedAt: row.addedAt,
     updatedAt: row.updatedAt,
     fileType: row.fileType,
-    downloadInfo: row.downloadIsDownloaded ? {
-      isDownloaded: row.downloadIsDownloaded,
-      downloadPath: row.downloadPath!,
-      downloadedAt: row.downloadedAt!,
-      updatedAt: row.downloadUpdatedAt!,
-    } : undefined,
+    downloadInfo: row.downloadIsDownloaded && row.downloadPath
+      ? {
+          isDownloaded: row.downloadIsDownloaded,
+          downloadPath: resolveAppPath(row.downloadPath),
+          downloadedAt: row.downloadedAt!,
+          updatedAt: row.downloadUpdatedAt!,
+        }
+      : undefined,
   }));
 }
 
@@ -295,7 +298,7 @@ export async function getMediaMetadataWithCover(mediaId: string): Promise<MediaM
     seriesName: row.seriesName,
     addedAt: row.addedAt,
     updatedAt: row.updatedAt,
-    localCoverUrl: row.localCoverUrl || undefined,
+    localCoverUrl: row.localCoverUrl ? resolveAppPath(row.localCoverUrl) : undefined,
   };
 }
 
@@ -388,6 +391,6 @@ export async function getMediaMetadataWithCoverByLibraryItemId(libraryItemId: st
     seriesName: row.seriesName,
     addedAt: row.addedAt,
     updatedAt: row.updatedAt,
-    localCoverUrl: row.localCoverUrl || undefined,
+    localCoverUrl: row.localCoverUrl ? resolveAppPath(row.localCoverUrl) : undefined,
   };
 }

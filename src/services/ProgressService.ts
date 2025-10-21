@@ -145,6 +145,7 @@ export class ProgressService {
       // Also end any other active sessions for this user (ensure only one session at a time)
       await this.endAllActiveSessionsForUser(user.id);
 
+      // TODO: need to ensure that if we have an active session that is more recent than synced progress that we use whichever startTime value is better
       // Get saved progress position
       const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
       const resumePosition = savedProgress?.currentTime || startTime;
@@ -494,6 +495,7 @@ export class ProgressService {
           session.userId,
           libraryItem.libraryId,
           session.libraryItemId,
+          session.startTime,
           currentTime,
           timeListened
         );
@@ -552,8 +554,9 @@ export class ProgressService {
       // Show user feedback after 2 failed syncs (like Android)
       if (this.failedSyncs >= 2) {
         console.warn('[UnifiedProgressService] Multiple sync failures detected - user should be notified');
-        // TODO: Implement user notification system
-        this.failedSyncs = 0; // Reset counter
+        endListeningSession(session.id, session.currentTime).catch(err => {
+          console.error('[UnifiedProgressService] Failed to end session after sync failures:', err);
+        });
       }
 
       // Record the sync failure in database

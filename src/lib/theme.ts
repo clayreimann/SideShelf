@@ -65,7 +65,6 @@ function createThemedStyles(isDark: boolean) {
       link: {
         color: colors.link,
         textDecorationLine: 'underline',
-        fontSize: 20,
       },
     }),
   };

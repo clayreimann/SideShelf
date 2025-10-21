@@ -2,6 +2,7 @@ import { db } from '@/db/client';
 import { libraryItems } from '@/db/schema/libraryItems';
 import { localCoverCache } from '@/db/schema/localData';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
+import { resolveAppPath } from '@/lib/fileSystem';
 import type { ApiLibraryItem, ApiLibraryItemsResponse } from '@/types/api';
 import type { LibraryItemDisplayRow } from '@/types/components';
 import type { LibraryItemRow, NewLibraryItemRow } from '@/types/database';
@@ -224,14 +225,20 @@ export async function getLibraryItemsForList(libraryId: string): Promise<{
       language: mediaMetadata.language,
       explicit: mediaMetadata.explicit,
       seriesName: mediaMetadata.seriesName,
+      mediaId: mediaMetadata.id,
     })
     .from(libraryItems)
     .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
     .leftJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId));
 
-  return await baseQuery
+  const rows = await baseQuery
     .where(eq(libraryItems.libraryId, libraryId))
     .orderBy(libraryItems.addedAt);
+
+  return rows.map(({ mediaId, ...row }) => ({
+    ...row,
+    coverUri: row.coverUri && mediaId ? resolveAppPath(row.coverUri) : undefined,
+  }));
 }
 
 /**

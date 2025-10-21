@@ -4,6 +4,7 @@ import { libraryItems } from '@/db/schema/libraryItems';
 import { localAudioFileDownloads, localCoverCache } from '@/db/schema/localData';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
 import { mediaProgress } from '@/db/schema/mediaProgress';
+import { resolveAppPath } from '@/lib/fileSystem';
 import { and, desc, eq, gt, inArray, not } from 'drizzle-orm';
 
 export interface HomeScreenItem {
@@ -27,6 +28,7 @@ export async function getContinueListeningItems(userId: string, limit: number = 
     const allProgress = await db
         .select({
             id: libraryItems.id,
+            mediaId: mediaMetadata.id,
             title: mediaMetadata.title,
             subtitle: mediaMetadata.subtitle,
             authorName: mediaMetadata.authorName,
@@ -82,7 +84,7 @@ export async function getContinueListeningItems(userId: string, limit: number = 
         subtitle: item.subtitle || undefined,
         authorName: item.authorName || undefined,
         seriesName: item.seriesName || undefined,
-        imageUrl: item.imageUrl || undefined,
+        imageUrl: item.imageUrl ? resolveAppPath(item.imageUrl) : undefined,
         progress: item.progress || undefined,
         currentTime: item.currentTime || undefined,
         duration: item.duration || undefined,
@@ -97,6 +99,7 @@ export async function getDownloadedItems(limit: number = 20): Promise<HomeScreen
     const items = await db
         .select({
             id: libraryItems.id,
+            mediaId: mediaMetadata.id,
             title: mediaMetadata.title,
             subtitle: mediaMetadata.subtitle,
             authorName: mediaMetadata.authorName,
@@ -125,7 +128,7 @@ export async function getDownloadedItems(limit: number = 20): Promise<HomeScreen
         subtitle: item.subtitle || undefined,
         authorName: item.authorName || undefined,
         seriesName: item.seriesName || undefined,
-        imageUrl: item.imageUrl || undefined,
+        imageUrl: item.imageUrl ? resolveAppPath(item.imageUrl) : undefined,
         duration: item.duration || undefined,
         isDownloaded: true,
     }));
@@ -137,6 +140,7 @@ export async function getListenAgainItems(userId: string, limit: number = 20): P
     const allFinished = await db
         .select({
             id: libraryItems.id,
+            mediaId: mediaMetadata.id,
             title: mediaMetadata.title,
             subtitle: mediaMetadata.subtitle,
             authorName: mediaMetadata.authorName,
@@ -187,7 +191,7 @@ export async function getListenAgainItems(userId: string, limit: number = 20): P
         subtitle: item.subtitle || undefined,
         authorName: item.authorName || undefined,
         seriesName: item.seriesName || undefined,
-        imageUrl: item.imageUrl || undefined,
+        imageUrl: item.imageUrl ? resolveAppPath(item.imageUrl) : undefined,
         progress: item.progress || undefined,
         duration: item.duration || undefined,
         isFinished: item.isFinished || false,
