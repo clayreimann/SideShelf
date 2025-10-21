@@ -1,4 +1,23 @@
-import { StyleSheet, useColorScheme } from 'react-native';
+import { Platform, StyleSheet, useColorScheme } from 'react-native';
+
+const platform = Platform.OS;
+const rawPlatformVersion = Platform.Version;
+const parsedMajorVersion =
+  typeof rawPlatformVersion === "string"
+    ? parseInt(rawPlatformVersion, 10)
+    : rawPlatformVersion;
+
+const isIOS = platform === "ios";
+const isAndroid = platform === "android";
+const iosMajorVersion =
+  isIOS &&
+  typeof parsedMajorVersion === "number" &&
+  !Number.isNaN(parsedMajorVersion)
+    ? parsedMajorVersion
+    : null;
+const SHOULD_USE_NATIVE_TABS =
+  iosMajorVersion !== null && iosMajorVersion >= 26;
+
 
 export type ThemedStyles = ReturnType<typeof createThemedStyles>;
 
@@ -20,6 +39,8 @@ function createThemedStyles(isDark: boolean) {
   } as const;
 
   const tabs = {
+    useNativeTabs: SHOULD_USE_NATIVE_TABS,
+    tabBarSpace: SHOULD_USE_NATIVE_TABS ? 84 : 0,
     backgroundColor: colors.background,
     opacity: isDark ? 0.8 : 1,
     iconColor: colors.textPrimary,

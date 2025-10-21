@@ -11,8 +11,6 @@ export default function LibraryLayout() {
             headerTintColor: header.tintColor,
             headerTitleStyle: { color: header.titleColor },
             headerShadowVisible: false,
-        }}>
-            <Stack.Screen name="index" options={{ title: 'Library', headerBackTitle: 'Back' }} />
-        </Stack>
+        }}/>
     );
 }

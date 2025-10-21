@@ -6,10 +6,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
-import type { SFSymbol } from "sf-symbols-typescript";
 import type { ComponentProps } from "react";
 import { useEffect } from "react";
 import { Platform, View } from "react-native";
+import type { SFSymbol } from "sf-symbols-typescript";
 
 type IoniconsName = ComponentProps<typeof Ionicons>["name"];
 
@@ -27,19 +27,8 @@ type TabConfig = {
 };
 
 const platform = Platform.OS;
-const rawPlatformVersion = Platform.Version;
-const parsedMajorVersion =
-  typeof rawPlatformVersion === "string"
-    ? parseInt(rawPlatformVersion, 10)
-    : rawPlatformVersion;
-
 const isIOS = platform === "ios";
 const isAndroid = platform === "android";
-const iosMajorVersion =
-  isIOS && typeof parsedMajorVersion === "number" && !Number.isNaN(parsedMajorVersion)
-    ? parsedMajorVersion
-    : null;
-const SHOULD_USE_NATIVE_TABS = iosMajorVersion !== null && iosMajorVersion >= 26;
 
 const TAB_CONFIG: TabConfig[] = [
   {
@@ -94,7 +83,9 @@ const TabBarIcon = ({ config, focused, color, size }: TabBarIconProps) => {
   if (isAndroid) {
     return (
       <Ionicons
-        name={focused ? config.androidIcon.selected : config.androidIcon.default}
+        name={
+          focused ? config.androidIcon.selected : config.androidIcon.default
+        }
         size={size ?? 24}
         color={color}
       />
@@ -109,7 +100,9 @@ const TabBarIcon = ({ config, focused, color, size }: TabBarIconProps) => {
         tintColor={color}
         fallback={
           <Ionicons
-            name={focused ? config.androidIcon.selected : config.androidIcon.default}
+            name={
+              focused ? config.androidIcon.selected : config.androidIcon.default
+            }
             size={size ?? 24}
             color={color}
           />
@@ -148,9 +141,7 @@ export default function TabLayout() {
     }
   }, [loginMessage]);
 
-  const shouldUseNativeTabs = SHOULD_USE_NATIVE_TABS;
-
-  if (!shouldUseNativeTabs) {
+  if (!tabs.useNativeTabs) {
     return (
       <View style={{ flex: 1 }}>
         <Tabs
@@ -175,9 +166,8 @@ export default function TabLayout() {
               }}
             />
           ))}
-          {/* Floating Player */}
-          <FloatingPlayer />
         </Tabs>
+        <FloatingPlayer />
       </View>
     );
   }
@@ -204,7 +194,6 @@ export default function TabLayout() {
         ))}
       </NativeTabs>
 
-      {/* Floating Player */}
       <FloatingPlayer />
     </View>
   );

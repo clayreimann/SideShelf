@@ -45,9 +45,10 @@ export default function FloatingPlayer() {
     <View style={{
       position: 'absolute',
       bottom: 100, // Above tab bar
-      left: 0,
-      right: 0,
+      left: 12,
+      right: 12,
       height: 64,
+      borderRadius: 8,
       backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
       borderTopWidth: 1,
       borderTopColor: isDark ? '#333' : '#e0e0e0',
@@ -57,17 +58,17 @@ export default function FloatingPlayer() {
       shadowColor: '#000',
       shadowOffset: {
         width: 0,
-        height: -2,
+        height: 0,
       },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
+      shadowOpacity: 0.2,
+      shadowRadius: 5,
       elevation: 5,
     }}>
       {/* Tappable area for opening modal */}
       <Pressable style={{ flex: 1, flexDirection: 'row', alignItems: 'center', }} onPress={handlePlayerPress}>
         {/* Cover Image */}
         <View style={{width: 48,height: 48,borderRadius: 6,marginRight: 12,overflow: 'hidden',}}>
-          <CoverImage uri={currentTrack.coverUri} title={currentTrack.title} fontSize={48} />
+          <CoverImage uri={currentTrack?.coverUri ?? ''} title={currentTrack?.title ?? 'No track selected'} fontSize={48} />
         </View>
 
         {/* Track Info */}
@@ -76,7 +77,7 @@ export default function FloatingPlayer() {
             {chapterTitle}
           </Text>
           <Text style={[styles.text, { fontSize: 12, opacity: 0.7, }]} numberOfLines={1}>
-            {currentTrack.title}
+            {currentTrack?.title ?? 'No selection'}
           </Text>
         </View>
       </Pressable>

@@ -96,11 +96,12 @@ const HTMLTagsStyles = {
   i: { fontStyle: "italic" },
 };
 
+
 export default function LibraryItemDetail({
   itemId,
   onTitleChange,
 }: LibraryItemDetailProps) {
-  const { styles, colors, isDark } = useThemedStyles();
+  const { styles, colors, isDark, tabs } = useThemedStyles();
   const { width } = useWindowDimensions();
   const { username, serverUrl, accessToken } = useAuth();
   const { currentTrack, isLoadingTrack, playTrack } = usePlayer();
@@ -579,9 +580,9 @@ export default function LibraryItemDetail({
         style={{
           flex: 1,
           backgroundColor: styles.container.backgroundColor,
-          marginBottom: currentTrack ? 160 : 100,
+          paddingBottom: currentTrack ? 160 : 100,
         }}
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: (currentTrack ? 76 : 0) + tabs.tabBarSpace }}
       >
         <View style={{ alignItems: "center", marginBottom: 16 }}>
           <View style={{ height: imageSize, width: imageSize, borderRadius: 8, overflow: "hidden" }}>

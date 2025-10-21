@@ -23,7 +23,7 @@ interface HomeSection {
 }
 
 export default function HomeScreen() {
-  const { styles, colors } = useThemedStyles();
+  const { styles, tabs, colors } = useThemedStyles();
   const { username, isAuthenticated } = useAuth();
   const { currentTrack } = usePlayer();
   const [sections, setSections] = useState<HomeSection[]>([]);
@@ -166,7 +166,7 @@ export default function HomeScreen() {
       renderItem={Item}
       renderSectionHeader={renderSectionHeader}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={[styles.flatListContainer, { paddingBottom: currentTrack ? 160 : 100 } ]}
+      contentContainerStyle={[styles.flatListContainer, { paddingBottom: (currentTrack ? 76 : 0) + tabs.tabBarSpace } ]}
       refreshControl={
         <RefreshControl
           refreshing={isRefreshing}
@@ -174,6 +174,7 @@ export default function HomeScreen() {
           tintColor={colors.link}
         />
       }
+      stickySectionHeadersEnabled={false}
       showsVerticalScrollIndicator={false}
     />
   );

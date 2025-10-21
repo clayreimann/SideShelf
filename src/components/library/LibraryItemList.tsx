@@ -19,7 +19,7 @@ export default function LibraryItemList({
   onRefresh,
   viewMode = 'grid'
 }: LibraryItemListProps) {
-  const { styles, isDark } = useThemedStyles();
+  const { styles, tabs, isDark } = useThemedStyles();
   const { currentTrack } = usePlayer();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -54,7 +54,7 @@ export default function LibraryItemList({
           styles.flatListContainer,
           {
             paddingTop: 8,
-            paddingBottom: currentTrack ? 160 : 100,
+            paddingBottom: (currentTrack ? 76 : 0) + tabs.tabBarSpace,
             ...(viewMode === 'list' && { paddingHorizontal: 0 }),
             justifyContent: 'center',
           }

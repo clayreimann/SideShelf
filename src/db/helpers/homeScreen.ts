@@ -146,7 +146,7 @@ export async function getListenAgainItems(userId: string, limit: number = 20): P
             authorName: mediaMetadata.authorName,
             seriesName: mediaMetadata.seriesName,
             imageUrl: localCoverCache.localCoverUrl,
-            progress: mediaProgress.progress,
+            // progress: mediaProgress.progress,
             duration: mediaMetadata.duration,
             isFinished: mediaProgress.isFinished,
             finishedAt: mediaProgress.finishedAt,

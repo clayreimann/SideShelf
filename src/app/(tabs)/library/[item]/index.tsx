@@ -7,7 +7,7 @@ export default function LibraryItemDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerTitle: '', headerBackTitle: 'Back' }} />
+      <Stack.Screen options={{ headerTitle: '', headerBackButtonDisplayMode: 'minimal'}} />
       <LibraryItemDetail itemId={itemId as string} />
     </>
   );

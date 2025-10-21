@@ -19,9 +19,11 @@ export default function HomeItem({ item }: HomeItemProps) {
           flexDirection: "row",
           padding: 12,
           marginBottom: 8,
+          alignContent: "center",
+          alignItems: "center",
         }}
       >
-        <View style={{ width: 80, height: 80, borderRadius: 4 }}>
+        <View style={{ width: 64, height: 64, borderRadius: 4, overflow: "hidden" }}>
           <CoverImage
             uri={item.imageUrl ?? null}
             title={item.title}
@@ -60,21 +62,6 @@ export default function HomeItem({ item }: HomeItemProps) {
                 showPercentage={true}
               />
             </View>
-          )}
-          {item.isDownloaded && (
-            <Text
-              style={[
-                styles.text,
-                {
-                  opacity: 0.8,
-                  fontSize: 11,
-                  marginTop: 4,
-                  color: colors.link,
-                },
-              ]}
-            >
-              ⬇ Downloaded
-            </Text>
           )}
         </View>
       </View>
