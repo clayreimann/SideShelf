@@ -172,8 +172,7 @@ export default function AdvancedScreen() {
         {
           label: `Device ID: ${deviceInfo?.deviceId}`,
           onPress: async () => {
-            const { setStringAsync } = await import("expo-clipboard");
-            await setStringAsync(deviceInfo?.deviceId ?? "");
+            await Clipboard.setStringAsync(deviceInfo?.deviceId ?? "");
           },
           disabled: false,
         },

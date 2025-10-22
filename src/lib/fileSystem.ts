@@ -7,6 +7,60 @@ function getAppBaseDirectory(): Directory {
   return Paths.cache;
 }
 
+function decodeUriPathSegments(path: string): string {
+  if (!path || !path.includes('%')) {
+    return path;
+  }
+
+  return path
+    .split('/')
+    .map((segment) => {
+      if (!segment || segment === '.' || segment === '..') {
+        return segment;
+      }
+
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    })
+    .join('/');
+}
+
+function normalizeFileUri(path: string): string {
+  if (!path) {
+    return path;
+  }
+
+  try {
+    const url = new URL(path);
+    if (url.protocol !== 'file:') {
+      return path;
+    }
+
+    const normalizedPathname = url.pathname
+      .split('/')
+      .map((segment) => {
+        if (!segment || segment === '.' || segment === '..') {
+          return segment;
+        }
+
+        try {
+          return decodeURIComponent(segment);
+        } catch {
+          return segment;
+        }
+      })
+      .join('/');
+
+    url.pathname = normalizedPathname;
+    return url.toString();
+  } catch {
+    return path;
+  }
+}
+
 /**
  * Convert an absolute path that lives under the app base directory into
  * a relative path for storage. Paths outside of the base directory are
@@ -17,18 +71,20 @@ export function toAppRelativePath(path: string): string {
     return path;
   }
 
-  if (!Paths.isAbsolute(path)) {
-    return path;
+  const normalizedPath = normalizeFileUri(path);
+
+  if (!Paths.isAbsolute(normalizedPath)) {
+    return normalizedPath;
   }
 
   const baseDirectory = getAppBaseDirectory();
-  const relative = Paths.relative(baseDirectory.uri, path);
+  const relative = Paths.relative(baseDirectory.uri, normalizedPath);
 
   if (!relative || relative.startsWith('..') || Paths.isAbsolute(relative)) {
-    return path;
+    return normalizedPath;
   }
 
-  return relative;
+  return decodeUriPathSegments(relative);
 }
 
 /**
@@ -40,12 +96,15 @@ export function resolveAppPath(path: string): string {
     return path;
   }
 
-  if (Paths.isAbsolute(path)) {
-    return path;
+  const normalizedPath = normalizeFileUri(path);
+
+  if (Paths.isAbsolute(normalizedPath)) {
+    return normalizedPath;
   }
 
   const baseDirectory = getAppBaseDirectory();
-  return Paths.join(baseDirectory.uri, path);
+  const decodedRelativePath = decodeUriPathSegments(normalizedPath);
+  return Paths.join(baseDirectory.uri, decodedRelativePath);
 }
 
 /**

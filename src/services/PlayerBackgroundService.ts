@@ -10,6 +10,12 @@ import { useAppStore } from '@/stores/appStore';
 import TrackPlayer, { Event, State } from 'react-native-track-player';
 import { unifiedProgressService } from './ProgressService';
 
+// Add type definition for the global property
+declare global {
+  // eslint-disable-next-line no-var
+  var __playerBackgroundServiceInitialized: boolean | undefined;
+}
+
 module.exports = async function() {
   let lastActiveTrackId: string | null = null;
 
@@ -43,19 +49,23 @@ module.exports = async function() {
   }
 
   // Remote control event handlers
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePlay, async () => {
+  const remotePlaySub = TrackPlayer.addEventListener(Event.RemotePlay, async () => {
     await TrackPlayer.play();
-  }));
+  });
+  subscriptions.push(remotePlaySub);
 
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePause, async () => {
+  const remotePauseSub = TrackPlayer.addEventListener(Event.RemotePause, async () => {
     await TrackPlayer.pause();
-  }));
+    // Immediate progress sync on pause
+  });
+  subscriptions.push(remotePauseSub);
 
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteStop, async () => {
+  const remoteStopSub = TrackPlayer.addEventListener(Event.RemoteStop, async () => {
     await TrackPlayer.stop();
     // End session when stopped
     await unifiedProgressService.endCurrentSession();
-  }));
+  });
+  subscriptions.push(remoteStopSub);
 
   subscriptions.push(TrackPlayer.addEventListener(Event.RemoteNext, () => TrackPlayer.skipToNext()));
 
@@ -95,14 +105,12 @@ module.exports = async function() {
       if (event.permanent) {
         await TrackPlayer.pause();
         await unifiedProgressService.handleDuck(true);
+      } else if (event.paused) {
+        await TrackPlayer.pause();
+        await unifiedProgressService.handleDuck(true);
       } else {
-        if (event.paused) {
-          await TrackPlayer.pause();
-          await unifiedProgressService.handleDuck(true);
-        } else {
-          await TrackPlayer.play();
-          await unifiedProgressService.handleDuck(false);
-        }
+        await TrackPlayer.play();
+        await unifiedProgressService.handleDuck(false);
       }
     } catch (error) {
       console.error('[PlayerBackgroundService] Duck event error:', error);

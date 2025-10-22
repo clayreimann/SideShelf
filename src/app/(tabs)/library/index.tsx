@@ -2,8 +2,8 @@ import { LibraryItemList, LibraryPicker } from '@/components/library';
 import { HeaderControls, SortMenu } from '@/components/ui';
 import { useThemedStyles } from '@/lib/theme';
 import { SortField, useLibrary } from '@/stores';
-import { Stack } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Text, View } from 'react-native';
 
 export default function LibraryScreen() {
@@ -11,12 +11,31 @@ export default function LibraryScreen() {
   const { libraries, items, selectLibrary, selectedLibrary, isLoadingItems, refresh, sortConfig, setSortConfig } = useLibrary();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const router = useRouter();
+  const { openItem } = useLocalSearchParams<{ openItem?: string | string[] }>();
+  const handledOpenItemRef = useRef<string | null>(null);
 
   const onRefresh = useCallback(async () => {
     await refresh();
   }, [refresh]);
 
   const toggleViewMode = useCallback(() => setViewMode(viewMode === 'grid' ? 'list' : 'grid'), [viewMode]);
+
+  useEffect(() => {
+    if (!openItem) {
+      handledOpenItemRef.current = null;
+      return;
+    }
+
+    const itemId = Array.isArray(openItem) ? openItem[0] : openItem;
+    if (!itemId || handledOpenItemRef.current === itemId) {
+      return;
+    }
+
+    handledOpenItemRef.current = itemId;
+    router.setParams({ openItem: undefined });
+    router.push(`/library/${itemId}`);
+  }, [openItem, router]);
 
   const controls = useCallback(() => (
     <HeaderControls

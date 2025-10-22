@@ -5,7 +5,11 @@ Lightly adapted [Expo](expo.dev) steps:
 ### Build production release
 
 ```shell
+# build local packages
 npx eas-cli build --platform ios --profile production --local
+
+# upload to test flight
+npx eas-cli submit --platform ios --path=./build-XXX.ipa
 ```
 
 

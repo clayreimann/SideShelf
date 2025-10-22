@@ -10,7 +10,7 @@
 - [x] Manage creds in expo CLI
 - [x] Downloaded files should only store paths relative to app bundle and we should resolve absolute file paths at runtime
 - [x] Conditionally use native tabs for ios 26+
-- [ ] Sessions for downloaded media are not being correctly created, streaming progress works fine, but progress from local items appears to create the session but subsequent syncs fail
+- [x] Sessions for downloaded media are not being correctly created, streaming progress works fine, but progress from local items appears to create the session but subsequent syncs fail
 - [ ] Fetch currently playing/most recent item status from TrackPlayer
 - [ ] PlayerService should be the single entrypoint to play/pause tracks.
   - [ ] PlayerService updates store state for accurate tracking

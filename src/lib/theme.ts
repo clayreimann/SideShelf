@@ -41,12 +41,21 @@ function createThemedStyles(isDark: boolean) {
   const tabs = {
     useNativeTabs: SHOULD_USE_NATIVE_TABS,
     tabBarSpace: SHOULD_USE_NATIVE_TABS ? 84 : 0,
-    backgroundColor: colors.background,
-    opacity: isDark ? 0.8 : 1,
-    iconColor: colors.textPrimary,
-    labelColor: colors.textPrimary,
+    backgroundColor: isDark ? '#1C1C1E' : '#F8F8F8',
+    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    iconColor: isDark ? 'rgba(255,255,255,0.65)' : '#6A6A6A',
+    selectedIconColor: colors.textPrimary,
+    labelColor: isDark ? 'rgba(255,255,255,0.7)' : '#6A6A6A',
+    selectedLabelColor: colors.textPrimary,
     badgeTextColor: colors.textPrimary,
-    shadowColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.1)',
+    badgeBackgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)',
+    selectedBadgeBackgroundColor: isDark
+      ? 'rgba(255,255,255,0.28)'
+      : 'rgba(0,0,0,0.16)',
+    rippleColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)',
+    indicatorColor: colors.textPrimary,
+    shadowColor: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.1)',
+    disableTransparentOnScrollEdge: true,
   } as const;
 
   const header = {

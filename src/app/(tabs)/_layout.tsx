@@ -147,6 +147,18 @@ export default function TabLayout() {
         <Tabs
           screenOptions={{
             headerShown: false,
+            tabBarActiveTintColor: tabs.selectedIconColor,
+            tabBarInactiveTintColor: tabs.iconColor,
+            tabBarStyle: {
+              backgroundColor: tabs.backgroundColor,
+              borderTopColor: tabs.borderColor,
+            },
+            tabBarLabelStyle: {
+              color: tabs.labelColor,
+            },
+            tabBarBadgeStyle: {
+              backgroundColor: tabs.badgeBackgroundColor,
+            },
           }}
         >
           {TAB_CONFIG.map((tab) => (
@@ -177,18 +189,41 @@ export default function TabLayout() {
         blurEffect={
           isDark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"
         }
+        backgroundColor={tabs.backgroundColor}
         iconColor={tabs.iconColor}
+        tintColor={tabs.selectedIconColor}
         labelStyle={{ color: tabs.labelColor }}
+        badgeBackgroundColor={tabs.badgeBackgroundColor}
         badgeTextColor={tabs.badgeTextColor}
+        shadowColor={tabs.shadowColor}
+        disableTransparentOnScrollEdge={tabs.disableTransparentOnScrollEdge}
+        rippleColor={tabs.rippleColor}
+        indicatorColor={tabs.indicatorColor}
       >
         {TAB_CONFIG.map((tab) => (
-          <NativeTabs.Trigger key={tab.name} name={tab.name}>
-            <Label>{tab.title}</Label>
+          <NativeTabs.Trigger
+            key={tab.name}
+            name={tab.name}
+            options={{
+              iconColor: tabs.iconColor,
+              selectedIconColor: tabs.selectedIconColor,
+              labelStyle: { color: tabs.labelColor },
+              selectedLabelStyle: { color: tabs.selectedLabelColor },
+              badgeBackgroundColor: tabs.badgeBackgroundColor,
+              selectedBadgeBackgroundColor: tabs.selectedBadgeBackgroundColor,
+              badgeTextColor: tabs.badgeTextColor,
+              backgroundColor: tabs.backgroundColor,
+            }}
+          >
+            <Label selectedStyle={{ color: tabs.selectedLabelColor }}>
+              {tab.title}
+            </Label>
             <Icon
               sf={{
                 default: tab.sfSymbol.default,
                 selected: tab.sfSymbol.selected,
               }}
+              selectedColor={tabs.selectedIconColor}
             />
           </NativeTabs.Trigger>
         ))}

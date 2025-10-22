@@ -13,7 +13,14 @@ export default function HomeItem({ item }: HomeItemProps) {
   const router = useRouter();
   const { styles, colors } = useThemedStyles();
   return (
-    <Pressable onPress={() => router.push(`/library/${item.id}`)}>
+    <Pressable
+      onPress={() =>
+        router.push({
+          pathname: "/library",
+          params: { openItem: item.id },
+        })
+      }
+    >
       <View
         style={{
           flexDirection: "row",
