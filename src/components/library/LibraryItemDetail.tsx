@@ -35,7 +35,6 @@ import { DownloadProgress, downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { unifiedProgressService } from "@/services/ProgressService";
 import { usePlayer } from "@/stores/appStore";
-import type { PlayerTrack } from "@/types/player";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import Octicons from "@expo/vector-icons/Octicons";
@@ -509,40 +508,21 @@ export default function LibraryItemDetail({
 
   // Play handler
   const handlePlay = useCallback(async () => {
-    if (!item || !metadata || !audioFiles.length) {
-      Alert.alert("Cannot Play", "No audio files available for this item.");
+    if (!item) {
+      Alert.alert("Cannot Play", "Item not found.");
       return;
     }
 
     try {
-      // Build player track
-      const playerTrack: PlayerTrack = {
-        libraryItemId: item.id,
-        mediaId: metadata.id,
-        title: metadata.title || "Unknown Title",
-        author: metadata.authorName || metadata.author || "Unknown Author",
-        coverUri: metadata.imageUrl || getCoverUri(item.id),
-        audioFiles,
-        chapters,
-        duration: audioFiles.reduce(
-          (total, file) => total + (file.duration || 0),
-          0
-        ),
-        isDownloaded: audioFiles.some(
-          (file) => file.downloadInfo?.isDownloaded
-        ),
-      };
-
-      // Play the track
-      await playTrack(playerTrack);
-      await playerService.playTrack(playerTrack, username || undefined);
+      // Simply call playerService with the library item ID
+      await playerService.playTrack(item.id);
     } catch (error) {
       console.error("[LibraryItemDetail] Failed to play track:", error);
       Alert.alert("Playback Failed", `Failed to start playback: ${error}`, [
         { text: "OK" },
       ]);
     }
-  }, [item, metadata, audioFiles, chapters, playTrack]);
+  }, [item]);
 
   if (loading) {
     return (

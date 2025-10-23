@@ -1,9 +1,9 @@
 import { authHelpers, mediaProgressHelpers, userHelpers } from '@/db/helpers';
 import { setApiConfig } from '@/lib/api/api';
 import { login as doLogin } from '@/lib/api/endpoints';
+import { getItem, saveItem, SECURE_KEYS } from '@/lib/secureStore';
 import { useDb } from '@/providers/DbProvider';
 import { unifiedProgressService } from '@/services/ProgressService';
-import * as SecureStore from 'expo-secure-store';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 
@@ -25,29 +25,6 @@ type AuthContextValue = AuthState & {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-const SECURE_KEYS = {
-    serverUrl: 'abs.serverUrl',
-    accessToken: 'abs.accessToken',
-    refreshToken: 'abs.refreshToken',
-    username: 'abs.username',
-} as const;
-
-async function saveItem(key: string, value: string | null): Promise<void> {
-    if (value == null) {
-        await SecureStore.deleteItemAsync(key);
-    } else {
-        await SecureStore.setItemAsync(key, value);
-    }
-}
-
-async function getItem(key: string): Promise<string | null> {
-    try {
-        return await SecureStore.getItemAsync(key);
-    } catch {
-        return null;
-    }
-}
 
 async function persistTokensAndState(
     setState: React.Dispatch<React.SetStateAction<AuthState>>,

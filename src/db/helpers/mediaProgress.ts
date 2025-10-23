@@ -49,6 +49,24 @@ export function marshalMediaProgressFromArray(mediaProgressList: ApiMediaProgres
   }));
 }
 
+// Marshal a single ApiMediaProgress item to database format
+export function marshalMediaProgressFromApi(mp: ApiMediaProgress, userId: string): NewMediaProgressRow {
+  return {
+    id: mp.id,
+    userId,
+    libraryItemId: mp.libraryItemId,
+    episodeId: mp.episodeId ?? null,
+    duration: mp.duration ?? null,
+    progress: mp.progress ?? null,
+    currentTime: mp.currentTime ?? null,
+    isFinished: mp.isFinished ?? null,
+    hideFromContinueListening: mp.hideFromContinueListening ?? null,
+    lastUpdate: mp.lastUpdate ? new Date(mp.lastUpdate) : null,
+    startedAt: mp.startedAt ? new Date(mp.startedAt) : null,
+    finishedAt: mp.finishedAt ? new Date(mp.finishedAt) : null,
+  };
+}
+
 export async function upsertMediaProgress(rows: NewMediaProgressRow[]): Promise<void> {
   if (!rows?.length) return;
   for (const row of rows) {

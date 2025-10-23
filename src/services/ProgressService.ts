@@ -21,10 +21,10 @@ import {
   updateSessionListeningTime,
   updateSessionProgress
 } from '@/db/helpers/localListeningSessions';
-import { getMediaProgressForLibraryItem, marshalMediaProgressFromAuthResponse, upsertMediaProgress } from '@/db/helpers/mediaProgress';
+import { getMediaProgressForLibraryItem, marshalMediaProgressFromApi, marshalMediaProgressFromAuthResponse, upsertMediaProgress } from '@/db/helpers/mediaProgress';
 import { getUserByUsername } from '@/db/helpers/users';
 import { LocalListeningSessionRow } from '@/db/schema/localData';
-import { closeSession, createLocalSession, fetchMe, syncSession } from '@/lib/api/endpoints';
+import { closeSession, createLocalSession, fetchMe, fetchMediaProgress, syncSession } from '@/lib/api/endpoints';
 import NetInfo from "@react-native-community/netinfo";
 
 /**
@@ -135,20 +135,50 @@ export class ProgressService {
         throw new Error('User not found');
       }
 
-      // Check for existing active session for this item and end it
+      // Check for existing active session for this item
       const existingSession = await getActiveSession(user.id, libraryItemId);
+      let shouldEndExistingSession = false;
+
       if (existingSession) {
-        console.log('[UnifiedProgressService] Found existing active session, ending it first');
-        await endListeningSession(existingSession.id, existingSession.currentTime);
+        // Check if session is stale (more than 10 minutes old)
+        const sessionAge = Date.now() - existingSession.updatedAt.getTime();
+        const isStale = sessionAge > 10 * 60 * 1000; // 10 minutes
+
+        if (isStale) {
+          console.log('[UnifiedProgressService] Found stale active session (>10 min), ending it');
+          shouldEndExistingSession = true;
+        } else {
+          console.log('[UnifiedProgressService] Found recent active session for same item, will resume');
+          shouldEndExistingSession = false;
+        }
       }
 
-      // Also end any other active sessions for this user (ensure only one session at a time)
-      await this.endAllActiveSessionsForUser(user.id);
+      // End any other active sessions for this user (sessions for different items)
+      const allActiveSessions = await getAllActiveSessionsForUser(user.id);
+      for (const session of allActiveSessions) {
+        if (session.libraryItemId !== libraryItemId) {
+          console.log(`[UnifiedProgressService] Ending active session for different item: ${session.libraryItemId}`);
+          await endListeningSession(session.id, session.currentTime);
+        } else if (shouldEndExistingSession) {
+          // End the stale session for this item
+          await endListeningSession(session.id, session.currentTime);
+        }
+      }
 
-      // TODO: need to ensure that if we have an active session that is more recent than synced progress that we use whichever startTime value is better
-      // Get saved progress position
-      const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
-      const resumePosition = savedProgress?.currentTime || startTime;
+      // Determine resume position: prioritize existing active session > saved progress > provided startTime
+      let resumePosition = startTime;
+      if (existingSession && !shouldEndExistingSession) {
+        // Use active session's current time (most recent position) - session is still active and recent
+        resumePosition = existingSession.currentTime;
+        console.log('[UnifiedProgressService] Resuming from active session:', resumePosition);
+      } else {
+        // Fall back to saved progress
+        const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
+        resumePosition = savedProgress?.currentTime || startTime;
+        if (savedProgress?.currentTime) {
+          console.log('[UnifiedProgressService] Resuming from saved progress:', resumePosition);
+        }
+      }
 
       // Start new session
       const sessionId = await startListeningSession(
@@ -526,9 +556,28 @@ export class ProgressService {
         session.duration
       );
 
+      // Fetch latest progress from server after sync
+      try {
+        const progressResponse = await fetchMediaProgress(session.libraryItemId);
+        await upsertMediaProgress([marshalMediaProgressFromApi(progressResponse, session.userId)]);
+        console.log(`[UnifiedProgressService] Fetched and updated progress after sync for ${session.libraryItemId}`);
+      } catch (fetchError) {
+        console.warn('[UnifiedProgressService] Failed to fetch progress after sync:', fetchError);
+        // Don't fail the entire sync if progress fetch fails
+      }
+
       // Close server session if local session is ended
       if (session.sessionEnd) {
         await closeSession(session.serverSessionId);
+
+        // Fetch final progress after closing session
+        try {
+          const finalProgress = await fetchMediaProgress(session.libraryItemId);
+          await upsertMediaProgress([marshalMediaProgressFromApi(finalProgress, session.userId)]);
+          console.log(`[UnifiedProgressService] Fetched final progress after closing session for ${session.libraryItemId}`);
+        } catch (fetchError) {
+          console.warn('[UnifiedProgressService] Failed to fetch final progress:', fetchError);
+        }
       }
 
       // Reset timeListening after successful sync (like iOS implementation)

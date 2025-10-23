@@ -9,9 +9,19 @@
  */
 
 import { clearAudioFileDownloadStatus } from "@/db/helpers/audioFiles";
+import { getChaptersForMedia } from "@/db/helpers/chapters";
+import type { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
+import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
+import { getLibraryItemById } from "@/db/helpers/libraryItems";
+import { getActiveSession } from "@/db/helpers/localListeningSessions";
+import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
+import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
+import { getUserByUsername } from "@/db/helpers/users";
 import { getApiConfig } from "@/lib/api/api";
 import { startPlaySession } from "@/lib/api/endpoints";
+import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
+import { getItem, SECURE_KEYS } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
 import type { PlayerTrack } from "@/types/player";
@@ -28,8 +38,6 @@ import TrackPlayer, {
   State,
   Track,
 } from "react-native-track-player";
-import { unifiedProgressService } from "./ProgressService";
-// Note: We can't use useAuth hook in a service, so we'll handle auth differently
 
 /**
  * Track player service class
@@ -184,17 +192,70 @@ export class PlayerService {
 
   /**
    * Load and play a track
+   * @param libraryItemId - The library item ID to play
+   * @param episodeId - Optional episode ID for podcast episodes (future use)
    */
-  async playTrack(track: PlayerTrack, username?: string): Promise<void> {
+  async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
     try {
-      console.log("[PlayerService] Loading track:", track.title);
+      console.log("[PlayerService] Loading track for library item:", libraryItemId);
 
-      // Set loading state in the store
-      const store = useAppStore.getState();
-      store._setTrackLoading(true);
+      // Get username from secure storage
+      const username = await getItem(SECURE_KEYS.username);
+      if (!username) {
+        throw new Error("No authenticated user found");
+      }
 
-      // End any existing session
-      await unifiedProgressService.endCurrentSession();
+      // Get user from database
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        throw new Error("User not found in database");
+      }
+
+      // Check if already playing this item - if so, just resume
+      if (this.currentTrack?.libraryItemId === libraryItemId) {
+        const state = await TrackPlayer.getPlaybackState();
+        if (state.state === State.Playing) {
+          console.log("[PlayerService] Already playing this item");
+          return;
+        } else if (state.state === State.Paused) {
+          console.log("[PlayerService] Resuming paused playback");
+          await TrackPlayer.play();
+          return;
+        }
+      }
+
+      // Fetch required data from database
+      const libraryItem = await getLibraryItemById(libraryItemId);
+      if (!libraryItem) {
+        throw new Error(`Library item ${libraryItemId} not found`);
+      }
+
+      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
+      if (!metadata) {
+        throw new Error(`Metadata not found for library item ${libraryItemId}`);
+      }
+
+      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
+      if (audioFiles.length === 0) {
+        throw new Error("No audio files found for this item");
+      }
+
+      const chapters = await getChaptersForMedia(metadata.id);
+
+      // Build PlayerTrack object
+      const track: PlayerTrack = {
+        libraryItemId: libraryItem.id,
+        mediaId: metadata.id,
+        title: metadata.title || "Unknown Title",
+        author: metadata.authorName || metadata.author || "Unknown Author",
+        coverUri: metadata.imageUrl || getCoverUri(libraryItem.id),
+        audioFiles,
+        chapters,
+        duration: audioFiles.reduce((total: number, file: AudioFileWithDownloadInfo) => total + (file.duration || 0), 0),
+        isDownloaded: audioFiles.some((file: AudioFileWithDownloadInfo) => file.downloadInfo?.isDownloaded),
+      };
+
+      console.log("[PlayerService] Built track:", track.title);
 
       // Clear current queue
       await TrackPlayer.reset();
@@ -208,7 +269,6 @@ export class PlayerService {
           (af) => af.downloadInfo?.isDownloaded
         );
 
-        // Check if we tried to get streaming URLs
         const needsStreaming = track.audioFiles.some(
           (audioFile) => !audioFile.downloadInfo?.isDownloaded
         );
@@ -236,44 +296,50 @@ export class PlayerService {
         throw new Error(errorMessage);
       }
 
+      // Set loading state before adding tracks
+      const store = useAppStore.getState();
+      store._setTrackLoading(true);
+
       // Add tracks to queue
       await TrackPlayer.add(tracks);
 
       // Store current track and username for session tracking
       this.currentTrack = track;
-      this.currentUsername = username || null;
+      this.currentUsername = username;
 
-      // Get resume position and seek to it
+      // Get resume position (use whichever was updated most recently)
       let resumePosition = 0;
-      if (username) {
-        resumePosition = await unifiedProgressService.getResumePosition(
-          track.libraryItemId,
-          username
-        );
+      const activeSession = await getActiveSession(user.id, libraryItemId);
+      const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
+
+      if (activeSession && savedProgress) {
+        // Both exist - use whichever was updated more recently
+        const sessionTime = activeSession.updatedAt.getTime();
+        const progressTime = savedProgress.lastUpdate ? savedProgress.lastUpdate.getTime() : 0;
+
+        if (sessionTime > progressTime) {
+          resumePosition = activeSession.currentTime;
+          console.log(`[PlayerService] Resuming from active session (more recent): ${resumePosition}s`);
+        } else {
+          resumePosition = savedProgress.currentTime || 0;
+          console.log(`[PlayerService] Resuming from saved progress (more recent): ${resumePosition}s`);
+        }
+      } else if (activeSession) {
+        resumePosition = activeSession.currentTime;
+        console.log(`[PlayerService] Resuming from active session: ${resumePosition}s`);
+      } else if (savedProgress) {
+        resumePosition = savedProgress.currentTime || 0;
         if (resumePosition > 0) {
-          console.log(
-            `[PlayerService] Seeking to resume position: ${resumePosition}s`
-          );
-          await TrackPlayer.seekTo(resumePosition);
+          console.log(`[PlayerService] Resuming from saved progress: ${resumePosition}s`);
         }
       }
 
-      // Start playback
-      await TrackPlayer.play();
-
-      // Start session tracking if we have username
-      if (username) {
-        await unifiedProgressService.startSession(
-          username,
-          track.libraryItemId,
-          track.mediaId,
-          resumePosition,
-          track.duration,
-          1.0, // playbackRate
-          1.0, // volume
-          this.currentPlaySessionId || undefined // Pass existing streaming session ID if available
-        );
+      if (resumePosition > 0) {
+        await TrackPlayer.seekTo(resumePosition);
       }
+
+      // Start playback - background service will handle session tracking
+      await TrackPlayer.play();
 
       console.log("[PlayerService] Track loaded and playing");
     } catch (error) {
@@ -337,12 +403,7 @@ export class PlayerService {
    * Stop playback and clear queue
    */
   async stop(): Promise<void> {
-    // End session tracking
-    if (this.currentTrack && this.currentUsername) {
-      const progress = await TrackPlayer.getProgress();
-      await unifiedProgressService.endCurrentSession(progress.position);
-    }
-
+    // PlayerBackgroundService will handle ending the session
     await TrackPlayer.stop();
     await TrackPlayer.reset();
 
@@ -518,6 +579,13 @@ export class PlayerService {
   }
 
   /**
+   * Get the current track (for PlayerBackgroundService)
+   */
+  getCurrentTrack(): PlayerTrack | null {
+    return this.currentTrack;
+  }
+
+  /**
    * Set up event listeners
    */
   private setupEventListeners(): void {
@@ -555,19 +623,19 @@ export class PlayerService {
   }
 
   onPlaybackStateChanged(event: PlaybackState) {
-    const store = useAppStore.getState();
-    const isPlaying = event.state === State.Playing;
-    store.updatePlayingState(isPlaying);
+    // Just log the state string value directly
+    console.log("[PlayerService] Playback state changed:", event.state);
+    // PlayerBackgroundService handles store updates
   }
 
   onPlaybackError(event: PlaybackErrorEvent) {
     console.error("[PlayerService] Playback error:", event);
-    // Handle playback errors
+    // PlayerBackgroundService handles store updates
   }
 
   onPlaybackEnded(event: PlaybackQueueEndedEvent) {
     console.log("[PlayerService] Playback ended");
-    // Handle end of playback
+    // PlayerBackgroundService handles store updates
   }
 }
 

@@ -373,6 +373,30 @@ export async function startPlaySession(
   return response.json();
 }
 
+/**
+ * Fetch media progress for a library item from the server
+ * @param libraryItemId - The library item ID
+ * @param episodeId - Optional episode ID for podcast episodes
+ * @returns The media progress data from the server
+ */
+export async function fetchMediaProgress(
+  libraryItemId: string,
+  episodeId?: string
+): Promise<ApiMediaProgress> {
+  const url = episodeId
+    ? `/api/me/progress/${libraryItemId}/${episodeId}`
+    : `/api/me/progress/${libraryItemId}`;
+
+  const response = await apiFetch(url);
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(
+      error.message || error.error || "Failed to fetch media progress"
+    );
+  }
+  return response.json();
+}
+
 export async function doPing(params: { baseUrl: string }): Promise<boolean> {
   try {
     const { baseUrl } = params;

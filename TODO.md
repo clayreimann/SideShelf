@@ -16,11 +16,12 @@
   - [ ] PlayerService updates store state for accurate tracking
   - [ ] PlayerService stores/remembers the last played item so that the floating player can be
         populated on start (for downloaded media)
-  - [ ] ProgressService should not close the current session if the new session is for the same 
+  - [ ] ProgressService should not close the current session if the new session is for the same
         item (unless timeout expired)
   - [ ] ProgressService should check on startup for dangling sessions (crash or memory pressure quit) and close them
 - [ ] PlayerService.PlayerTrack should take the resume position
 - [ ] PlayerService should update the track metadata with new chapter information
+- [ ] Add background task service library to end sessions after 10 minutes of inactivity
 
 ### Misc/Bugs
 

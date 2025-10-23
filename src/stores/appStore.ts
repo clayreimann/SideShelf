@@ -440,9 +440,8 @@ export function useSeriesActions() {
 /**
  * Hook to use the player slice with automatic subscription management
  *
- * This hook provides a clean interface to the player slice, similar to the
- * existing library and authors hooks. It automatically handles subscriptions
- * and provides type-safe access to the player state and actions.
+ * This hook provides a clean interface to the player slice state.
+ * All player control actions should go through PlayerService directly.
  *
  * @example
  * ```tsx
@@ -450,12 +449,11 @@ export function useSeriesActions() {
  *   const {
  *     currentTrack,
  *     isPlaying,
- *     position,
- *     playTrack,
- *     togglePlayPause
+ *     position
  *   } = usePlayer();
  *
- *   // Use the store state and actions...
+ *   // Use playerService for actions
+ *   await playerService.playTrack(libraryItemId);
  * }
  * ```
  */
@@ -471,19 +469,8 @@ export function usePlayer() {
     const isSeeking = useAppStore(state => state.player.loading.isSeeking);
     const initialized = useAppStore(state => state.player.initialized);
 
-    // Actions (these don't change so we can get them once)
-    const initialize = useAppStore(state => state.initializePlayerSlice);
-    const playTrack = useAppStore(state => state.playTrack);
-    const togglePlayPause = useAppStore(state => state.togglePlayPause);
-    const pause = useAppStore(state => state.pause);
-    const play = useAppStore(state => state.play);
-    const seekTo = useAppStore(state => state.seekTo);
-    const skipForward = useAppStore(state => state.skipForward);
-    const skipBackward = useAppStore(state => state.skipBackward);
-    const setPlaybackRate = useAppStore(state => state.setPlaybackRate);
-    const setVolume = useAppStore(state => state.setVolume);
+    // Only UI-only action
     const setModalVisible = useAppStore(state => state.setModalVisible);
-    const clearTrack = useAppStore(state => state.clearTrack);
 
     return React.useMemo(() => ({
         currentTrack,
@@ -496,18 +483,7 @@ export function usePlayer() {
         isLoadingTrack,
         isSeeking,
         initialized,
-        initialize,
-        playTrack,
-        togglePlayPause,
-        pause,
-        play,
-        seekTo,
-        skipForward,
-        skipBackward,
-        setPlaybackRate,
-        setVolume,
         setModalVisible,
-        clearTrack,
     }), [
         currentTrack,
         isPlaying,
@@ -519,18 +495,7 @@ export function usePlayer() {
         isLoadingTrack,
         isSeeking,
         initialized,
-        initialize,
-        playTrack,
-        togglePlayPause,
-        pause,
-        play,
-        seekTo,
-        skipForward,
-        skipBackward,
-        setPlaybackRate,
-        setVolume,
         setModalVisible,
-        clearTrack,
     ]);
 }
 
@@ -553,17 +518,17 @@ export function usePlayerState<T>(selector: (state: PlayerSlice) => T): T {
 /**
  * Hook to get player actions without subscribing to state
  *
- * This hook provides access to player actions without subscribing to any state,
- * which is useful for components that only need to trigger actions.
+ * Note: Most player actions should go through PlayerService directly.
+ * This hook only provides UI-only actions.
  *
  * @example
  * ```tsx
- * function PlayButton() {
- *   const { playTrack, togglePlayPause } = usePlayerActions();
+ * function PlayerModal() {
+ *   const { setModalVisible } = usePlayerActions();
  *
  *   return (
- *     <Button onPress={() => togglePlayPause()}>
- *       Toggle Play/Pause
+ *     <Button onPress={() => setModalVisible(true)}>
+ *       Open Player
  *     </Button>
  *   );
  * }
@@ -571,18 +536,7 @@ export function usePlayerState<T>(selector: (state: PlayerSlice) => T): T {
  */
 export function usePlayerActions() {
     return useAppStore((state) => ({
-        initialize: state.initializePlayerSlice,
-        playTrack: state.playTrack,
-        togglePlayPause: state.togglePlayPause,
-        pause: state.pause,
-        play: state.play,
-        seekTo: state.seekTo,
-        skipForward: state.skipForward,
-        skipBackward: state.skipBackward,
-        setPlaybackRate: state.setPlaybackRate,
-        setVolume: state.setVolume,
         setModalVisible: state.setModalVisible,
-        clearTrack: state.clearTrack,
     }));
 }
 

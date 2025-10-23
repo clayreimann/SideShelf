@@ -6,8 +6,10 @@
  * Handles comprehensive progress syncing with 30s intervals and immediate sync on pause/duck.
  */
 
+import { getItem, SECURE_KEYS } from '@/lib/secureStore';
 import { useAppStore } from '@/stores/appStore';
 import TrackPlayer, { Event, State } from 'react-native-track-player';
+import { playerService } from './PlayerService';
 import { unifiedProgressService } from './ProgressService';
 
 // Add type definition for the global property
@@ -30,23 +32,6 @@ module.exports = async function() {
 
   // Store event listener subscriptions for cleanup
   const subscriptions: Array<{ remove: () => void }> = [];
-
-  // Clean up on hot reload
-  if (module.hot) {
-    module.hot.dispose(() => {
-      console.log('[PlayerBackgroundService] Cleaning up for hot reload');
-      // Remove all event listeners
-      subscriptions.forEach(subscription => {
-        try {
-          subscription.remove();
-        } catch (error) {
-          console.warn('[PlayerBackgroundService] Error removing subscription:', error);
-        }
-      });
-      subscriptions.length = 0; // Clear the array
-      global.__playerBackgroundServiceInitialized = false;
-    });
-  }
 
   // Remote control event handlers
   const remotePlaySub = TrackPlayer.addEventListener(Event.RemotePlay, async () => {
@@ -192,9 +177,35 @@ module.exports = async function() {
       lastActiveTrackId = currentActiveTrack.id;
       console.log('[PlayerBackgroundService] Active track changed:', event);
 
-      // Update store position when track changes
+      // Get track info from PlayerService and username from secure store
+      const currentTrack = playerService.getCurrentTrack();
+      const username = await getItem(SECURE_KEYS.username);
+
+      if (currentTrack && username) {
+        console.log('[PlayerBackgroundService] Starting session for track:', currentTrack.title);
+        // Start session tracking
+        const playbackRate = await TrackPlayer.getRate();
+        const volume = await TrackPlayer.getVolume();
+        const sessionId = playerService.getCurrentPlaySessionId();
+
+        await unifiedProgressService.startSession(
+          username,
+          currentTrack.libraryItemId,
+          currentTrack.mediaId,
+          0, // startTime - will be determined by active session or saved progress in ProgressService
+          currentTrack.duration,
+          playbackRate,
+          volume,
+          sessionId || undefined
+        );
+      }
+
+      // Update store position and track when track changes
       const store = useAppStore.getState();
       store.updatePosition(0); // Reset position for new track
+      if (store._setCurrentTrack) {
+        store._setCurrentTrack(currentTrack);
+      }
 
     } catch (error) {
       console.error('[PlayerBackgroundService] Active track change error:', error);

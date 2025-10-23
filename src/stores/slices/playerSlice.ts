@@ -44,45 +44,36 @@ export interface PlayerSliceState {
 
 /**
  * Player slice actions interface
+ *
+ * This interface contains ONLY internal mutators for use by services.
+ * All player control actions should go through PlayerService directly.
  */
 export interface PlayerSliceActions {
-  // Public methods
+  // Initialization
   /** Initialize the player slice */
   initializePlayerSlice: () => Promise<void>;
-  /** Load and play a track */
-  playTrack: (track: PlayerTrack) => Promise<void>;
-  /** Toggle play/pause */
-  togglePlayPause: () => Promise<void>;
-  /** Pause playback */
-  pause: () => Promise<void>;
-  /** Resume playback */
-  play: () => Promise<void>;
-  /** Seek to a specific position in seconds */
-  seekTo: (position: number) => Promise<void>;
-  /** Skip forward by seconds (default 30) */
-  skipForward: (seconds?: number) => Promise<void>;
-  /** Skip backward by seconds (default 15) */
-  skipBackward: (seconds?: number) => Promise<void>;
-  /** Set playback rate */
-  setPlaybackRate: (rate: number) => Promise<void>;
-  /** Set volume */
-  setVolume: (volume: number) => Promise<void>;
+
+  // UI-only action
   /** Show/hide full-screen modal */
   setModalVisible: (visible: boolean) => void;
-  /** Update current position (called by track player events) */
-  updatePosition: (position: number) => void;
-  /** Update playing state (called by track player events) */
-  updatePlayingState: (isPlaying: boolean) => void;
-  /** Clear current track */
-  clearTrack: () => void;
 
-  // Private methods (prefixed with _)
+  // Internal mutators (used by PlayerBackgroundService)
+  /** Update current position (called by PlayerBackgroundService) */
+  updatePosition: (position: number) => void;
+  /** Update playing state (called by PlayerBackgroundService) */
+  updatePlayingState: (isPlaying: boolean) => void;
+  /** Set current track (called by PlayerBackgroundService) */
+  _setCurrentTrack: (track: PlayerTrack | null) => void;
   /** Set loading state for track */
   _setTrackLoading: (loading: boolean) => void;
   /** Set seeking state */
   _setSeeking: (seeking: boolean) => void;
   /** Update current chapter based on position */
   _updateCurrentChapter: (position: number) => void;
+  /** Update playback rate in store */
+  _setPlaybackRate: (rate: number) => void;
+  /** Update volume in store */
+  _setVolume: (volume: number) => void;
 }
 
 /**
@@ -122,124 +113,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     }));
   },
 
-  playTrack: async (track: PlayerTrack) => {
-    console.log('[PlayerSlice] Loading track:', track.title);
-
-    const state = get() as PlayerSlice;
-    state._setTrackLoading(true);
-
-    try {
-      // Set the current track
-      set((state: PlayerSlice) => ({
-        ...state,
-        player: {
-          ...state.player,
-          currentTrack: track,
-          position: 0,
-          currentChapter: null,
-        },
-      }));
-
-      // Update current chapter for position 0
-      state._updateCurrentChapter(0);
-
-      // The actual track player setup will be handled by the PlayerService
-      console.log('[PlayerSlice] Track loaded successfully');
-    } catch (error) {
-      console.error('[PlayerSlice] Failed to load track:', error);
-    } finally {
-      state._setTrackLoading(false);
-    }
-  },
-
-  togglePlayPause: async () => {
-    const state = get() as PlayerSlice;
-    if (state.player.isPlaying) {
-      await state.pause();
-    } else {
-      await state.play();
-    }
-  },
-
-  pause: async () => {
-    console.log('[PlayerSlice] Pausing playback');
-    // The actual pause will be handled by PlayerService
-    // This just updates the state
-  },
-
-  play: async () => {
-    console.log('[PlayerSlice] Starting playback');
-    // The actual play will be handled by PlayerService
-    // This just updates the state
-  },
-
-  seekTo: async (position: number) => {
-    console.log('[PlayerSlice] Seeking to position:', position);
-
-    const state = get() as PlayerSlice;
-    state._setSeeking(true);
-
-    try {
-      // Update position immediately for UI responsiveness
-      set((state: PlayerSlice) => ({
-        ...state,
-        player: {
-          ...state.player,
-          position,
-        },
-      }));
-
-      // Update current chapter
-      state._updateCurrentChapter(position);
-
-      // The actual seek will be handled by PlayerService
-    } catch (error) {
-      console.error('[PlayerSlice] Failed to seek:', error);
-    } finally {
-      state._setSeeking(false);
-    }
-  },
-
-  skipForward: async (seconds = 30) => {
-    const state = get() as PlayerSlice;
-    const newPosition = Math.min(
-      state.player.position + seconds,
-      state.player.currentTrack?.duration || 0
-    );
-    await state.seekTo(newPosition);
-  },
-
-  skipBackward: async (seconds = 15) => {
-    const state = get() as PlayerSlice;
-    const newPosition = Math.max(state.player.position - seconds, 0);
-    await state.seekTo(newPosition);
-  },
-
-  setPlaybackRate: async (rate: number) => {
-    console.log('[PlayerSlice] Setting playback rate:', rate);
-    set((state: PlayerSlice) => ({
-      ...state,
-      player: {
-        ...state.player,
-        playbackRate: rate,
-      },
-    }));
-    // The actual rate change will be handled by PlayerService
-  },
-
-  setVolume: async (volume: number) => {
-    const clampedVolume = Math.max(0, Math.min(1, volume));
-    console.log('[PlayerSlice] Setting volume:', clampedVolume);
-    set((state: PlayerSlice) => ({
-      ...state,
-      player: {
-        ...state.player,
-        volume: clampedVolume,
-      },
-    }));
-    // The actual volume change will be handled by PlayerService
-  },
-
   setModalVisible: (visible: boolean) => {
     set((state: PlayerSlice) => ({
       ...state,
@@ -274,21 +147,24 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     }));
   },
 
-  clearTrack: () => {
+  _setCurrentTrack: (track: PlayerTrack | null) => {
+    const state = get() as PlayerSlice;
     set((state: PlayerSlice) => ({
       ...state,
       player: {
         ...state.player,
-        currentTrack: null,
-        isPlaying: false,
-        position: 0,
+        currentTrack: track,
+        position: track ? state.player.position : 0,
         currentChapter: null,
-        isModalVisible: false,
       },
     }));
+
+    // Update current chapter if we have a track
+    if (track) {
+      state._updateCurrentChapter(state.player.position);
+    }
   },
 
-  // Private methods
   _setTrackLoading: (loading: boolean) => {
     set((state: PlayerSlice) => ({
       ...state,
@@ -344,5 +220,26 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         },
       }));
     }
+  },
+
+  _setPlaybackRate: (rate: number) => {
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        playbackRate: rate,
+      },
+    }));
+  },
+
+  _setVolume: (volume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        volume: clampedVolume,
+      },
+    }));
   },
 });

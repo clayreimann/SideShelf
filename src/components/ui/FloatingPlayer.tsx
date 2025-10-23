@@ -19,17 +19,16 @@ import { Pressable, Text, View } from 'react-native';
 
 export default function FloatingPlayer() {
   const { styles, isDark } = useThemedStyles();
-  const { currentTrack, currentChapter, togglePlayPause } = usePlayer();
+  const { currentTrack, currentChapter } = usePlayer();
 
   // Don't show if no track is loaded
   if (!currentTrack) {
     return null;
   }
-  
+
   const handlePlayPausePress = async () => {
     try {
       await playerService.togglePlayPause();
-      await togglePlayPause();
     } catch (error) {
       console.error('[FloatingPlayer] Failed to toggle play/pause:', error);
     }

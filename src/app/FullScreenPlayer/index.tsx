@@ -50,7 +50,7 @@ export default function FullScreenPlayer() {
   const { styles, isDark } = useThemedStyles();
   const { width, height } = useWindowDimensions();
 
-  const { currentTrack, position, currentChapter, playbackRate, isPlaying, seekTo, skipForward, skipBackward, togglePlayPause, setPlaybackRate, setVolume } = usePlayer();
+  const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
 
@@ -61,11 +61,10 @@ export default function FullScreenPlayer() {
   const handlePlayPause = useCallback(async () => {
     try {
       await playerService.togglePlayPause();
-      await togglePlayPause();
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to toggle play/pause:', error);
     }
-  }, [togglePlayPause]);
+  }, []);
 
   const handleSeekStart = useCallback((value: number) => {
     setIsSeekingSlider(true);
@@ -80,47 +79,42 @@ export default function FullScreenPlayer() {
     setIsSeekingSlider(false);
     try {
       await playerService.seekTo(value);
-      await seekTo(value);
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to seek:', error);
     }
-  }, [seekTo]);
+  }, []);
 
   const handleSkipBackward = useCallback(async () => {
     try {
-      await skipBackward(15);
       await playerService.seekTo(Math.max(position - 15, 0));
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to skip backward:', error);
     }
-  }, [skipBackward, position]);
+  }, [position]);
 
   const handleSkipForward = useCallback(async () => {
     try {
-      await skipForward(30);
       await playerService.seekTo(position + 30);
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to skip forward:', error);
     }
-  }, [skipForward, position]);
+  }, [position]);
 
   const handleRateChange = useCallback(async (rate: number) => {
     try {
       await playerService.setRate(rate);
-      await setPlaybackRate(rate);
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to set playback rate:', error);
     }
-  }, [setPlaybackRate]);
+  }, []);
 
   const handleVolumeChange = useCallback(async (newVolume: number) => {
     try {
       await playerService.setVolume(newVolume);
-      await setVolume(newVolume);
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to set volume:', error);
     }
-  }, [setVolume]);
+  }, []);
 
   const handleStartOfChapter = useCallback(async () => {
     if (!currentChapter) {
@@ -128,11 +122,10 @@ export default function FullScreenPlayer() {
     }
     try {
       await playerService.seekTo(currentChapter?.chapter.start || 0);
-      await seekTo(currentChapter?.chapter.start || 0);
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to seek to start:', error);
     }
-  }, [seekTo, currentChapter]);
+  }, [currentChapter]);
 
   const handleNextChapter = useCallback(async () => {
     if (!currentChapter) {
@@ -140,11 +133,10 @@ export default function FullScreenPlayer() {
     }
     try {
       await playerService.seekTo(currentChapter?.chapter.end || 0);
-      await seekTo(currentChapter?.chapter.end || 0);
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to seek to next chapter:', error);
     }
-  }, [seekTo, currentChapter]);
+  }, [currentChapter]);
 
   if (!currentTrack) {
     return null;
@@ -231,7 +223,7 @@ export default function FullScreenPlayer() {
           }}>
             <JumpTrackButton direction="backward" onPress={handleStartOfChapter} hitBoxSize={60} />
             <SkipButton direction="backward" onPress={handleSkipBackward} hitBoxSize={60} />
-            <PlayPauseButton isPlaying={isPlaying} onPress={handlePlayPause} hitBoxSize={100} iconSize={48} />
+            <PlayPauseButton onPress={handlePlayPause} hitBoxSize={100} iconSize={48} />
             <SkipButton direction="forward" onPress={handleSkipForward} hitBoxSize={60} />
             <JumpTrackButton direction="forward" onPress={handleNextChapter} hitBoxSize={60} />
           </View>
