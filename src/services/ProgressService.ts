@@ -70,11 +70,10 @@ export class ProgressService {
   private pauseStartTime = 0;
   private lastProgressUpdateTime = 0;
   private failedSyncs = 0;
-  private activePlaybackTimer: ReturnType<typeof setInterval> | null = null;
 
   // Configuration
-  private readonly SYNC_INTERVAL_UNMETERED = 15000; // 15 seconds on unmetered connections
-  private readonly SYNC_INTERVAL_METERED = 60000; // 60 seconds on metered connections
+  public readonly SYNC_INTERVAL_UNMETERED = 15000; // 15 seconds on unmetered connections
+  public readonly SYNC_INTERVAL_METERED = 60000; // 60 seconds on metered connections
   private readonly BACKGROUND_SYNC_INTERVAL = 120000; // 2 minutes for background sync
   private readonly MIN_SESSION_DURATION = 5; // 5 seconds minimum to record a session
   private readonly PAUSE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
@@ -209,9 +208,6 @@ export class ProgressService {
       this.lastSyncTime = Date.now();
       this.failedSyncs = 0;
 
-      // Start active playback timer (like Android implementation)
-      this.startActivePlaybackTimer();
-
       // If we have an existing server session ID (from streaming), use it
       if (existingServerSessionId) {
         console.log(`[UnifiedProgressService] Using existing server session ID: ${existingServerSessionId}`);
@@ -242,9 +238,8 @@ export class ProgressService {
       // Use provided endTime, or current session's currentTime, or fall back to startTime
       const finalEndTime = endTime ?? this.currentSession.currentTime;
 
-      // Clear pause timeout and stop active timer
+      // Clear pause timeout
       this.clearPauseTimeout();
-      this.stopActivePlaybackTimer();
 
       // Only record session if it was long enough
       const sessionDuration = finalEndTime - this.currentSession.startTime;
@@ -370,6 +365,54 @@ export class ProgressService {
   }
 
   /**
+   * Get last sync time (for background service to check if sync is needed)
+   */
+  getLastSyncTime(): number {
+    return this.lastSyncTime;
+  }
+
+  /**
+   * Get whether playback is currently paused
+   */
+  getIsPaused(): boolean {
+    return this.isPaused;
+  }
+
+  /**
+   * Check if a sync is needed based on network type and time
+   */
+  async shouldSyncToServer(): Promise<{ shouldSync: boolean; reason: string }> {
+    if (!this.currentSession) {
+      return { shouldSync: false, reason: 'No active session' };
+    }
+
+    if (this.isPaused) {
+      return { shouldSync: false, reason: 'Playback is paused' };
+    }
+
+    const netInfo = await NetInfo.fetch();
+    if (!netInfo.isConnected) {
+      return { shouldSync: false, reason: 'No network connection' };
+    }
+
+    const isUnmetered = netInfo.type === 'wifi' || netInfo.type === 'ethernet';
+    const syncInterval = isUnmetered ? this.SYNC_INTERVAL_UNMETERED : this.SYNC_INTERVAL_METERED;
+    const timeSinceLastSync = Date.now() - this.lastSyncTime;
+
+    if (timeSinceLastSync < syncInterval) {
+      return {
+        shouldSync: false,
+        reason: `Too soon (${timeSinceLastSync}ms < ${syncInterval}ms)`
+      };
+    }
+
+    return {
+      shouldSync: true,
+      reason: `Ready to sync (${timeSinceLastSync}ms >= ${syncInterval}ms on ${netInfo.type})`
+    };
+  }
+
+  /**
    * Get the resume position for a library item
    */
   async getResumePosition(libraryItemId: string, username: string): Promise<number> {
@@ -388,9 +431,9 @@ export class ProgressService {
   }
 
   /**
-   * Sync current session to server
+   * Sync current session to server (public for background service)
    */
-  private async syncCurrentSessionToServer(): Promise<void> {
+  async syncCurrentSessionToServer(): Promise<void> {
     if (!this.currentSession) {
       return;
     }
@@ -452,45 +495,6 @@ export class ProgressService {
     }, this.BACKGROUND_SYNC_INTERVAL);
   }
 
-  /**
-   * Start active playback timer (like Android's 15-second timer)
-   */
-  private startActivePlaybackTimer(): void {
-    if (this.activePlaybackTimer) {
-      clearInterval(this.activePlaybackTimer);
-    }
-
-    // Start timer that runs every 15 seconds during active playback
-    this.activePlaybackTimer = setInterval(async () => {
-      if (!this.currentSession || this.isPaused) {
-        return;
-      }
-
-      try {
-        // Check if we should sync to server based on network type and timing
-        const netInfo = await NetInfo.fetch();
-        const isUnmetered = netInfo.type === 'wifi' || netInfo.type === 'ethernet';
-        const syncInterval = isUnmetered ? this.SYNC_INTERVAL_UNMETERED : this.SYNC_INTERVAL_METERED;
-        const shouldSyncServer = Date.now() - this.lastSyncTime >= syncInterval;
-
-        if (shouldSyncServer) {
-          await this.syncCurrentSessionToServer();
-        }
-      } catch (error) {
-        console.error('[UnifiedProgressService] Active playback timer error:', error);
-      }
-    }, 15000); // Run every 15 seconds like Android
-  }
-
-  /**
-   * Stop active playback timer
-   */
-  private stopActivePlaybackTimer(): void {
-    if (this.activePlaybackTimer) {
-      clearInterval(this.activePlaybackTimer);
-      this.activePlaybackTimer = null;
-    }
-  }
 
   /**
    * Sync a single session to the server
@@ -723,7 +727,6 @@ export class ProgressService {
    */
   shutdown(): void {
     this.clearPauseTimeout();
-    this.stopActivePlaybackTimer();
 
     if (this.syncInterval) {
       clearInterval(this.syncInterval);

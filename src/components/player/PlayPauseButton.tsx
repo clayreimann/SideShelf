@@ -1,9 +1,18 @@
 import { useThemedStyles } from "@/lib/theme";
 import { usePlayerState } from "@/stores";
-import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { SymbolView } from "expo-symbols";
+import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 
-
+/**
+ * PlayPauseButton component
+ *
+ * Displays a play or pause button with platform-specific icons:
+ * - iOS: Uses SF Symbols (play.circle, pause.circle)
+ * - Android: Uses Material Icons (play-arrow, pause)
+ *
+ * Shows an activity indicator while a track is loading.
+ */
 export interface PlayPauseButtonProps {
     hitBoxSize?: number;
     iconSize?: number;
@@ -14,13 +23,40 @@ export default function PlayPauseButton({ onPress, hitBoxSize: size = 44, iconSi
     const { colors } = useThemedStyles();
     const isLoadingTrack = usePlayerState(state => state.player.loading.isLoadingTrack);
     const isPlaying = usePlayerState(state => state.player.isPlaying);
-    return isLoadingTrack ? (
-        <View style={{width: size, height: size, justifyContent: 'center', alignItems: 'center'}}>
-            <ActivityIndicator size="small" color={colors.textPrimary} />
-        </View>
-    ) : (
-        <Pressable onPress={onPress} style={({pressed}) => ({width: size, height: size, justifyContent: 'center', alignItems: 'center', opacity: pressed ? 0.5 : 1,})}>
-            <FontAwesome6 name={isPlaying ? 'pause' : 'play'} size={iconSize} color={colors.textPrimary} />
+
+    if (isLoadingTrack) {
+        return (
+            <View style={{width: size, height: size, justifyContent: 'center', alignItems: 'center'}}>
+                <ActivityIndicator size="small" color={colors.textPrimary} />
+            </View>
+        );
+    }
+
+    return (
+        <Pressable
+            onPress={onPress}
+            style={({pressed}) => ({
+                width: size,
+                height: size,
+                justifyContent: 'center',
+                alignItems: 'center',
+                opacity: pressed ? 0.5 : 1,
+            })}
+        >
+            {Platform.OS === 'ios' ? (
+                <SymbolView
+                    name={isPlaying ? 'pause.circle' : 'play.circle'}
+                    size={iconSize}
+                    tintColor={colors.textPrimary}
+                    type="hierarchical"
+                />
+            ) : (
+                <MaterialIcons
+                    name={isPlaying ? 'pause' : 'play-arrow'}
+                    size={iconSize}
+                    color={colors.textPrimary}
+                />
+            )}
         </Pressable>
     );
 }

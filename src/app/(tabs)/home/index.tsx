@@ -152,7 +152,7 @@ export default function HomeScreen() {
   if (sections.length === 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={[styles.text, { fontSize: 18, textAlign: 'center', opacity: 0.7 }]}>
+        <Text style={[styles.text, { fontSize: 18, textAlign: 'center', opacity: 0.7, paddingHorizontal: 16 }]}>
           Welcome to your library!{'\n\n'}
           Your books will appear here as you start listening to them.
         </Text>

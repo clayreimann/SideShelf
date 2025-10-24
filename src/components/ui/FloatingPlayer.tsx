@@ -54,14 +54,14 @@ export default function FloatingPlayer() {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 12,
-      shadowColor: '#000',
+      shadowColor: isDark ? '#fff' : '#000',
       shadowOffset: {
         width: 0,
         height: 0,
       },
-      shadowOpacity: 0.2,
-      shadowRadius: 5,
-      elevation: 5,
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 8,
     }}>
       {/* Tappable area for opening modal */}
       <Pressable style={{ flex: 1, flexDirection: 'row', alignItems: 'center', }} onPress={handlePlayerPress}>
@@ -81,7 +81,7 @@ export default function FloatingPlayer() {
         </View>
       </Pressable>
 
-      <PlayPauseButton onPress={handlePlayPausePress} />
+      <PlayPauseButton onPress={handlePlayPausePress} iconSize={32} />
     </View>
   );
 }

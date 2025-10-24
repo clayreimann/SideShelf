@@ -7,6 +7,7 @@ import type {
   ApiLibraryResponse,
   ApiLibraryResponseWithFilterData,
   ApiLoginResponse,
+  ApiMediaProgress,
   ApiMeResponse,
   ApiPlaySessionResponse,
 } from "@/types/api";

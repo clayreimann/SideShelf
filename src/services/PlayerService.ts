@@ -296,16 +296,17 @@ export class PlayerService {
         throw new Error(errorMessage);
       }
 
-      // Set loading state before adding tracks
+      // Store current track and username for session tracking
+      this.currentTrack = track;
+      this.currentUsername = username;
+
+      // Update store with new track (this also sets loading state)
       const store = useAppStore.getState();
+      store._setCurrentTrack(track);
       store._setTrackLoading(true);
 
       // Add tracks to queue
       await TrackPlayer.add(tracks);
-
-      // Store current track and username for session tracking
-      this.currentTrack = track;
-      this.currentUsername = username;
 
       // Get resume position (use whichever was updated most recently)
       let resumePosition = 0;

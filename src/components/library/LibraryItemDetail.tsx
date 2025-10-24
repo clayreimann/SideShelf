@@ -1,6 +1,8 @@
 import { useThemedStyles } from "@/lib/theme";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
 
+import { AuthorIcon, DownloadButton, NarratorIcon, SeriesIcon } from "@/components/icons";
+import DownloadProgressView from "@/components/library/DownloadProgress";
 import { CollapsibleSection, ProgressBar } from "@/components/ui";
 import { ChapterRow, getChaptersForMedia } from "@/db/helpers/chapters";
 import {
@@ -25,19 +27,11 @@ import { getUserByUsername } from "@/db/helpers/users";
 import { MediaMetadataRow } from "@/db/schema/mediaMetadata";
 import { fetchLibraryItemsBatch } from "@/lib/api/endpoints";
 import { getCoverUri } from "@/lib/covers";
-import {
-  formatBytes,
-  formatSpeed,
-  formatTimeRemaining,
-} from "@/lib/helpers/formatters";
 import { useAuth } from "@/providers/AuthProvider";
 import { DownloadProgress, downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { unifiedProgressService } from "@/services/ProgressService";
 import { usePlayer } from "@/stores/appStore";
-import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import Octicons from "@expo/vector-icons/Octicons";
 import { Stack } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -95,7 +89,6 @@ const HTMLTagsStyles = {
   i: { fontStyle: "italic" },
 };
 
-
 export default function LibraryItemDetail({
   itemId,
   onTitleChange,
@@ -103,7 +96,7 @@ export default function LibraryItemDetail({
   const { styles, colors, isDark, tabs } = useThemedStyles();
   const { width } = useWindowDimensions();
   const { username, serverUrl, accessToken } = useAuth();
-  const { currentTrack, isLoadingTrack, playTrack } = usePlayer();
+  const { currentTrack, position, isPlaying, isLoadingTrack } = usePlayer();
 
   const [loading, setLoading] = useState(true);
   const [item, setItem] = useState<NewLibraryItemRow | null>(null);
@@ -231,6 +224,27 @@ export default function LibraryItemDetail({
       isMounted = false;
     };
   }, [username, item?.id]);
+
+  // Compute effective progress: use live player position if this item is playing,
+  // otherwise use stored progress
+  const effectiveProgress = useMemo(() => {
+    if (!progress || !item) return null;
+
+    // Check if this item is currently playing
+    const isThisItemPlaying = currentTrack?.libraryItemId === item.id;
+
+    if (isThisItemPlaying && position !== undefined) {
+      // Use live position from player store (updated every second by background service)
+      return {
+        ...progress,
+        currentTime: position,
+        progress: progress.duration ? position / progress.duration : 0,
+      };
+    }
+
+    // Use stored progress
+    return progress;
+  }, [progress, item?.id, currentTrack?.libraryItemId, position]);
 
   // Background data enhancement effect
   useEffect(() => {
@@ -514,15 +528,23 @@ export default function LibraryItemDetail({
     }
 
     try {
-      // Simply call playerService with the library item ID
-      await playerService.playTrack(item.id);
+      // Check if this item is currently playing
+      const isThisItemPlaying = currentTrack?.libraryItemId === item.id;
+
+      if (isThisItemPlaying) {
+        // Toggle play/pause for currently playing item
+        await playerService.togglePlayPause();
+      } else {
+        // Play a different item
+        await playerService.playTrack(item.id);
+      }
     } catch (error) {
       console.error("[LibraryItemDetail] Failed to play track:", error);
       Alert.alert("Playback Failed", `Failed to start playback: ${error}`, [
         { text: "OK" },
       ]);
     }
-  }, [item]);
+  }, [item, currentTrack]);
 
   if (loading) {
     return (
@@ -562,10 +584,20 @@ export default function LibraryItemDetail({
           backgroundColor: styles.container.backgroundColor,
           paddingBottom: currentTrack ? 160 : 100,
         }}
-        contentContainerStyle={{ padding: 16, paddingBottom: (currentTrack ? 76 : 0) + tabs.tabBarSpace }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: (currentTrack ? 76 : 0) + tabs.tabBarSpace,
+        }}
       >
         <View style={{ alignItems: "center", marginBottom: 16 }}>
-          <View style={{ height: imageSize, width: imageSize, borderRadius: 8, overflow: "hidden" }}>
+          <View
+            style={{
+              height: imageSize,
+              width: imageSize,
+              borderRadius: 8,
+              overflow: "hidden",
+            }}
+          >
             <CoverImage uri={coverUri} title={title} fontSize={14} />
           </View>
         </View>
@@ -608,12 +640,7 @@ export default function LibraryItemDetail({
                 flexShrink: 1,
               }}
             >
-              <FontAwesome6
-                name="pen-to-square"
-                size={16}
-                color={isDark ? "white" : "black"}
-                style={{ marginRight: 8 }}
-              />
+              <AuthorIcon style={{ marginRight: 8 }} />
               <Text
                 style={[styles.text, { textAlign: "center", flexShrink: 1 }]}
               >
@@ -630,12 +657,7 @@ export default function LibraryItemDetail({
                     flexShrink: 1,
                   }}
                 >
-                  <FontAwesome6
-                    name="microphone-lines"
-                    size={16}
-                    color={isDark ? "white" : "black"}
-                    style={{ marginRight: 8 }}
-                  />
+                  <NarratorIcon style={{ marginRight: 8 }} />
                   <Text
                     style={[
                       styles.text,
@@ -649,24 +671,33 @@ export default function LibraryItemDetail({
             ) : null}
           </View>
           {series ? (
-            <Text
-              style={[
-                styles.text,
-                { fontStyle: "italic", marginBottom: 4, textAlign: "center" },
-              ]}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
-              <MaterialCommunityIcons
-                name="bookshelf"
-                size={24}
-                color={isDark ? "white" : "black"}
-              />{" "}
-              {series}
-            </Text>
+              <SeriesIcon />
+              <Text
+                style={[
+                  styles.text,
+                  {
+                    fontStyle: "italic",
+                    marginBottom: 4,
+                    marginLeft: 4,
+                    textAlign: "center",
+                  },
+                ]}
+              >
+                {series}
+              </Text>
+            </View>
           ) : null}
         </View>
 
         {/* Progress display */}
-        {progress && (
+        {effectiveProgress && (
           <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
             <View
               style={{
@@ -676,11 +707,11 @@ export default function LibraryItemDetail({
               }}
             >
               <ProgressBar
-                progress={progress.progress || 0}
+                progress={effectiveProgress.progress || 0}
                 variant="medium"
-                showTimeLabels={!!(progress.currentTime && progress.duration)}
-                currentTime={progress.currentTime || undefined}
-                duration={progress.duration || undefined}
+                showTimeLabels={!!(effectiveProgress.currentTime && effectiveProgress.duration)}
+                currentTime={effectiveProgress.currentTime || undefined}
+                duration={effectiveProgress.duration || undefined}
                 showPercentage={true}
               />
             </View>
@@ -688,199 +719,16 @@ export default function LibraryItemDetail({
         )}
 
         {/* Download Section */}
-        <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
-          {isDownloading ? (
-            <View
-              style={{
-                backgroundColor: isDark ? "#333" : "#f5f5f5",
-                borderRadius: 8,
-                padding: 12,
-              }}
-            >
-              <Text
-                style={[
-                  styles.text,
-                  { fontSize: 14, marginBottom: 8, textAlign: "center" },
-                ]}
-              >
-                {downloadProgress
-                  ? downloadProgress.status === "downloading"
-                    ? `Downloading: ${downloadProgress.currentFile}`
-                    : downloadProgress.status === "completed"
-                    ? "Download Complete!"
-                    : downloadProgress.status === "cancelled"
-                    ? "Download Cancelled"
-                    : "Download Error"
-                  : "Preparing download..."}
-              </Text>
-
-              {/* Overall Progress Bar */}
-              <View style={{ marginBottom: 8 }}>
-                <ProgressBar
-                  progress={downloadProgress?.totalProgress || 0}
-                  variant="large"
-                  progressColor={
-                    downloadProgress?.status === "error" ? "#FF3B30" : "#007AFF"
-                  }
-                  customPercentageText={`Overall Progress: ${Math.round(
-                    (downloadProgress?.totalProgress || 0) * 100
-                  )}%`}
-                  showPercentage={true}
-                />
-              </View>
-
-              {/* Current File Progress Bar */}
-              {downloadProgress?.status === "downloading" &&
-                downloadProgress?.currentFile && (
-                  <View style={{ marginBottom: 8 }}>
-                    <ProgressBar
-                      progress={downloadProgress?.fileProgress || 0}
-                      variant="medium"
-                      progressColor="#34C759"
-                      customPercentageText={`Current File: ${Math.round(
-                        (downloadProgress?.fileProgress || 0) * 100
-                      )}%`}
-                      showPercentage={true}
-                    />
-                  </View>
-                )}
-
-              {/* Download Stats */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  marginBottom: 8,
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.text,
-                      { fontSize: 11, opacity: 0.7, textAlign: "left" },
-                    ]}
-                  >
-                    Files: {downloadProgress?.downloadedFiles || 0}/
-                    {downloadProgress?.totalFiles || 0}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.text,
-                      { fontSize: 11, opacity: 0.7, textAlign: "left" },
-                    ]}
-                  >
-                    Size: {formatBytes(downloadProgress?.bytesDownloaded || 0)}/
-                    {formatBytes(downloadProgress?.totalBytes || 0)}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.text,
-                      { fontSize: 11, opacity: 0.7, textAlign: "right" },
-                    ]}
-                  >
-                    Speed: {formatSpeed(downloadProgress?.downloadSpeed || 0)}
-                  </Text>
-                  {(downloadProgress?.downloadSpeed || 0) > 0 && (
-                    <Text
-                      style={[
-                        styles.text,
-                        { fontSize: 11, opacity: 0.7, textAlign: "right" },
-                      ]}
-                    >
-                      ETA:{" "}
-                      {formatTimeRemaining(
-                        (downloadProgress?.totalBytes || 0) -
-                          (downloadProgress?.bytesDownloaded || 0),
-                        downloadProgress?.downloadSpeed || 0,
-                        3, // minSamplesForEta
-                        downloadProgress?.speedSampleCount || 0
-                      )}
-                    </Text>
-                  )}
-                </View>
-              </View>
-
-              {/* Download Control Buttons */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "center",
-                  gap: 8,
-                  marginTop: 8,
-                }}
-              >
-                {downloadProgress?.canPause && (
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: "#FF9500",
-                      borderRadius: 6,
-                      paddingVertical: 8,
-                      paddingHorizontal: 16,
-                    }}
-                    onPress={handlePauseDownload}
-                  >
-                    <Text
-                      style={{
-                        color: "white",
-                        fontSize: 12,
-                        fontWeight: "600",
-                      }}
-                    >
-                      ⏸️ Pause
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                {downloadProgress?.canResume && (
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: "#34C759",
-                      borderRadius: 6,
-                      paddingVertical: 8,
-                      paddingHorizontal: 16,
-                    }}
-                    onPress={handleResumeDownload}
-                  >
-                    <Text
-                      style={{
-                        color: "white",
-                        fontSize: 12,
-                        fontWeight: "600",
-                      }}
-                    >
-                      ▶️ Resume
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                {(downloadProgress?.status === "downloading" ||
-                  downloadProgress?.status === "paused") && (
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: "#FF3B30",
-                      borderRadius: 6,
-                      paddingVertical: 8,
-                      paddingHorizontal: 16,
-                    }}
-                    onPress={handleCancelDownload}
-                  >
-                    <Text
-                      style={{
-                        color: "white",
-                        fontSize: 12,
-                        fontWeight: "600",
-                      }}
-                    >
-                      ❌ Cancel
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          ) : null}
-        </View>
+        {isDownloading && (
+          <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
+            <DownloadProgressView
+              downloadProgress={downloadProgress}
+              onPause={handlePauseDownload}
+              onResume={handleResumeDownload}
+              onCancel={handleCancelDownload}
+            />
+          </View>
+        )}
 
         {/* Play Button */}
         {audioFiles.length > 0 && (
@@ -903,7 +751,11 @@ export default function LibraryItemDetail({
                   fontWeight: "600",
                 }}
               >
-                {isLoadingTrack ? "⏳ Loading..." : "▶️ Play"}
+                {isLoadingTrack
+                  ? "Loading..."
+                  : currentTrack?.libraryItemId === item?.id && isPlaying
+                  ? "Pause"
+                  : "Play"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1025,17 +877,11 @@ export default function LibraryItemDetail({
       <Stack.Screen
         options={{
           headerRight: () => (
-            <TouchableOpacity
+            <DownloadButton
+              isDownloaded={isDownloaded}
               onPress={isDownloaded ? handleDeleteDownload : handleDownload}
               disabled={!serverUrl || !accessToken || isDownloading}
-              style={{ alignContent: "center", padding: 8 }}
-            >
-              <Octicons
-                name={isDownloaded ? "trash" : "download"}
-                size={24}
-                color={isDark ? "white" : "black"}
-              />
-            </TouchableOpacity>
+            />
           ),
         }}
       />
