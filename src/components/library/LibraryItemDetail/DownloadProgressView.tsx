@@ -25,7 +25,7 @@ interface DownloadProgressProps {
 /**
  * Displays download progress with statistics and control buttons
  */
-export default function DownloadProgress({
+export default function DownloadProgressView({
   downloadProgress,
   onPause,
   onResume,

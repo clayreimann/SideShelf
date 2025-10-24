@@ -6,6 +6,7 @@
  * Handles comprehensive progress syncing using TrackPlayer events.
  */
 
+import { logger } from '@/lib/logger';
 import { getItem, SECURE_KEYS } from '@/lib/secureStore';
 import { useAppStore } from '@/stores/appStore';
 import TrackPlayer, {
@@ -15,16 +16,20 @@ import TrackPlayer, {
   PlaybackProgressUpdatedEvent,
   PlaybackState as PlaybackStateEvent,
   RemoteDuckEvent,
+  RemoteJumpBackwardEvent,
+  RemoteJumpForwardEvent,
   RemoteSeekEvent,
   State
 } from 'react-native-track-player';
 import { playerService } from './PlayerService';
 import { unifiedProgressService } from './ProgressService';
 
-// Add type definition for the global property
+// Add type definitions for global properties
 declare global {
   // eslint-disable-next-line no-var
-  var __playerBackgroundServiceInitialized: boolean | undefined;
+  var __playerBackgroundServiceInitializedAt: number | undefined;
+  // eslint-disable-next-line no-var
+  var __playerBackgroundServiceSubscriptions: Array<() => void> | undefined;
 }
 
 /**
@@ -47,6 +52,68 @@ async function handleRemotePause(): Promise<void> {
 async function handleRemoteStop(): Promise<void> {
   await TrackPlayer.stop();
   await unifiedProgressService.endCurrentSession();
+}
+
+/**
+ * Handle remote jump forward command
+ */
+async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<void> {
+  const progress = await TrackPlayer.getProgress();
+  const newPosition = progress.position + event.interval;
+  await TrackPlayer.seekTo(newPosition);
+
+  try {
+    const currentSession = unifiedProgressService.getCurrentSession();
+    if (currentSession) {
+      const playbackRate = await TrackPlayer.getRate();
+      const volume = await TrackPlayer.getVolume();
+      const state = await TrackPlayer.getPlaybackState();
+
+      await unifiedProgressService.updateProgress(
+        newPosition,
+        playbackRate,
+        volume,
+        undefined,
+        state.state === State.Playing
+      );
+
+      const store = useAppStore.getState();
+      store.updatePosition(newPosition);
+    }
+  } catch (error) {
+    logger.error('PlayerBackgroundService', 'Jump forward progress update error', error as Error);
+  }
+}
+
+/**
+ * Handle remote jump backward command
+ */
+async function handleRemoteJumpBackward(event: RemoteJumpBackwardEvent): Promise<void> {
+  const progress = await TrackPlayer.getProgress();
+  const newPosition = Math.max(0, progress.position - event.interval);
+  await TrackPlayer.seekTo(newPosition);
+
+  try {
+    const currentSession = unifiedProgressService.getCurrentSession();
+    if (currentSession) {
+      const playbackRate = await TrackPlayer.getRate();
+      const volume = await TrackPlayer.getVolume();
+      const state = await TrackPlayer.getPlaybackState();
+
+      await unifiedProgressService.updateProgress(
+        newPosition,
+        playbackRate,
+        volume,
+        undefined,
+        state.state === State.Playing
+      );
+
+      const store = useAppStore.getState();
+      store.updatePosition(newPosition);
+    }
+  } catch (error) {
+    logger.error('PlayerBackgroundService', 'Jump backward progress update error', error as Error);
+  }
 }
 
 /**
@@ -90,7 +157,7 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
       store.updatePosition(event.position);
     }
   } catch (error) {
-    console.error('[PlayerBackgroundService] Seek progress update error:', error);
+    logger.error('PlayerBackgroundService', 'Seek progress update error', error as Error);
   }
 }
 
@@ -110,7 +177,7 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
       await unifiedProgressService.handleDuck(false);
     }
   } catch (error) {
-    console.error('[PlayerBackgroundService] Duck event error:', error);
+    logger.error('PlayerBackgroundService', 'Duck event error', error as Error);
   }
 }
 
@@ -146,7 +213,7 @@ async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<vo
       );
     }
   } catch (error) {
-    console.error('[PlayerBackgroundService] Playback state change error:', error);
+    logger.error('PlayerBackgroundService', 'Playback state change error', error as Error);
   }
 }
 
@@ -179,12 +246,12 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
       // Check if we should sync to server (uses adaptive intervals based on network type)
       const syncCheck = await unifiedProgressService.shouldSyncToServer();
       if (syncCheck.shouldSync) {
-        console.log(`[PlayerBackgroundService] Syncing to server: ${syncCheck.reason}`);
+        logger.info('PlayerBackgroundService', `Syncing to server: ${syncCheck.reason}`);
         await unifiedProgressService.syncCurrentSessionToServer();
       }
     }
   } catch (error) {
-    console.error('[PlayerBackgroundService] Progress update error:', error);
+    logger.error('PlayerBackgroundService', 'Progress update error', error as Error);
   }
 }
 
@@ -203,14 +270,14 @@ async function handleActiveTrackChanged(
     }
 
     lastActiveTrackId.value = currentActiveTrack.id;
-    console.log('[PlayerBackgroundService] Active track changed:', event);
+    logger.info('PlayerBackgroundService', `Active track changed: ${event.track?.title || 'unknown'}`);
 
     // Get track info from PlayerService and username from secure store
     const currentTrack = playerService.getCurrentTrack();
     const username = await getItem(SECURE_KEYS.username);
 
     if (currentTrack && username) {
-      console.log('[PlayerBackgroundService] Starting session for track:', currentTrack.title);
+      logger.info('PlayerBackgroundService', `Starting session for track: ${currentTrack.title}`);
       // Start session tracking
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
@@ -239,7 +306,7 @@ async function handleActiveTrackChanged(
       }
     }
   } catch (error) {
-    console.error('[PlayerBackgroundService] Active track change error:', error);
+    logger.error('PlayerBackgroundService', 'Active track change error', error as Error);
   }
 }
 
@@ -247,13 +314,13 @@ async function handleActiveTrackChanged(
  * Handle playback errors
  */
 async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
-  console.error('[PlayerBackgroundService] Playback error:', event);
+  logger.error('PlayerBackgroundService', `Playback error: ${event.code} - ${event.message}`);
 
   try {
     // End current session on critical playback errors
     const currentSession = unifiedProgressService.getCurrentSession();
     if (currentSession) {
-      console.log('[PlayerBackgroundService] Ending session due to playback error');
+      logger.info('PlayerBackgroundService', 'Ending session due to playback error');
       await unifiedProgressService.endCurrentSession();
     }
 
@@ -261,41 +328,86 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
     const store = useAppStore.getState();
     store._setTrackLoading(false);
   } catch (error) {
-    console.error('[PlayerBackgroundService] Error handling playback error:', error);
+    logger.error('PlayerBackgroundService', 'Error handling playback error', error as Error);
   }
 }
 
-module.exports = async function() {
-  // Track if we've already set up listeners to prevent duplicates during hot reload
-  if (global.__playerBackgroundServiceInitialized) {
-    console.log('[PlayerBackgroundService] Already initialized, skipping duplicate setup');
-    return;
+/**
+ * Clean up existing event listeners
+ */
+function cleanupEventListeners(): void {
+  if (global.__playerBackgroundServiceSubscriptions) {
+    logger.info('PlayerBackgroundService', 'Cleaning up existing event listeners');
+    global.__playerBackgroundServiceSubscriptions.forEach(unsub => unsub());
+    global.__playerBackgroundServiceSubscriptions = undefined;
   }
+}
 
-  console.log('[PlayerBackgroundService] Setting up event listeners');
-  global.__playerBackgroundServiceInitialized = true;
-
-  // Store event listener subscriptions for cleanup
-  const subscriptions: Array<{ remove: () => void }> = [];
+/**
+ * Setup all event listeners
+ */
+function setupEventListeners(): Array<() => void> {
+  logger.info('PlayerBackgroundService', 'Setting up event listeners');
 
   // Use object to store lastActiveTrackId so it can be mutated in the handler
   const lastActiveTrackId = { value: null as string | null };
 
+  const subscriptions: Array<() => void> = [];
+
   // Register remote control event handlers
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePlay, handleRemotePlay));
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePause, handleRemotePause));
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteStop, handleRemoteStop));
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteNext, handleRemoteNext));
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePrevious, handleRemotePrevious));
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteSeek, handleRemoteSeek));
-  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck));
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePlay, handleRemotePlay).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePause, handleRemotePause).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteStop, handleRemoteStop).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteNext, handleRemoteNext).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePrevious, handleRemotePrevious).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteSeek, handleRemoteSeek).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteJumpForward, handleRemoteJumpForward).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteJumpBackward, handleRemoteJumpBackward).remove);
 
   // Register playback event handlers
-  subscriptions.push(TrackPlayer.addEventListener(Event.PlaybackState, handlePlaybackStateChanged));
-  subscriptions.push(TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, handlePlaybackProgressUpdated));
+  subscriptions.push(TrackPlayer.addEventListener(Event.PlaybackState, handlePlaybackStateChanged).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, handlePlaybackProgressUpdated).remove);
   subscriptions.push(TrackPlayer.addEventListener(
     Event.PlaybackActiveTrackChanged,
     (event) => handleActiveTrackChanged(event, lastActiveTrackId)
-  ));
-  subscriptions.push(TrackPlayer.addEventListener(Event.PlaybackError, handlePlaybackError));
+  ).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.PlaybackError, handlePlaybackError).remove);
+
+  return subscriptions;
+}
+
+/**
+ * Reconnect background service (for external use)
+ */
+export function reconnectBackgroundService(): void {
+  logger.info('PlayerBackgroundService', 'Forcing reconnection of background service');
+  cleanupEventListeners();
+  global.__playerBackgroundServiceSubscriptions = setupEventListeners();
+  global.__playerBackgroundServiceInitializedAt = Date.now();
+}
+
+module.exports = async function() {
+  const now = Date.now();
+
+  if (global.__playerBackgroundServiceInitializedAt) {
+    const timeSinceInit = now - global.__playerBackgroundServiceInitializedAt;
+
+    // If called within 1 second, skip (duplicate call)
+    if (timeSinceInit < 1000) {
+      logger.debug('PlayerBackgroundService', `Already initialized ${timeSinceInit}ms ago, skipping duplicate setup`);
+      return;
+    }
+
+    // If it's been longer, this likely means the JS context was recreated
+    logger.warn('PlayerBackgroundService', `Re-initializing after ${Math.round(timeSinceInit / 1000)}s - possible JS context recreation`);
+    cleanupEventListeners();
+  } else {
+    logger.info('PlayerBackgroundService', 'First-time initialization');
+  }
+
+  global.__playerBackgroundServiceSubscriptions = setupEventListeners();
+  global.__playerBackgroundServiceInitializedAt = now;
+
+  logger.info('PlayerBackgroundService', 'Background service initialization complete');
 };

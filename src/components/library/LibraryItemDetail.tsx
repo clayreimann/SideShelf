@@ -2,7 +2,8 @@ import { useThemedStyles } from "@/lib/theme";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
 
 import { AuthorIcon, DownloadButton, NarratorIcon, SeriesIcon } from "@/components/icons";
-import DownloadProgressView from "@/components/library/DownloadProgress";
+import ChapterList from "@/components/library/LibraryItemDetail/ChapterList";
+import DownloadProgressView from "@/components/library/LibraryItemDetail/DownloadProgressView";
 import { CollapsibleSection, ProgressBar } from "@/components/ui";
 import { ChapterRow, getChaptersForMedia } from "@/db/helpers/chapters";
 import {
@@ -41,7 +42,6 @@ import {
 } from "react-native";
 import RenderHtml from "react-native-render-html";
 import CoverImage from "../ui/CoverImange";
-import ChapterList from "./LibraryItemDetail/ChapterList";
 
 interface LibraryItemDetailProps {
   itemId: string;

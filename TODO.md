@@ -1,5 +1,172 @@
 # Audiobookshelf React Native - TODO
 
+## 🚨 **CRITICAL PRE-LAUNCH ITEMS** (Priority 0)
+
+### Legal & Compliance
+- [ ] **Create Privacy Policy** - REQUIRED for App Store/Play Store
+  - [ ] Document what data is collected (server URLs, usernames, playback progress)
+  - [ ] Explain how data is stored locally vs on user's server
+  - [ ] Add privacy policy link to app and store listings
+  - [ ] Host privacy policy on a public URL
+- [ ] **Create Terms of Service / EULA**
+  - [ ] Clarify that app requires user's own Audiobookshelf server
+  - [ ] Disclaimer about content responsibility
+- [ ] **Add "About" section with legal links**
+  - [ ] Add privacy policy link to Settings/More screen
+  - [ ] Add terms of service link
+  - [ ] Add support/contact information
+  - [ ] Add app version display
+
+### Internationalization (i18n)
+- [ ] **Implement i18n system** (like the existing audiobookshelf-app)
+  - [ ] Add i18n library (e.g., react-i18next or similar)
+  - [ ] Create string resource files structure
+  - [ ] Extract ALL hardcoded strings from UI components
+  - [ ] Create en-us.json as base language
+  - [ ] Update login screen strings
+  - [ ] Update library detail screen strings
+  - [ ] Update player UI strings
+  - [ ] Update settings strings
+  - [ ] Update error messages
+  - [ ] Update all button labels, placeholders, and messages
+
+### App Store Requirements
+- [ ] **Prepare App Store Screenshots** (required for both stores)
+  - [ ] iPhone 6.7" display (required for iOS)
+  - [ ] iPhone 5.5" display (required for iOS)
+  - [ ] iPad Pro 12.9" display (optional but recommended)
+  - [ ] Android phone screenshots (multiple sizes)
+  - [ ] Android tablet screenshots (optional but recommended)
+  - [ ] Create compelling screenshots showing key features
+- [ ] **Write App Store Description**
+  - [ ] Compelling short description (80 chars for iOS subtitle)
+  - [ ] Full description highlighting features
+  - [ ] Keywords for discoverability
+  - [ ] What's New section for v1.0.0
+- [ ] **Prepare Promotional Assets**
+  - [ ] App icon (already have: icon.png)
+  - [ ] Feature graphic for Google Play
+  - [ ] Promo video (optional but recommended)
+- [ ] **Update App Store URLs in README**
+  - [ ] Add correct iOS App Store URL
+  - [ ] Add correct Google Play Store URL
+  - [ ] Update repository URL if needed
+
+### Production Configuration
+- [ ] **Remove/Minimize Console Logging** (379 console.log statements found!)
+  - [ ] Create production logging utility that conditionally logs
+  - [ ] Replace console.log with proper logger in services
+  - [ ] Replace console.error with proper error tracking
+  - [ ] Keep critical error logs, remove debug logs
+  - [ ] Or: Use babel-plugin-transform-remove-console for production builds
+- [ ] **Add Error Tracking/Crash Reporting**
+  - [ ] Integrate Sentry or similar crash reporting
+  - [ ] Add error boundaries to catch React errors
+  - [ ] Configure proper source maps for stack traces
+  - [ ] Test crash reporting in production mode
+- [ ] **Add Analytics (Optional but Recommended)**
+  - [ ] Consider privacy-friendly analytics
+  - [ ] Track key user flows (login, downloads, playback)
+  - [ ] Track errors and failures
+  - [ ] Ensure GDPR compliance
+- [ ] **Verify Environment Variables**
+  - [ ] Ensure no development URLs are hardcoded
+  - [ ] Verify all sensitive config is properly secured
+  - [ ] Check for any API keys that shouldn't be in code
+- [ ] **Update app.json metadata**
+  - [ ] Verify correct bundle identifiers
+  - [ ] Update description
+  - [ ] Verify permissions are correctly listed
+  - [ ] Add App Store metadata (iOS)
+  - [ ] Add Google Play metadata (Android)
+
+### Testing & Quality Assurance
+- [ ] **Comprehensive Testing**
+  - [ ] Test on physical iOS device (not just simulator)
+  - [ ] Test on physical Android device (not just emulator)
+  - [ ] Test on different screen sizes
+  - [ ] Test with slow network conditions
+  - [ ] Test offline mode thoroughly
+  - [ ] Test download and playback interruptions
+  - [ ] Test app backgrounding/foregrounding
+  - [ ] Test with low storage space
+  - [ ] Test with different server versions
+  - [ ] Test login/logout flows
+  - [ ] Test token expiration and refresh
+- [ ] **Beta Testing**
+  - [ ] Set up TestFlight for iOS beta
+  - [ ] Set up Google Play internal testing
+  - [ ] Recruit beta testers
+  - [ ] Collect and address feedback
+  - [ ] Fix critical bugs found in beta
+- [ ] **Expand Test Coverage**
+  - [ ] Add more unit tests (currently only 5 test files)
+  - [ ] Add integration tests for critical flows
+  - [ ] Add E2E tests for main user journeys
+  - [ ] Test error handling thoroughly
+
+### Documentation & Support
+- [ ] **Update README.md**
+  - [ ] Add screenshots/demo
+  - [ ] Clarify installation instructions
+  - [ ] Add troubleshooting section
+  - [ ] Add FAQ section
+  - [ ] Update feature list to match reality
+  - [ ] Add badge for app store availability
+- [ ] **Create User Documentation**
+  - [ ] Getting started guide
+  - [ ] How to connect to server
+  - [ ] How to download content
+  - [ ] How to use player features
+  - [ ] Common troubleshooting steps
+- [ ] **Set up Support Channels**
+  - [ ] Create GitHub Discussions or similar
+  - [ ] Add support email or contact method
+  - [ ] Link to Audiobookshelf Discord
+  - [ ] Create issue templates
+
+### Code Quality & Security
+- [ ] **Security Audit**
+  - [ ] Review token storage (currently using SecureStore - good!)
+  - [ ] Ensure sensitive data isn't logged
+  - [ ] Review all network calls for security
+  - [ ] Verify SSL/TLS is enforced where possible
+  - [ ] Check for any hardcoded credentials
+- [ ] **Performance Optimization**
+  - [ ] Profile app performance
+  - [ ] Optimize image loading and caching
+  - [ ] Optimize database queries
+  - [ ] Check for memory leaks
+  - [ ] Optimize bundle size
+- [ ] **Code Cleanup**
+  - [ ] Remove commented code
+  - [ ] Remove unused imports
+  - [ ] Remove unused files/components
+  - [ ] Ensure consistent code style
+  - [ ] Run linter and fix all warnings
+  - [ ] Add JSDoc to public APIs
+
+### Build & Release Preparation
+- [ ] **Configure Production Builds**
+  - [ ] Test production iOS build
+  - [ ] Test production Android build
+  - [ ] Verify app signing is configured
+  - [ ] Set up automated versioning
+  - [ ] Configure OTA updates (if using)
+- [ ] **App Store Submission Prep**
+  - [ ] Review Apple App Store guidelines
+  - [ ] Review Google Play Store guidelines
+  - [ ] Prepare answers for review questions
+  - [ ] Create demo account for reviewers (if needed)
+  - [ ] Prepare demo server for reviewers (if needed)
+- [ ] **Version Management**
+  - [ ] Create release branching strategy
+  - [ ] Tag v1.0.0 release
+  - [ ] Create CHANGELOG.md
+  - [ ] Document release process
+
+---
+
 ## 🚀 High Priority Features
 
 ### Build issues
@@ -187,7 +354,9 @@
 - [ ] Show indicator when offline
 - [ ] Add accessibility features
   - [ ] Ensure screen reader navigation works
-- [ ]I18n
+  - [ ] Test VoiceOver (iOS) and TalkBack (Android)
+  - [ ] Add proper accessibility labels
+  - [ ] Ensure proper contrast ratios
 
 ## 🔧 Infrastructure
 
@@ -211,7 +380,7 @@
 ### Android
 
 - [ ] Android Auto integration
-- [ ] Notification controls
+- [ ] Notification controls (already partially implemented in audiobookshelf-app)
 - [ ] Background service optimization
 - [ ] Material Design compliance
 
@@ -310,5 +479,6 @@
 
 ---
 
-_Last updated: [Current Date]_
-_Total items: [Count] completed, [Count] pending_
+_Last updated: October 24, 2025_
+_Critical pre-launch items: ~40 items_
+_Total items: ~150+ items across all priorities_
