@@ -24,6 +24,9 @@ import TrackPlayer, {
 import { playerService } from './PlayerService';
 import { unifiedProgressService } from './ProgressService';
 
+// Create a cached sublogger for this service (more efficient than calling logger.X('tag', ...) each time)
+const log = logger.forTag('PlayerBackgroundService');
+
 // Add type definitions for global properties
 declare global {
   // eslint-disable-next-line no-var
@@ -81,7 +84,7 @@ async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<v
       store.updatePosition(newPosition);
     }
   } catch (error) {
-    logger.error('PlayerBackgroundService', 'Jump forward progress update error', error as Error);
+    log.error('Jump forward progress update error', error as Error);
   }
 }
 
@@ -112,7 +115,7 @@ async function handleRemoteJumpBackward(event: RemoteJumpBackwardEvent): Promise
       store.updatePosition(newPosition);
     }
   } catch (error) {
-    logger.error('PlayerBackgroundService', 'Jump backward progress update error', error as Error);
+    log.error('Jump backward progress update error', error as Error);
   }
 }
 
@@ -157,7 +160,7 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
       store.updatePosition(event.position);
     }
   } catch (error) {
-    logger.error('PlayerBackgroundService', 'Seek progress update error', error as Error);
+    log.error('Seek progress update error', error as Error);
   }
 }
 
@@ -177,7 +180,7 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
       await unifiedProgressService.handleDuck(false);
     }
   } catch (error) {
-    logger.error('PlayerBackgroundService', 'Duck event error', error as Error);
+    log.error( 'Duck event error', error as Error);
   }
 }
 
@@ -213,7 +216,7 @@ async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<vo
       );
     }
   } catch (error) {
-    logger.error('PlayerBackgroundService', 'Playback state change error', error as Error);
+    log.error( 'Playback state change error', error as Error);
   }
 }
 
@@ -246,12 +249,12 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
       // Check if we should sync to server (uses adaptive intervals based on network type)
       const syncCheck = await unifiedProgressService.shouldSyncToServer();
       if (syncCheck.shouldSync) {
-        logger.info('PlayerBackgroundService', `Syncing to server: ${syncCheck.reason}`);
+        log.info( `Syncing to server: ${syncCheck.reason}`);
         await unifiedProgressService.syncCurrentSessionToServer();
       }
     }
   } catch (error) {
-    logger.error('PlayerBackgroundService', 'Progress update error', error as Error);
+    log.error( 'Progress update error', error as Error);
   }
 }
 
@@ -270,14 +273,14 @@ async function handleActiveTrackChanged(
     }
 
     lastActiveTrackId.value = currentActiveTrack.id;
-    logger.info('PlayerBackgroundService', `Active track changed: ${event.track?.title || 'unknown'}`);
+    log.info( `Active track changed: ${event.track?.title || 'unknown'}`);
 
     // Get track info from PlayerService and username from secure store
     const currentTrack = playerService.getCurrentTrack();
     const username = await getItem(SECURE_KEYS.username);
 
     if (currentTrack && username) {
-      logger.info('PlayerBackgroundService', `Starting session for track: ${currentTrack.title}`);
+      log.info( `Starting session for track: ${currentTrack.title}`);
       // Start session tracking
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
@@ -306,7 +309,7 @@ async function handleActiveTrackChanged(
       }
     }
   } catch (error) {
-    logger.error('PlayerBackgroundService', 'Active track change error', error as Error);
+    log.error( 'Active track change error', error as Error);
   }
 }
 
@@ -314,13 +317,13 @@ async function handleActiveTrackChanged(
  * Handle playback errors
  */
 async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
-  logger.error('PlayerBackgroundService', `Playback error: ${event.code} - ${event.message}`);
+  log.error( `Playback error: ${event.code} - ${event.message}`);
 
   try {
     // End current session on critical playback errors
     const currentSession = unifiedProgressService.getCurrentSession();
     if (currentSession) {
-      logger.info('PlayerBackgroundService', 'Ending session due to playback error');
+      log.info( 'Ending session due to playback error');
       await unifiedProgressService.endCurrentSession();
     }
 
@@ -328,7 +331,7 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
     const store = useAppStore.getState();
     store._setTrackLoading(false);
   } catch (error) {
-    logger.error('PlayerBackgroundService', 'Error handling playback error', error as Error);
+    log.error( 'Error handling playback error', error as Error);
   }
 }
 
@@ -337,7 +340,7 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
  */
 function cleanupEventListeners(): void {
   if (global.__playerBackgroundServiceSubscriptions) {
-    logger.info('PlayerBackgroundService', 'Cleaning up existing event listeners');
+    log.info( 'Cleaning up existing event listeners');
     global.__playerBackgroundServiceSubscriptions.forEach(unsub => unsub());
     global.__playerBackgroundServiceSubscriptions = undefined;
   }
@@ -347,7 +350,7 @@ function cleanupEventListeners(): void {
  * Setup all event listeners
  */
 function setupEventListeners(): Array<() => void> {
-  logger.info('PlayerBackgroundService', 'Setting up event listeners');
+  log.info( 'Setting up event listeners');
 
   // Use object to store lastActiveTrackId so it can be mutated in the handler
   const lastActiveTrackId = { value: null as string | null };
@@ -381,7 +384,7 @@ function setupEventListeners(): Array<() => void> {
  * Reconnect background service (for external use)
  */
 export function reconnectBackgroundService(): void {
-  logger.info('PlayerBackgroundService', 'Forcing reconnection of background service');
+  log.info( 'Forcing reconnection of background service');
   cleanupEventListeners();
   global.__playerBackgroundServiceSubscriptions = setupEventListeners();
   global.__playerBackgroundServiceInitializedAt = Date.now();
@@ -395,19 +398,19 @@ module.exports = async function() {
 
     // If called within 1 second, skip (duplicate call)
     if (timeSinceInit < 1000) {
-      logger.debug('PlayerBackgroundService', `Already initialized ${timeSinceInit}ms ago, skipping duplicate setup`);
+      log.debug( `Already initialized ${timeSinceInit}ms ago, skipping duplicate setup`);
       return;
     }
 
     // If it's been longer, this likely means the JS context was recreated
-    logger.warn('PlayerBackgroundService', `Re-initializing after ${Math.round(timeSinceInit / 1000)}s - possible JS context recreation`);
+    log.warn( `Re-initializing after ${Math.round(timeSinceInit / 1000)}s - possible JS context recreation`);
     cleanupEventListeners();
   } else {
-    logger.info('PlayerBackgroundService', 'First-time initialization');
+    log.info( 'First-time initialization');
   }
 
   global.__playerBackgroundServiceSubscriptions = setupEventListeners();
   global.__playerBackgroundServiceInitializedAt = now;
 
-  logger.info('PlayerBackgroundService', 'Background service initialization complete');
+  log.info( 'Background service initialization complete');
 };

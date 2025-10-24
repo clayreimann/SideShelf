@@ -7,24 +7,31 @@
  * - Automatic log trimming to prevent database bloat
  * - Export functionality for remote troubleshooting
  * - Built on react-native-logs for robust logging infrastructure
+ * - Cached subloggers for improved performance
  *
- * Usage:
+ * Usage (direct):
  *   import { logger } from '@/lib/logger';
  *   logger.debug('MyComponent', 'Debug message');
  *   logger.info('MyComponent', 'Info message');
  *   logger.warn('MyComponent', 'Warning message');
  *   logger.error('MyComponent', 'Error message', error);
+ *
+ * Usage (cached sublogger - recommended for frequent logging):
+ *   import { logger } from '@/lib/logger';
+ *   const log = logger.forTag('MyComponent');
+ *   log.info('Info message');
+ *   log.error('Error message', error);
  */
 
 import { consoleTransport, logger as rnLogger } from 'react-native-logs';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLogsBefore, insertLogToDb, trimLogsToCount } from './db';
-import type { LogLevel } from './types';
+import type { LogLevel, SubLogger } from './types';
 
 // Re-export types and DB functions for convenience
 export { clearAllLogs, getAllLogs, getLogsByLevel } from './db';
 export type { LogRow } from './db';
-export type { LogLevel } from './types';
+export type { LogEntry, LogLevel, SubLogger } from './types';
 
 const MAX_LOGS = 1000; // Keep only the most recent 1000 logs
 const MAX_LOG_AGE_DAYS = 7; // Delete logs older than 7 days
@@ -114,10 +121,11 @@ const config = {
 const rnLoggerInstance = rnLogger.createLogger(config);
 
 /**
- * Logger facade that provides a consistent API
+ * Logger facade that provides a consistent API with cached subloggers
  */
 class Logger {
   private static instance: Logger | null = null;
+  private subLoggers: Map<string, SubLogger> = new Map();
 
   private constructor() {}
 
@@ -129,24 +137,49 @@ class Logger {
   }
 
   /**
+   * Get a cached sublogger for a specific tag
+   * This avoids creating multiple subloggers for the same tag
+   */
+  forTag(tag: string): SubLogger {
+    let subLogger = this.subLoggers.get(tag);
+    if (!subLogger) {
+      const extendedLogger = rnLoggerInstance.extend(tag);
+      subLogger = {
+        debug: (message: string) => extendedLogger.debug(message),
+        info: (message: string) => extendedLogger.info(message),
+        warn: (message: string) => extendedLogger.warn(message),
+        error: (message: string, error?: Error) => {
+          if (error) {
+            extendedLogger.error(message, error);
+          } else {
+            extendedLogger.error(message);
+          }
+        },
+      };
+      this.subLoggers.set(tag, subLogger);
+    }
+    return subLogger;
+  }
+
+  /**
    * Log a debug message
    */
   debug(tag: string, message: string): void {
-    rnLoggerInstance.extend(tag).debug(message);
+    this.forTag(tag).debug(message);
   }
 
   /**
    * Log an info message
    */
   info(tag: string, message: string): void {
-    rnLoggerInstance.extend(tag).info(message);
+    this.forTag(tag).info(message);
   }
 
   /**
    * Log a warning message
    */
   warn(tag: string, message: string): void {
-    rnLoggerInstance.extend(tag).warn(message);
+    this.forTag(tag).warn(message);
   }
 
   /**
@@ -156,11 +189,7 @@ class Logger {
    * @param error - Optional Error object to include stack trace
    */
   error(tag: string, message: string, error?: Error): void {
-    if (error) {
-      rnLoggerInstance.extend(tag).error(message, error);
-    } else {
-      rnLoggerInstance.extend(tag).error(message);
-    }
+    this.forTag(tag).error(message, error);
   }
 
   /**
@@ -191,6 +220,13 @@ class Logger {
     // This is handled by the db module
     const { clearAllLogs } = require('./db');
     clearAllLogs();
+  }
+
+  /**
+   * Clear the sublogger cache (useful for testing)
+   */
+  clearCache(): void {
+    this.subLoggers.clear();
   }
 }
 

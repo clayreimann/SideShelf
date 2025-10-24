@@ -5,16 +5,11 @@
  * Uses a separate logs.sqlite database to avoid contention with the main app database.
  */
 
-import type { LogLevel } from "@/lib/logger/types";
+import type { LogDbRow, LogEntry, LogLevel } from "@/lib/logger/types";
 import * as SQLite from "expo-sqlite";
 
-export type LogRow = {
-  id: string;
-  timestamp: Date;
-  level: LogLevel;
-  tag: string;
-  message: string;
-};
+// Re-export LogEntry as LogRow for backward compatibility
+export type LogRow = LogEntry;
 
 let logsDb: SQLite.SQLiteDatabase | null = null;
 
@@ -51,13 +46,7 @@ function getLogsDb(): SQLite.SQLiteDatabase {
 /**
  * Insert a log entry into the database (async to never block UI)
  */
-export function insertLogToDb(log: {
-  id: string;
-  timestamp: Date;
-  level: LogLevel;
-  tag: string;
-  message: string;
-}): void {
+export function insertLogToDb(log: LogEntry): void {
   const db = getLogsDb();
   db.runAsync(
     "INSERT INTO logs (id, timestamp, level, tag, message) VALUES (?, ?, ?, ?, ?)",
@@ -75,20 +64,8 @@ export function getAllLogs(limit?: number): LogRow[] {
     : "SELECT * FROM logs ORDER BY timestamp DESC";
 
   const rows = limit
-    ? db.getAllSync<{
-        id: string;
-        timestamp: number;
-        level: LogLevel;
-        tag: string;
-        message: string;
-      }>(sql, [limit])
-    : db.getAllSync<{
-        id: string;
-        timestamp: number;
-        level: LogLevel;
-        tag: string;
-        message: string;
-      }>(sql);
+    ? db.getAllSync<LogDbRow>(sql, [limit])
+    : db.getAllSync<LogDbRow>(sql);
 
   return rows.map((row) => ({
     ...row,
@@ -106,20 +83,8 @@ export function getLogsByLevel(level: LogLevel, limit?: number): LogRow[] {
     : "SELECT * FROM logs WHERE level = ? ORDER BY timestamp DESC";
 
   const rows = limit
-    ? db.getAllSync<{
-        id: string;
-        timestamp: number;
-        level: LogLevel;
-        tag: string;
-        message: string;
-      }>(sql, [level, limit])
-    : db.getAllSync<{
-        id: string;
-        timestamp: number;
-        level: LogLevel;
-        tag: string;
-        message: string;
-      }>(sql, [level]);
+    ? db.getAllSync<LogDbRow>(sql, [level, limit])
+    : db.getAllSync<LogDbRow>(sql, [level]);
 
   return rows.map((row) => ({
     ...row,
