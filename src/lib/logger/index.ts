@@ -56,26 +56,41 @@ const sqliteTransport = (props: any) => {
   // Extract tag from extension or use 'App' as default
   const tag = extension || 'App';
 
+  const includeStack = __DEV__;
+  const formatArg = (arg: any): string => {
+    if (arg instanceof Error) {
+      if (includeStack && arg.stack) {
+        return `Error: ${arg.message}\nStack: ${arg.stack}`;
+      }
+      return `Error: ${arg.message}`;
+    }
+
+    if (typeof arg === 'object') {
+      try {
+        return JSON.stringify(arg);
+      } catch {
+        return String(arg);
+      }
+    }
+
+    return String(arg);
+  };
+
   // Format message
   let message = '';
   if (typeof rawMsg[0] === 'string') {
     message = rawMsg[0];
     // Include any additional arguments
     if (rawMsg.length > 1) {
-      message += ' ' + rawMsg.slice(1).map((arg: any) => {
-        if (arg instanceof Error) {
-          return `Error: ${arg.message}\nStack: ${arg.stack}`;
-        }
-        return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
-      }).join(' ');
+      message +=
+        ' ' +
+        rawMsg
+          .slice(1)
+          .map(formatArg)
+          .join(' ');
     }
   } else {
-    message = rawMsg.map((arg: any) => {
-      if (arg instanceof Error) {
-        return `Error: ${arg.message}\nStack: ${arg.stack}`;
-      }
-      return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
-    }).join(' ');
+    message = rawMsg.map(formatArg).join(' ');
   }
 
   // Write to SQLite database (async, non-blocking)
