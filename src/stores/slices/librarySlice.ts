@@ -10,17 +10,17 @@
  */
 
 import {
-  getAllLibraries,
-  getLibraryById,
-  LibraryRow,
-  marshalLibrariesFromResponse,
-  upsertLibraries
+    getAllLibraries,
+    getLibraryById,
+    LibraryRow,
+    marshalLibrariesFromResponse,
+    upsertLibraries
 } from '@/db/helpers/libraries';
 import {
-  getLibraryItemsForList,
-  marshalLibraryItemsFromResponse,
-  transformItemsToDisplayFormat,
-  upsertLibraryItems
+    getLibraryItemsForList,
+    marshalLibraryItemsFromResponse,
+    transformItemsToDisplayFormat,
+    upsertLibraryItems
 } from '@/db/helpers/libraryItems';
 import { cacheCoversForLibraryItems, upsertBooksMetadata, upsertPodcastsMetadata } from '@/db/helpers/mediaMetadata';
 import { fetchLibraries, fetchLibraryItems } from '@/lib/api/endpoints';
@@ -30,9 +30,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LibraryItemDisplayRow } from '@/types/components';
 import type {
-  LoadingStates,
-  SliceCreator,
-  SortConfig
+    LoadingStates,
+    SliceCreator,
+    SortConfig
 } from '@/types/store';
 import { DEFAULT_SORT_CONFIG, sortLibraryItems, STORAGE_KEYS } from '../utils';
 
