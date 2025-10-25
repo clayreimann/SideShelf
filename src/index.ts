@@ -13,6 +13,7 @@
 // Import crypto polyfill for React Native (required for UUID generation)
 import 'react-native-get-random-values';
 
+import { logger } from '@/lib/logger';
 import { playerService } from '@/services/PlayerService';
 import TrackPlayer from 'react-native-track-player';
 
@@ -31,6 +32,10 @@ export async function initializeApp(): Promise<void> {
     if (__DEV__) {
       console.log('[App] Development mode: handling potential hot-reload scenario');
     }
+
+    // Initialize logger first to load persisted settings (disabled tags)
+    await logger.initialize();
+    console.log('[App] Logger initialized and settings loaded');
 
     // Initialize React Native Track Player
     await initializeTrackPlayer();

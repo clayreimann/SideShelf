@@ -124,3 +124,33 @@ export function trimLogsToCount(keepCount: number): void {
     db.runSync("DELETE FROM logs WHERE timestamp < ?", [cutoffRow.timestamp]);
   }
 }
+
+/**
+ * Get all unique tags from logs
+ */
+export function getAllTags(): string[] {
+  const db = getLogsDb();
+  const rows = db.getAllSync<{ tag: string }>(
+    "SELECT DISTINCT tag FROM logs ORDER BY tag ASC"
+  );
+  return rows.map((row) => row.tag);
+}
+
+/**
+ * Get logs for a specific tag
+ */
+export function getLogsByTag(tag: string, limit?: number): LogRow[] {
+  const db = getLogsDb();
+  const sql = limit
+    ? "SELECT * FROM logs WHERE tag = ? ORDER BY timestamp DESC LIMIT ?"
+    : "SELECT * FROM logs WHERE tag = ? ORDER BY timestamp DESC";
+
+  const rows = limit
+    ? db.getAllSync<LogDbRow>(sql, [tag, limit])
+    : db.getAllSync<LogDbRow>(sql, [tag]);
+
+  return rows.map((row) => ({
+    ...row,
+    timestamp: new Date(row.timestamp),
+  }));
+}

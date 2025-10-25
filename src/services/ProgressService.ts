@@ -25,7 +25,11 @@ import { getMediaProgressForLibraryItem, marshalMediaProgressFromApi, marshalMed
 import { getUserByUsername } from '@/db/helpers/users';
 import { LocalListeningSessionRow } from '@/db/schema/localData';
 import { closeSession, createLocalSession, fetchMe, fetchMediaProgress, syncSession } from '@/lib/api/endpoints';
+import { logger } from '@/lib/logger';
 import NetInfo from "@react-native-community/netinfo";
+
+// Create cached sublogger for this service
+const log = logger.forTag('ProgressService');
 
 /**
  * Session information for tracking playback progress
@@ -103,27 +107,27 @@ export class ProgressService {
     existingServerSessionId?: string
   ): Promise<void> {
     try {
-      console.log(`[UnifiedProgressService] Starting session for library item ${libraryItemId}, media ${mediaId}`);
+      log.info(`Starting session for library item ${libraryItemId}, media ${mediaId}`);
       if (existingServerSessionId) {
-        console.log(`[UnifiedProgressService] Using existing streaming session: ${existingServerSessionId}`);
+        log.info(`Using existing streaming session: ${existingServerSessionId}`);
       }
 
       // Validate that the library item exists in our local database
       const libraryItem = await getLibraryItemById(libraryItemId);
       if (!libraryItem) {
-        console.error(`[UnifiedProgressService] Library item ${libraryItemId} not found in local database`);
+        log.error(`Library item ${libraryItemId} not found in local database`);
         throw new Error(`Library item ${libraryItemId} not found locally`);
       }
 
-      console.log(`[UnifiedProgressService] Found library item: ${libraryItem.mediaType} in library ${libraryItem.libraryId}`);
+      log.info(`Found library item: ${libraryItem.mediaType} in library ${libraryItem.libraryId}`);
 
       if (this.currentSession) {
         if (this.currentSession.libraryItemId === libraryItemId) {
-          console.log('[UnifiedProgressService] Session already active for this item, ignoring start request');
+          log.info('Session already active for this item, ignoring start request');
           return;
         } else {
           // End any existing session first
-          console.log('[UnifiedProgressService] Different session active, ending current session first');
+          log.info('Different session active, ending current session first');
           await this.endCurrentSession();
         }
       }
@@ -144,10 +148,10 @@ export class ProgressService {
         const isStale = sessionAge > 10 * 60 * 1000; // 10 minutes
 
         if (isStale) {
-          console.log('[UnifiedProgressService] Found stale active session (>10 min), ending it');
+          log.info('Found stale active session (>10 min), ending it');
           shouldEndExistingSession = true;
         } else {
-          console.log('[UnifiedProgressService] Found recent active session for same item, will resume');
+          log.info('Found recent active session for same item, will resume');
           shouldEndExistingSession = false;
         }
       }
@@ -156,7 +160,7 @@ export class ProgressService {
       const allActiveSessions = await getAllActiveSessionsForUser(user.id);
       for (const session of allActiveSessions) {
         if (session.libraryItemId !== libraryItemId) {
-          console.log(`[UnifiedProgressService] Ending active session for different item: ${session.libraryItemId}`);
+          log.info(`Ending active session for different item: ${session.libraryItemId}`);
           await endListeningSession(session.id, session.currentTime);
         } else if (shouldEndExistingSession) {
           // End the stale session for this item
@@ -169,13 +173,13 @@ export class ProgressService {
       if (existingSession && !shouldEndExistingSession) {
         // Use active session's current time (most recent position) - session is still active and recent
         resumePosition = existingSession.currentTime;
-        console.log('[UnifiedProgressService] Resuming from active session:', resumePosition);
+        log.info(`Resuming from active session: ${resumePosition}`);
       } else {
         // Fall back to saved progress
         const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
         resumePosition = savedProgress?.currentTime || startTime;
         if (savedProgress?.currentTime) {
-          console.log('[UnifiedProgressService] Resuming from saved progress:', resumePosition);
+          log.info(`Resuming from saved progress: ${resumePosition}`);
         }
       }
 
@@ -210,7 +214,7 @@ export class ProgressService {
 
       // If we have an existing server session ID (from streaming), use it
       if (existingServerSessionId) {
-        console.log(`[UnifiedProgressService] Using existing server session ID: ${existingServerSessionId}`);
+        log.info(`Using existing server session ID: ${existingServerSessionId}`);
         await updateServerSessionId(sessionId, existingServerSessionId);
         // Mark as synced since the server session already exists
         await markSessionAsSynced(sessionId);
@@ -219,9 +223,9 @@ export class ProgressService {
         await this.syncCurrentSessionToServer();
       }
 
-      console.log(`[UnifiedProgressService] Started session ${sessionId} for ${libraryItemId} at position ${resumePosition}`);
+      log.info(`Started session ${sessionId} for ${libraryItemId} at position ${resumePosition}`);
     } catch (error) {
-      console.error('[UnifiedProgressService] Failed to start session:', error);
+      log.error('Failed to start session:', error as Error);
       throw error;
     }
   }
@@ -249,9 +253,9 @@ export class ProgressService {
         // Final sync to server
         await this.syncCurrentSessionToServer();
 
-        console.log(`[UnifiedProgressService] Ended session ${this.currentSession.sessionId}`);
+        log.info(`Ended session ${this.currentSession.sessionId}`);
       } else {
-        console.log(`[UnifiedProgressService] Session too short (${sessionDuration}s), not recording`);
+        log.info(`Session too short (${sessionDuration}s), not recording`);
       }
 
       this.currentSession = null;
@@ -261,7 +265,7 @@ export class ProgressService {
       this.lastSyncTime = 0;
       this.failedSyncs = 0;
     } catch (error) {
-      console.error('[UnifiedProgressService] Failed to end session:', error);
+      log.error('Failed to end session:', error as Error);
     }
   }
 
@@ -297,7 +301,7 @@ export class ProgressService {
         this.isPaused = false;
         this.clearPauseTimeout();
         this.lastProgressUpdateTime = now; // Reset to avoid counting paused time
-        console.log('[UnifiedProgressService] Resumed playback');
+        log.info('Resumed playback');
       } else if (!isPlaying && !this.isPaused) {
         // Starting pause
         this.isPaused = true;
@@ -306,7 +310,7 @@ export class ProgressService {
 
         // Immediate sync on pause
         await this.syncCurrentSessionToServer();
-        console.log('[UnifiedProgressService] Paused playback, synced to server');
+        log.info('Paused playback, synced to server');
       }
 
       // Update session progress
@@ -324,7 +328,7 @@ export class ProgressService {
       // but only count listening time when actually playing
       this.lastProgressUpdateTime = now;
     } catch (error) {
-      console.error('[UnifiedProgressService] Failed to update progress:', error);
+      log.error('Failed to update progress:', error as Error);
     }
   }
 
@@ -344,16 +348,16 @@ export class ProgressService {
 
         // Immediate sync on duck
         await this.syncCurrentSessionToServer();
-        console.log('[UnifiedProgressService] Audio ducked, synced to server');
+        log.info('Audio ducked, synced to server');
       } else {
         // Audio unducked (resumed by system) - reset timer to avoid counting ducked time
         this.isPaused = false;
         this.clearPauseTimeout();
         this.lastProgressUpdateTime = Date.now(); // Reset to avoid counting ducked time
-        console.log('[UnifiedProgressService] Audio unducked');
+        log.info('Audio unducked');
       }
     } catch (error) {
-      console.error('[UnifiedProgressService] Failed to handle duck event:', error);
+      log.error('Failed to handle duck event:', error as Error);
     }
   }
 
@@ -425,7 +429,7 @@ export class ProgressService {
       const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
       return savedProgress?.currentTime || 0;
     } catch (error) {
-      console.error('[UnifiedProgressService] Failed to get resume position:', error);
+      log.error('Failed to get resume position:', error as Error);
       return 0;
     }
   }
@@ -442,14 +446,14 @@ export class ProgressService {
       // Check network connectivity
       const netInfo = await NetInfo.fetch();
       if (!netInfo.isConnected) {
-        console.log('[UnifiedProgressService] No network connection, skipping sync');
+        log.info('No network connection, skipping sync');
         return;
       }
 
       // Load the current session from database to get full session data
       const sessionData = await getListeningSession(this.currentSession.sessionId);
       if (!sessionData) {
-        console.error('[UnifiedProgressService] Could not load session data for sync');
+        log.error('Could not load session data for sync');
         return;
       }
 
@@ -457,9 +461,9 @@ export class ProgressService {
       await this.syncSingleSession(sessionData);
 
       this.lastSyncTime = Date.now();
-      console.log(`[UnifiedProgressService] Synced session to server: ${this.currentSession.libraryItemId}`);
+      log.info(`Synced session to server: ${this.currentSession.libraryItemId}`);
     } catch (error) {
-      console.error('[UnifiedProgressService] Failed to sync session to server:', error);
+      log.error('Failed to sync session to server:', error as Error);
     }
   }
 
@@ -471,7 +475,7 @@ export class ProgressService {
     this.clearPauseTimeout();
 
     this.pauseTimeoutInterval = setTimeout(async () => {
-      console.log('[UnifiedProgressService] Pause timeout reached, ending session');
+      log.info('Pause timeout reached, ending session');
       await this.endCurrentSession();
     }, this.PAUSE_TIMEOUT);
   }
@@ -507,16 +511,16 @@ export class ProgressService {
 
     // Skip sessions that are too short
     if (timeListened < this.MIN_SESSION_DURATION) {
-      console.log(`[UnifiedProgressService] Skipping short session ${session.id} (${timeListened}s)`);
+      log.info(`Skipping short session ${session.id} (${timeListened}s)`);
       await markSessionAsSynced(session.id);
       return;
     }
 
-    console.log(`[UnifiedProgressService] Syncing session ${session.id} for library item ${session.libraryItemId}`);
+    log.info(`Syncing session ${session.id} for library item ${session.libraryItemId}`);
 
     if (!session.serverSessionId) {
       // Create new server session only for downloaded content
-      console.log(`[UnifiedProgressService] Creating server session for ${session.libraryItemId}`);
+      log.info(`Creating server session for ${session.libraryItemId}`);
       try {
         // Get the library item to get the library ID
         const libraryItem = await getLibraryItemById(session.libraryItemId);
@@ -538,11 +542,11 @@ export class ProgressService {
         await updateServerSessionId(session.id, serverSession.id);
         session.serverSessionId = serverSession.id;
       } catch (error) {
-        console.error(`[UnifiedProgressService] Failed to create server session for ${session.libraryItemId}:`, error);
+        log.error(`Failed to create server session for ${session.libraryItemId}:`, error as Error);
 
         // If the library item doesn't exist on server, mark session as synced to avoid retry loop
         if (error instanceof Error && error.message.includes('Media item not found')) {
-          console.log(`[UnifiedProgressService] Library item ${session.libraryItemId} not found on server, marking session as synced`);
+          log.info(`Library item ${session.libraryItemId} not found on server, marking session as synced`);
           await markSessionAsSynced(session.id);
           return;
         }
@@ -564,9 +568,9 @@ export class ProgressService {
       try {
         const progressResponse = await fetchMediaProgress(session.libraryItemId);
         await upsertMediaProgress([marshalMediaProgressFromApi(progressResponse, session.userId)]);
-        console.log(`[UnifiedProgressService] Fetched and updated progress after sync for ${session.libraryItemId}`);
+        log.info(`Fetched and updated progress after sync for ${session.libraryItemId}`);
       } catch (fetchError) {
-        console.warn('[UnifiedProgressService] Failed to fetch progress after sync:', fetchError);
+        log.warn(`Failed to fetch progress after sync: ${fetchError}`);
         // Don't fail the entire sync if progress fetch fails
       }
 
@@ -578,9 +582,9 @@ export class ProgressService {
         try {
           const finalProgress = await fetchMediaProgress(session.libraryItemId);
           await upsertMediaProgress([marshalMediaProgressFromApi(finalProgress, session.userId)]);
-          console.log(`[UnifiedProgressService] Fetched final progress after closing session for ${session.libraryItemId}`);
+          log.info(`Fetched final progress after closing session for ${session.libraryItemId}`);
         } catch (fetchError) {
-          console.warn('[UnifiedProgressService] Failed to fetch final progress:', fetchError);
+          log.warn(`Failed to fetch final progress: ${fetchError}`);
         }
       }
 
@@ -597,18 +601,18 @@ export class ProgressService {
       this.failedSyncs = 0;
       this.lastSyncTime = Date.now();
 
-      console.log(`[UnifiedProgressService] Successfully synced session to server: ${session.libraryItemId}`);
+      log.info(`Successfully synced session to server: ${session.libraryItemId}`);
     } catch (error) {
       // Handle sync failure (like Android implementation)
       this.failedSyncs++;
 
-      console.error(`[UnifiedProgressService] Failed to sync session ${session.id} (attempt ${this.failedSyncs}):`, error);
+      log.error(`Failed to sync session ${session.id} (attempt ${this.failedSyncs}):`, error as Error);
 
       // Show user feedback after 2 failed syncs (like Android)
       if (this.failedSyncs >= 2) {
-        console.warn('[UnifiedProgressService] Multiple sync failures detected - user should be notified');
+        log.warn('Multiple sync failures detected - user should be notified');
         endListeningSession(session.id, session.currentTime).catch(err => {
-          console.error('[UnifiedProgressService] Failed to end session after sync failures:', err);
+          log.error('Failed to end session after sync failures:', err);
         });
       }
 
@@ -635,18 +639,18 @@ export class ProgressService {
         return;
       }
 
-      console.log(`[UnifiedProgressService] Syncing ${unsyncedSessions.length} unsynced sessions`);
+      log.info(`Syncing ${unsyncedSessions.length} unsynced sessions`);
 
       for (const session of unsyncedSessions) {
         try {
           await this.syncSingleSession(session);
         } catch (error) {
-          console.error(`[UnifiedProgressService] Failed to sync session ${session.id}:`, error);
+          log.error(`Failed to sync session ${session.id}:`, error as Error);
           await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown error');
         }
       }
     } catch (error) {
-      console.error('[UnifiedProgressService] Failed to sync sessions:', error);
+      log.error('Failed to sync sessions:', error as Error);
     }
   }
 
@@ -655,13 +659,13 @@ export class ProgressService {
    */
   async forceSyncSessions(): Promise<void> {
     const unsyncedSessions = await getUnsyncedSessions();
-    console.log(`[UnifiedProgressService] Force syncing ${unsyncedSessions.length} sessions`);
+    log.info(`Force syncing ${unsyncedSessions.length} sessions`);
 
     for (const session of unsyncedSessions) {
       try {
         await this.syncSingleSession(session);
       } catch (error) {
-        console.error(`[UnifiedProgressService] Failed to force sync session ${session.id}:`, error);
+        log.error(`Failed to force sync session ${session.id}:`, error as Error);
         await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown error');
       }
     }
@@ -673,7 +677,7 @@ export class ProgressService {
    */
   async fetchServerProgress(): Promise<void> {
     try {
-      console.log('[UnifiedProgressService] Fetching latest progress from server');
+      log.info('Fetching latest progress from server');
 
       // Fetch latest user data including progress
       const meResponse = await fetchMe();
@@ -682,13 +686,13 @@ export class ProgressService {
       const progressData = marshalMediaProgressFromAuthResponse(meResponse);
       if (progressData.length > 0) {
         await upsertMediaProgress(progressData);
-        console.log(`[UnifiedProgressService] Synced ${progressData.length} progress entries from server`);
+        log.info(`Synced ${progressData.length} progress entries from server`);
       } else {
-        console.log('[UnifiedProgressService] No progress data to sync from server');
+        log.info('No progress data to sync from server');
       }
 
     } catch (error) {
-      console.error('[UnifiedProgressService] Failed to fetch server progress:', error);
+      log.error('Failed to fetch server progress:', error as Error);
       throw error;
     }
   }
@@ -700,7 +704,7 @@ export class ProgressService {
     try {
       const activeSessions = await getAllActiveSessionsForUser(userId);
       for (const session of activeSessions) {
-        console.log(`[UnifiedProgressService] Ending active session ${session.id} for user ${userId}`);
+        log.info(`Ending active session ${session.id} for user ${userId}`);
 
         // If session got detached somehow, calculate a reasonable end time
         // Use current time if available, otherwise estimate based on session duration
@@ -712,13 +716,13 @@ export class ProgressService {
           const sessionDurationMs = now - sessionCreated;
           const estimatedListeningTime = Math.min(sessionDurationMs / 1000, session.duration - session.startTime);
           endTime = session.startTime + estimatedListeningTime;
-          console.error(`[UnifiedProgressService] Estimated end time for session ${session.id}: ${endTime}`);
+          log.error(`Estimated end time for session ${session.id}: ${endTime}`);
         }
 
         await endListeningSession(session.id, endTime);
       }
     } catch (error) {
-      console.error('[UnifiedProgressService] Failed to end active sessions:', error);
+      log.error('Failed to end active sessions:', error as Error);
     }
   }
 

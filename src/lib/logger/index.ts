@@ -23,13 +23,16 @@
  *   log.error('Error message', error);
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { consoleTransport, logger as rnLogger } from 'react-native-logs';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteLogsBefore, insertLogToDb, trimLogsToCount } from './db';
 import type { LogLevel, SubLogger } from './types';
 
+const DISABLED_TAGS_KEY = '@logger/disabled_tags';
+
 // Re-export types and DB functions for convenience
-export { clearAllLogs, getAllLogs, getLogsByLevel } from './db';
+export { clearAllLogs, getAllLogs, getAllTags, getLogsByLevel, getLogsByTag } from './db';
 export type { LogRow } from './db';
 export type { LogEntry, LogLevel, SubLogger } from './types';
 
@@ -126,14 +129,63 @@ const rnLoggerInstance = rnLogger.createLogger(config);
 class Logger {
   private static instance: Logger | null = null;
   private subLoggers: Map<string, SubLogger> = new Map();
+  private disabledTags: Set<string> = new Set();
+  private initialized: boolean = false;
 
-  private constructor() {}
+  private constructor() {
+    // Load disabled tags from storage on initialization
+    this.loadDisabledTags();
+  }
 
   static getInstance(): Logger {
     if (!Logger.instance) {
       Logger.instance = new Logger();
     }
     return Logger.instance;
+  }
+
+  /**
+   * Load disabled tags from AsyncStorage
+   */
+  private async loadDisabledTags(): Promise<void> {
+    try {
+      const stored = await AsyncStorage.getItem(DISABLED_TAGS_KEY);
+      if (stored) {
+        const tags = JSON.parse(stored) as string[];
+        this.disabledTags = new Set(tags);
+        console.log(`[Logger] Loaded ${tags.length} disabled tags from storage`);
+      }
+      this.initialized = true;
+    } catch (error) {
+      console.error('[Logger] Failed to load disabled tags from storage:', error);
+      this.initialized = true;
+    }
+  }
+
+  /**
+   * Save disabled tags to AsyncStorage
+   */
+  private async saveDisabledTags(): Promise<void> {
+    try {
+      const tags = Array.from(this.disabledTags);
+      await AsyncStorage.setItem(DISABLED_TAGS_KEY, JSON.stringify(tags));
+    } catch (error) {
+      console.error('[Logger] Failed to save disabled tags to storage:', error);
+    }
+  }
+
+  /**
+   * Wait for initialization to complete
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+
+    // Wait for initialization with timeout
+    const timeout = 1000; // 1 second
+    const start = Date.now();
+    while (!this.initialized && Date.now() - start < timeout) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
   }
 
   /**
@@ -144,15 +196,25 @@ class Logger {
     let subLogger = this.subLoggers.get(tag);
     if (!subLogger) {
       const extendedLogger = rnLoggerInstance.extend(tag);
+      const isTagDisabled = () => this.disabledTags.has(tag);
+
       subLogger = {
-        debug: (message: string) => extendedLogger.debug(message),
-        info: (message: string) => extendedLogger.info(message),
-        warn: (message: string) => extendedLogger.warn(message),
+        debug: (message: string) => {
+          if (!isTagDisabled()) extendedLogger.debug(message);
+        },
+        info: (message: string) => {
+          if (!isTagDisabled()) extendedLogger.info(message);
+        },
+        warn: (message: string) => {
+          if (!isTagDisabled()) extendedLogger.warn(message);
+        },
         error: (message: string, error?: Error) => {
-          if (error) {
-            extendedLogger.error(message, error);
-          } else {
-            extendedLogger.error(message);
+          if (!isTagDisabled()) {
+            if (error) {
+              extendedLogger.error(message, error);
+            } else {
+              extendedLogger.error(message);
+            }
           }
         },
       };
@@ -227,6 +289,52 @@ class Logger {
    */
   clearCache(): void {
     this.subLoggers.clear();
+  }
+
+  /**
+   * Enable logging for a specific tag
+   */
+  enableTag(tag: string): void {
+    this.disabledTags.delete(tag);
+    this.saveDisabledTags(); // Persist changes
+  }
+
+  /**
+   * Disable logging for a specific tag
+   */
+  disableTag(tag: string): void {
+    this.disabledTags.add(tag);
+    this.saveDisabledTags(); // Persist changes
+  }
+
+  /**
+   * Check if a tag is enabled
+   */
+  isTagEnabled(tag: string): boolean {
+    return !this.disabledTags.has(tag);
+  }
+
+  /**
+   * Get all disabled tags
+   */
+  getDisabledTags(): string[] {
+    return Array.from(this.disabledTags);
+  }
+
+  /**
+   * Enable all tags
+   */
+  enableAllTags(): void {
+    this.disabledTags.clear();
+    this.saveDisabledTags(); // Persist changes
+  }
+
+  /**
+   * Initialize the logger and load persisted settings
+   * Call this early in app startup to ensure settings are loaded
+   */
+  async initialize(): Promise<void> {
+    await this.ensureInitialized();
   }
 }
 

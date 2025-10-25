@@ -21,6 +21,7 @@ import { getApiConfig } from "@/lib/api/api";
 import { startPlaySession } from "@/lib/api/endpoints";
 import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
+import { logger } from "@/lib/logger";
 import { getItem, SECURE_KEYS } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
@@ -45,12 +46,14 @@ import TrackPlayer, {
 export class PlayerService {
   private static instance: PlayerService | null = null;
   private initialized = false;
+  private initializationTimestamp = 0;
   private listenersSetup = false;
   private eventSubscriptions: Array<{ remove: () => void }> = [];
   private currentTrack: PlayerTrack | null = null;
   private currentUsername: string | null = null;
   private cachedApiInfo: { baseUrl: string; accessToken: string } | null = null;
   private currentPlaySessionId: string | null = null; // Track the current server session ID
+  private log = logger.forTag('PlayerService'); // Cached sublogger
 
   private constructor() {}
 
@@ -83,7 +86,7 @@ export class PlayerService {
       try {
         subscription.remove();
       } catch (error) {
-        console.warn("[PlayerService] Error removing subscription:", error);
+        this.log.error("Error removing subscription", error as Error);
       }
     });
     this.eventSubscriptions.length = 0; // Clear the array
@@ -97,32 +100,27 @@ export class PlayerService {
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
-      console.log("[PlayerService] Already initialized, skipping");
+      this.log.info("Already initialized, skipping");
       return;
     }
 
     try {
-      console.log("[PlayerService] Initializing track player");
+      this.log.info("Initializing track player");
 
       // Check if player is already set up (e.g., during hot reload)
       try {
         const state = await TrackPlayer.getPlaybackState();
-        console.log(
-          "[PlayerService] Track player already exists, reusing existing instance"
-        );
+        this.log.info("Track player already exists, reusing existing instance");
 
         // Player exists, just set up our event listeners
         this.setupEventListeners();
         this.initialized = true;
-        console.log(
-          "[PlayerService] Reused existing track player successfully"
-        );
+        this.initializationTimestamp = Date.now();
+        this.log.info("Reused existing track player successfully");
         return;
       } catch (checkError) {
         // Player doesn't exist yet, continue with setup
-        console.log(
-          "[PlayerService] No existing player found, setting up new instance"
-        );
+        this.log.info("No existing player found, setting up new instance");
       }
 
       await TrackPlayer.setupPlayer({
@@ -156,36 +154,28 @@ export class PlayerService {
       this.setupEventListeners();
 
       this.initialized = true;
-      console.log("[PlayerService] Track player initialized successfully");
+      this.initializationTimestamp = Date.now();
+      this.log.info("Track player initialized successfully");
     } catch (error) {
       // Handle the specific "already initialized" error gracefully
       if (
         error instanceof Error &&
         error.message.includes("already been initialized")
       ) {
-        console.log(
-          "[PlayerService] Player was already initialized elsewhere, setting up listeners"
-        );
+        this.log.info("Player was already initialized elsewhere, setting up listeners");
         try {
           // Set up our event listeners on the existing player
           this.setupEventListeners();
           this.initialized = true;
-          console.log(
-            "[PlayerService] Successfully attached to existing player"
-          );
+          this.initializationTimestamp = Date.now();
+          this.log.info("Successfully attached to existing player");
           return;
         } catch (attachError) {
-          console.error(
-            "[PlayerService] Failed to attach to existing player:",
-            attachError
-          );
+          this.log.error("Failed to attach to existing player", attachError as Error);
         }
       }
 
-      console.error(
-        "[PlayerService] Failed to initialize track player:",
-        error
-      );
+      this.log.error("Failed to initialize track player", error as Error);
       throw error;
     }
   }
@@ -197,7 +187,7 @@ export class PlayerService {
    */
   async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
     try {
-      console.log("[PlayerService] Loading track for library item:", libraryItemId);
+      this.log.info(`Loading track for library item: ${libraryItemId}`);
 
       // Get username from secure storage
       const username = await getItem(SECURE_KEYS.username);
@@ -215,10 +205,10 @@ export class PlayerService {
       if (this.currentTrack?.libraryItemId === libraryItemId) {
         const state = await TrackPlayer.getPlaybackState();
         if (state.state === State.Playing) {
-          console.log("[PlayerService] Already playing this item");
+          this.log.info("Already playing this item");
           return;
         } else if (state.state === State.Paused) {
-          console.log("[PlayerService] Resuming paused playback");
+          this.log.info("Resuming paused playback");
           await TrackPlayer.play();
           return;
         }
@@ -255,7 +245,7 @@ export class PlayerService {
         isDownloaded: audioFiles.some((file: AudioFileWithDownloadInfo) => file.downloadInfo?.isDownloaded),
       };
 
-      console.log("[PlayerService] Built track:", track.title);
+      this.log.info(`Built track: ${track.title}`);
 
       // Clear current queue
       await TrackPlayer.reset();
@@ -285,13 +275,13 @@ export class PlayerService {
             ". Downloaded files are missing and streaming failed. Please check your internet connection or re-download the content.";
         }
 
-        console.error("[PlayerService] No playable tracks available:", {
+        this.log.error(`No playable tracks available: ${JSON.stringify({
           totalAudioFiles: track.audioFiles.length,
           downloadedFiles: track.audioFiles.filter(
             (af) => af.downloadInfo?.isDownloaded
           ).length,
           needsStreaming,
-        });
+        })}`);
 
         throw new Error(errorMessage);
       }
@@ -320,18 +310,18 @@ export class PlayerService {
 
         if (sessionTime > progressTime) {
           resumePosition = activeSession.currentTime;
-          console.log(`[PlayerService] Resuming from active session (more recent): ${resumePosition}s`);
+          this.log.info(` Resuming from active session (more recent): ${resumePosition}s`);
         } else {
           resumePosition = savedProgress.currentTime || 0;
-          console.log(`[PlayerService] Resuming from saved progress (more recent): ${resumePosition}s`);
+          this.log.info(` Resuming from saved progress (more recent): ${resumePosition}s`);
         }
       } else if (activeSession) {
         resumePosition = activeSession.currentTime;
-        console.log(`[PlayerService] Resuming from active session: ${resumePosition}s`);
+        this.log.info(` Resuming from active session: ${resumePosition}s`);
       } else if (savedProgress) {
         resumePosition = savedProgress.currentTime || 0;
         if (resumePosition > 0) {
-          console.log(`[PlayerService] Resuming from saved progress: ${resumePosition}s`);
+          this.log.info(` Resuming from saved progress: ${resumePosition}s`);
         }
       }
 
@@ -342,9 +332,9 @@ export class PlayerService {
       // Start playback - background service will handle session tracking
       await TrackPlayer.play();
 
-      console.log("[PlayerService] Track loaded and playing");
+      this.log.info("Track loaded and playing");
     } catch (error) {
-      console.error("[PlayerService] Failed to load track:", error);
+      this.log.error(" Failed to load track:", error as Error);
       // Clear loading state on error
       const store = useAppStore.getState();
       store._setTrackLoading(false);
@@ -432,23 +422,14 @@ export class PlayerService {
           locallyAvailableFiles.add(audioFile.id);
         } else {
           const resolvedPath = resolveAppPath(storedPath);
-          console.warn(
-            "[PlayerService] File marked as downloaded but missing:",
-            resolvedPath
-          );
+          this.log.warn(`File marked as downloaded but missing: ${resolvedPath}`);
 
           // Clean up database
           try {
             await clearAudioFileDownloadStatus(audioFile.id);
-            console.log(
-              "[PlayerService] Cleared download status for missing file:",
-              audioFile.id
-            );
+            this.log.info(`Cleared download status for missing file: ${audioFile.id}`);
           } catch (error) {
-            console.error(
-              "[PlayerService] Failed to clear download status:",
-              error
-            );
+            this.log.error("Failed to clear download status", error as Error);
           }
         }
       }
@@ -464,21 +445,18 @@ export class PlayerService {
       try {
         playSession = await startPlaySession(playerTrack.libraryItemId);
         this.currentPlaySessionId = playSession.id; // Store session ID for progress tracking
-        console.log("[PlayerService] Started play session:", playSession.id);
-        console.log(
-          "[PlayerService] Got streaming tracks:",
-          playSession.audioTracks.length
-        );
+        this.log.info(`Started play session: ${playSession.id}`);
+        this.log.info(`Got streaming tracks: ${playSession.audioTracks.length}`);
 
         if (playSession.audioTracks.length > 0) {
-          console.log("[PlayerService] Sample streaming track:", {
+          this.log.info(`Sample streaming track: ${JSON.stringify({
             contentUrl: playSession.audioTracks[0].contentUrl,
             filename: playSession.audioTracks[0].metadata.filename,
             mimeType: playSession.audioTracks[0].mimeType,
-          });
+          })}`);
         }
       } catch (error) {
-        console.error("[PlayerService] Failed to start play session:", error);
+        this.log.error("Failed to start play session", error as Error);
       }
     }
 
@@ -517,12 +495,10 @@ export class PlayerService {
 
       // Add track if we have a valid URL
       if (url) {
-        console.log(
-          `[PlayerService] Using ${sourceType} file for ${audioFile.filename}:`,
-          sourceType === "streaming"
-            ? url.replace(this.cachedApiInfo?.accessToken || "", "<token>")
-            : url
-        );
+        const displayUrl = sourceType === "streaming"
+          ? url.replace(this.cachedApiInfo?.accessToken || "", "<token>")
+          : url;
+        this.log.info(`Using ${sourceType} file for ${audioFile.filename}: ${displayUrl}`);
 
         tracks.push({
           id: audioFile.id,
@@ -534,10 +510,7 @@ export class PlayerService {
           duration: audioFile.duration || undefined,
         });
       } else {
-        console.warn(
-          "[PlayerService] No playable source found for:",
-          audioFile.filename
-        );
+        this.log.warn(`No playable source found for: ${audioFile.filename}`);
       }
     }
 
@@ -550,7 +523,7 @@ export class PlayerService {
   private getApiInfo(): { baseUrl: string; accessToken: string } | null {
     const config = getApiConfig();
     if (!config) {
-      console.error("[PlayerService] API config not available");
+      this.log.error(" API config not available");
       return null;
     }
 
@@ -558,7 +531,7 @@ export class PlayerService {
     const accessToken = config.getAccessToken();
 
     if (!baseUrl || !accessToken) {
-      console.error("[PlayerService] Missing base URL or access token");
+      this.log.error(" Missing base URL or access token");
       return null;
     }
 
@@ -591,11 +564,11 @@ export class PlayerService {
    */
   private setupEventListeners(): void {
     if (this.listenersSetup) {
-      console.log("[PlayerService] Event listeners already set up, skipping");
+      this.log.info("Event listeners already set up, skipping");
       return;
     }
 
-    console.log("[PlayerService] Setting up event listeners");
+    this.log.info("Setting up event listeners");
     this.listenersSetup = true;
 
     // Playback state changes
@@ -625,18 +598,122 @@ export class PlayerService {
 
   onPlaybackStateChanged(event: PlaybackState) {
     // Just log the state string value directly
-    console.log("[PlayerService] Playback state changed:", event.state);
+    this.log.info(`Playback state changed: ${event.state}`);
     // PlayerBackgroundService handles store updates
   }
 
   onPlaybackError(event: PlaybackErrorEvent) {
-    console.error("[PlayerService] Playback error:", event);
+    this.log.error(`Playback error: ${JSON.stringify(event)}`);
     // PlayerBackgroundService handles store updates
   }
 
   onPlaybackEnded(event: PlaybackQueueEndedEvent) {
-    console.log("[PlayerService] Playback ended");
+    this.log.info("Playback ended");
     // PlayerBackgroundService handles store updates
+  }
+
+  /**
+   * Get the initialization timestamp (for detecting context recreation)
+   */
+  getInitializationTimestamp(): number {
+    return this.initializationTimestamp;
+  }
+
+  /**
+   * Verify that TrackPlayer state matches store state
+   */
+  async verifyConnection(): Promise<boolean> {
+    try {
+      const store = useAppStore.getState();
+      const [state, currentTrack, progress] = await Promise.all([
+        TrackPlayer.getPlaybackState(),
+        TrackPlayer.getActiveTrack(),
+        TrackPlayer.getProgress(),
+      ]);
+
+      // Check if track matches
+      const trackMatches =
+        (currentTrack as any)?.id === store.player.currentTrack?.libraryItemId ||
+        (!currentTrack && !store.player.currentTrack);
+
+      // Check if position is roughly the same (within 5 seconds)
+      const positionMatches =
+        !store.player.position ||
+        Math.abs(progress.position - store.player.position) < 5;
+
+      // Check if playing state matches
+      const playingMatches =
+        (state.state === State.Playing) === store.player.isPlaying;
+
+      const isConnected = trackMatches && positionMatches && playingMatches;
+
+      if (!isConnected) {
+        this.log.warn(
+          `Connection mismatch - Track: ${trackMatches}, Position: ${positionMatches}, Playing: ${playingMatches}`
+        );
+      } else {
+        this.log.info("Player connection verified OK");
+      }
+
+      return isConnected;
+    } catch (error) {
+      this.log.error("Error verifying connection", error as Error);
+      return false;
+    }
+  }
+
+  /**
+   * Sync store state with TrackPlayer state
+   */
+  async syncStoreWithTrackPlayer(): Promise<void> {
+    try {
+      this.log.info("Syncing store with TrackPlayer");
+
+      const store = useAppStore.getState();
+      const [state, currentTrack, progress] = await Promise.all([
+        TrackPlayer.getPlaybackState(),
+        TrackPlayer.getActiveTrack(),
+        TrackPlayer.getProgress(),
+      ]);
+
+      // Update position
+      store.updatePosition(progress.position);
+
+      // Note: Playing state is updated by PlayerBackgroundService event listeners
+
+      // If current track in TrackPlayer doesn't match store, update store
+      if (currentTrack && (currentTrack as any).id !== store.player.currentTrack?.libraryItemId) {
+        // Find the track info from our current track
+        const trackInfo = this.getCurrentTrack();
+        if (trackInfo) {
+          store._setCurrentTrack(trackInfo);
+        }
+      }
+
+      this.log.info("Store synced with TrackPlayer successfully");
+    } catch (error) {
+      this.log.error("Error syncing store with TrackPlayer", error as Error);
+    }
+  }
+
+  /**
+   * Reconnect background service and sync state
+   */
+  async reconnectBackgroundService(): Promise<void> {
+    try {
+      this.log.info("Reconnecting background service");
+
+      // Import and call the reconnection function from PlayerBackgroundService
+      const { reconnectBackgroundService } = require("./PlayerBackgroundService");
+      reconnectBackgroundService();
+
+      // Sync the store with TrackPlayer state
+      await this.syncStoreWithTrackPlayer();
+
+      this.log.info("Background service reconnection complete");
+    } catch (error) {
+      this.log.error("Error reconnecting background service", error as Error);
+    }
   }
 }
 

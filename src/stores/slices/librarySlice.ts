@@ -10,30 +10,34 @@
  */
 
 import {
-    getAllLibraries,
-    getLibraryById,
-    LibraryRow,
-    marshalLibrariesFromResponse,
-    upsertLibraries
+  getAllLibraries,
+  getLibraryById,
+  LibraryRow,
+  marshalLibrariesFromResponse,
+  upsertLibraries
 } from '@/db/helpers/libraries';
 import {
-    getLibraryItemsForList,
-    marshalLibraryItemsFromResponse,
-    transformItemsToDisplayFormat,
-    upsertLibraryItems
+  getLibraryItemsForList,
+  marshalLibraryItemsFromResponse,
+  transformItemsToDisplayFormat,
+  upsertLibraryItems
 } from '@/db/helpers/libraryItems';
 import { cacheCoversForLibraryItems, upsertBooksMetadata, upsertPodcastsMetadata } from '@/db/helpers/mediaMetadata';
 import { fetchLibraries, fetchLibraryItems } from '@/lib/api/endpoints';
+import { logger } from '@/lib/logger';
 import type { ApiBook, ApiPodcast } from '@/types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LibraryItemDisplayRow } from '@/types/components';
 import type {
-    LoadingStates,
-    SliceCreator,
-    SortConfig
+  LoadingStates,
+  SliceCreator,
+  SortConfig
 } from '@/types/store';
 import { DEFAULT_SORT_CONFIG, sortLibraryItems, STORAGE_KEYS } from '../utils';
+
+// Create cached sublogger for this slice
+const log = logger.forTag('LibrarySlice');
 
 /**
  * ApiLibrary slice state interface - scoped under 'library' to avoid conflicts
@@ -131,7 +135,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         const state = get();
         if (state.library.initialized) return;
 
-        console.log('[LibrarySlice] Initializing slice...');
+        log.info(' Initializing slice...');
 
         set((state: LibrarySlice) => ({
             ...state,
@@ -147,10 +151,10 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
             // Set ready state
             const ready = get()._setLibraryReady(apiConfigured, dbInitialized);
-            console.log(`[LibrarySlice] ApiLibrary slice ready=${ready} apiConfigured=${apiConfigured} dbInitialized=${dbInitialized}`);
+            log.info(` ApiLibrary slice ready=${ready} apiConfigured=${apiConfigured} dbInitialized=${dbInitialized}`);
 
             if (dbInitialized) {
-                console.log('[LibrarySlice] Loading cached libraries and items...');
+                log.info(' Loading cached libraries and items...');
 
                 const { library: { selectedLibraryId } }: LibrarySliceState = get();
 
@@ -159,7 +163,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
                 // If ready and no libraries in cache, fetch from API
                 if (apiConfigured && dbInitialized && libraries.length === 0) {
-                    console.log('[LibrarySlice] No cached libraries found, fetching from API...');
+                    log.info(' No cached libraries found, fetching from API...');
                     libraries = await get()._refetchLibraries();
                 }
 
@@ -169,13 +173,13 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 if (!selectedLibraryId && libraries.length > 0) {
                     finalSelectedLibraryId = libraries[0].id;
                     finalSelectedLibrary = libraries[0];
-                    console.log(`[LibrarySlice] Auto-selecting first library: ${finalSelectedLibrary.name}`);
+                    log.info(` Auto-selecting first library: ${finalSelectedLibrary.name}`);
 
                     // Persist the selection
                     try {
                         await AsyncStorage.setItem(STORAGE_KEYS.selectedLibraryId, finalSelectedLibraryId);
                     } catch (error) {
-                        console.error('[LibrarySlice] Failed to persist auto-selected library:', error);
+                        log.error(' Failed to persist auto-selected library:', error);
                     }
                 }
 
@@ -185,7 +189,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                     items = await getLibraryItemsForList(finalSelectedLibraryId);
                     rawItems = transformItemsToDisplayFormat(items);
 
-                    console.log(`[LibrarySlice] Loaded ${rawItems.length} cached items for library: ${finalSelectedLibrary?.name}`);
+                    log.info(` Loaded ${rawItems.length} cached items for library: ${finalSelectedLibrary?.name}`);
                 }
 
 
@@ -203,9 +207,9 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 }));
             }
 
-            console.log('[LibrarySlice] Slice initialized successfully');
+            log.info(' Slice initialized successfully');
         } catch (error) {
-            console.error('[LibrarySlice] Failed to initialize slice:', error);
+            log.error(' Failed to initialize slice:', error);
         } finally {
             set((state: LibrarySlice) => ({
                 ...state,
@@ -223,16 +227,16 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     selectLibrary: async (libraryId: string, fetchFromApi: boolean = false) => {
         const state = get();
         if (!state.library.ready) {
-            console.warn('[LibrarySlice] Slice not ready, cannot select library');
+            log.warn(' Slice not ready, cannot select library');
             return;
         }
 
         if (state.library.selectedLibraryId === libraryId && !fetchFromApi) {
-            console.log('[LibrarySlice] ApiLibrary already selected:', libraryId);
+            log.info(' ApiLibrary already selected:', libraryId);
             return;
         }
 
-        console.log('[LibrarySlice] Selecting library:', libraryId, 'fetchFromApi:', fetchFromApi);
+        log.info(' Selecting library:', libraryId, 'fetchFromApi:', fetchFromApi);
 
         if (fetchFromApi) {
             // First select the library, then fetch items from API
@@ -250,11 +254,11 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     refresh: async () => {
         const state = get();
         if (!state.library.ready) {
-            console.warn('[LibrarySlice] Slice not ready, cannot refresh');
+            log.warn(' Slice not ready, cannot refresh');
             return;
         }
 
-        console.log('[LibrarySlice] Refreshing libraries and items...');
+        log.info(' Refreshing libraries and items...');
 
         try {
             // First refresh the library list
@@ -265,9 +269,9 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 await get()._refetchItems();
             }
 
-            console.log('[LibrarySlice] Refresh completed successfully');
+            log.info(' Refresh completed successfully');
         } catch (error) {
-            console.error('[LibrarySlice] Failed to refresh:', error);
+            log.error(' Failed to refresh:', error);
         }
     },
 
@@ -278,16 +282,16 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     _selectLibraryFromCache: async (libraryId: string) => {
         const state = get();
         if (!state.library.ready) {
-            console.warn('[LibrarySlice] Slice not ready, cannot select library from cache');
+            log.warn(' Slice not ready, cannot select library from cache');
             return;
         }
 
         if (state.library.selectedLibraryId === libraryId) {
-            console.log('[LibrarySlice] ApiLibrary already selected:', libraryId);
+            log.info(' ApiLibrary already selected:', libraryId);
             return;
         }
 
-        console.log('[LibrarySlice] Selecting library from cache:', libraryId);
+        log.info(' Selecting library from cache:', libraryId);
 
         set((state: LibrarySlice) => ({
             ...state,
@@ -315,7 +319,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
             }
 
         } catch (error) {
-            console.error('[LibrarySlice] Failed to select library from cache:', error);
+            log.error(' Failed to select library from cache:', error);
         } finally {
             set((state: LibrarySlice) => ({
                 ...state,
@@ -336,11 +340,11 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         const { selectedLibraryId } = state.library;
 
         if (!selectedLibraryId) {
-            console.warn('[LibrarySlice] No library selected, cannot load cached items');
+            log.warn(' No library selected, cannot load cached items');
             return;
         }
 
-        console.log('[LibrarySlice] Loading cached items for library:', selectedLibraryId);
+        log.info(' Loading cached items for library:', selectedLibraryId);
 
         set((state: LibrarySlice) => ({
             ...state,
@@ -364,10 +368,10 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 }
             }));
 
-            console.log(`[LibrarySlice] Loaded ${displayItems.length} cached items`);
+            log.info(` Loaded ${displayItems.length} cached items`);
 
         } catch (error) {
-            console.error('[LibrarySlice] Failed to load cached items:', error);
+            log.error(' Failed to load cached items:', error);
         } finally {
             set((state: LibrarySlice) => ({
                 ...state,
@@ -385,7 +389,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     _refetchLibraries: async (): Promise<LibraryRow[]> => {
         const state = get();
         if (!state.library.ready) {
-            console.warn('[LibrarySlice] Slice not ready, cannot fetch libraries');
+            log.warn(' Slice not ready, cannot fetch libraries');
             return [];
         }
 
@@ -398,7 +402,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         }));
 
         try {
-            console.log('[LibrarySlice] Refreshing libraries from API...');
+            log.info(' Refreshing libraries from API...');
 
             // Fetch libraries from API
             const response = await fetchLibraries();
@@ -416,7 +420,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
             if (!state.library.selectedLibraryId && libraries.length > 0) {
                 // If no library is selected but we have libraries, select the first one
-                console.log('[LibrarySlice] Defaulting to first library')
+                log.info(' Defaulting to first library')
                 const selectedLibrary = libraries[0];
                 set((state: LibrarySlice) => ({
                     ...state,
@@ -430,10 +434,10 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 await get()._loadCachedItems();
             }
 
-            console.log(`[LibrarySlice] Successfully refreshed ${libraries.length} libraries`);
+            log.info(` Successfully refreshed ${libraries.length} libraries`);
             return libraries;
         } catch (error) {
-            console.error('[LibrarySlice] Failed to fetch libraries from API:', error);
+            log.error(' Failed to fetch libraries from API:', error);
 
             // Fallback to database-only data
             const libraries = await getAllLibraries();
@@ -462,7 +466,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         const { library: { selectedLibraryId, selectedLibrary, ready } } = state;
 
         if (!ready || !selectedLibraryId || !selectedLibrary) {
-            console.warn('[LibrarySlice] Cannot refresh items: ready=', ready, 'selectedLibraryId=', selectedLibraryId, 'selectedLibrary=', selectedLibrary);
+            log.warn(' Cannot refresh items: ready=', ready, 'selectedLibraryId=', selectedLibraryId, 'selectedLibrary=', selectedLibrary);
             return;
         }
 
@@ -475,7 +479,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         }));
 
         try {
-            console.log('[LibrarySlice] Refreshing items for library:', selectedLibraryId, 'type:', selectedLibrary.mediaType);
+            log.info(' Refreshing items for library:', selectedLibraryId, 'type:', selectedLibrary.mediaType);
 
             // Fetch library items from API
             const response = await fetchLibraryItems(selectedLibraryId);
@@ -490,7 +494,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                     .map(item => ({ ...item.media, libraryItemId: item.id }) as ApiBook);
 
                 if (books.length > 0) {
-                    console.log('[LibrarySlice] Processing book metadata for', books.length, 'books');
+                    log.info(' Processing book metadata for', books.length, 'books');
                     await upsertBooksMetadata(books);
                 }
             } else if (selectedLibrary.mediaType === 'podcast') {
@@ -500,7 +504,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                     .map(item => ({ ...item.media, libraryItemId: item.id }) as ApiPodcast);
 
                 if (podcasts.length > 0) {
-                    console.log('[LibrarySlice] Processing podcast metadata for', podcasts.length, 'podcasts');
+                    log.info(' Processing podcast metadata for', podcasts.length, 'podcasts');
                     await upsertPodcastsMetadata(podcasts);
                 }
             }
@@ -520,15 +524,15 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
             // Cache covers in the background (don't await to avoid blocking UI)
             cacheCoversForLibraryItems(selectedLibraryId).then(async (result) => {
-                console.log(`[LibrarySlice] Cover caching completed. Downloaded: ${result.downloadedCount}/${result.totalCount}`);
+                log.info(` Cover caching completed. Downloaded: ${result.downloadedCount}/${result.totalCount}`);
 
                 // Always refresh the UI after cover caching to show cached covers
                 // This ensures that covers persist after refresh and get updated when newly cached
-                console.log('[LibrarySlice] Refreshing display with cached covers');
+                log.info(' Refreshing display with cached covers');
                 const updatedItems = await getLibraryItemsForList(selectedLibraryId)
                 const updatedDisplayItems = transformItemsToDisplayFormat(updatedItems);
-                console.log(`[LibrarySlice] Refreshing display with ${updatedDisplayItems.length} items after cover caching ${updatedDisplayItems.filter(i => i.coverUri).length} with covers`);
-                
+                log.info(` Refreshing display with ${updatedDisplayItems.length} items after cover caching ${updatedDisplayItems.filter(i => i.coverUri).length} with covers`);
+
                 set((state: LibrarySlice) => ({
                     ...state,
                     library: {
@@ -538,11 +542,11 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                     }
                 }));
             }).catch(error => {
-                console.error('[LibrarySlice] Cover caching failed:', error);
+                log.error(' Cover caching failed:', error);
             });
 
         } catch (error) {
-            console.error('[LibrarySlice] Failed to refresh items:', error);
+            log.error(' Failed to refresh items:', error);
         } finally {
             set((state: LibrarySlice) => ({
                 ...state,
@@ -558,7 +562,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
      * Update sort configuration and persist to storage
      */
     setSortConfig: async (config: SortConfig) => {
-        console.log('[LibrarySlice] Setting sort config:', config);
+        log.info(' Setting sort config:', config);
 
         set((state: LibrarySlice) => ({
             ...state,
@@ -572,7 +576,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         try {
             await AsyncStorage.setItem(STORAGE_KEYS.sortConfig, JSON.stringify(config));
         } catch (error) {
-            console.error('[LibrarySlice] Failed to save sort config:', error);
+            log.error(' Failed to save sort config:', error);
         }
     },
 
@@ -580,7 +584,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
      * Reset the slice to initial state
      */
     resetLibrary: () => {
-        console.log('[LibrarySlice] Resetting slice to initial state');
+        log.info(' Resetting slice to initial state');
         set((state: LibrarySlice) => ({
             ...state,
             ...initialLibraryState,
@@ -592,7 +596,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
      */
     _setLibraryReady: (apiConfigured: boolean, dbInitialized: boolean): boolean => {
         const ready = apiConfigured && dbInitialized;
-        console.log(`[LibrarySlice] Setting ready state: ${ready} (api=${apiConfigured}, db=${dbInitialized})`);
+        log.info(` Setting ready state: ${ready} (api=${apiConfigured}, db=${dbInitialized})`);
         set((state: LibrarySlice) => ({
             ...state,
             library: { ...state.library, ready }
@@ -605,7 +609,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
      */
     _loadLibrarySettingsFromStorage: async () => {
         try {
-            console.log('[LibrarySlice] Loading from storage...');
+            log.info(' Loading from storage...');
 
             const [storedLibraryId, storedSortConfig] = await Promise.all([
                 AsyncStorage.getItem(STORAGE_KEYS.selectedLibraryId),
@@ -616,16 +620,16 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
             if (storedLibraryId) {
                 updates.selectedLibraryId = storedLibraryId;
-                console.log('[LibrarySlice] Loaded selected library ID from storage:', storedLibraryId);
+                log.info(' Loaded selected library ID from storage:', storedLibraryId);
             }
 
             if (storedSortConfig) {
                 try {
                     const parsedSortConfig = JSON.parse(storedSortConfig) as SortConfig;
                     updates.sortConfig = parsedSortConfig;
-                    console.log('[LibrarySlice] Loaded sort config from storage:', parsedSortConfig);
+                    log.info(' Loaded sort config from storage:', parsedSortConfig);
                 } catch (parseError) {
-                    console.error('[LibrarySlice] Failed to parse stored sort config:', parseError);
+                    log.error(' Failed to parse stored sort config:', parseError);
                 }
             }
 
@@ -636,7 +640,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 }));
             }
         } catch (error) {
-            console.error('[LibrarySlice] Failed to load from storage:', error);
+            log.error(' Failed to load from storage:', error);
         }
     },
 

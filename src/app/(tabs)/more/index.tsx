@@ -21,6 +21,7 @@ export default function MoreScreen() {
       { label: 'About Me', onPress: () => router.push('/more/me') },
       { label: 'Settings', onPress: () => router.push('/more/settings') },
       { label: 'Advanced', onPress: () => router.push('/more/advanced') },
+      { label: 'Logs', onPress: () => router.push('/more/logs') },
       { label: 'Log out', onPress: async () => { await logout(); router.replace('/login'); } },
     ];
   }, [router, logout]);
