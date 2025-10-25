@@ -245,7 +245,7 @@ export async function getUnsyncedSessions(): Promise<LocalListeningSessionRow[]>
 /**
  * Update server session ID for a local session
  */
-export async function updateServerSessionId(sessionId: string, serverSessionId: string): Promise<void> {
+export async function updateServerSessionId(sessionId: string, serverSessionId: string | null): Promise<void> {
     const now = new Date();
 
     await db

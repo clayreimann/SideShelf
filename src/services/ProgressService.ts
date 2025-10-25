@@ -503,7 +503,10 @@ export class ProgressService {
   /**
    * Sync a single session to the server
    */
-  private async syncSingleSession(session: LocalListeningSessionRow): Promise<void> {
+  private async syncSingleSession(
+    session: LocalListeningSessionRow,
+    allowSessionRecreate: boolean = true
+  ): Promise<void> {
     // Use current time for active sessions, endTime for completed sessions
     const currentTime = session.endTime || session.currentTime;
     // Use the tracked timeListening field, which represents actual listening time
@@ -603,6 +606,25 @@ export class ProgressService {
 
       log.info(`Successfully synced session to server: ${session.libraryItemId}`);
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message.toLowerCase() : '';
+
+      if (
+        allowSessionRecreate &&
+        error instanceof Error &&
+        errorMessage.includes('not found')
+      ) {
+        log.warn(
+          `Server session ${session.serverSessionId} missing for ${session.libraryItemId}; recreating`
+        );
+        await updateServerSessionId(session.id, null);
+        session.serverSessionId = null;
+
+        // Retry once after clearing the stale server session ID
+        await this.syncSingleSession(session, false);
+        return;
+      }
+
       // Handle sync failure (like Android implementation)
       this.failedSyncs++;
 
