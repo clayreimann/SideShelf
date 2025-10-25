@@ -1,3 +1,5 @@
+import { apiFetch } from "@/lib/api/api";
+import { logger } from "@/lib/logger";
 import type {
   ApiError,
   ApiLibrariesResponse,
@@ -12,27 +14,31 @@ import type {
   ApiPlaySessionResponse,
 } from "@/types/api";
 import DeviceInfo from "react-native-device-info";
-import { apiFetch } from "./api";
+
+const log = logger.forTag("api:endpoints");
+
+async function handleResponseError(response: Response, defaultMessage: string) {
+  if (!response.ok) {
+    const text = await response.clone().text();
+    log.error(`${defaultMessage}: ${text}`);
+    try {
+      const error: ApiError = JSON.parse(text);
+      throw new Error(error.message || error.error || defaultMessage);
+    } catch {
+      throw new Error(text || defaultMessage);
+    }
+  }
+}
 
 export async function fetchMe(): Promise<ApiMeResponse> {
   const response = await apiFetch("/api/me");
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(
-      error.message || error.error || "Failed to fetch user data"
-    );
-  }
+  await handleResponseError(response, "Failed to fetch user data");
   return response.json();
 }
 
 export async function fetchLibraries(): Promise<ApiLibrariesResponse> {
   const response = await apiFetch("/api/libraries");
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(
-      error.message || error.error || "Failed to fetch libraries"
-    );
-  }
+  await handleResponseError(response, "Failed to fetch libraries");
   return response.json();
 }
 
@@ -42,10 +48,7 @@ export async function fetchLibrary(
   const url = `/api/libraries/${libraryId}`;
 
   const response = await apiFetch(url);
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || "Failed to fetch library");
-  }
+  await handleResponseError(response, "Failed to fetch library");
   return response.json();
 }
 
@@ -55,12 +58,10 @@ export async function fetchLibraryWithFilterData(
   const response = await apiFetch(
     `/api/libraries/${libraryId}?include=filterdata`
   );
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(
-      error.message || error.error || "Failed to fetch library with filterdata"
-    );
-  }
+  await handleResponseError(
+    response,
+    "Failed to fetch library with filterdata"
+  );
   return response.json();
 }
 
@@ -68,12 +69,7 @@ export async function fetchLibraryItems(
   libraryId: string
 ): Promise<ApiLibraryItemsResponse> {
   const response = await apiFetch(`/api/libraries/${libraryId}/items`);
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(
-      error.message || error.error || "Failed to fetch library items"
-    );
-  }
+  await handleResponseError(response, "Failed to fetch library items");
   return response.json();
 }
 
@@ -81,12 +77,7 @@ export async function fetchLibraryItem(
   libraryItemId: string
 ): Promise<ApiLibraryItemResponse> {
   const response = await apiFetch(`/api/items/${libraryItemId}`);
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(
-      error.message || error.error || "Failed to fetch library item"
-    );
-  }
+  await handleResponseError(response, "Failed to fetch library item");
   return response.json();
 }
 
@@ -111,12 +102,7 @@ export async function fetchLibraryItemsBatch(
     body: JSON.stringify({ libraryItemIds }),
   });
 
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(
-      error.message || error.error || "Failed to batch fetch library items"
-    );
-  }
+  await handleResponseError(response, "Failed to batch fetch library items");
 
   const data = await response.json();
   return data.libraryItems || [];
@@ -145,12 +131,7 @@ export async function updateMediaProgress(
     }),
   });
 
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(
-      error.message || error.error || "Failed to update media progress"
-    );
-  }
+  await handleResponseError(response, "Failed to update media progress");
 }
 
 const PLAY_METHOD = {
@@ -237,46 +218,28 @@ export async function createLocalSession(
     deviceInfo,
     mediaPlayer: "react-native-track-player",
   };
-  console.log(
-    `[createLocalSession] Creating local session for library item ${libraryItemId} with session ID ${sessionId}`, body
+  const bodyText = JSON.stringify(body);
+  log.info(
+    `Creating local session localId=${sessionId} libraryItem=${libraryItemId} body=${bodyText}`
   );
   const response = await apiFetch("/api/session/local", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: bodyText,
   });
 
-  if (!response.ok) {
-    // Get the response text first, then try to parse as JSON
-    const responseText = await response.text();
-    let errorMessage = "Failed to create local session";
-
-    try {
-      const error: ApiError = JSON.parse(responseText);
-      errorMessage = error.message || error.error || errorMessage;
-    } catch {
-      // If JSON parsing fails, use the raw text response
-      if (responseText.includes("Media item not found")) {
-        errorMessage = "Media item not found";
-      } else {
-        errorMessage = responseText || errorMessage;
-      }
-    }
-
-    console.error(
-      `[createLocalSession] Error for library item ${libraryItemId}: ${errorMessage}`
-    );
-    throw new Error(errorMessage);
-  }
+  await handleResponseError(response, "Failed to create local session");
 
   const result = await response.json();
-  console.log(
-    `[createLocalSession] Created local session with ID ${result.id} for library item ${libraryItemId}`, result
+  log.info(
+    `Created local session serverId=${
+      result.id
+    } libraryItem=${libraryItemId} response=${JSON.stringify(result)}`
   );
 
-  return {id: sessionId};
+  return { id: sessionId };
 }
 
 /**
@@ -304,6 +267,7 @@ export async function syncSession(
 
   body = JSON.stringify(body);
 
+  log.info(`Syncing session id=${sessionId} body=${body}`);
   const response = await apiFetch(`/api/session/${sessionId}/sync`, {
     method: "POST",
     headers: {
@@ -312,10 +276,7 @@ export async function syncSession(
     body,
   });
 
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || "Failed to sync session");
-  }
+  await handleResponseError(response, `Failed to sync session id=${sessionId}`);
 }
 
 /**
@@ -330,10 +291,10 @@ export async function closeSession(sessionId: string): Promise<void> {
     },
   });
 
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(error.message || error.error || "Failed to close session");
-  }
+  await handleResponseError(
+    response,
+    `Failed to close session id=${sessionId}`
+  );
 }
 
 /**
@@ -364,12 +325,7 @@ export async function startPlaySession(
     }),
   });
 
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(
-      error.message || error.error || "Failed to start play session"
-    );
-  }
+  await handleResponseError(response, `Failed to play item=${libraryItemId}`);
 
   return response.json();
 }
@@ -389,12 +345,7 @@ export async function fetchMediaProgress(
     : `/api/me/progress/${libraryItemId}`;
 
   const response = await apiFetch(url);
-  if (!response.ok) {
-    const error: ApiError = await response.json();
-    throw new Error(
-      error.message || error.error || "Failed to fetch media progress"
-    );
-  }
+  await handleResponseError(response, "Failed to fetch media progress");
   return response.json();
 }
 
@@ -403,7 +354,7 @@ export async function doPing(params: { baseUrl: string }): Promise<boolean> {
     const { baseUrl } = params;
     const base = baseUrl.trim().replace(/\/$/, "");
 
-    console.log("[ping] Pinging server at:", base);
+    log.info(`Pinging server at ${base}`);
     const response = await Promise.race([
       fetch(`${base}/ping`, {
         method: "GET",
@@ -417,14 +368,16 @@ export async function doPing(params: { baseUrl: string }): Promise<boolean> {
       ),
     ]);
     if (!response.ok) {
-      console.log("[ping] Ping failed:", response.status, response.statusText);
+      log.info(
+        `Ping failed status=${response.status} text=${response.statusText}`
+      );
       return false;
     }
     const data = await response.json();
-    console.log("[ping] Ping response:", data);
+    log.info(`Ping response: ${JSON.stringify(data)}`);
     return data?.success;
   } catch (e) {
-    console.log("[ping] Ping error:", e);
+    log.error("Ping error:", e as Error);
     return false;
   }
 }
@@ -436,7 +389,7 @@ export async function login(
 ): Promise<ApiLoginResponse> {
   const base = baseUrl.trim().replace(/\/$/, "");
   const url = `${base}/login`;
-  console.log("[auth] Login URL:", url);
+  log.info(`Login URL: ${url}`);
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -446,17 +399,10 @@ export async function login(
     },
     body: JSON.stringify({ username, password }),
   });
-  console.log("[auth] Login response:", response.status, response.statusText);
+  log.info(
+    `Login response: status=${response.status} text=${response.statusText}`
+  );
 
-  if (!response.ok) {
-    const text = await response.clone().text();
-    console.log("[auth] Login error body:", text);
-    let message = "Login failed";
-    try {
-      const err = JSON.parse(text);
-      message = err?.error || err?.message || message;
-    } catch {}
-    throw new Error(message);
-  }
+  await handleResponseError(response, "Login failed");
   return response.json();
 }
