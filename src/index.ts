@@ -13,9 +13,12 @@
 // Import crypto polyfill for React Native (required for UUID generation)
 import 'react-native-get-random-values';
 
+import { getFullVersionString, getPreviousVersion, hasAppBeenUpdated, saveCurrentVersion } from '@/lib/appVersion';
 import { logger } from '@/lib/logger';
 import { playerService } from '@/services/PlayerService';
 import TrackPlayer from 'react-native-track-player';
+
+const log = logger.forTag('App');
 
 /**
  * Initialize all singleton services
@@ -25,6 +28,7 @@ import TrackPlayer from 'react-native-track-player';
  * and singletons that the app depends on.
  */
 export async function initializeApp(): Promise<void> {
+  // Use console.log for this initial message since logger isn't initialized yet
   console.log('[App] Starting application initialization...');
 
   try {
@@ -35,7 +39,28 @@ export async function initializeApp(): Promise<void> {
 
     // Initialize logger first to load persisted settings (disabled tags)
     await logger.initialize();
-    console.log('[App] Logger initialized and settings loaded');
+    log.info('Logger initialized and settings loaded');
+
+    // Check if app has been updated
+    const appUpdated = await hasAppBeenUpdated();
+    if (appUpdated) {
+      const previousVersion = await getPreviousVersion();
+      const currentVersion = getFullVersionString();
+
+      if (previousVersion) {
+        log.info(`App updated from ${previousVersion.version} (${previousVersion.buildNumber}) to ${currentVersion}`);
+      } else {
+        log.info(`First run - version ${currentVersion}`);
+      }
+
+      // Perform any update-specific cleanup or migration here
+      await handleAppUpdate();
+
+      // Save the new version
+      await saveCurrentVersion();
+    } else {
+      log.info(`Starting app version ${getFullVersionString()}`);
+    }
 
     // Initialize React Native Track Player
     await initializeTrackPlayer();
@@ -44,10 +69,36 @@ export async function initializeApp(): Promise<void> {
     // await downloadService.initialize();
     // await otherService.initialize();
 
-    console.log('[App] Application initialization completed successfully');
+    log.info('Application initialization completed successfully');
   } catch (error) {
-    console.error('[App] Failed to initialize application:', error);
+    log.error('Failed to initialize application', error as Error);
     throw error;
+  }
+}
+
+/**
+ * Handle app update logic
+ * This is called when the app version changes
+ */
+async function handleAppUpdate(): Promise<void> {
+  try {
+    log.info('Handling app update...');
+
+    // Force cleanup of any cached modules that might have changed
+    // This is especially important for the PlayerBackgroundService
+    const backgroundServicePath = require.resolve('@/services/PlayerBackgroundService');
+    if (require.cache[backgroundServicePath]) {
+      log.info('Clearing cached PlayerBackgroundService module');
+      delete require.cache[backgroundServicePath];
+    }
+
+    // Any other update-specific logic can go here
+    // For example: database migrations, cache cleanup, etc.
+
+    log.info('App update handling complete');
+  } catch (error) {
+    log.error('Error handling app update', error as Error);
+    // Don't throw - we want the app to continue even if update handling fails
   }
 }
 
@@ -59,7 +110,7 @@ export async function initializeApp(): Promise<void> {
  */
 async function initializeTrackPlayer(): Promise<void> {
   try {
-    console.log('[App] Initializing React Native Track Player...');
+    log.info('Initializing React Native Track Player...');
 
     // Register the playback service for background audio
     // This is safe to call multiple times
@@ -68,13 +119,13 @@ async function initializeTrackPlayer(): Promise<void> {
     // Initialize the player service singleton
     await playerService.initialize();
 
-    console.log('[App] React Native Track Player initialized successfully');
+    log.info('React Native Track Player initialized successfully');
   } catch (error) {
-    console.error('[App] Failed to initialize React Native Track Player:', error);
+    log.error('Failed to initialize React Native Track Player', error as Error);
 
     // In development mode, don't throw the error to prevent app crashes during hot-reload
     if (__DEV__) {
-      console.warn('[App] Continuing despite track player initialization error (development mode)');
+      log.warn('Continuing despite track player initialization error (development mode)');
       return;
     }
 

@@ -698,14 +698,63 @@ export class PlayerService {
 
   /**
    * Reconnect background service and sync state
+   *
+   * This method handles reconnection after app updates, hot reloads, or JS context recreation.
+   * It safely loads the background service module and attempts reconnection, falling back
+   * to a full re-registration if the module has changed (e.g., after an app update).
    */
   async reconnectBackgroundService(): Promise<void> {
     try {
       this.log.info("Reconnecting background service");
 
-      // Import and call the reconnection function from PlayerBackgroundService
-      const { reconnectBackgroundService } = require("./PlayerBackgroundService");
-      reconnectBackgroundService();
+      // Try to load the background service module
+      // Using require() here to handle dynamic loading
+      let PlayerBackgroundServiceModule;
+
+      try {
+        // Clear the require cache for this module to ensure we get the latest version
+        // This is important after app updates where the module might have changed
+        const modulePath = require.resolve("./PlayerBackgroundService");
+        if (__DEV__) {
+          this.log.debug(`Module path: ${modulePath}`);
+        }
+
+        // Delete from cache in development to ensure we get fresh code
+        if (__DEV__ && require.cache[modulePath]) {
+          this.log.debug("Clearing module cache for PlayerBackgroundService");
+          delete require.cache[modulePath];
+        }
+
+        PlayerBackgroundServiceModule = require("./PlayerBackgroundService");
+      } catch (requireError) {
+        this.log.error("Failed to require PlayerBackgroundService module", requireError as Error);
+
+        // If we can't load the module, try to force a full re-registration
+        this.log.warn("Attempting full TrackPlayer service re-registration");
+        TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
+        await this.syncStoreWithTrackPlayer();
+        return;
+      }
+
+      // Check if the reconnect function exists
+      const reconnectFn = PlayerBackgroundServiceModule.reconnectBackgroundService;
+      const isInitialized = PlayerBackgroundServiceModule.isBackgroundServiceInitialized?.();
+
+      if (typeof reconnectFn === 'function') {
+        this.log.info(`Background service initialized: ${isInitialized}`);
+        reconnectFn();
+      } else {
+        // Function doesn't exist (old version or incompatible module)
+        this.log.warn("reconnectBackgroundService function not found - forcing full re-registration");
+
+        // Shutdown if the function exists
+        if (typeof PlayerBackgroundServiceModule.shutdownBackgroundService === 'function') {
+          PlayerBackgroundServiceModule.shutdownBackgroundService();
+        }
+
+        // Force re-registration
+        TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
+      }
 
       // Sync the store with TrackPlayer state
       await this.syncStoreWithTrackPlayer();
@@ -713,6 +762,13 @@ export class PlayerService {
       this.log.info("Background service reconnection complete");
     } catch (error) {
       this.log.error("Error reconnecting background service", error as Error);
+
+      // Last resort: try to sync state anyway
+      try {
+        await this.syncStoreWithTrackPlayer();
+      } catch (syncError) {
+        this.log.error("Failed to sync store after reconnection error", syncError as Error);
+      }
     }
   }
 }

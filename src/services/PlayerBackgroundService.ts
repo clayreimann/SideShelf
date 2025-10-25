@@ -341,7 +341,16 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
 function cleanupEventListeners(): void {
   if (global.__playerBackgroundServiceSubscriptions) {
     log.info( 'Cleaning up existing event listeners');
-    global.__playerBackgroundServiceSubscriptions.forEach(unsub => unsub());
+    global.__playerBackgroundServiceSubscriptions.forEach(unsub => {
+      try {
+        // unsub is already the .remove function, just call it
+        if (typeof unsub === 'function') {
+          unsub();
+        }
+      } catch (error) {
+        log.error('Error removing event listener', error as Error);
+      }
+    });
     global.__playerBackgroundServiceSubscriptions = undefined;
   }
 }
@@ -382,14 +391,37 @@ function setupEventListeners(): Array<() => void> {
 
 /**
  * Reconnect background service (for external use)
+ * This forces a cleanup and re-setup of event listeners
  */
 export function reconnectBackgroundService(): void {
-  log.info( 'Forcing reconnection of background service');
+  log.info('Forcing reconnection of background service');
   cleanupEventListeners();
   global.__playerBackgroundServiceSubscriptions = setupEventListeners();
   global.__playerBackgroundServiceInitializedAt = Date.now();
 }
 
+/**
+ * Shutdown the background service and clean up all resources
+ * Useful for hot reloads, app updates, or forcing a full re-initialization
+ */
+export function shutdownBackgroundService(): void {
+  log.info('Shutting down background service');
+  cleanupEventListeners();
+  global.__playerBackgroundServiceSubscriptions = undefined;
+  global.__playerBackgroundServiceInitializedAt = undefined;
+}
+
+/**
+ * Check if the background service is initialized
+ */
+export function isBackgroundServiceInitialized(): boolean {
+  return global.__playerBackgroundServiceInitializedAt !== undefined;
+}
+
+/**
+ * Main module export - called by TrackPlayer.registerPlaybackService
+ * This is the entry point that react-native-track-player calls
+ */
 module.exports = async function() {
   const now = Date.now();
 
@@ -398,19 +430,19 @@ module.exports = async function() {
 
     // If called within 1 second, skip (duplicate call)
     if (timeSinceInit < 1000) {
-      log.debug( `Already initialized ${timeSinceInit}ms ago, skipping duplicate setup`);
+      log.debug(`Already initialized ${timeSinceInit}ms ago, skipping duplicate setup`);
       return;
     }
 
     // If it's been longer, this likely means the JS context was recreated
-    log.warn( `Re-initializing after ${Math.round(timeSinceInit / 1000)}s - possible JS context recreation`);
+    log.warn(`Re-initializing after ${Math.round(timeSinceInit / 1000)}s - possible JS context recreation`);
     cleanupEventListeners();
   } else {
-    log.info( 'First-time initialization');
+    log.info('First-time initialization');
   }
 
   global.__playerBackgroundServiceSubscriptions = setupEventListeners();
   global.__playerBackgroundServiceInitializedAt = now;
 
-  log.info( 'Background service initialization complete');
+  log.info('Background service initialization complete');
 };

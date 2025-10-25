@@ -24,8 +24,12 @@ async function handleResponseError(response: Response, defaultMessage: string) {
     try {
       const error: ApiError = JSON.parse(text);
       throw new Error(error.message || error.error || defaultMessage);
-    } catch {
-      throw new Error(text || defaultMessage);
+    } catch (parseError) {
+      // If JSON parsing fails, the server returned plain text (e.g., "OK", "Offline")
+      // Use the raw text as the error message instead of exposing the parse error
+      const errorMessage = text?.trim() || defaultMessage;
+      log.warn(`Server returned non-JSON error response: ${errorMessage}`);
+      throw new Error(errorMessage);
     }
   }
 }
@@ -232,12 +236,28 @@ export async function createLocalSession(
 
   await handleResponseError(response, "Failed to create local session");
 
-  const result = await response.json();
-  log.info(
-    `Created local session serverId=${
-      result.id
-    } libraryItem=${libraryItemId} response=${JSON.stringify(result)}`
-  );
+  // Try to parse JSON response, but handle non-JSON responses gracefully
+  let result: any = {};
+  try {
+    const text = await response.text();
+    if (text && text.trim()) {
+      try {
+        result = JSON.parse(text);
+        log.info(
+          `Created local session serverId=${
+            result.id || sessionId
+          } libraryItem=${libraryItemId} response=${JSON.stringify(result)}`
+        );
+      } catch (parseError) {
+        // Server returned non-JSON response (e.g., "OK"), which is fine for this endpoint
+        log.info(
+          `Created local session localId=${sessionId} libraryItem=${libraryItemId} (server response: ${text.substring(0, 50)})`
+        );
+      }
+    }
+  } catch (error) {
+    log.warn(`Failed to read response body: ${error}`);
+  }
 
   return { id: sessionId };
 }
