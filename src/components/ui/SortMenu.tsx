@@ -1,3 +1,4 @@
+import { translate } from '@/i18n';
 import React from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 
@@ -30,8 +31,9 @@ export default function SortMenu<T = string>({
   onSortChange,
   sortOptions,
   isDark,
-  title = 'Sort by'
+  title
 }: SortMenuProps<T>) {
+  const headerTitle = title ?? translate('sortMenu.title');
   const handleSortChange = (field: T) => {
     const direction: 'asc' | 'desc' =
       sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc';
@@ -76,35 +78,47 @@ export default function SortMenu<T = string>({
             color: isDark ? '#fff' : '#000',
             textAlign: 'center',
           }}>
-            {title}
+            {headerTitle}
           </Text>
-          {sortOptions.map((option) => (
-            <Pressable
-              key={option.field}
-              onPress={() => handleSortChange(option.field)}
-              style={{
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 8,
-                marginBottom: 4,
-                backgroundColor: sortConfig.field === option.field
-                  ? (isDark ? '#555' : '#f0f0f0')
-                  : 'transparent',
-              }}
-            >
-              <Text style={{
-                color: isDark ? '#fff' : '#000',
-                fontSize: 16,
-              }}>
-                {option.label}
-                {sortConfig.field === option.field && (
-                  <Text style={{ color: isDark ? '#aaa' : '#666' }}>
-                    {' '}({sortConfig.direction === 'asc' ? 'A-Z' : 'Z-A'})
-                  </Text>
-                )}
-              </Text>
-            </Pressable>
-          ))}
+          {sortOptions.map((option) => {
+            const isActive = sortConfig.field === option.field;
+            const directionLabel =
+              sortConfig.direction === "asc"
+                ? translate("sortMenu.direction.asc")
+                : translate("sortMenu.direction.desc");
+
+            return (
+              <Pressable
+                key={option.field}
+                onPress={() => handleSortChange(option.field)}
+                style={{
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  marginBottom: 4,
+                  backgroundColor: isActive
+                    ? isDark
+                      ? "#555"
+                      : "#f0f0f0"
+                    : "transparent",
+                }}
+              >
+                <Text
+                  style={{
+                    color: isDark ? "#fff" : "#000",
+                    fontSize: 16,
+                  }}
+                >
+                  {option.label}
+                  {isActive && (
+                    <Text style={{ color: isDark ? "#aaa" : "#666" }}>
+                      {` (${directionLabel})`}
+                    </Text>
+                  )}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       </Pressable>
     </Modal>

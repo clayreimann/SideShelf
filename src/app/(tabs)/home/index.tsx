@@ -1,4 +1,5 @@
 import Item from '@/components/home/Item';
+import { translate } from '@/i18n';
 import { getHomeScreenData, getItemsWithProgressNeedingFullRefresh, type HomeScreenItem } from '@/db/helpers/homeScreen';
 import { getUserByUsername } from '@/db/helpers/users';
 import { useThemedStyles } from '@/lib/theme';
@@ -53,21 +54,21 @@ export default function HomeScreen() {
 
       if (data.continueListening.length > 0) {
         newSections.push({
-          title: 'Continue Listening',
+          title: translate('home.sections.continueListening'),
           data: data.continueListening,
         });
       }
 
       if (data.downloaded.length > 0) {
         newSections.push({
-          title: 'Downloaded',
+          title: translate('home.sections.downloaded'),
           data: data.downloaded,
         });
       }
 
       if (data.listenAgain.length > 0) {
         newSections.push({
-          title: 'Listen Again',
+          title: translate('home.sections.listenAgain'),
           data: data.listenAgain,
         });
       }
@@ -86,7 +87,10 @@ export default function HomeScreen() {
 
     } catch (error) {
       console.error('[HomeScreen] Error loading home data:', error);
-      Alert.alert('Error', 'Failed to load home screen data');
+      Alert.alert(
+        translate('common.error'),
+        translate('home.errors.loadHomeData')
+      );
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -135,7 +139,7 @@ export default function HomeScreen() {
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={colors.link} />
         <Text style={[styles.text, { marginTop: 12, opacity: 0.7 }]}>
-          Loading your library...
+          {translate('home.loading')}
         </Text>
       </View>
     );
@@ -144,7 +148,7 @@ export default function HomeScreen() {
   if (!isAuthenticated) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={styles.text}>Please log in to view your library</Text>
+        <Text style={styles.text}>{translate('home.requireLogin')}</Text>
       </View>
     );
   }
@@ -153,8 +157,7 @@ export default function HomeScreen() {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <Text style={[styles.text, { fontSize: 18, textAlign: 'center', opacity: 0.7, paddingHorizontal: 16 }]}>
-          Welcome to your library!{'\n\n'}
-          Your books will appear here as you start listening to them.
+          {translate('home.emptyState')}
         </Text>
       </View>
     );

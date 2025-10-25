@@ -1,5 +1,6 @@
 import { LibraryItemList, LibraryPicker } from '@/components/library';
 import { HeaderControls, SortMenu } from '@/components/ui';
+import { translate } from '@/i18n';
 import { useThemedStyles } from '@/lib/theme';
 import { SortField, useLibrary } from '@/stores';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -48,22 +49,22 @@ export default function LibraryScreen() {
 
   // ApiLibrary sort options
   const librarySortOptions = [
-    { field: 'title' as SortField, label: 'Title' },
-    { field: 'author' as SortField, label: 'Author' },
-    { field: 'publishedYear' as SortField, label: 'Published Year' },
-    { field: 'addedAt' as SortField, label: 'Date Added' },
+    { field: 'title' as SortField, label: translate('library.sortOptions.title') },
+    { field: 'author' as SortField, label: translate('library.sortOptions.author') },
+    { field: 'publishedYear' as SortField, label: translate('library.sortOptions.publishedYear') },
+    { field: 'addedAt' as SortField, label: translate('library.sortOptions.dateAdded') },
   ];
 
   if (!libraries.length) {
     return (
       <View style={styles.container}>
-        <Text style={styles.text}>No libraries found.</Text>
-        <Button title='Refresh' onPress={onRefresh} />
+        <Text style={styles.text}>{translate('library.empty')}</Text>
+        <Button title={translate('common.refresh')} onPress={onRefresh} />
       </View>
     );
   }
 
-  const title = selectedLibrary?.name || 'Library';
+  const title = selectedLibrary?.name || translate('library.title');
 
   return (
     <>

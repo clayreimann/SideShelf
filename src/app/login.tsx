@@ -1,3 +1,4 @@
+import { translate } from '@/i18n';
 import { doPing } from '@/lib/api/endpoints';
 import { useThemedStyles } from '@/lib/theme';
 import { Stack, useRouter } from 'expo-router';
@@ -74,7 +75,7 @@ export default function LoginModal() {
       router.replace('/');
     } catch (e: any) {
       console.log('[login] Error', e);
-      setError(e?.message || 'Login failed');
+      setError(e?.message || translate('auth.loginFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -82,11 +83,13 @@ export default function LoginModal() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-      <Stack.Screen options={{ headerTitle: 'Sign in' }} />
+      <Stack.Screen options={{ headerTitle: translate('auth.signIn') }} />
       <View style={styles.content}>
-        <Text style={{...styles.title, color: colors.textPrimary }}>{loginMessage ?? 'Connect to Audiobookshelf'}</Text>
+        <Text style={{...styles.title, color: colors.textPrimary }}>
+          {loginMessage ?? translate('auth.connectToAudiobookshelf')}
+        </Text>
         <TextInput
-          placeholder="Server URL (e.g. https://abs.example.com)"
+          placeholder={translate('auth.serverUrlPlaceholder')}
           autoCapitalize="none"
           autoCorrect={false}
           style={{...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
@@ -97,7 +100,7 @@ export default function LoginModal() {
           textContentType="URL"
         />
         <TextInput
-          placeholder="Username"
+          placeholder={translate('auth.usernamePlaceholder')}
           autoCapitalize="none"
           autoCorrect={false}
           style={{...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
@@ -106,7 +109,7 @@ export default function LoginModal() {
           textContentType="username"
         />
         <TextInput
-          placeholder="Password"
+          placeholder={translate('auth.passwordPlaceholder')}
           autoCapitalize="none"
           autoCorrect={false}
           secureTextEntry
@@ -118,10 +121,18 @@ export default function LoginModal() {
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {baseUrl ? (
-          <Text style={{ color: colors.textPrimary, textAlign: 'center' }}>{didPing ? 'Connected to server' : 'Searching for server…'}</Text>
+          <Text style={{ color: colors.textPrimary, textAlign: 'center' }}>
+            {didPing
+              ? translate('auth.connectedToServer')
+              : translate('auth.searchingForServer')}
+          </Text>
         ) : null}
         <TouchableOpacity style={[styles.button, !canSubmit && styles.buttonDisabled]} onPress={onSubmit} disabled={!canSubmit}>
-          {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>{translate('auth.signIn')}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

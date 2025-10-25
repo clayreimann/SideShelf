@@ -1,4 +1,5 @@
 import FloatingPlayer from "@/components/ui/FloatingPlayer";
+import { translate, type TranslationKey } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { DownloadService } from "@/services/DownloadService";
@@ -15,7 +16,7 @@ type IoniconsName = ComponentProps<typeof Ionicons>["name"];
 
 type TabConfig = {
   name: string;
-  title: string;
+  titleKey: TranslationKey;
   sfSymbol: {
     default: SFSymbol;
     selected: SFSymbol;
@@ -33,13 +34,13 @@ const isAndroid = platform === "android";
 const TAB_CONFIG: TabConfig[] = [
   {
     name: "home",
-    title: "Home",
+    titleKey: "tabs.home",
     sfSymbol: { default: "house", selected: "house.fill" },
     androidIcon: { default: "home-outline", selected: "home" },
   },
   {
     name: "library",
-    title: "Library",
+    titleKey: "tabs.library",
     sfSymbol: {
       default: "books.vertical",
       selected: "books.vertical.fill",
@@ -48,13 +49,13 @@ const TAB_CONFIG: TabConfig[] = [
   },
   {
     name: "series",
-    title: "Series",
+    titleKey: "tabs.series",
     sfSymbol: { default: "square.stack", selected: "square.stack.fill" },
     androidIcon: { default: "layers-outline", selected: "layers" },
   },
   {
     name: "authors",
-    title: "Authors",
+    titleKey: "tabs.authors",
     sfSymbol: { default: "person.circle", selected: "person.circle.fill" },
     androidIcon: {
       default: "people-circle-outline",
@@ -63,7 +64,7 @@ const TAB_CONFIG: TabConfig[] = [
   },
   {
     name: "more",
-    title: "More",
+    titleKey: "tabs.more",
     sfSymbol: { default: "ellipsis.circle", selected: "ellipsis.circle.fill" },
     androidIcon: {
       default: "ellipsis-horizontal-circle-outline",
@@ -161,23 +162,26 @@ export default function TabLayout() {
             },
           }}
         >
-          {TAB_CONFIG.map((tab) => (
-            <Tabs.Screen
-              key={tab.name}
-              name={tab.name}
-              options={{
-                title: tab.title,
-                tabBarIcon: ({ focused, color, size }) => (
-                  <TabBarIcon
-                    config={tab}
-                    focused={focused}
-                    color={color}
-                    size={size}
-                  />
-                ),
-              }}
-            />
-          ))}
+          {TAB_CONFIG.map((tab) => {
+            const label = translate(tab.titleKey);
+            return (
+              <Tabs.Screen
+                key={tab.name}
+                name={tab.name}
+                options={{
+                  title: label,
+                  tabBarIcon: ({ focused, color, size }) => (
+                    <TabBarIcon
+                      config={tab}
+                      focused={focused}
+                      color={color}
+                      size={size}
+                    />
+                  ),
+                }}
+              />
+            );
+          })}
         </Tabs>
         <FloatingPlayer />
       </View>
@@ -200,33 +204,36 @@ export default function TabLayout() {
         rippleColor={tabs.rippleColor}
         indicatorColor={tabs.indicatorColor}
       >
-        {TAB_CONFIG.map((tab) => (
-          <NativeTabs.Trigger
-            key={tab.name}
-            name={tab.name}
-            options={{
-              iconColor: tabs.iconColor,
-              selectedIconColor: tabs.selectedIconColor,
-              labelStyle: { color: tabs.labelColor },
-              selectedLabelStyle: { color: tabs.selectedLabelColor },
-              badgeBackgroundColor: tabs.badgeBackgroundColor,
-              selectedBadgeBackgroundColor: tabs.selectedBadgeBackgroundColor,
-              badgeTextColor: tabs.badgeTextColor,
-              backgroundColor: tabs.backgroundColor,
-            }}
-          >
-            <Label selectedStyle={{ color: tabs.selectedLabelColor }}>
-              {tab.title}
-            </Label>
-            <Icon
-              sf={{
-                default: tab.sfSymbol.default,
-                selected: tab.sfSymbol.selected,
+        {TAB_CONFIG.map((tab) => {
+          const label = translate(tab.titleKey);
+          return (
+            <NativeTabs.Trigger
+              key={tab.name}
+              name={tab.name}
+              options={{
+                iconColor: tabs.iconColor,
+                selectedIconColor: tabs.selectedIconColor,
+                labelStyle: { color: tabs.labelColor },
+                selectedLabelStyle: { color: tabs.selectedLabelColor },
+                badgeBackgroundColor: tabs.badgeBackgroundColor,
+                selectedBadgeBackgroundColor: tabs.selectedBadgeBackgroundColor,
+                badgeTextColor: tabs.badgeTextColor,
+                backgroundColor: tabs.backgroundColor,
               }}
-              selectedColor={tabs.selectedIconColor}
-            />
-          </NativeTabs.Trigger>
-        ))}
+            >
+              <Label selectedStyle={{ color: tabs.selectedLabelColor }}>
+                {label}
+              </Label>
+              <Icon
+                sf={{
+                  default: tab.sfSymbol.default,
+                  selected: tab.sfSymbol.selected,
+                }}
+                selectedColor={tabs.selectedIconColor}
+              />
+            </NativeTabs.Trigger>
+          );
+        })}
       </NativeTabs>
 
       <FloatingPlayer />
