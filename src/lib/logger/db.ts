@@ -109,23 +109,6 @@ export function deleteLogsBefore(date: Date): void {
 }
 
 /**
- * Trim logs to keep only the most recent N entries
- */
-export function trimLogsToCount(keepCount: number): void {
-  const db = getLogsDb();
-
-  // Get the timestamp of the Nth most recent log
-  const cutoffRow = db.getFirstSync<{ timestamp: number }>(
-    "SELECT timestamp FROM logs ORDER BY timestamp DESC LIMIT 1 OFFSET ?",
-    [keepCount - 1]
-  );
-
-  if (cutoffRow) {
-    db.runSync("DELETE FROM logs WHERE timestamp < ?", [cutoffRow.timestamp]);
-  }
-}
-
-/**
  * Get all unique tags from logs
  */
 export function getAllTags(): string[] {

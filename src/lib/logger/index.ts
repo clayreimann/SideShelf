@@ -26,18 +26,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { consoleTransport, logger as rnLogger } from 'react-native-logs';
 import { v4 as uuidv4 } from 'uuid';
-import { deleteLogsBefore, insertLogToDb, trimLogsToCount } from './db';
+import { deleteLogsBefore, insertLogToDb } from './db';
 import type { LogLevel, SubLogger } from './types';
 
 const DISABLED_TAGS_KEY = '@logger/disabled_tags';
+const RETENTION_DURATION_KEY = '@logger/retention_duration_ms';
 
 // Re-export types and DB functions for convenience
 export { clearAllLogs, getAllLogs, getAllTags, getLogsByLevel, getLogsByTag } from './db';
 export type { LogRow } from './db';
 export type { LogEntry, LogLevel, SubLogger } from './types';
 
-const MAX_LOGS = 1000; // Keep only the most recent 1000 logs
-const MAX_LOG_AGE_DAYS = 7; // Delete logs older than 7 days
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const MIN_LOG_RETENTION_MS = ONE_HOUR_MS; // Always keep at least 1 hour of logs
+const DEFAULT_LOG_RETENTION_MS = ONE_HOUR_MS; // Default retention when no preference is stored
+
+let currentRetentionDurationMs = DEFAULT_LOG_RETENTION_MS;
+
+const clampRetentionDuration = (durationMs: number): number =>
+  Math.max(durationMs, MIN_LOG_RETENTION_MS);
 
 /**
  * Custom SQLite transport for react-native-logs
@@ -83,10 +90,9 @@ const sqliteTransport = (props: any) => {
   // Periodically trim old logs (1% chance per log write)
   if (Math.random() < 0.01) {
     try {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - MAX_LOG_AGE_DAYS);
+      const retentionMs = currentRetentionDurationMs;
+      const cutoffDate = new Date(Date.now() - retentionMs);
       deleteLogsBefore(cutoffDate);
-      trimLogsToCount(MAX_LOGS);
     } catch (error) {
       console.error('[Logger] Failed to trim old logs:', error);
     }
@@ -133,8 +139,8 @@ class Logger {
   private initialized: boolean = false;
 
   private constructor() {
-    // Load disabled tags from storage on initialization
-    this.loadDisabledTags();
+    // Load persisted settings on initialization
+    this.loadSettings();
   }
 
   static getInstance(): Logger {
@@ -147,17 +153,33 @@ class Logger {
   /**
    * Load disabled tags from AsyncStorage
    */
-  private async loadDisabledTags(): Promise<void> {
+  private async loadSettings(): Promise<void> {
     try {
-      const stored = await AsyncStorage.getItem(DISABLED_TAGS_KEY);
-      if (stored) {
-        const tags = JSON.parse(stored) as string[];
+      const [storedTags, storedRetention] = await Promise.all([
+        AsyncStorage.getItem(DISABLED_TAGS_KEY),
+        AsyncStorage.getItem(RETENTION_DURATION_KEY),
+      ]);
+
+      if (storedTags) {
+        const tags = JSON.parse(storedTags) as string[];
         this.disabledTags = new Set(tags);
         console.log(`[Logger] Loaded ${tags.length} disabled tags from storage`);
       }
+
+      if (storedRetention) {
+        const parsedRetention = Number(storedRetention);
+        if (!Number.isNaN(parsedRetention) && parsedRetention > 0) {
+          currentRetentionDurationMs = clampRetentionDuration(parsedRetention);
+          console.log(
+            `[Logger] Loaded log retention preference: ${Math.round(
+              currentRetentionDurationMs / ONE_HOUR_MS
+            )}h`
+          );
+        }
+      }
       this.initialized = true;
     } catch (error) {
-      console.error('[Logger] Failed to load disabled tags from storage:', error);
+      console.error('[Logger] Failed to load logger settings from storage:', error);
       this.initialized = true;
     }
   }
@@ -269,10 +291,13 @@ class Logger {
    * Manually trigger log trimming
    */
   manualTrim(): void {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - MAX_LOG_AGE_DAYS);
-    deleteLogsBefore(cutoffDate);
-    trimLogsToCount(MAX_LOGS);
+    try {
+      const retentionMs = currentRetentionDurationMs;
+      const cutoffDate = new Date(Date.now() - retentionMs);
+      deleteLogsBefore(cutoffDate);
+    } catch (error) {
+      console.error('[Logger] Failed to manually trim logs:', error);
+    }
   }
 
   /**
@@ -282,6 +307,47 @@ class Logger {
     // This is handled by the db module
     const { clearAllLogs } = require('./db');
     clearAllLogs();
+  }
+
+  /**
+   * Get the current log retention duration in milliseconds
+   */
+  getRetentionDurationMs(): number {
+    return currentRetentionDurationMs;
+  }
+
+  /**
+   * Get the current log retention duration in hours (rounded)
+   */
+  getRetentionDurationHours(): number {
+    return Math.round(currentRetentionDurationMs / ONE_HOUR_MS);
+  }
+
+  /**
+   * Update the log retention duration (milliseconds)
+   */
+  async setRetentionDurationMs(durationMs: number): Promise<void> {
+    const clampedDuration = clampRetentionDuration(durationMs);
+    const hasChanged = clampedDuration !== currentRetentionDurationMs;
+    currentRetentionDurationMs = clampedDuration;
+
+    try {
+      await AsyncStorage.setItem(RETENTION_DURATION_KEY, clampedDuration.toString());
+    } catch (error) {
+      console.error('[Logger] Failed to save log retention preference:', error);
+    }
+
+    if (hasChanged) {
+      this.manualTrim();
+    }
+  }
+
+  /**
+   * Update the log retention duration (hours)
+   */
+  async setRetentionDurationHours(hours: number): Promise<void> {
+    const durationMs = Math.round(hours) * ONE_HOUR_MS;
+    await this.setRetentionDurationMs(durationMs);
   }
 
   /**

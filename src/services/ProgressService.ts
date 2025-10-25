@@ -463,7 +463,7 @@ export class ProgressService {
       this.lastSyncTime = Date.now();
       log.info(`Synced session to server: ${this.currentSession.libraryItemId}`);
     } catch (error) {
-      log.error('Failed to sync session to server:', error as Error);
+      log.error(`Failed to sync session to server: ${(error as Error).message}`);
     }
   }
 
