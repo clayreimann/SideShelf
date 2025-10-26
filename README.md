@@ -128,7 +128,28 @@ npm run android    # Run on Android emulator
 npm test           # Run test suite
 npm run lint       # Run ESLint
 npm run test:coverage # Run tests with coverage report
+npm run abs:debug  # Run Audiobookshelf API debugging utility
 ```
+
+#### API Debugging Utility
+
+Use the debugging script to capture real Audiobookshelf responses and exercise session lifecycle endpoints:
+
+```bash
+ABN_BASE_URL="https://your-server" \
+ABN_USERNAME="user" \
+ABN_PASSWORD="pass" \
+npm run abs:debug -- \
+  --library-id LIBRARY_ID \
+  --library-item-id ITEM_ID \
+  --sync-mode playback \
+  --open-session-sync \
+  --check-session-reuse \
+  --fetch-progress \
+  --output api-response-samples/debug-session.json
+```
+
+The script logs each step (login, library fetches, session create/sync/close, optional reuse checks, and `/play` calls), redacting credentials while writing a structured JSON report you can feed into tests or inspect manually. By default it mirrors the app's minimal local-session payload and uses `/api/session/local`; add `--sync-mode playback` to send the richer playback-session body, or `--open-session-sync` to exercise the `/api/session/:id/sync` and `/close` endpoints used for streaming sessions.
 
 ### Testing
 

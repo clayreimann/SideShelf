@@ -158,6 +158,24 @@ type DeviceInfo = {
   deviceId: string;
 };
 
+type CreateLocalSessionParams = {
+  sessionId: string;
+  userId: string;
+  libraryId: string;
+  libraryItemId: string;
+  startTime: number;
+  currentTime: number;
+  timeListening?: number;
+  timeListened?: number;
+  duration?: number;
+  episodeId?: string | null;
+  startedAt?: number;
+  updatedAt?: number;
+  mediaPlayer?: string;
+  playMethod?: number;
+  deviceInfo?: Partial<DeviceInfo> & Record<string, unknown>;
+};
+
 let CACHED_DEVICE_INFO: DeviceInfo | null = null;
 
 export async function getDeviceInfo(): Promise<DeviceInfo> {
@@ -200,28 +218,58 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
  * @param timeListened - Total time listened in this session (usually 0 for new sessions)
  * @returns The created session object with ID
  */
-export async function createLocalSession(
-  sessionId: string,
-  userId: string,
-  libraryId: string,
-  libraryItemId: string,
-  startTime: number,
-  currentTime: number,
-  timeListened: number = 0
-): Promise<{ id: string }> {
-  const deviceInfo = await getDeviceInfo();
-  const body = {
-    id: sessionId,
+export async function createLocalSession(params: CreateLocalSessionParams): Promise<{ id: string }> {
+  const {
+    sessionId,
     userId,
     libraryId,
     libraryItemId,
     startTime,
     currentTime,
+    timeListening,
     timeListened,
-    playMethod: PLAY_METHOD.Local,
+    duration,
+    episodeId,
+    startedAt,
+    updatedAt,
+    mediaPlayer,
+    playMethod,
+    deviceInfo: overrideDeviceInfo,
+  } = params;
+
+  const deviceInfo = overrideDeviceInfo ?? (await getDeviceInfo());
+  const listeningSeconds = sanitizeSeconds(
+    timeListening ?? timeListened ?? 0
+  );
+  const startSeconds = sanitizeSeconds(startTime ?? 0);
+  const currentSeconds = sanitizeSeconds(currentTime ?? 0);
+  const durationSeconds =
+    duration !== undefined ? sanitizeSeconds(duration) : undefined;
+  const startedAtMs = sanitizeTimestamp(startedAt ?? Date.now());
+  const updatedAtMs = sanitizeTimestamp(updatedAt ?? startedAtMs);
+  const body: Record<string, unknown> = {
+    id: sessionId,
+    userId,
+    libraryId,
+    libraryItemId,
+    episodeId: episodeId ?? undefined,
+    duration: durationSeconds,
+    playMethod: playMethod ?? PLAY_METHOD.Local,
+    mediaPlayer: mediaPlayer ?? "react-native-track-player",
     deviceInfo,
-    mediaPlayer: "react-native-track-player",
+    timeListening: listeningSeconds,
+    timeListened: listeningSeconds,
+    startTime: startSeconds,
+    currentTime: currentSeconds,
+    startedAt: startedAtMs,
+    updatedAt: updatedAtMs,
   };
+  for (const key of Object.keys(body)) {
+    if (body[key] === undefined) {
+      delete body[key];
+    }
+  }
+
   const bodyText = JSON.stringify(body);
   log.info(
     `Creating local session localId=${sessionId} libraryItem=${libraryItemId} body=${bodyText}`
@@ -268,6 +316,20 @@ export async function createLocalSession(
   }
 
   return { id: serverSessionId };
+}
+
+function sanitizeSeconds(value: number): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.abs(numeric) > 1_000_000 ? numeric / 1000 : numeric;
+}
+
+function sanitizeTimestamp(value: number): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return Date.now();
+  }
+  return numeric;
 }
 
 /**

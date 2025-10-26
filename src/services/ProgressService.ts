@@ -7,6 +7,7 @@
  */
 
 import { getLibraryItemById } from '@/db/helpers/libraryItems';
+import { getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
 import {
   endListeningSession,
   getActiveSession,
@@ -24,6 +25,7 @@ import {
 import { getMediaProgressForLibraryItem, marshalMediaProgressFromApi, marshalMediaProgressFromAuthResponse, upsertMediaProgress } from '@/db/helpers/mediaProgress';
 import { getUserByUsername } from '@/db/helpers/users';
 import { LocalListeningSessionRow } from '@/db/schema/localData';
+import type { LibraryItemRow } from '@/db/schema/libraryItems';
 import { closeSession, createLocalSession, fetchMe, fetchMediaProgress, syncSession } from '@/lib/api/endpoints';
 import { logger } from '@/lib/logger';
 import NetInfo from "@react-native-community/netinfo";
@@ -510,62 +512,56 @@ export class ProgressService {
     // Use current time for active sessions, endTime for completed sessions
     const currentTime = session.endTime || session.currentTime;
     // Use the tracked timeListening field, which represents actual listening time
-    const timeListened = session.timeListening || 0;
+    const timeListening = session.timeListening || 0;
 
     // Skip sessions that are too short
-    if (timeListened < this.MIN_SESSION_DURATION) {
-      log.info(`Skipping short session ${session.id} (${timeListened}s)`);
+    if (timeListening < this.MIN_SESSION_DURATION) {
+      log.info(`Skipping short session ${session.id} (${timeListening}s)`);
       await markSessionAsSynced(session.id);
       return;
     }
 
     log.info(`Syncing session ${session.id} for library item ${session.libraryItemId}`);
 
-    if (!session.serverSessionId) {
-      // Create new server session only for downloaded content
-      log.info(`Creating server session for ${session.libraryItemId}`);
-      try {
-        // Get the library item to get the library ID
-        const libraryItem = await getLibraryItemById(session.libraryItemId);
-        if (!libraryItem) {
-          throw new Error(`Library item ${session.libraryItemId} not found locally`);
-        }
+    // Determine whether we are tracking an open (streaming) session
+    let isStreamingSession =
+      !!session.serverSessionId && session.serverSessionId !== session.id;
 
-        const serverSession = await createLocalSession(
-          session.id, // Use the local session ID as the server session ID
-          session.userId,
-          libraryItem.libraryId,
-          session.libraryItemId,
-          session.startTime,
-          currentTime,
-          timeListened
-        );
-
-        // Update local session with server session ID
-        await updateServerSessionId(session.id, serverSession.id);
-        session.serverSessionId = serverSession.id;
-      } catch (error) {
-        log.error(`Failed to create server session for ${session.libraryItemId}:`, error as Error);
-
-        // If the library item doesn't exist on server, mark session as synced to avoid retry loop
-        if (error instanceof Error && error.message.includes('Media item not found')) {
-          log.info(`Library item ${session.libraryItemId} not found on server, marking session as synced`);
-          await markSessionAsSynced(session.id);
-          return;
-        }
-
-        throw error;
-      }
+    // Get the library item to reference metadata when needed
+    const libraryItem = await getLibraryItemById(session.libraryItemId);
+    if (!libraryItem) {
+      log.warn(`Library item ${session.libraryItemId} no longer exists; marking session as synced`);
+      await markSessionAsSynced(session.id);
+      return;
     }
 
     try {
-      // Sync current progress to server session
-      await syncSession(
-        session.serverSessionId,
-        currentTime,
-        timeListened,
-        session.duration
-      );
+      if (isStreamingSession) {
+        await syncSession(
+          session.serverSessionId as string,
+          currentTime,
+          timeListening,
+          session.duration
+        );
+      } else {
+        // Local/offline session - use /api/session/local to upsert
+        const serverSessionId = await this.syncDownloadedSession(
+          session,
+          libraryItem,
+          currentTime,
+          timeListening
+        );
+
+        if (serverSessionId == null) {
+          // Session handled (e.g., media missing) - nothing more to do
+          return;
+        }
+
+        if (!session.serverSessionId) {
+          await updateServerSessionId(session.id, serverSessionId);
+          session.serverSessionId = serverSessionId;
+        }
+      }
 
       // Fetch latest progress from server after sync
       try {
@@ -577,8 +573,8 @@ export class ProgressService {
         // Don't fail the entire sync if progress fetch fails
       }
 
-      // Close server session if local session is ended
-      if (session.sessionEnd) {
+      // Close streaming session if local session is ended
+      if (isStreamingSession && session.sessionEnd) {
         await closeSession(session.serverSessionId);
 
         // Fetch final progress after closing session
@@ -597,53 +593,54 @@ export class ProgressService {
         await resetSessionListeningTime(session.id);
       }
 
-      // Mark as synced
-      await markSessionAsSynced(session.id);
+    // Mark as synced
+    await markSessionAsSynced(session.id);
 
-      // Reset failure counter on successful sync (like Android)
-      this.failedSyncs = 0;
-      this.lastSyncTime = Date.now();
+    // Reset failure counter on successful sync (like Android)
+    this.failedSyncs = 0;
+    this.lastSyncTime = Date.now();
 
-      log.info(`Successfully synced session to server: ${session.libraryItemId}`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message.toLowerCase() : '';
+    log.info(`Successfully synced session to server: ${session.libraryItemId}`);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message.toLowerCase() : '';
 
-      if (
-        allowSessionRecreate &&
-        error instanceof Error &&
-        errorMessage.includes('not found')
-      ) {
-        log.warn(
-          `Server session ${session.serverSessionId} missing for ${session.libraryItemId}; recreating`
-        );
-        await updateServerSessionId(session.id, null);
-        session.serverSessionId = null;
+    if (
+      allowSessionRecreate &&
+      session.serverSessionId &&
+      session.serverSessionId !== session.id &&
+      error instanceof Error &&
+      errorMessage.includes('not found')
+    ) {
+      log.warn(
+        `Server session ${session.serverSessionId} missing for ${session.libraryItemId}; recreating`
+      );
+      await updateServerSessionId(session.id, null);
+      session.serverSessionId = null;
 
-        // Retry once after clearing the stale server session ID
-        await this.syncSingleSession(session, false);
-        return;
-      }
-
-      // Handle sync failure (like Android implementation)
-      this.failedSyncs++;
-
-      log.error(`Failed to sync session ${session.id} (attempt ${this.failedSyncs}):`, error as Error);
-
-      // Show user feedback after 2 failed syncs (like Android)
-      if (this.failedSyncs >= 2) {
-        log.warn('Multiple sync failures detected - user should be notified');
-        endListeningSession(session.id, session.currentTime).catch(err => {
-          log.error('Failed to end session after sync failures:', err);
-        });
-      }
-
-      // Record the sync failure in database
-      await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown sync error');
-
-      throw error;
+      await this.syncSingleSession(session, false);
+      return;
     }
+
+    // Handle sync failure (like Android implementation)
+    this.failedSyncs++;
+
+    log.error(`Failed to sync session ${session.id} (attempt ${this.failedSyncs}): ${(error as Error).message}`);
+
+    // Show user feedback after 2 failed syncs (like Android)
+    if (this.failedSyncs >= 2) {
+      log.warn('Multiple sync failures detected - user should be notified');
+      endListeningSession(session.id, session.currentTime).catch(err => {
+        log.error('Failed to end session after sync failures:', err);
+      });
+    }
+
+    // Record the sync failure in database
+    await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown sync error');
+
+    throw error;
   }
+}
 
   /**
    * Sync all unsynced sessions to the server
@@ -689,7 +686,51 @@ export class ProgressService {
       } catch (error) {
         log.error(`Failed to force sync session ${session.id}:`, error as Error);
         await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+}
+
+  private async syncDownloadedSession(
+    session: LocalListeningSessionRow,
+    libraryItem: LibraryItemRow,
+    currentTime: number,
+    timeListening: number
+  ): Promise<string | null> {
+    const episodeId =
+      libraryItem.mediaType === 'podcast' && session.mediaId !== libraryItem.id
+        ? session.mediaId
+        : undefined;
+
+    let duration = session.duration ?? undefined;
+    if (duration == null) {
+      const metadata = await getMediaMetadataByLibraryItemId(session.libraryItemId);
+      duration = metadata?.duration ?? undefined;
+    }
+
+    try {
+    const { id } = await createLocalSession({
+      sessionId: session.id,
+      userId: session.userId,
+      libraryId: libraryItem.libraryId,
+      libraryItemId: session.libraryItemId,
+      episodeId,
+      startTime: session.startTime,
+      currentTime,
+      timeListening,
+      duration,
+      startedAt: session.sessionStart?.getTime(),
+      updatedAt: session.updatedAt?.getTime(),
+    });
+
+      return id;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Media item not found')) {
+        log.info(`Library item ${session.libraryItemId} not found on server, marking session as synced`);
+        await markSessionAsSynced(session.id);
+        return null;
       }
+
+      throw error;
     }
   }
 
