@@ -9,6 +9,7 @@
 import { logger } from "@/lib/logger";
 import { getItem, SECURE_KEYS } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
+import { AppState } from "react-native";
 import TrackPlayer, {
   Event,
   PlaybackActiveTrackChangedEvent,
@@ -234,7 +235,9 @@ async function handlePlaybackProgressUpdated(
   event: PlaybackProgressUpdatedEvent
 ): Promise<void> {
   try {
-    log.info(`Playback progress updated: position=${event.position.toFixed(2)}s`);
+    if (event.position % 5 === 0) {
+      log.info(`Playback progress updated: position=${event.position.toFixed(2)}s appState=${AppState.currentState}`);
+    }
     const currentSession = unifiedProgressService.getCurrentSession();
     if (currentSession) {
       const playbackRate = await TrackPlayer.getRate();
@@ -258,7 +261,7 @@ async function handlePlaybackProgressUpdated(
       // Check if we should sync to server (uses adaptive intervals based on network type)
       const syncCheck = await unifiedProgressService.shouldSyncToServer();
       if (syncCheck.shouldSync) {
-        log.info(`Syncing to server: ${syncCheck.reason}`);
+        log.info(`Syncing to server: ${syncCheck.reason} appState=${AppState.currentState}`);
         await unifiedProgressService.syncCurrentSessionToServer();
       }
     }

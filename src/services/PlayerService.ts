@@ -53,7 +53,7 @@ export class PlayerService {
   private currentUsername: string | null = null;
   private cachedApiInfo: { baseUrl: string; accessToken: string } | null = null;
   private currentPlaySessionId: string | null = null; // Track the current server session ID
-  private log = logger.forTag('PlayerService'); // Cached sublogger
+  private log = logger.forTag("PlayerService"); // Cached sublogger
 
   private constructor() {}
 
@@ -132,23 +132,7 @@ export class PlayerService {
         // Android specific options
         androidAudioContentType: AndroidAudioContentType.Speech,
       });
-
-      await TrackPlayer.updateOptions({
-        android: {
-          appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
-        },
-        capabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.SeekTo,
-          Capability.JumpBackward,
-          Capability.JumpForward,
-        ],
-        compactCapabilities: [Capability.Play, Capability.Pause],
-        forwardJumpInterval: 30,
-        backwardJumpInterval: 30,
-        progressUpdateEventInterval: 1, // Update every second
-      });
+      await this.configureTrackPlayer();
 
       // Set up event listeners
       this.setupEventListeners();
@@ -162,7 +146,9 @@ export class PlayerService {
         error instanceof Error &&
         error.message.includes("already been initialized")
       ) {
-        this.log.info("Player was already initialized elsewhere, setting up listeners");
+        this.log.info(
+          "Player was already initialized elsewhere, setting up listeners"
+        );
         try {
           // Set up our event listeners on the existing player
           this.setupEventListeners();
@@ -171,7 +157,10 @@ export class PlayerService {
           this.log.info("Successfully attached to existing player");
           return;
         } catch (attachError) {
-          this.log.error("Failed to attach to existing player", attachError as Error);
+          this.log.error(
+            "Failed to attach to existing player",
+            attachError as Error
+          );
         }
       }
 
@@ -241,8 +230,14 @@ export class PlayerService {
         coverUri: metadata.imageUrl || getCoverUri(libraryItem.id),
         audioFiles,
         chapters,
-        duration: audioFiles.reduce((total: number, file: AudioFileWithDownloadInfo) => total + (file.duration || 0), 0),
-        isDownloaded: audioFiles.some((file: AudioFileWithDownloadInfo) => file.downloadInfo?.isDownloaded),
+        duration: audioFiles.reduce(
+          (total: number, file: AudioFileWithDownloadInfo) =>
+            total + (file.duration || 0),
+          0
+        ),
+        isDownloaded: audioFiles.some(
+          (file: AudioFileWithDownloadInfo) => file.downloadInfo?.isDownloaded
+        ),
       };
 
       this.log.info(`Built track: ${track.title}`);
@@ -275,13 +270,15 @@ export class PlayerService {
             ". Downloaded files are missing and streaming failed. Please check your internet connection or re-download the content.";
         }
 
-        this.log.error(`No playable tracks available: ${JSON.stringify({
-          totalAudioFiles: track.audioFiles.length,
-          downloadedFiles: track.audioFiles.filter(
-            (af) => af.downloadInfo?.isDownloaded
-          ).length,
-          needsStreaming,
-        })}`);
+        this.log.error(
+          `No playable tracks available: ${JSON.stringify({
+            totalAudioFiles: track.audioFiles.length,
+            downloadedFiles: track.audioFiles.filter(
+              (af) => af.downloadInfo?.isDownloaded
+            ).length,
+            needsStreaming,
+          })}`
+        );
 
         throw new Error(errorMessage);
       }
@@ -301,19 +298,28 @@ export class PlayerService {
       // Get resume position (use whichever was updated most recently)
       let resumePosition = 0;
       const activeSession = await getActiveSession(user.id, libraryItemId);
-      const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
+      const savedProgress = await getMediaProgressForLibraryItem(
+        libraryItemId,
+        user.id
+      );
 
       if (activeSession && savedProgress) {
         // Both exist - use whichever was updated more recently
         const sessionTime = activeSession.updatedAt.getTime();
-        const progressTime = savedProgress.lastUpdate ? savedProgress.lastUpdate.getTime() : 0;
+        const progressTime = savedProgress.lastUpdate
+          ? savedProgress.lastUpdate.getTime()
+          : 0;
 
         if (sessionTime > progressTime) {
           resumePosition = activeSession.currentTime;
-          this.log.info(` Resuming from active session (more recent): ${resumePosition}s`);
+          this.log.info(
+            ` Resuming from active session (more recent): ${resumePosition}s`
+          );
         } else {
           resumePosition = savedProgress.currentTime || 0;
-          this.log.info(` Resuming from saved progress (more recent): ${resumePosition}s`);
+          this.log.info(
+            ` Resuming from saved progress (more recent): ${resumePosition}s`
+          );
         }
       } else if (activeSession) {
         resumePosition = activeSession.currentTime;
@@ -422,12 +428,16 @@ export class PlayerService {
           locallyAvailableFiles.add(audioFile.id);
         } else {
           const resolvedPath = resolveAppPath(storedPath);
-          this.log.warn(`File marked as downloaded but missing: ${resolvedPath}`);
+          this.log.warn(
+            `File marked as downloaded but missing: ${resolvedPath}`
+          );
 
           // Clean up database
           try {
             await clearAudioFileDownloadStatus(audioFile.id);
-            this.log.info(`Cleared download status for missing file: ${audioFile.id}`);
+            this.log.info(
+              `Cleared download status for missing file: ${audioFile.id}`
+            );
           } catch (error) {
             this.log.error("Failed to clear download status", error as Error);
           }
@@ -446,14 +456,18 @@ export class PlayerService {
         playSession = await startPlaySession(playerTrack.libraryItemId);
         this.currentPlaySessionId = playSession.id; // Store session ID for progress tracking
         this.log.info(`Started play session: ${playSession.id}`);
-        this.log.info(`Got streaming tracks: ${playSession.audioTracks.length}`);
+        this.log.info(
+          `Got streaming tracks: ${playSession.audioTracks.length}`
+        );
 
         if (playSession.audioTracks.length > 0) {
-          this.log.info(`Sample streaming track: ${JSON.stringify({
-            contentUrl: playSession.audioTracks[0].contentUrl,
-            filename: playSession.audioTracks[0].metadata.filename,
-            mimeType: playSession.audioTracks[0].mimeType,
-          })}`);
+          this.log.info(
+            `Sample streaming track: ${JSON.stringify({
+              contentUrl: playSession.audioTracks[0].contentUrl,
+              filename: playSession.audioTracks[0].metadata.filename,
+              mimeType: playSession.audioTracks[0].mimeType,
+            })}`
+          );
         }
       } catch (error) {
         this.log.error("Failed to start play session", error as Error);
@@ -495,10 +509,13 @@ export class PlayerService {
 
       // Add track if we have a valid URL
       if (url) {
-        const displayUrl = sourceType === "streaming"
-          ? url.replace(this.cachedApiInfo?.accessToken || "", "<token>")
-          : url;
-        this.log.info(`Using ${sourceType} file for ${audioFile.filename}: ${displayUrl}`);
+        const displayUrl =
+          sourceType === "streaming"
+            ? url.replace(this.cachedApiInfo?.accessToken || "", "<token>")
+            : url;
+        this.log.info(
+          `Using ${sourceType} file for ${audioFile.filename}: ${displayUrl}`
+        );
 
         tracks.push({
           id: audioFile.id,
@@ -633,7 +650,8 @@ export class PlayerService {
 
       // Check if track matches
       const trackMatches =
-        (currentTrack as any)?.id === store.player.currentTrack?.libraryItemId ||
+        (currentTrack as any)?.id ===
+          store.player.currentTrack?.libraryItemId ||
         (!currentTrack && !store.player.currentTrack);
 
       // Check if position is roughly the same (within 5 seconds)
@@ -682,7 +700,10 @@ export class PlayerService {
       // Note: Playing state is updated by PlayerBackgroundService event listeners
 
       // If current track in TrackPlayer doesn't match store, update store
-      if (currentTrack && (currentTrack as any).id !== store.player.currentTrack?.libraryItemId) {
+      if (
+        currentTrack &&
+        (currentTrack as any).id !== store.player.currentTrack?.libraryItemId
+      ) {
         // Find the track info from our current track
         const trackInfo = this.getCurrentTrack();
         if (trackInfo) {
@@ -694,6 +715,26 @@ export class PlayerService {
     } catch (error) {
       this.log.error("Error syncing store with TrackPlayer", error as Error);
     }
+  }
+
+  async configureTrackPlayer(): Promise<void> {
+    this.log.info("Configuring TrackPlayer options");
+    await TrackPlayer.updateOptions({
+      android: {
+        appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
+      },
+      capabilities: [
+        Capability.Play,
+        Capability.Pause,
+        Capability.SeekTo,
+        Capability.JumpBackward,
+        Capability.JumpForward,
+      ],
+      compactCapabilities: [Capability.Play, Capability.Pause],
+      forwardJumpInterval: 30,
+      backwardJumpInterval: 30,
+      progressUpdateEventInterval: 1, // Update every second
+    });
   }
 
   /**
@@ -715,9 +756,15 @@ export class PlayerService {
         // Clear the require cache for this module to ensure we get the latest version
         // This is important after app updates where the module might have changed. Hermes
         // doesn't expose Node's require.resolve / require.cache, so guard their usage.
-        const metroRequire = require as { resolve?: (path: string) => string; cache?: Record<string, unknown> };
-        const canResolve = typeof require === "function" && typeof metroRequire.resolve === "function";
-        const cache = typeof require === "function" ? metroRequire.cache : undefined;
+        const metroRequire = require as {
+          resolve?: (path: string) => string;
+          cache?: Record<string, unknown>;
+        };
+        const canResolve =
+          typeof require === "function" &&
+          typeof metroRequire.resolve === "function";
+        const cache =
+          typeof require === "function" ? metroRequire.cache : undefined;
 
         if (canResolve && metroRequire.resolve) {
           const modulePath = metroRequire.resolve("./PlayerBackgroundService");
@@ -736,34 +783,50 @@ export class PlayerService {
 
         PlayerBackgroundServiceModule = require("./PlayerBackgroundService");
       } catch (requireError) {
-        this.log.error("Failed to require PlayerBackgroundService module", requireError as Error);
+        this.log.error(
+          "Failed to require PlayerBackgroundService module",
+          requireError as Error
+        );
 
         // If we can't load the module, try to force a full re-registration
         this.log.warn("Attempting full TrackPlayer service re-registration");
-        TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
+        TrackPlayer.registerPlaybackService(() =>
+          require("./PlayerBackgroundService")
+        );
         await this.syncStoreWithTrackPlayer();
         return;
       }
 
       // Check if the reconnect function exists
-      const reconnectFn = PlayerBackgroundServiceModule.reconnectBackgroundService;
-      const isInitialized = PlayerBackgroundServiceModule.isBackgroundServiceInitialized?.();
+      const reconnectFn =
+        PlayerBackgroundServiceModule.reconnectBackgroundService;
+      const isInitialized =
+        PlayerBackgroundServiceModule.isBackgroundServiceInitialized?.();
 
-      if (typeof reconnectFn === 'function') {
+      if (typeof reconnectFn === "function") {
         this.log.info(`Background service initialized: ${isInitialized}`);
         reconnectFn();
       } else {
         // Function doesn't exist (old version or incompatible module)
-        this.log.warn("reconnectBackgroundService function not found - forcing full re-registration");
+        this.log.warn(
+          "reconnectBackgroundService function not found - forcing full re-registration"
+        );
 
         // Shutdown if the function exists
-        if (typeof PlayerBackgroundServiceModule.shutdownBackgroundService === 'function') {
+        if (
+          typeof PlayerBackgroundServiceModule.shutdownBackgroundService ===
+          "function"
+        ) {
           PlayerBackgroundServiceModule.shutdownBackgroundService();
         }
 
         // Force re-registration
-        TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
+        TrackPlayer.registerPlaybackService(() =>
+          require("./PlayerBackgroundService")
+        );
       }
+
+      await this.configureTrackPlayer();
 
       // Sync the store with TrackPlayer state
       await this.syncStoreWithTrackPlayer();
@@ -776,7 +839,10 @@ export class PlayerService {
       try {
         await this.syncStoreWithTrackPlayer();
       } catch (syncError) {
-        this.log.error("Failed to sync store after reconnection error", syncError as Error);
+        this.log.error(
+          "Failed to sync store after reconnection error",
+          syncError as Error
+        );
       }
     }
   }
