@@ -587,8 +587,10 @@ export class ProgressService {
         }
       }
 
-      // Reset timeListening after successful sync (like iOS implementation)
-      if (!session.sessionEnd) {
+      // Reset timeListening after successful sync for streaming sessions only.
+      // Local downloaded sessions must retain cumulative listening time so that
+      // the server receives the total duration rather than 15s increments.
+      if (isStreamingSession && !session.sessionEnd) {
         // Only reset for active sessions; completed sessions don't need reset
         await resetSessionListeningTime(session.id);
       }
