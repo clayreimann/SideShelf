@@ -713,16 +713,25 @@ export class PlayerService {
 
       try {
         // Clear the require cache for this module to ensure we get the latest version
-        // This is important after app updates where the module might have changed
-        const modulePath = require.resolve("./PlayerBackgroundService");
-        if (__DEV__) {
-          this.log.debug(`Module path: ${modulePath}`);
-        }
+        // This is important after app updates where the module might have changed. Hermes
+        // doesn't expose Node's require.resolve / require.cache, so guard their usage.
+        const metroRequire = require as { resolve?: (path: string) => string; cache?: Record<string, unknown> };
+        const canResolve = typeof require === "function" && typeof metroRequire.resolve === "function";
+        const cache = typeof require === "function" ? metroRequire.cache : undefined;
 
-        // Delete from cache in development to ensure we get fresh code
-        if (__DEV__ && require.cache[modulePath]) {
-          this.log.debug("Clearing module cache for PlayerBackgroundService");
-          delete require.cache[modulePath];
+        if (canResolve && metroRequire.resolve) {
+          const modulePath = metroRequire.resolve("./PlayerBackgroundService");
+          if (__DEV__) {
+            this.log.debug(`Module path: ${modulePath}`);
+          }
+
+          // Delete from cache in development to ensure we get fresh code
+          if (__DEV__ && cache && cache[modulePath]) {
+            this.log.debug("Clearing module cache for PlayerBackgroundService");
+            delete cache[modulePath];
+          }
+        } else if (__DEV__) {
+          this.log.debug("require.resolve not available; skipping cache clear");
         }
 
         PlayerBackgroundServiceModule = require("./PlayerBackgroundService");

@@ -129,6 +129,7 @@ npm test           # Run test suite
 npm run lint       # Run ESLint
 npm run test:coverage # Run tests with coverage report
 npm run abs:debug  # Run Audiobookshelf API debugging utility
+./scripts/capture-ios-logs.sh [device|udid] # Stream iOS logs (sim/device)
 ```
 
 #### API Debugging Utility

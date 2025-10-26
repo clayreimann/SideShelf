@@ -3,7 +3,7 @@ import { SeriesListRow } from '@/db/helpers/series';
 import { useThemedStyles } from '@/lib/theme';
 import { SeriesSortField, useSeries } from '@/stores';
 import { useFocusEffect } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from 'react-native';
 
@@ -11,6 +11,7 @@ export default function SeriesScreen() {
   const { styles, isDark } = useThemedStyles();
   const { items, isLoadingItems, isInitializing, ready, refetchSeries, sortConfig, setSortConfig } = useSeries();
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const router = useRouter();
 
   const onRefresh = useCallback(async () => {
     await refetchSeries();
@@ -40,27 +41,38 @@ export default function SeriesScreen() {
     { field: 'updatedAt' as SeriesSortField, label: 'Last Updated' },
   ];
 
-  const renderSeries = React.useCallback(({ item }: { item: SeriesListRow }) => (
-    <View style={{
-      padding: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: styles.text.color + '20',
-    }}>
-      <Text style={[styles.text, { fontSize: 16, fontWeight: '600' }]}>
-        {item.name}
-      </Text>
-      {item.description && (
-        <Text style={[styles.text, { fontSize: 14, opacity: 0.7, marginTop: 4 }]} numberOfLines={2}>
-          {item.description}
+  const renderSeries = React.useCallback(({ item }: { item: SeriesListRow }) => {
+    const bookCountLabel = item.bookCount === 1 ? '1 book' : `${item.bookCount} books`;
+    return (
+      <TouchableOpacity
+        onPress={() => router.push(`/series/${item.id}`)}
+        style={{
+          padding: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: styles.text.color + '20',
+        }}
+        accessibilityRole="button"
+        accessibilityHint={`View books in ${item.name}`}
+      >
+        <Text style={[styles.text, { fontSize: 16, fontWeight: '600' }]}>
+          {item.name}
         </Text>
-      )}
-      {item.updatedAt && (
-        <Text style={[styles.text, { fontSize: 12, opacity: 0.5, marginTop: 4 }]}>
-          Updated: {new Date(item.updatedAt).toLocaleDateString()}
+        <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginTop: 4 }]}>
+          {bookCountLabel}
         </Text>
-      )}
-    </View>
-  ), [styles]);
+        {item.description && (
+          <Text style={[styles.text, { fontSize: 14, opacity: 0.7, marginTop: 4 }]} numberOfLines={2}>
+            {item.description}
+          </Text>
+        )}
+        {item.updatedAt && (
+          <Text style={[styles.text, { fontSize: 12, opacity: 0.5, marginTop: 4 }]}>
+            Updated: {new Date(item.updatedAt).toLocaleDateString()}
+          </Text>
+        )}
+      </TouchableOpacity>
+    );
+  }, [router, styles.text]);
 
   if (!ready || isInitializing) {
     return (
@@ -68,7 +80,7 @@ export default function SeriesScreen() {
         <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
           <ActivityIndicator size="large" />
           <Text style={[styles.text, { marginTop: 16 }]}>Loading series...</Text>
-          <Stack.Screen options={{ title: 'Series', headerTitle: 'Series' }} />
+          <Stack.Screen options={{ title: 'Series', headerTitle: 'Series', headerRight: controls }} />
         </View>
       </>
     );
@@ -96,7 +108,7 @@ export default function SeriesScreen() {
               Reload Series
             </Text>
           </TouchableOpacity>
-          <Stack.Screen options={{ title: 'Series', headerTitle: 'Series' }} />
+          <Stack.Screen options={{ title: 'Series', headerTitle: 'Series', headerRight: controls }} />
         </View>
       </>
     );
@@ -121,7 +133,7 @@ export default function SeriesScreen() {
           sortOptions={seriesSortOptions}
           isDark={isDark}
         />
-        {/* <Stack.Screen options={{ title: 'Series', headerTitle: `Series (${items.length})`, headerRight: controls }} /> */}
+        <Stack.Screen options={{ title: 'Series', headerTitle: `Series (${items.length})`, headerRight: controls }} />
       </View>
     </>
   );

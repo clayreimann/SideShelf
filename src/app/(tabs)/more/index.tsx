@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { FlatList, Pressable, Text } from 'react-native';
+import { Alert, FlatList, Pressable, Text } from 'react-native';
 
 type ActionItem = {
   label: string;
@@ -22,7 +22,25 @@ export default function MoreScreen() {
       { label: 'Settings', onPress: () => router.push('/more/settings') },
       { label: 'Advanced', onPress: () => router.push('/more/advanced') },
       { label: 'Logs', onPress: () => router.push('/more/logs') },
-      { label: 'Log out', onPress: async () => { await logout(); router.replace('/login'); } },
+      {
+        label: 'Log out',
+        styles: { color: 'red' },
+        onPress: () => {
+          Alert.alert('Log out', 'Are you sure you want to log out?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Log out',
+              style: 'destructive',
+              onPress: () => {
+                void (async () => {
+                  await logout();
+                  router.replace('/login');
+                })();
+              },
+            },
+          ]);
+        },
+      },
     ];
   }, [router, logout]);
   return (
@@ -31,7 +49,7 @@ export default function MoreScreen() {
         data={data}
         renderItem={({ item }) => (
         <Pressable style={styles.listItem} onPress={item.onPress}>
-          <Text style={styles.text}>{item.label}</Text>
+          <Text style={[styles.text, item.styles]}>{item.label}</Text>
         </Pressable>
         )}
       />

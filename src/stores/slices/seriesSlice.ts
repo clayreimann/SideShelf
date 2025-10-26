@@ -11,7 +11,7 @@
 import {
     getAllSeries,
     SeriesListRow,
-    SeriesRow,
+    SeriesWithBooks,
     transformSeriesToDisplayFormat
 } from '@/db/helpers/series';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,7 +29,7 @@ import { DEFAULT_SERIES_SORT_CONFIG, sortSeries, STORAGE_KEYS } from '../utils';
 export interface SeriesSliceState {
     series: {
         /** All available series */
-        series: SeriesRow[];
+        series: SeriesWithBooks[];
         /** Raw series (unsorted) */
         rawItems: SeriesListRow[];
         /** Sorted series (computed from rawItems and sortConfig) */
@@ -53,7 +53,7 @@ export interface SeriesSliceActions {
     /** Initialize the slice (load from storage, fetch initial data) */
     initializeSeries: (apiConfigured: boolean, dbInitialized: boolean) => Promise<void>;
     /** Refresh all series from database */
-    refetchSeries: () => Promise<SeriesRow[]>;
+    refetchSeries: () => Promise<SeriesWithBooks[]>;
     /** Update sort configuration and persist to storage */
     setSeriesSortConfig: (config: SeriesSortConfig) => Promise<void>;
     /** Reset the slice to initial state */
@@ -160,7 +160,7 @@ export const createSeriesSlice: SliceCreator<SeriesSlice> = (set, get) => ({
     /**
      * Refresh all series from database
      */
-    refetchSeries: async (): Promise<SeriesRow[]> => {
+    refetchSeries: async (): Promise<SeriesWithBooks[]> => {
         const state = get();
         if (!state.series.ready) {
             console.warn('[SeriesSlice] Slice not ready, cannot fetch series');

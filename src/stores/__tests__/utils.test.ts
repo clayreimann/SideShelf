@@ -343,23 +343,26 @@ describe('Store Utils', () => {
       {
         id: 'series-1',
         name: 'Harry Potter',
+        description: null,
         addedAt: new Date('2022-01-01'),
         updatedAt: new Date('2023-01-01'),
-        numBooks: 7,
+        bookCount: 7,
       },
       {
         id: 'series-2',
         name: 'The Lord of the Rings',
+        description: null,
         addedAt: new Date('2021-06-15'),
         updatedAt: new Date('2022-12-01'),
-        numBooks: 3,
+        bookCount: 3,
       },
       {
         id: 'series-3',
         name: 'A Song of Ice and Fire',
+        description: null,
         addedAt: new Date('2023-03-10'),
         updatedAt: new Date('2023-06-15'),
-        numBooks: 5,
+        bookCount: 5,
       },
     ];
 

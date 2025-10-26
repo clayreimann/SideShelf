@@ -14,12 +14,9 @@ export default function HomeItem({ item }: HomeItemProps) {
   const { styles, colors } = useThemedStyles();
   return (
     <Pressable
-      onPress={() =>
-        router.push({
-          pathname: "/library",
-          params: { openItem: item.id },
-        })
-      }
+      onPress={() => router.push(`/home/item/${item.id}`)}
+      accessibilityRole="button"
+      accessibilityHint={`Open details for ${item.title}`}
     >
       <View
         style={{

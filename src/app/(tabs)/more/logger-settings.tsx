@@ -24,7 +24,7 @@ const RETENTION_OPTIONS = [
 ];
 
 export default function LoggerSettingsScreen() {
-  const { styles, colors, isDark } = useThemedStyles();
+  const { colors, isDark } = useThemedStyles();
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [disabledTags, setDisabledTags] = useState<string[]>([]);
   const [retentionHours, setRetentionHours] = useState<number>(() => logger.getRetentionDurationHours());
@@ -38,10 +38,10 @@ export default function LoggerSettingsScreen() {
   // Load tags and retention preference
   const loadLoggerSettings = useCallback(() => {
     try {
-      const tags = getAllTags();
-      setAvailableTags(tags);
       const disabled = logger.getDisabledTags();
       setDisabledTags(disabled);
+      const tags = getAllTags();
+      setAvailableTags([...tags, ...disabled.filter(t => !tags.includes(t))].sort());
       setRetentionHours(logger.getRetentionDurationHours());
     } catch (error) {
       log.error('Failed to load logger settings', error as Error);
