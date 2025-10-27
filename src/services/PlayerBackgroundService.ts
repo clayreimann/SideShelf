@@ -28,6 +28,27 @@ import { unifiedProgressService } from "./ProgressService";
 // Create a cached sublogger for this service (more efficient than calling logger.X('tag', ...) each time)
 const log = logger.forTag("PlayerBackgroundService");
 
+function describeRuntimeContext(): string {
+  const parts: string[] = [];
+  parts.push(typeof globalThis.window === "undefined" ? "no-window" : "window");
+  parts.push(
+    typeof globalThis.document === "undefined" ? "no-document" : "document"
+  );
+  try {
+    const state = AppState.currentState;
+    parts.push(`AppState=${state ?? "unknown"}`);
+  } catch {
+    parts.push("AppState=unavailable");
+  }
+  parts.push(
+    global.__playerBackgroundServiceInitializedAt !== undefined
+      ? `initializedAt=${global.__playerBackgroundServiceInitializedAt}`
+      : "initializedAt=none"
+  );
+  parts.push(__DEV__ ? "dev" : "prod");
+  return parts.join(" ");
+}
+
 // Add type definitions for global properties
 declare global {
   // eslint-disable-next-line no-var
@@ -40,6 +61,7 @@ declare global {
  * Handle remote play command
  */
 async function handleRemotePlay(): Promise<void> {
+  log.info(`[DIAG] RemotePlay received (${describeRuntimeContext()})`);
   await TrackPlayer.play();
 }
 
@@ -47,6 +69,7 @@ async function handleRemotePlay(): Promise<void> {
  * Handle remote pause command
  */
 async function handleRemotePause(): Promise<void> {
+  log.info(`[DIAG] RemotePause received (${describeRuntimeContext()})`);
   await TrackPlayer.pause();
 }
 
@@ -54,6 +77,7 @@ async function handleRemotePause(): Promise<void> {
  * Handle remote stop command
  */
 async function handleRemoteStop(): Promise<void> {
+  log.info(`[DIAG] RemoteStop received (${describeRuntimeContext()})`);
   await TrackPlayer.stop();
   await unifiedProgressService.endCurrentSession();
 }
@@ -64,6 +88,9 @@ async function handleRemoteStop(): Promise<void> {
 async function handleRemoteJumpForward(
   event: RemoteJumpForwardEvent
 ): Promise<void> {
+  log.info(
+    `[DIAG] RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`
+  );
   const progress = await TrackPlayer.getProgress();
   const newPosition = progress.position + event.interval;
   await TrackPlayer.seekTo(newPosition);
@@ -97,6 +124,9 @@ async function handleRemoteJumpForward(
 async function handleRemoteJumpBackward(
   event: RemoteJumpBackwardEvent
 ): Promise<void> {
+  log.info(
+    `[DIAG] RemoteJumpBackward received interval=${event.interval} (${describeRuntimeContext()})`
+  );
   const progress = await TrackPlayer.getProgress();
   const newPosition = Math.max(0, progress.position - event.interval);
   await TrackPlayer.seekTo(newPosition);
@@ -128,6 +158,7 @@ async function handleRemoteJumpBackward(
  * Handle remote next track command
  */
 async function handleRemoteNext(): Promise<void> {
+  log.info(`[DIAG] RemoteNext received (${describeRuntimeContext()})`);
   await TrackPlayer.skipToNext();
 }
 
@@ -135,6 +166,7 @@ async function handleRemoteNext(): Promise<void> {
  * Handle remote previous track command
  */
 async function handleRemotePrevious(): Promise<void> {
+  log.info(`[DIAG] RemotePrevious received (${describeRuntimeContext()})`);
   await TrackPlayer.skipToPrevious();
 }
 
@@ -142,6 +174,9 @@ async function handleRemotePrevious(): Promise<void> {
  * Handle remote seek command
  */
 async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
+  log.info(
+    `[DIAG] RemoteSeek received position=${event.position} (${describeRuntimeContext()})`
+  );
   await TrackPlayer.seekTo(event.position);
 
   // Update progress immediately after seek
@@ -173,6 +208,9 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
  * Handle audio duck events (when other apps need audio focus)
  */
 async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
+  log.info(
+    `[DIAG] RemoteDuck received permanent=${event.permanent} paused=${event.paused} ducking=${event.ducking} (${describeRuntimeContext()})`
+  );
   try {
     if (event.permanent) {
       await TrackPlayer.pause();
@@ -356,7 +394,9 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
 function cleanupEventListeners(): void {
   if (global.__playerBackgroundServiceSubscriptions) {
     log.info("Cleaning up existing event listeners");
-    log.info(`[DIAG] Number of listeners to clean up: ${global.__playerBackgroundServiceSubscriptions.length}`);
+    log.info(
+      `[DIAG] Number of listeners to clean up: ${global.__playerBackgroundServiceSubscriptions.length} (${describeRuntimeContext()})`
+    );
     global.__playerBackgroundServiceSubscriptions.forEach((unsub, idx) => {
       try {
         // unsub is already the .remove function, just call it
@@ -383,7 +423,11 @@ function setupEventListeners(): Array<() => void> {
     'RemoteSeek', 'RemoteDuck', 'RemoteJumpForward', 'RemoteJumpBackward',
     'PlaybackState', 'PlaybackProgressUpdated', 'PlaybackActiveTrackChanged', 'PlaybackError'
   ];
-  log.info(`[DIAG] Setting up listeners for events: ${eventTypes.join(', ')}`);
+  log.info(
+    `[DIAG] Setting up listeners for events: ${eventTypes.join(
+      ", "
+    )} (${describeRuntimeContext()})`
+  );
 
   // Use object to store lastActiveTrackId so it can be mutated in the handler
   const lastActiveTrackId = { value: null as string | null };
@@ -458,10 +502,14 @@ function setupEventListeners(): Array<() => void> {
  */
 export function reconnectBackgroundService(): void {
   log.info("Forcing reconnection of background service");
-  log.info("[DIAG] Reconnecting background service: cleaning up and re-setting listeners");
+  log.info(
+    `[DIAG] Reconnecting background service: cleaning up and re-setting listeners (${describeRuntimeContext()})`
+  );
   cleanupEventListeners();
   global.__playerBackgroundServiceSubscriptions = setupEventListeners();
-  log.info(`[DIAG] Number of listeners after setup: ${global.__playerBackgroundServiceSubscriptions.length}`);
+  log.info(
+    `[DIAG] Number of listeners after setup: ${global.__playerBackgroundServiceSubscriptions.length}`
+  );
   global.__playerBackgroundServiceInitializedAt = Date.now();
 }
 
@@ -489,6 +537,9 @@ export function isBackgroundServiceInitialized(): boolean {
  */
 async function trackPlayerBackgroundService(): Promise<void> {
   const now = Date.now();
+  log.info(
+    `[DIAG] trackPlayerBackgroundService invoked (${describeRuntimeContext()})`
+  );
 
   if (global.__playerBackgroundServiceInitializedAt) {
     const timeSinceInit = now - global.__playerBackgroundServiceInitializedAt;

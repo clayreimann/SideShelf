@@ -8,9 +8,9 @@
  * - Loading states
  */
 
+import { ASYNC_KEYS, saveItem } from '@/lib/asyncStore';
 import type { CurrentChapter, PlayerTrack } from '@/types/player';
 import type { SliceCreator } from '@/types/store';
-import { saveItem, ASYNC_KEYS } from '@/lib/asyncStore';
 
 /**
  * Player slice state interface - scoped under 'player' to avoid conflicts

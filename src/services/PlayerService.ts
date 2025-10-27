@@ -39,6 +39,7 @@ import TrackPlayer, {
   State,
   Track,
 } from "react-native-track-player";
+import { AppState } from "react-native";
 
 /**
  * Track player service class
@@ -782,6 +783,21 @@ export class PlayerService {
   async reconnectBackgroundService(): Promise<void> {
     try {
       this.log.info("Reconnecting background service");
+      const runtimeParts: string[] = [];
+      runtimeParts.push(
+        typeof globalThis.window === "undefined" ? "no-window" : "window"
+      );
+      runtimeParts.push(
+        typeof globalThis.document === "undefined" ? "no-document" : "document"
+      );
+      try {
+        runtimeParts.push(`AppState=${AppState.currentState ?? "unknown"}`);
+      } catch {
+        runtimeParts.push("AppState=unavailable");
+      }
+      this.log.info(
+        `[DIAG] PlayerService reconnect runtime: ${runtimeParts.join(" ")}`
+      );
 
       // Try to load the background service module
       // Using require() here to handle dynamic loading
@@ -840,7 +856,16 @@ export class PlayerService {
 
       if (typeof reconnectFn === "function") {
         this.log.info(`Background service initialized: ${isInitialized}`);
-        reconnectFn();
+        if (isInitialized) {
+          reconnectFn();
+        } else {
+          this.log.warn(
+            "Background service not initialized; forcing TrackPlayer service re-registration instead of reconnect"
+          );
+          TrackPlayer.registerPlaybackService(() =>
+            require("./PlayerBackgroundService")
+          );
+        }
       } else {
         // Function doesn't exist (old version or incompatible module)
         this.log.warn(
