@@ -23,7 +23,7 @@ export function formatSpeed(bytesPerSecond: number): string {
 /**
  * Estimate time remaining based on current speed
  */
-export function formatTimeRemaining(
+export function formatTimeRemainingInDownload(
   bytesRemaining: number,
   bytesPerSecond: number,
   minSamplesForEta: number = 3,
@@ -35,14 +35,18 @@ export function formatTimeRemaining(
 
   const secondsRemaining = bytesRemaining / bytesPerSecond;
 
-  if (secondsRemaining < 60) {
-    return `${Math.ceil(secondsRemaining)}s`;
-  } else if (secondsRemaining < 3600) {
-    const minutes = Math.floor(secondsRemaining / 60);
+  return formatTimeRemaining(secondsRemaining);
+}
+
+export function formatTimeRemaining(seconds: number): string {
+  if (seconds < 60) {
+    return `${Math.ceil(seconds)}s`;
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
     return `${minutes}m`;
   } else {
-    const hours = Math.floor(secondsRemaining / 3600);
-    const minutes = Math.floor((secondsRemaining % 3600) / 60);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
   }
 }

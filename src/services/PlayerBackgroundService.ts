@@ -235,7 +235,7 @@ async function handlePlaybackProgressUpdated(
   event: PlaybackProgressUpdatedEvent
 ): Promise<void> {
   try {
-    if (event.position % 5 === 0) {
+    if (Math.floor(event.position) % 5 === 0) {
       log.info(`Playback progress updated: position=${event.position.toFixed(2)}s appState=${AppState.currentState}`);
     }
     const currentSession = unifiedProgressService.getCurrentSession();
@@ -356,11 +356,13 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
 function cleanupEventListeners(): void {
   if (global.__playerBackgroundServiceSubscriptions) {
     log.info("Cleaning up existing event listeners");
-    global.__playerBackgroundServiceSubscriptions.forEach((unsub) => {
+    log.info(`[DIAG] Number of listeners to clean up: ${global.__playerBackgroundServiceSubscriptions.length}`);
+    global.__playerBackgroundServiceSubscriptions.forEach((unsub, idx) => {
       try {
         // unsub is already the .remove function, just call it
         if (typeof unsub === "function") {
           unsub();
+          log.info(`[DIAG] Cleaned up listener #${idx}`);
         }
       } catch (error) {
         log.error("Error removing event listener", error as Error);
@@ -375,6 +377,13 @@ function cleanupEventListeners(): void {
  */
 function setupEventListeners(): Array<() => void> {
   log.info("Setting up event listeners");
+  // Diagnostic: log event listener setup
+  const eventTypes = [
+    'RemotePlay', 'RemotePause', 'RemoteStop', 'RemoteNext', 'RemotePrevious',
+    'RemoteSeek', 'RemoteDuck', 'RemoteJumpForward', 'RemoteJumpBackward',
+    'PlaybackState', 'PlaybackProgressUpdated', 'PlaybackActiveTrackChanged', 'PlaybackError'
+  ];
+  log.info(`[DIAG] Setting up listeners for events: ${eventTypes.join(', ')}`);
 
   // Use object to store lastActiveTrackId so it can be mutated in the handler
   const lastActiveTrackId = { value: null as string | null };
@@ -449,8 +458,10 @@ function setupEventListeners(): Array<() => void> {
  */
 export function reconnectBackgroundService(): void {
   log.info("Forcing reconnection of background service");
+  log.info("[DIAG] Reconnecting background service: cleaning up and re-setting listeners");
   cleanupEventListeners();
   global.__playerBackgroundServiceSubscriptions = setupEventListeners();
+  log.info(`[DIAG] Number of listeners after setup: ${global.__playerBackgroundServiceSubscriptions.length}`);
   global.__playerBackgroundServiceInitializedAt = Date.now();
 }
 

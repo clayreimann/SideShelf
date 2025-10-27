@@ -1,4 +1,5 @@
 import { initializeApp } from "@/index";
+import { formatTimeRemaining } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
 import { AuthProvider } from "@/providers/AuthProvider";
@@ -6,6 +7,7 @@ import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
 import { unifiedProgressService } from "@/services/ProgressService";
+import { useAppStore } from "@/stores/appStore";
 import {
   FontAwesome6,
   MaterialCommunityIcons,
@@ -24,6 +26,13 @@ const log = logger.forTag('RootLayout');
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  // Diagnostic: log mount/unmount and AppState transitions
+  useEffect(() => {
+    log.info('[DIAG] RootLayout mounted');
+    return () => {
+      log.info('[DIAG] RootLayout unmounted');
+    };
+  }, []);
   const { colors, header } = useThemedStyles();
 
   // Load custom fonts
@@ -64,6 +73,7 @@ export default function RootLayout() {
     playerInitTimestamp.current = playerService.getInitializationTimestamp();
 
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      log.info(`[DIAG] AppState changed: ${nextAppState}`);
       if (nextAppState === "background") {
         lastBackgroundTime.current = Date.now();
         log.info("App moved to background");
@@ -83,10 +93,14 @@ export default function RootLayout() {
         }
 
         if (wasLongBackground || contextRecreated) {
-          log.info(`App resumed after long background (${Math.round(timeInBackground / 1000)}s) or context recreated, verifying player connection`);
+          log.info(`App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, verifying player connection`);
 
           // Verify connection between TrackPlayer and store
-          const isConnected = await playerService.verifyConnection();
+          let isConnected = await playerService.verifyConnection();
+          log.info(`Player service connection status: ${isConnected ? "connected" : "disconnected"}`);
+          // Restore current track from AsyncStore if missing
+          await useAppStore.getState().restorePersistedState();
+          isConnected = await playerService.verifyConnection();
 
           if (!isConnected || contextRecreated) {
             log.warn("Connection mismatch or context recreated, reconnecting background service");

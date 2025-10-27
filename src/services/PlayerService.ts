@@ -95,12 +95,31 @@ export class PlayerService {
     this.listenersSetup = false;
   }
 
+  async printDebugInfo(from: string): Promise<void> {
+    try {
+      const currentTrackId = await TrackPlayer.getActiveTrackIndex();
+      const currentTrack = (await TrackPlayer.getQueue())[currentTrackId || 0];
+      const { position } = await TrackPlayer.getProgress();
+      const state = await TrackPlayer.getPlaybackState();
+      this.log.info(
+        `[DIAG] ${from} CurrentTrackId: ${currentTrackId}, Position: ${position}, State: ${state.state}`
+      );
+    } catch (diagError) {
+      this.log.error(
+        "[DIAG] Error fetching TrackPlayer state",
+        diagError as Error
+      );
+    }
+  }
+
   /**
    * Initialize the track player
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
       this.log.info("Already initialized, skipping");
+      // Diagnostic: log current track, position, playing state
+      await this.printDebugInfo("initialize");
       return;
     }
 
@@ -176,6 +195,11 @@ export class PlayerService {
    */
   async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
     try {
+      this.log.info(
+        `[DIAG] playTrack called for libraryItemId: ${libraryItemId}`
+      );
+      // Diagnostic: log current track, position, playing state before loading
+      await this.printDebugInfo("playTrack::init");
       this.log.info(`Loading track for library item: ${libraryItemId}`);
 
       // Get username from secure storage
@@ -338,6 +362,8 @@ export class PlayerService {
       // Start playback - background service will handle session tracking
       await TrackPlayer.play();
 
+      // Diagnostic: log current track, position, playing state after loading
+      await this.printDebugInfo("playTrack::done");
       this.log.info("Track loaded and playing");
     } catch (error) {
       this.log.error(" Failed to load track:", error as Error);
@@ -667,8 +693,17 @@ export class PlayerService {
 
       if (!isConnected) {
         this.log.warn(
-          `Connection mismatch - Track: ${trackMatches}, Position: ${positionMatches}, Playing: ${playingMatches}`
+          `Connection mismatch - Track: ${trackMatches ? "match" : "mismatch"}, Position: ${positionMatches ? "match" : "mismatch"}, Playing: ${playingMatches ? "match" : "mismatch"}`
         );
+        if (!trackMatches) {
+          this.log.info(`From store: ${JSON.stringify(store.player.currentTrack)}} from TrackPlayer: ${JSON.stringify(currentTrack)}`)
+        }
+        if (!positionMatches) {
+          this.log.info(`From store position: ${store.player.position}, from TrackPlayer position: ${progress.position}`);
+        }
+        if (!playingMatches) {
+          this.log.info(`From store isPlaying: ${store.player.isPlaying}, from TrackPlayer state: ${state.state}`);
+        }
       } else {
         this.log.info("Player connection verified OK");
       }

@@ -235,7 +235,7 @@ export default function FullScreenPlayer() {
             alignItems: 'center',
           }}>
             {/* Playback Rate */}
-            <View style={{ alignItems: 'center' }}>
+            {/* <View style={{ alignItems: 'center' }}>
               <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
                 Speed
               </Text>
@@ -262,28 +262,14 @@ export default function FullScreenPlayer() {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
+            </View> */}
 
             {/* Volume */}
-            <View style={{ alignItems: 'center', flex: 1, marginLeft: 32 }}>
+            {/* <View style={{ alignItems: 'center', flex: 1, marginLeft: 32 }}>
               <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
                 Volume
               </Text>
-              {/* <Slider
-                  style={{ width: '100%', height: 30 }}
-                  minimumValue={0}
-                  maximumValue={1}
-                  value={volume}
-                  onValueChange={handleVolumeChange}
-                  minimumTrackTintColor="#007AFF"
-                  maximumTrackTintColor={isDark ? '#333' : '#e0e0e0'}
-                  thumbStyle={{
-                    backgroundColor: '#007AFF',
-                    width: 16,
-                    height: 16,
-                  }}
-                /> */}
-            </View>
+            </View> */}
           </View>
         </View>
       </View>

@@ -9,7 +9,7 @@
  */
 
 import { ProgressBar } from '@/components/ui';
-import { formatBytes, formatSpeed, formatTimeRemaining } from '@/lib/helpers/formatters';
+import { formatBytes, formatSpeed, formatTimeRemainingInDownload } from '@/lib/helpers/formatters';
 import { useThemedStyles } from '@/lib/theme';
 import { DownloadProgress as DownloadProgressType } from '@/services/DownloadService';
 import React from 'react';
@@ -178,7 +178,7 @@ export default function DownloadProgressView({
               ]}
             >
               ETA:{' '}
-              {formatTimeRemaining(
+              {formatTimeRemainingInDownload(
                 (downloadProgress.totalBytes || 0) -
                   (downloadProgress.bytesDownloaded || 0),
                 downloadProgress.downloadSpeed || 0,

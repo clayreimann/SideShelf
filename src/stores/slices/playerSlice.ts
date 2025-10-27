@@ -10,6 +10,7 @@
 
 import type { CurrentChapter, PlayerTrack } from '@/types/player';
 import type { SliceCreator } from '@/types/store';
+import { saveItem, ASYNC_KEYS } from '@/lib/asyncStore';
 
 /**
  * Player slice state interface - scoped under 'player' to avoid conflicts
@@ -49,6 +50,8 @@ export interface PlayerSliceState {
  * All player control actions should go through PlayerService directly.
  */
 export interface PlayerSliceActions {
+  /** Restore persisted player state from AsyncStorage */
+  restorePersistedState: () => Promise<void>;
   // Initialization
   /** Initialize the player slice */
   initializePlayerSlice: () => Promise<void>;
@@ -85,6 +88,39 @@ export interface PlayerSlice extends PlayerSliceState, PlayerSliceActions {}
  * Create player slice
  */
 export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
+  restorePersistedState: async () => {
+    const { getItem, ASYNC_KEYS } = await import('@/lib/asyncStore');
+    const store = get();
+    if (!store.player.currentTrack) {
+      const track = await getItem(ASYNC_KEYS.currentTrack);
+      if (track) {
+        store._setCurrentTrack(track);
+        console.log('[PlayerSlice] Restored currentTrack from AsyncStorage');
+      } else {
+        console.log('[PlayerSlice] No currentTrack found in AsyncStorage');
+      }
+    }
+    const playbackRate = await getItem(ASYNC_KEYS.playbackRate);
+    if (playbackRate !== null && playbackRate !== undefined) {
+      store._setPlaybackRate(playbackRate);
+      console.log('[PlayerSlice] Restored playbackRate from AsyncStorage');
+    }
+    const volume = await getItem(ASYNC_KEYS.volume);
+    if (volume !== null && volume !== undefined) {
+      store._setVolume(volume);
+      console.log('[PlayerSlice] Restored volume from AsyncStorage');
+    }
+    const position = await getItem(ASYNC_KEYS.position);
+    if (position !== null && position !== undefined) {
+      store.updatePosition(position);
+      console.log('[PlayerSlice] Restored position from AsyncStorage');
+    }
+    const isPlaying = await getItem(ASYNC_KEYS.isPlaying);
+    if (isPlaying !== null && isPlaying !== undefined) {
+      store.updatePlayingState(isPlaying);
+      console.log('[PlayerSlice] Restored isPlaying from AsyncStorage');
+    }
+  },
   // Initial scoped state
   player: {
     currentTrack: null,
@@ -132,7 +168,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         position,
       },
     }));
-
+    saveItem(ASYNC_KEYS.position, position);
     // Update current chapter
     state._updateCurrentChapter(position);
   },
@@ -145,6 +181,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         isPlaying,
       },
     }));
+    saveItem(ASYNC_KEYS.isPlaying, isPlaying);
   },
 
   _setCurrentTrack: (track: PlayerTrack | null) => {
@@ -158,7 +195,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         currentChapter: null,
       },
     }));
-
+    // Persist current track to AsyncStorage
+    saveItem(ASYNC_KEYS.currentTrack, track);
     // Update current chapter if we have a track
     if (track) {
       state._updateCurrentChapter(state.player.position);
@@ -230,6 +268,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         playbackRate: rate,
       },
     }));
+    saveItem(ASYNC_KEYS.playbackRate, rate);
   },
 
   _setVolume: (volume: number) => {
@@ -241,5 +280,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         volume: clampedVolume,
       },
     }));
+    saveItem(ASYNC_KEYS.volume, clampedVolume);
   },
 });
