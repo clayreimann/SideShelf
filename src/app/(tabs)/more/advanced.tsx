@@ -147,7 +147,7 @@ export default function AdvancedScreen() {
 
       const sqliteDirectory = getSQLiteDirectory();
       const metadataDbFile = new File(sqliteDirectory, 'abs2.sqlite');
-      const logDbFile = new File(sqliteDirectory, 'abs2.log.sqlite');
+      const logDbFile = new File(sqliteDirectory, 'logs.sqlite');
       const covers = collectFileStats(coverRows.map((row) => row.localCoverUrl));
 
       const metadataStats: StorageBucketStats = metadataDbFile.exists
@@ -384,7 +384,7 @@ export default function AdvancedScreen() {
           label: entry.id,
           onPress: disabledOnPress,
           disabled: true,
-          columns: [entry.title, formatFileCount(entry.count), formatBytes(entry.size)],
+          columns: [entry.title, formatFileCount(entry.count), formatBytes(entry.size)] as [string, string, string],
         })),
       ],
     };

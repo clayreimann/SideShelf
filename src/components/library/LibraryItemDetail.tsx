@@ -11,10 +11,7 @@ import {
   getAudioFilesWithDownloadInfo,
 } from "@/db/helpers/combinedQueries";
 import { processFullLibraryItems } from "@/db/helpers/fullLibraryItems";
-import {
-  getLibraryItemById,
-  NewLibraryItemRow,
-} from "@/db/helpers/libraryItems";
+import { getLibraryItemById } from "@/db/helpers/libraryItems";
 import { getMediaGenres, getMediaTags } from "@/db/helpers/mediaJoins";
 import {
   cacheCoverAndUpdateMetadata,
@@ -33,6 +30,7 @@ import { DownloadProgress, downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { unifiedProgressService } from "@/services/ProgressService";
 import { usePlayer } from "@/stores/appStore";
+import type { NewLibraryItemRow } from "@/types/database";
 import { Stack } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {

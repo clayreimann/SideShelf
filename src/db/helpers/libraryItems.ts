@@ -10,7 +10,6 @@ import { and, eq, inArray, not } from 'drizzle-orm';
 import { audioFiles } from '../schema/audioFiles';
 import { mediaAuthors } from '../schema/mediaJoins';
 
-
 // Marshal a single ApiLibraryItem from API to database row
 export function marshalLibraryItemFromApi(item: ApiLibraryItem): NewLibraryItemRow {
   return {
@@ -237,7 +236,7 @@ export async function getLibraryItemsForList(libraryId: string): Promise<{
 
   return rows.map(({ mediaId, ...row }) => ({
     ...row,
-    coverUri: row.coverUri && mediaId ? resolveAppPath(row.coverUri) : undefined,
+    coverUri: row.coverUri && mediaId ? resolveAppPath(row.coverUri) : ,
   }));
 }
 
@@ -251,7 +250,7 @@ export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof
     title: item.title || 'Unknown Title',
     author: item.author || item.authorName || 'Unknown ApiAuthor',
     authorNameLF: item.authorNameLF,
-    narrator: item.narrator || item.narratorName || null,
+    narrator: item.narrator || null,
     releaseDate: item.releaseDate || item.publishedDate || null,
     publishedYear: item.publishedYear,
     addedAt: item.addedAt,

@@ -261,6 +261,20 @@ class Logger {
   }
 
   /**
+   * Get a diagnostic sublogger for verbose diagnostic logging
+   * Diagnostic loggers are prefixed with "DIAG:" and can be enabled/disabled separately
+   * from the main logger for that tag. This is useful for detailed debugging without
+   * cluttering the main logs.
+   *
+   * @param tag - The base tag (e.g., "PlayerService")
+   * @returns A SubLogger that logs to "DIAG:{tag}"
+   */
+  forDiagnostics(tag: string): SubLogger {
+    const diagTag = `DIAG:${tag}`;
+    return this.forTag(diagTag);
+  }
+
+  /**
    * Log a debug message
    */
   debug(tag: string, message: string): void {

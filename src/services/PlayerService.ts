@@ -26,6 +26,7 @@ import { getItem, SECURE_KEYS } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
 import type { PlayerTrack } from "@/types/player";
+import { AppState } from "react-native";
 import TrackPlayer, {
   AndroidAudioContentType,
   AppKilledPlaybackBehavior,
@@ -39,7 +40,6 @@ import TrackPlayer, {
   State,
   Track,
 } from "react-native-track-player";
-import { AppState } from "react-native";
 
 /**
  * Track player service class
@@ -55,6 +55,7 @@ export class PlayerService {
   private cachedApiInfo: { baseUrl: string; accessToken: string } | null = null;
   private currentPlaySessionId: string | null = null; // Track the current server session ID
   private log = logger.forTag("PlayerService"); // Cached sublogger
+  private diagLog = logger.forDiagnostics("PlayerService"); // Diagnostic logger
 
   private constructor() {}
 
@@ -102,12 +103,12 @@ export class PlayerService {
       const currentTrack = (await TrackPlayer.getQueue())[currentTrackId || 0];
       const { position } = await TrackPlayer.getProgress();
       const state = await TrackPlayer.getPlaybackState();
-      this.log.info(
-        `[DIAG] ${from} CurrentTrackId: ${currentTrackId}, Position: ${position}, State: ${state.state}`
+      this.diagLog.info(
+        `${from} CurrentTrackId: ${currentTrackId}, Position: ${position}, State: ${state.state}`
       );
     } catch (diagError) {
-      this.log.error(
-        "[DIAG] Error fetching TrackPlayer state",
+      this.diagLog.error(
+        "Error fetching TrackPlayer state",
         diagError as Error
       );
     }
@@ -196,8 +197,8 @@ export class PlayerService {
    */
   async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
     try {
-      this.log.info(
-        `[DIAG] playTrack called for libraryItemId: ${libraryItemId}`
+      this.diagLog.info(
+        `playTrack called for libraryItemId: ${libraryItemId}`
       );
       // Diagnostic: log current track, position, playing state before loading
       await this.printDebugInfo("playTrack::init");
@@ -218,13 +219,21 @@ export class PlayerService {
       // Check if already playing this item - if so, just resume
       if (this.currentTrack?.libraryItemId === libraryItemId) {
         const state = await TrackPlayer.getPlaybackState();
-        if (state.state === State.Playing) {
-          this.log.info("Already playing this item");
-          return;
-        } else if (state.state === State.Paused) {
-          this.log.info("Resuming paused playback");
-          await TrackPlayer.play();
-          return;
+        const queue = await TrackPlayer.getQueue();
+
+        // Only short-circuit if we actually have tracks in the queue
+        if (queue.length > 0) {
+          if (state.state === State.Playing) {
+            this.log.info("Already playing this item");
+            return;
+          } else if (state.state === State.Paused) {
+            this.log.info("Resuming paused playback");
+            await TrackPlayer.play();
+            return;
+          }
+        } else {
+          // Queue is empty even though we have a currentTrack - need to reload
+          this.log.warn("Current track set but queue is empty - reloading track");
         }
       }
 
@@ -795,8 +804,8 @@ export class PlayerService {
       } catch {
         runtimeParts.push("AppState=unavailable");
       }
-      this.log.info(
-        `[DIAG] PlayerService reconnect runtime: ${runtimeParts.join(" ")}`
+      this.diagLog.info(
+        `PlayerService reconnect runtime: ${runtimeParts.join(" ")}`
       );
 
       // Try to load the background service module

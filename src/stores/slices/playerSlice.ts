@@ -90,35 +90,52 @@ export interface PlayerSlice extends PlayerSliceState, PlayerSliceActions {}
 export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
   restorePersistedState: async () => {
     const { getItem, ASYNC_KEYS } = await import('@/lib/asyncStore');
+    const { logger } = await import('@/lib/logger');
+    const log = logger.forTag('PlayerSlice');
+
     const store = get();
     if (!store.player.currentTrack) {
       const track = await getItem(ASYNC_KEYS.currentTrack);
       if (track) {
         store._setCurrentTrack(track);
-        console.log('[PlayerSlice] Restored currentTrack from AsyncStorage');
+        log.info('Restored currentTrack from AsyncStorage');
       } else {
-        console.log('[PlayerSlice] No currentTrack found in AsyncStorage');
+        log.info('No currentTrack found in AsyncStorage');
       }
     }
     const playbackRate = await getItem(ASYNC_KEYS.playbackRate);
     if (playbackRate !== null && playbackRate !== undefined) {
       store._setPlaybackRate(playbackRate);
-      console.log('[PlayerSlice] Restored playbackRate from AsyncStorage');
+      log.info('Restored playbackRate from AsyncStorage');
     }
     const volume = await getItem(ASYNC_KEYS.volume);
     if (volume !== null && volume !== undefined) {
       store._setVolume(volume);
-      console.log('[PlayerSlice] Restored volume from AsyncStorage');
+      log.info('Restored volume from AsyncStorage');
     }
     const position = await getItem(ASYNC_KEYS.position);
     if (position !== null && position !== undefined) {
       store.updatePosition(position);
-      console.log('[PlayerSlice] Restored position from AsyncStorage');
+      log.info(`Restored position from AsyncStorage: ${position}s`);
+
+      // Try to apply position to TrackPlayer if possible
+      // This is a best-effort attempt - if TrackPlayer isn't ready, it will fail silently
+      try {
+        const TrackPlayer = await import('react-native-track-player');
+        const queue = await TrackPlayer.default.getQueue();
+        if (queue.length > 0) {
+          await TrackPlayer.default.seekTo(position);
+          log.info(`Applied restored position to TrackPlayer: ${position}s`);
+        }
+      } catch (error) {
+        // Ignore errors - TrackPlayer might not be ready yet
+        log.info('Could not apply position to TrackPlayer (player may not be ready)');
+      }
     }
     const isPlaying = await getItem(ASYNC_KEYS.isPlaying);
     if (isPlaying !== null && isPlaying !== undefined) {
       store.updatePlayingState(isPlaying);
-      console.log('[PlayerSlice] Restored isPlaying from AsyncStorage');
+      log.info('Restored isPlaying from AsyncStorage');
     }
   },
   // Initial scoped state
@@ -139,7 +156,9 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   // Actions
   initializePlayerSlice: async () => {
-    console.log('[PlayerSlice] Initializing player slice');
+    const { logger } = await import('@/lib/logger');
+    const log = logger.forTag('PlayerSlice');
+    log.info('Initializing player slice');
     set((state: PlayerSlice) => ({
       ...state,
       player: {

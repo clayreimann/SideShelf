@@ -1,4 +1,5 @@
 import { initializeApp } from "@/index";
+import { getBackgroundServiceReconnectionEnabled } from "@/lib/appSettings";
 import { formatTimeRemaining } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
@@ -21,6 +22,7 @@ import { AppState, AppStateStatus, View } from "react-native";
 
 // Create cached sublogger for this component
 const log = logger.forTag('RootLayout');
+const diagLog = logger.forDiagnostics('RootLayout');
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -28,9 +30,9 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   // Diagnostic: log mount/unmount and AppState transitions
   useEffect(() => {
-    log.info('[DIAG] RootLayout mounted');
+    diagLog.info('RootLayout mounted');
     return () => {
-      log.info('[DIAG] RootLayout unmounted');
+      diagLog.info('RootLayout unmounted');
     };
   }, []);
   const { colors, header } = useThemedStyles();
@@ -73,7 +75,7 @@ export default function RootLayout() {
     playerInitTimestamp.current = playerService.getInitializationTimestamp();
 
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
-      log.info(`[DIAG] AppState changed: ${nextAppState}`);
+      diagLog.info(`AppState changed: ${nextAppState}`);
       if (nextAppState === "background") {
         lastBackgroundTime.current = Date.now();
         log.info("App moved to background");
@@ -95,6 +97,10 @@ export default function RootLayout() {
         if (wasLongBackground || contextRecreated) {
           log.info(`App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, verifying player connection`);
 
+          // Check if background service reconnection is enabled
+          const reconnectionEnabled = await getBackgroundServiceReconnectionEnabled();
+          diagLog.info(`Background service reconnection enabled: ${reconnectionEnabled}`);
+
           // Verify connection between TrackPlayer and store
           let isConnected = await playerService.verifyConnection();
           log.info(`Player service connection status: ${isConnected ? "connected" : "disconnected"}`);
@@ -102,9 +108,11 @@ export default function RootLayout() {
           await useAppStore.getState().restorePersistedState();
           isConnected = await playerService.verifyConnection();
 
-          if (!isConnected || contextRecreated) {
+          if (reconnectionEnabled && (!isConnected || contextRecreated)) {
             log.warn("Connection mismatch or context recreated, reconnecting background service");
             await playerService.reconnectBackgroundService();
+          } else if (!reconnectionEnabled && (!isConnected || contextRecreated)) {
+            log.info("Background service reconnection is disabled, skipping reconnection");
           }
         }
 

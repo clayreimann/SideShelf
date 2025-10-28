@@ -27,6 +27,8 @@ import { unifiedProgressService } from "./ProgressService";
 
 // Create a cached sublogger for this service (more efficient than calling logger.X('tag', ...) each time)
 const log = logger.forTag("PlayerBackgroundService");
+// Create a diagnostic logger for verbose diagnostic logging
+const diagLog = logger.forDiagnostics("PlayerBackgroundService");
 
 function describeRuntimeContext(): string {
   const parts: string[] = [];
@@ -61,7 +63,7 @@ declare global {
  * Handle remote play command
  */
 async function handleRemotePlay(): Promise<void> {
-  log.info(`[DIAG] RemotePlay received (${describeRuntimeContext()})`);
+  diagLog.info(`RemotePlay received (${describeRuntimeContext()})`);
   await TrackPlayer.play();
 }
 
@@ -69,7 +71,7 @@ async function handleRemotePlay(): Promise<void> {
  * Handle remote pause command
  */
 async function handleRemotePause(): Promise<void> {
-  log.info(`[DIAG] RemotePause received (${describeRuntimeContext()})`);
+  diagLog.info(`RemotePause received (${describeRuntimeContext()})`);
   await TrackPlayer.pause();
 }
 
@@ -77,7 +79,7 @@ async function handleRemotePause(): Promise<void> {
  * Handle remote stop command
  */
 async function handleRemoteStop(): Promise<void> {
-  log.info(`[DIAG] RemoteStop received (${describeRuntimeContext()})`);
+  diagLog.info(`RemoteStop received (${describeRuntimeContext()})`);
   await TrackPlayer.stop();
   await unifiedProgressService.endCurrentSession();
 }
@@ -88,8 +90,8 @@ async function handleRemoteStop(): Promise<void> {
 async function handleRemoteJumpForward(
   event: RemoteJumpForwardEvent
 ): Promise<void> {
-  log.info(
-    `[DIAG] RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`
+  diagLog.info(
+    `RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`
   );
   const progress = await TrackPlayer.getProgress();
   const newPosition = progress.position + event.interval;
@@ -124,8 +126,8 @@ async function handleRemoteJumpForward(
 async function handleRemoteJumpBackward(
   event: RemoteJumpBackwardEvent
 ): Promise<void> {
-  log.info(
-    `[DIAG] RemoteJumpBackward received interval=${event.interval} (${describeRuntimeContext()})`
+  diagLog.info(
+    `RemoteJumpBackward received interval=${event.interval} (${describeRuntimeContext()})`
   );
   const progress = await TrackPlayer.getProgress();
   const newPosition = Math.max(0, progress.position - event.interval);
@@ -158,7 +160,7 @@ async function handleRemoteJumpBackward(
  * Handle remote next track command
  */
 async function handleRemoteNext(): Promise<void> {
-  log.info(`[DIAG] RemoteNext received (${describeRuntimeContext()})`);
+  diagLog.info(`RemoteNext received (${describeRuntimeContext()})`);
   await TrackPlayer.skipToNext();
 }
 
@@ -166,7 +168,7 @@ async function handleRemoteNext(): Promise<void> {
  * Handle remote previous track command
  */
 async function handleRemotePrevious(): Promise<void> {
-  log.info(`[DIAG] RemotePrevious received (${describeRuntimeContext()})`);
+  diagLog.info(`RemotePrevious received (${describeRuntimeContext()})`);
   await TrackPlayer.skipToPrevious();
 }
 
@@ -174,8 +176,8 @@ async function handleRemotePrevious(): Promise<void> {
  * Handle remote seek command
  */
 async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
-  log.info(
-    `[DIAG] RemoteSeek received position=${event.position} (${describeRuntimeContext()})`
+  diagLog.info(
+    `RemoteSeek received position=${event.position} (${describeRuntimeContext()})`
   );
   await TrackPlayer.seekTo(event.position);
 
@@ -208,8 +210,8 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
  * Handle audio duck events (when other apps need audio focus)
  */
 async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
-  log.info(
-    `[DIAG] RemoteDuck received permanent=${event.permanent} paused=${event.paused} ducking=${event.ducking} (${describeRuntimeContext()})`
+  diagLog.info(
+    `RemoteDuck received permanent=${event.permanent} paused=${event.paused} (${describeRuntimeContext()})`
   );
   try {
     if (event.permanent) {
@@ -394,15 +396,15 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
 function cleanupEventListeners(): void {
   if (global.__playerBackgroundServiceSubscriptions) {
     log.info("Cleaning up existing event listeners");
-    log.info(
-      `[DIAG] Number of listeners to clean up: ${global.__playerBackgroundServiceSubscriptions.length} (${describeRuntimeContext()})`
+    diagLog.info(
+      `Number of listeners to clean up: ${global.__playerBackgroundServiceSubscriptions.length} (${describeRuntimeContext()})`
     );
     global.__playerBackgroundServiceSubscriptions.forEach((unsub, idx) => {
       try {
         // unsub is already the .remove function, just call it
         if (typeof unsub === "function") {
           unsub();
-          log.info(`[DIAG] Cleaned up listener #${idx}`);
+          diagLog.info(`Cleaned up listener #${idx}`);
         }
       } catch (error) {
         log.error("Error removing event listener", error as Error);
@@ -423,8 +425,8 @@ function setupEventListeners(): Array<() => void> {
     'RemoteSeek', 'RemoteDuck', 'RemoteJumpForward', 'RemoteJumpBackward',
     'PlaybackState', 'PlaybackProgressUpdated', 'PlaybackActiveTrackChanged', 'PlaybackError'
   ];
-  log.info(
-    `[DIAG] Setting up listeners for events: ${eventTypes.join(
+  diagLog.info(
+    `Setting up listeners for events: ${eventTypes.join(
       ", "
     )} (${describeRuntimeContext()})`
   );
@@ -502,13 +504,13 @@ function setupEventListeners(): Array<() => void> {
  */
 export function reconnectBackgroundService(): void {
   log.info("Forcing reconnection of background service");
-  log.info(
-    `[DIAG] Reconnecting background service: cleaning up and re-setting listeners (${describeRuntimeContext()})`
+  diagLog.info(
+    `Reconnecting background service: cleaning up and re-setting listeners (${describeRuntimeContext()})`
   );
   cleanupEventListeners();
   global.__playerBackgroundServiceSubscriptions = setupEventListeners();
-  log.info(
-    `[DIAG] Number of listeners after setup: ${global.__playerBackgroundServiceSubscriptions.length}`
+  diagLog.info(
+    `Number of listeners after setup: ${global.__playerBackgroundServiceSubscriptions.length}`
   );
   global.__playerBackgroundServiceInitializedAt = Date.now();
 }
@@ -537,8 +539,8 @@ export function isBackgroundServiceInitialized(): boolean {
  */
 async function trackPlayerBackgroundService(): Promise<void> {
   const now = Date.now();
-  log.info(
-    `[DIAG] trackPlayerBackgroundService invoked (${describeRuntimeContext()})`
+  diagLog.info(
+    `trackPlayerBackgroundService invoked (${describeRuntimeContext()})`
   );
 
   if (global.__playerBackgroundServiceInitializedAt) {
