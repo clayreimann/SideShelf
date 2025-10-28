@@ -7,9 +7,9 @@
  */
 
 import { getLibraryItemById } from '@/db/helpers/libraryItems';
-import { getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
 import {
   endListeningSession,
+  endStaleListeningSession,
   getActiveSession,
   getAllActiveSessionsForUser,
   getListeningSession,
@@ -22,12 +22,14 @@ import {
   updateSessionListeningTime,
   updateSessionProgress
 } from '@/db/helpers/localListeningSessions';
+import { getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
 import { getMediaProgressForLibraryItem, marshalMediaProgressFromApi, marshalMediaProgressFromAuthResponse, upsertMediaProgress } from '@/db/helpers/mediaProgress';
 import { getUserByUsername } from '@/db/helpers/users';
-import { LocalListeningSessionRow } from '@/db/schema/localData';
 import type { LibraryItemRow } from '@/db/schema/libraryItems';
+import { LocalListeningSessionRow } from '@/db/schema/localData';
 import { closeSession, createLocalSession, fetchMe, fetchMediaProgress, syncSession } from '@/lib/api/endpoints';
 import { logger } from '@/lib/logger';
+import { getItem, SECURE_KEYS } from '@/lib/secureStore';
 import NetInfo from "@react-native-community/netinfo";
 
 // Create cached sublogger for this service
@@ -76,6 +78,7 @@ export class ProgressService {
   private pauseStartTime = 0;
   private lastProgressUpdateTime = 0;
   private failedSyncs = 0;
+  private sessionIsStale = false;
 
   // Configuration
   public readonly SYNC_INTERVAL_UNMETERED = 15000; // 15 seconds on unmetered connections
@@ -86,6 +89,8 @@ export class ProgressService {
 
   private constructor() {
     this.startPeriodicSync();
+    // Rehydrate session when service is created
+    this.rehydrateActiveSession();
   }
 
   static getInstance(): ProgressService {
@@ -93,6 +98,88 @@ export class ProgressService {
       ProgressService.instance = new ProgressService();
     }
     return ProgressService.instance;
+  }
+
+  /**
+   * Rehydrate active session from database (called on service creation)
+   * Optionally match against a specific library item ID (e.g., from TrackPlayer)
+   */
+  private async rehydrateActiveSession(matchLibraryItemId?: string): Promise<void> {
+    try {
+      const username = await getItem(SECURE_KEYS.username);
+      if (!username) {
+        log.info('No username found, skipping session rehydration');
+        return;
+      }
+
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        log.info('User not found, skipping session rehydration');
+        return;
+      }
+
+      // Get all active sessions for this user
+      const activeSessions = await getAllActiveSessionsForUser(user.id);
+      if (activeSessions.length === 0) {
+        log.info('No active sessions to rehydrate');
+        return;
+      }
+
+      // Use the most recently updated session
+      const session = activeSessions.sort((a, b) =>
+        b.updatedAt.getTime() - a.updatedAt.getTime()
+      )[0];
+
+      // If a specific library item ID was provided, verify it matches
+      if (matchLibraryItemId && session.libraryItemId !== matchLibraryItemId) {
+        log.info(`Active session library item (${session.libraryItemId}) doesn't match TrackPlayer item (${matchLibraryItemId}), not rehydrating`);
+        return;
+      }
+
+      // Get the library item to verify it still exists
+      const libraryItem = await getLibraryItemById(session.libraryItemId);
+      if (!libraryItem) {
+        log.warn(`Library item ${session.libraryItemId} not found, ending stale session`);
+        await endListeningSession(session.id, session.currentTime);
+        return;
+      }
+
+      // Check if session is stale (more than 15 minutes old)
+      const sessionAge = Date.now() - session.updatedAt.getTime();
+      const isStale = sessionAge > this.PAUSE_TIMEOUT;
+
+      if (isStale) {
+        log.info(`Rehydrating stale session ${session.id} (${Math.round(sessionAge / 1000)}s old) - will be expired on next update`);
+      } else {
+        log.info(`Rehydrating session ${session.id} for ${session.libraryItemId} at position ${session.currentTime}`);
+      }
+
+      this.currentSession = {
+        sessionId: session.id,
+        libraryItemId: session.libraryItemId,
+        mediaId: session.mediaId,
+        startTime: session.startTime,
+        currentTime: session.currentTime,
+        duration: session.duration,
+        isDownloaded: true,
+      };
+
+      this.currentUsername = username;
+      this.lastProgressUpdateTime = Date.now();
+      this.lastSyncTime = session.updatedAt.getTime();
+      this.failedSyncs = 0;
+      this.isPaused = false;
+
+      // Mark the session as stale if it's old - will be handled in updateProgress
+      if (isStale) {
+        // Store the stale flag in a property so updateProgress can handle it
+        this.sessionIsStale = true;
+      }
+
+      log.info('Session rehydration complete');
+    } catch (error) {
+      log.error('Failed to rehydrate active session:', error as Error);
+    }
   }
 
   /**
@@ -213,6 +300,7 @@ export class ProgressService {
       this.lastProgressUpdateTime = Date.now();
       this.lastSyncTime = Date.now();
       this.failedSyncs = 0;
+      this.sessionIsStale = false; // Clear stale flag for new session
 
       // If we have an existing server session ID (from streaming), use it
       if (existingServerSessionId) {
@@ -266,8 +354,51 @@ export class ProgressService {
       this.lastProgressUpdateTime = 0;
       this.lastSyncTime = 0;
       this.failedSyncs = 0;
+      this.sessionIsStale = false;
     } catch (error) {
       log.error('Failed to end session:', error as Error);
+    }
+  }
+
+  /**
+   * End a stale listening session using its last update time as the session end timestamp
+   * This is used when cleaning up sessions that were abandoned - the session
+   * actually ended at its last update time, not at the current time
+   */
+  private async endStaleSession(endTime?: number): Promise<void> {
+    if (!this.currentSession) {
+      return;
+    }
+
+    try {
+      // Use provided endTime, or current session's currentTime, or fall back to startTime
+      const finalEndTime = endTime ?? this.currentSession.currentTime;
+
+      // Clear pause timeout
+      this.clearPauseTimeout();
+
+      // Only record session if it was long enough
+      const sessionDuration = finalEndTime - this.currentSession.startTime;
+      if (sessionDuration >= this.MIN_SESSION_DURATION) {
+        await endStaleListeningSession(this.currentSession.sessionId, finalEndTime);
+
+        // Final sync to server
+        await this.syncCurrentSessionToServer();
+
+        log.info(`Ended stale session ${this.currentSession.sessionId}`);
+      } else {
+        log.info(`Stale session too short (${sessionDuration}s), not recording`);
+      }
+
+      this.currentSession = null;
+      this.currentUsername = null;
+      this.isPaused = false;
+      this.lastProgressUpdateTime = 0;
+      this.lastSyncTime = 0;
+      this.failedSyncs = 0;
+      this.sessionIsStale = false;
+    } catch (error) {
+      log.error('Failed to end stale session:', error as Error);
     }
   }
 
@@ -286,6 +417,41 @@ export class ProgressService {
     }
 
     try {
+      // Handle stale session - end it and start a fresh one
+      if (this.sessionIsStale) {
+        log.info('Handling stale session - ending old session and starting new one');
+
+        const oldSession = { ...this.currentSession };
+        const username = this.currentUsername;
+
+        // End the stale session at its last known position (when it was last updated)
+        // Use endStaleListeningSession which uses the session's updatedAt timestamp
+        // as the sessionEnd time, not the current time
+        const staleSessionEndTime = oldSession.currentTime;
+        log.info(`Ending stale session at its last position: ${staleSessionEndTime}s (not current position: ${currentTime}s)`);
+        await this.endStaleSession(staleSessionEndTime);
+
+        // Start a new session for the same item at the current playback position
+        if (username) {
+          log.info(`Starting new session for ${oldSession.libraryItemId} at position ${currentTime}`);
+          await this.startSession(
+            username,
+            oldSession.libraryItemId,
+            oldSession.mediaId,
+            currentTime,
+            oldSession.duration,
+            playbackRate || 1.0,
+            volume || 1.0
+          );
+        }
+
+        // Clear the stale flag
+        this.sessionIsStale = false;
+
+        // Early return - the new session will handle subsequent updates
+        return;
+      }
+
       const now = Date.now();
 
       // Track listening time like iOS implementation:
@@ -368,6 +534,16 @@ export class ProgressService {
    */
   getCurrentSession(): SessionInfo | null {
     return this.currentSession;
+  }
+
+  /**
+   * Force rehydration of session from database
+   * Useful when app resumes from background
+   * @param matchLibraryItemId - Optional library item ID to match against (e.g., from TrackPlayer)
+   */
+  async forceRehydrateSession(matchLibraryItemId?: string): Promise<void> {
+    log.info('Force rehydrating session from database');
+    await this.rehydrateActiveSession(matchLibraryItemId);
   }
 
   /**
@@ -478,7 +654,7 @@ export class ProgressService {
 
     this.pauseTimeoutInterval = setTimeout(async () => {
       log.info('Pause timeout reached, ending session');
-      await this.endCurrentSession();
+      await this.endStaleSession();
     }, this.PAUSE_TIMEOUT);
   }
 
@@ -759,35 +935,6 @@ export class ProgressService {
     } catch (error) {
       log.error('Failed to fetch server progress:', error as Error);
       throw error;
-    }
-  }
-
-  /**
-   * End all active sessions for a user (ensures only one session at a time)
-   */
-  private async endAllActiveSessionsForUser(userId: string): Promise<void> {
-    try {
-      const activeSessions = await getAllActiveSessionsForUser(userId);
-      for (const session of activeSessions) {
-        log.info(`Ending active session ${session.id} for user ${userId}`);
-
-        // If session got detached somehow, calculate a reasonable end time
-        // Use current time if available, otherwise estimate based on session duration
-        let endTime = session.currentTime;
-        if (!endTime || endTime <= session.startTime) {
-          // Calculate session listening duration and add to start time
-          const sessionCreated = session.createdAt.getTime();
-          const now = Date.now();
-          const sessionDurationMs = now - sessionCreated;
-          const estimatedListeningTime = Math.min(sessionDurationMs / 1000, session.duration - session.startTime);
-          endTime = session.startTime + estimatedListeningTime;
-          log.error(`Estimated end time for session ${session.id}: ${endTime}`);
-        }
-
-        await endListeningSession(session.id, endTime);
-      }
-    } catch (error) {
-      log.error('Failed to end active sessions:', error as Error);
     }
   }
 

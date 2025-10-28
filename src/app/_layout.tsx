@@ -102,11 +102,10 @@ export default function RootLayout() {
           diagLog.info(`Background service reconnection enabled: ${reconnectionEnabled}`);
 
           // Verify connection between TrackPlayer and store
-          let isConnected = await playerService.verifyConnection();
-          log.info(`Player service connection status: ${isConnected ? "connected" : "disconnected"}`);
           // Restore current track from AsyncStore if missing
           await useAppStore.getState().restorePersistedState();
-          isConnected = await playerService.verifyConnection();
+          const isConnected = await playerService.verifyConnection();
+          log.info(`Player service connection status: ${isConnected ? "connected" : "disconnected"}`);
 
           if (reconnectionEnabled && (!isConnected || contextRecreated)) {
             log.warn("Connection mismatch or context recreated, reconnecting background service");

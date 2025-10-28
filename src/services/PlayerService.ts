@@ -22,6 +22,7 @@ import { startPlaySession } from "@/lib/api/endpoints";
 import { calculateSmartRewindTime, getSmartRewindEnabled } from '@/lib/appSettings';
 import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
+import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getItem, SECURE_KEYS } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
@@ -32,15 +33,15 @@ import TrackPlayer, {
   AndroidAudioContentType,
   AppKilledPlaybackBehavior,
   Capability,
-  Event,
   IOSCategory,
   IOSCategoryMode,
-  PlaybackErrorEvent,
-  PlaybackQueueEndedEvent,
-  PlaybackState,
   State,
-  Track,
+  Track
 } from "react-native-track-player";
+
+
+const log = logger.forTag("PlayerService"); // Cached sublogger
+const diagLog = logger.forDiagnostics("PlayerService"); // Diagnostic logger
 
 /**
  * Track player service class
@@ -56,8 +57,6 @@ export class PlayerService {
   private cachedApiInfo: { baseUrl: string; accessToken: string } | null = null;
   private currentPlaySessionId: string | null = null; // Track the current server session ID
   private lastPauseTime: number | null = null; // Track when playback was paused (for smart rewind)
-  private log = logger.forTag("PlayerService"); // Cached sublogger
-  private diagLog = logger.forDiagnostics("PlayerService"); // Diagnostic logger
 
   private constructor() {}
 
@@ -90,7 +89,7 @@ export class PlayerService {
       try {
         subscription.remove();
       } catch (error) {
-        this.log.error("Error removing subscription", error as Error);
+        log.error("Error removing subscription", error as Error);
       }
     });
     this.eventSubscriptions.length = 0; // Clear the array
@@ -101,15 +100,15 @@ export class PlayerService {
 
   async printDebugInfo(from: string): Promise<void> {
     try {
-      const currentTrackId = await TrackPlayer.getActiveTrackIndex();
-      const currentTrack = (await TrackPlayer.getQueue())[currentTrackId || 0];
+      const trackIdx = await TrackPlayer.getActiveTrackIndex();
+      const currentTrack = (await TrackPlayer.getQueue())[trackIdx || 0];
       const { position } = await TrackPlayer.getProgress();
       const state = await TrackPlayer.getPlaybackState();
-      this.diagLog.info(
-        `${from} CurrentTrackId: ${currentTrackId}, Position: ${position}, State: ${state.state}`
+      diagLog.info(
+        `${from} Track=${trackIdx} Id=${currentTrack?.id} Title=${currentTrack?.title} Position=${formatTime(position)}, State: ${state.state}`
       );
     } catch (diagError) {
-      this.diagLog.error(
+      diagLog.error(
         "Error fetching TrackPlayer state",
         diagError as Error
       );
@@ -121,29 +120,28 @@ export class PlayerService {
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
-      this.log.info("Already initialized, skipping");
+      log.info("Already initialized, skipping");
       // Diagnostic: log current track, position, playing state
       await this.printDebugInfo("initialize");
       return;
     }
 
     try {
-      this.log.info("Initializing track player");
+      log.info("Initializing track player");
 
       // Check if player is already set up (e.g., during hot reload)
       try {
         const state = await TrackPlayer.getPlaybackState();
-        this.log.info("Track player already exists, reusing existing instance");
+        log.info("Track player already exists, reusing existing instance");
 
         // Player exists, just set up our event listeners
-        this.setupEventListeners();
         this.initialized = true;
         this.initializationTimestamp = Date.now();
-        this.log.info("Reused existing track player successfully");
+        log.info("Reused existing track player successfully");
         return;
       } catch (checkError) {
         // Player doesn't exist yet, continue with setup
-        this.log.info("No existing player found, setting up new instance");
+        log.info("No existing player found, setting up new instance");
       }
 
       await TrackPlayer.setupPlayer({
@@ -158,36 +156,34 @@ export class PlayerService {
       await this.configureTrackPlayer();
 
       // Set up event listeners
-      this.setupEventListeners();
 
       this.initialized = true;
       this.initializationTimestamp = Date.now();
-      this.log.info("Track player initialized successfully");
+      log.info("Track player initialized successfully");
     } catch (error) {
       // Handle the specific "already initialized" error gracefully
       if (
         error instanceof Error &&
         error.message.includes("already been initialized")
       ) {
-        this.log.info(
+        log.info(
           "Player was already initialized elsewhere, setting up listeners"
         );
         try {
           // Set up our event listeners on the existing player
-          this.setupEventListeners();
           this.initialized = true;
           this.initializationTimestamp = Date.now();
-          this.log.info("Successfully attached to existing player");
+          log.info("Successfully attached to existing player");
           return;
         } catch (attachError) {
-          this.log.error(
+          log.error(
             "Failed to attach to existing player",
             attachError as Error
           );
         }
       }
 
-      this.log.error("Failed to initialize track player", error as Error);
+      log.error("Failed to initialize track player", error as Error);
       throw error;
     }
   }
@@ -199,12 +195,12 @@ export class PlayerService {
    */
   async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
     try {
-      this.diagLog.info(
+      diagLog.info(
         `playTrack called for libraryItemId: ${libraryItemId}`
       );
       // Diagnostic: log current track, position, playing state before loading
       await this.printDebugInfo("playTrack::init");
-      this.log.info(`Loading track for library item: ${libraryItemId}`);
+      log.info(`Loading track for library item: ${libraryItemId}`);
 
       // Get username from secure storage
       const username = await getItem(SECURE_KEYS.username);
@@ -226,16 +222,16 @@ export class PlayerService {
         // Only short-circuit if we actually have tracks in the queue
         if (queue.length > 0) {
           if (state.state === State.Playing) {
-            this.log.info("Already playing this item");
+            log.info("Already playing this item");
             return;
           } else if (state.state === State.Paused) {
-            this.log.info("Resuming paused playback");
+            log.info("Resuming paused playback");
             await TrackPlayer.play();
             return;
           }
         } else {
           // Queue is empty even though we have a currentTrack - need to reload
-          this.log.warn("Current track set but queue is empty - reloading track");
+          log.warn("Current track set but queue is empty - reloading track");
         }
       }
 
@@ -276,7 +272,7 @@ export class PlayerService {
         ),
       };
 
-      this.log.info(`Built track: ${track.title}`);
+      log.info(`Built track: ${track.title}`);
 
       // Clear current queue
       await TrackPlayer.reset();
@@ -306,7 +302,7 @@ export class PlayerService {
             ". Downloaded files are missing and streaming failed. Please check your internet connection or re-download the content.";
         }
 
-        this.log.error(
+        log.error(
           `No playable tracks available: ${JSON.stringify({
             totalAudioFiles: track.audioFiles.length,
             downloadedFiles: track.audioFiles.filter(
@@ -348,22 +344,22 @@ export class PlayerService {
 
         if (sessionTime > progressTime) {
           resumePosition = activeSession.currentTime;
-          this.log.info(
+          log.info(
             ` Resuming from active session (more recent): ${resumePosition}s`
           );
         } else {
           resumePosition = savedProgress.currentTime || 0;
-          this.log.info(
+          log.info(
             ` Resuming from saved progress (more recent): ${resumePosition}s`
           );
         }
       } else if (activeSession) {
         resumePosition = activeSession.currentTime;
-        this.log.info(` Resuming from active session: ${resumePosition}s`);
+        log.info(` Resuming from active session: ${resumePosition}s`);
       } else if (savedProgress) {
         resumePosition = savedProgress.currentTime || 0;
         if (resumePosition > 0) {
-          this.log.info(` Resuming from saved progress: ${resumePosition}s`);
+          log.info(` Resuming from saved progress: ${resumePosition}s`);
         }
       }
 
@@ -376,9 +372,9 @@ export class PlayerService {
 
       // Diagnostic: log current track, position, playing state after loading
       await this.printDebugInfo("playTrack::done");
-      this.log.info("Track loaded and playing");
+      log.info("Track loaded and playing");
     } catch (error) {
-      this.log.error(" Failed to load track:", error as Error);
+      log.error(" Failed to load track:", error as Error);
       // Clear loading state on error
       const store = useAppStore.getState();
       store._setTrackLoading(false);
@@ -404,7 +400,7 @@ export class PlayerService {
    */
   async pause(): Promise<void> {
     this.lastPauseTime = Date.now();
-    this.log.info(`Pausing playback at ${new Date(this.lastPauseTime).toISOString()}`);
+    log.info(`Pausing playback at ${new Date(this.lastPauseTime).toISOString()}`);
     await TrackPlayer.pause();
   }
 
@@ -416,63 +412,70 @@ export class PlayerService {
     const smartRewindEnabled = await getSmartRewindEnabled();
 
     if (smartRewindEnabled) {
-      let lastPlayedTime: number | null = null;
-
-      // First, try to use the in-memory pause time from current session
-      if (this.lastPauseTime) {
-        lastPlayedTime = this.lastPauseTime;
-        this.log.info(`Using current session pause time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
-      } else if (this.currentTrack?.libraryItemId && this.currentUsername) {
-        // Cold boot scenario - check the database for last played time
-        try {
-          const user = await getUserByUsername(this.currentUsername);
-          if (user?.id) {
-            const activeSession = await getActiveSession(user.id, this.currentTrack.libraryItemId);
-            const savedProgress = await getMediaProgressForLibraryItem(
-              this.currentTrack.libraryItemId,
-              user.id
-            );
-
-            // Use whichever was updated most recently
-            if (activeSession && savedProgress?.lastUpdate) {
-              const sessionTime = activeSession.updatedAt.getTime();
-              const progressTime = savedProgress.lastUpdate.getTime();
-
-              if (sessionTime > progressTime) {
-                lastPlayedTime = sessionTime;
-                this.log.info(`Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
-              } else {
-                lastPlayedTime = progressTime;
-                this.log.info(`Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
-              }
-            } else if (activeSession) {
-              lastPlayedTime = activeSession.updatedAt.getTime();
-              this.log.info(`Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
-            } else if (savedProgress?.lastUpdate) {
-              lastPlayedTime = savedProgress.lastUpdate.getTime();
-              this.log.info(`Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
-            }
-          }
-        } catch (error) {
-          this.log.error('Failed to get last played time from database for smart rewind', error as Error);
-        }
-      }
-
-      // Apply smart rewind if we have a last played time
-      if (lastPlayedTime) {
-        const rewindSeconds = calculateSmartRewindTime(lastPlayedTime);
-        if (rewindSeconds > 0) {
-          const currentPosition = await TrackPlayer.getProgress();
-          const newPosition = Math.max(0, currentPosition.position - rewindSeconds);
-          this.log.info(`Smart rewind: jumping back ${rewindSeconds}s (from ${currentPosition.position.toFixed(2)}s to ${newPosition.toFixed(2)}s)`);
-          await TrackPlayer.seekTo(newPosition);
-        }
-      }
+      await this.smartRewind();
     }
 
     // Clear pause time since we're resuming
     this.lastPauseTime = null;
     await TrackPlayer.play();
+  }
+
+  /**
+   * Smart rewind
+   */
+  async smartRewind(): Promise<void> {
+    let lastPlayedTime: number | null = null;
+
+    // First, try to use the in-memory pause time from current session
+    if (this.lastPauseTime) {
+      lastPlayedTime = this.lastPauseTime;
+      log.info(`Using current session pause time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+    } else if (this.currentTrack?.libraryItemId && this.currentUsername) {
+      // Cold boot scenario - check the database for last played time
+      try {
+        const user = await getUserByUsername(this.currentUsername);
+        if (user?.id) {
+          const activeSession = await getActiveSession(user.id, this.currentTrack.libraryItemId);
+          const savedProgress = await getMediaProgressForLibraryItem(
+            this.currentTrack.libraryItemId,
+            user.id
+          );
+
+          // Use whichever was updated most recently
+          if (activeSession && savedProgress?.lastUpdate) {
+            const sessionTime = activeSession.updatedAt.getTime();
+            const progressTime = savedProgress.lastUpdate.getTime();
+
+            if (sessionTime > progressTime) {
+              lastPlayedTime = sessionTime;
+              log.info(`Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+            } else {
+              lastPlayedTime = progressTime;
+              log.info(`Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+            }
+          } else if (activeSession) {
+            lastPlayedTime = activeSession.updatedAt.getTime();
+            log.info(`Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+          } else if (savedProgress?.lastUpdate) {
+            lastPlayedTime = savedProgress.lastUpdate.getTime();
+            log.info(`Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+          }
+        }
+      } catch (error) {
+        log.error('Failed to get last played time from database for smart rewind', error as Error);
+      }
+    }
+
+    // Apply smart rewind if we have a last played time
+    if (lastPlayedTime) {
+      const rewindSeconds = calculateSmartRewindTime(lastPlayedTime);
+      if (rewindSeconds > 0) {
+        const currentPosition = await TrackPlayer.getProgress();
+        const newPosition = Math.max(0, currentPosition.position - rewindSeconds);
+        log.info(`Smart rewind: jumping back ${rewindSeconds}s (from ${formatTime(currentPosition.position)} to ${formatTime(newPosition)})`);
+        await TrackPlayer.seekTo(newPosition);
+      }
+    }
   }
 
   /**
@@ -528,18 +531,18 @@ export class PlayerService {
           locallyAvailableFiles.add(audioFile.id);
         } else {
           const resolvedPath = resolveAppPath(storedPath);
-          this.log.warn(
+          log.warn(
             `File marked as downloaded but missing: ${resolvedPath}`
           );
 
           // Clean up database
           try {
             await clearAudioFileDownloadStatus(audioFile.id);
-            this.log.info(
+            log.info(
               `Cleared download status for missing file: ${audioFile.id}`
             );
           } catch (error) {
-            this.log.error("Failed to clear download status", error as Error);
+            log.error("Failed to clear download status", error as Error);
           }
         }
       }
@@ -555,13 +558,11 @@ export class PlayerService {
       try {
         playSession = await startPlaySession(playerTrack.libraryItemId);
         this.currentPlaySessionId = playSession.id; // Store session ID for progress tracking
-        this.log.info(`Started play session: ${playSession.id}`);
-        this.log.info(
-          `Got streaming tracks: ${playSession.audioTracks.length}`
-        );
+        log.info(`Started play session: ${playSession.id}`);
+        log.info(`Got streaming tracks: ${playSession.audioTracks.length}`);
 
         if (playSession.audioTracks.length > 0) {
-          this.log.info(
+          log.info(
             `Sample streaming track: ${JSON.stringify({
               contentUrl: playSession.audioTracks[0].contentUrl,
               filename: playSession.audioTracks[0].metadata.filename,
@@ -570,7 +571,7 @@ export class PlayerService {
           );
         }
       } catch (error) {
-        this.log.error("Failed to start play session", error as Error);
+        log.error("Failed to start play session", error as Error);
       }
     }
 
@@ -613,7 +614,7 @@ export class PlayerService {
           sourceType === "streaming"
             ? url.replace(this.cachedApiInfo?.accessToken || "", "<token>")
             : url;
-        this.log.info(
+        log.info(
           `Using ${sourceType} file for ${audioFile.filename}: ${displayUrl}`
         );
 
@@ -627,7 +628,7 @@ export class PlayerService {
           duration: audioFile.duration || undefined,
         });
       } else {
-        this.log.warn(`No playable source found for: ${audioFile.filename}`);
+        log.warn(`No playable source found for: ${audioFile.filename}`);
       }
     }
 
@@ -640,7 +641,7 @@ export class PlayerService {
   private getApiInfo(): { baseUrl: string; accessToken: string } | null {
     const config = getApiConfig();
     if (!config) {
-      this.log.error(" API config not available");
+      log.error(" API config not available");
       return null;
     }
 
@@ -648,7 +649,7 @@ export class PlayerService {
     const accessToken = config.getAccessToken();
 
     if (!baseUrl || !accessToken) {
-      this.log.error(" Missing base URL or access token");
+      log.error(" Missing base URL or access token");
       return null;
     }
 
@@ -677,56 +678,10 @@ export class PlayerService {
   }
 
   /**
-   * Set up event listeners
+   * Get the current library item ID (for session rehydration)
    */
-  private setupEventListeners(): void {
-    if (this.listenersSetup) {
-      this.log.info("Event listeners already set up, skipping");
-      return;
-    }
-
-    this.log.info("Setting up event listeners");
-    this.listenersSetup = true;
-
-    // Playback state changes
-    this.eventSubscriptions.push(
-      TrackPlayer.addEventListener(
-        Event.PlaybackState,
-        this.onPlaybackStateChanged.bind(this)
-      )
-    );
-
-    // Playback errors
-    this.eventSubscriptions.push(
-      TrackPlayer.addEventListener(
-        Event.PlaybackError,
-        this.onPlaybackError.bind(this)
-      )
-    );
-
-    // Queue ended
-    this.eventSubscriptions.push(
-      TrackPlayer.addEventListener(
-        Event.PlaybackQueueEnded,
-        this.onPlaybackEnded.bind(this)
-      )
-    );
-  }
-
-  onPlaybackStateChanged(event: PlaybackState) {
-    // Just log the state string value directly
-    this.log.info(`Playback state changed: ${event.state}`);
-    // PlayerBackgroundService handles store updates
-  }
-
-  onPlaybackError(event: PlaybackErrorEvent) {
-    this.log.error(`Playback error: ${JSON.stringify(event)}`);
-    // PlayerBackgroundService handles store updates
-  }
-
-  onPlaybackEnded(event: PlaybackQueueEndedEvent) {
-    this.log.info("Playback ended");
-    // PlayerBackgroundService handles store updates
+  getCurrentLibraryItemId(): string | null {
+    return this.currentTrack?.libraryItemId || null;
   }
 
   /**
@@ -750,9 +705,8 @@ export class PlayerService {
 
       // Check if track matches
       const trackMatches =
-        (currentTrack as any)?.id ===
-          store.player.currentTrack?.libraryItemId ||
-        (!currentTrack && !store.player.currentTrack);
+      (!currentTrack && !store.player.currentTrack) ||
+      (currentTrack as any)?.id.startsWith(store.player.currentTrack?.libraryItemId || "");
 
       // Check if position is roughly the same (within 5 seconds)
       const positionMatches =
@@ -766,25 +720,25 @@ export class PlayerService {
       const isConnected = trackMatches && positionMatches && playingMatches;
 
       if (!isConnected) {
-        this.log.warn(
+        log.warn(
           `Connection mismatch - Track: ${trackMatches ? "match" : "mismatch"}, Position: ${positionMatches ? "match" : "mismatch"}, Playing: ${playingMatches ? "match" : "mismatch"}`
         );
         if (!trackMatches) {
-          this.log.info(`From store: ${JSON.stringify(store.player.currentTrack)}} from TrackPlayer: ${JSON.stringify(currentTrack)}`)
+          diagLog.info(`From TrackPlayer: ${JSON.stringify(currentTrack)}\n\nFrom store: ${JSON.stringify(store.player.currentTrack)}}`)
         }
         if (!positionMatches) {
-          this.log.info(`From store position: ${store.player.position}, from TrackPlayer position: ${progress.position}`);
+          diagLog.info(`From store position: ${store.player.position}, from TrackPlayer position: ${progress.position}`);
         }
         if (!playingMatches) {
-          this.log.info(`From store isPlaying: ${store.player.isPlaying}, from TrackPlayer state: ${state.state}`);
+          diagLog.info(`From store isPlaying: ${store.player.isPlaying}, from TrackPlayer state: ${state.state}`);
         }
       } else {
-        this.log.info("Player connection verified OK");
+        log.info("Player connection verified OK");
       }
 
       return isConnected;
     } catch (error) {
-      this.log.error("Error verifying connection", error as Error);
+      log.error("Error verifying connection", error as Error);
       return false;
     }
   }
@@ -794,7 +748,7 @@ export class PlayerService {
    */
   async syncStoreWithTrackPlayer(): Promise<void> {
     try {
-      this.log.info("Syncing store with TrackPlayer");
+      log.info("Syncing store with TrackPlayer");
 
       const store = useAppStore.getState();
       const [state, currentTrack, progress] = await Promise.all([
@@ -820,14 +774,14 @@ export class PlayerService {
         }
       }
 
-      this.log.info("Store synced with TrackPlayer successfully");
+      log.info("Store synced with TrackPlayer successfully");
     } catch (error) {
-      this.log.error("Error syncing store with TrackPlayer", error as Error);
+      log.error("Error syncing store with TrackPlayer", error as Error);
     }
   }
 
   async configureTrackPlayer(): Promise<void> {
-    this.log.info("Configuring TrackPlayer options");
+    log.info("Configuring TrackPlayer options");
 
     // Load jump intervals from settings
     const { getJumpForwardInterval, getJumpBackwardInterval } = await import('@/lib/appSettings');
@@ -836,7 +790,7 @@ export class PlayerService {
       getJumpBackwardInterval(),
     ]);
 
-    this.log.info(`Configuring jump intervals: forward=${forwardInterval}s, backward=${backwardInterval}s`);
+    log.info(`Configuring jump intervals: forward=${forwardInterval}s, backward=${backwardInterval}s`);
 
     await TrackPlayer.updateOptions({
       android: {
@@ -865,7 +819,7 @@ export class PlayerService {
    */
   async reconnectBackgroundService(): Promise<void> {
     try {
-      this.log.info("Reconnecting background service");
+      log.info("Reconnecting background service");
       const runtimeParts: string[] = [];
       runtimeParts.push(
         typeof globalThis.window === "undefined" ? "no-window" : "window"
@@ -878,7 +832,7 @@ export class PlayerService {
       } catch {
         runtimeParts.push("AppState=unavailable");
       }
-      this.diagLog.info(
+      diagLog.info(
         `PlayerService reconnect runtime: ${runtimeParts.join(" ")}`
       );
 
@@ -903,27 +857,27 @@ export class PlayerService {
         if (canResolve && metroRequire.resolve) {
           const modulePath = metroRequire.resolve("./PlayerBackgroundService");
           if (__DEV__) {
-            this.log.debug(`Module path: ${modulePath}`);
+            log.debug(`Module path: ${modulePath}`);
           }
 
           // Delete from cache in development to ensure we get fresh code
           if (__DEV__ && cache && cache[modulePath]) {
-            this.log.debug("Clearing module cache for PlayerBackgroundService");
+            log.debug("Clearing module cache for PlayerBackgroundService");
             delete cache[modulePath];
           }
         } else if (__DEV__) {
-          this.log.debug("require.resolve not available; skipping cache clear");
+          log.debug("require.resolve not available; skipping cache clear");
         }
 
         PlayerBackgroundServiceModule = require("./PlayerBackgroundService");
       } catch (requireError) {
-        this.log.error(
+        log.error(
           "Failed to require PlayerBackgroundService module",
           requireError as Error
         );
 
         // If we can't load the module, try to force a full re-registration
-        this.log.warn("Attempting full TrackPlayer service re-registration");
+        log.warn("Attempting full TrackPlayer service re-registration");
         TrackPlayer.registerPlaybackService(() =>
           require("./PlayerBackgroundService")
         );
@@ -938,11 +892,11 @@ export class PlayerService {
         PlayerBackgroundServiceModule.isBackgroundServiceInitialized?.();
 
       if (typeof reconnectFn === "function") {
-        this.log.info(`Background service initialized: ${isInitialized}`);
+        log.info(`Background service initialized: ${isInitialized}`);
         if (isInitialized) {
           reconnectFn();
         } else {
-          this.log.warn(
+          log.warn(
             "Background service not initialized; forcing TrackPlayer service re-registration instead of reconnect"
           );
           TrackPlayer.registerPlaybackService(() =>
@@ -951,7 +905,7 @@ export class PlayerService {
         }
       } else {
         // Function doesn't exist (old version or incompatible module)
-        this.log.warn(
+        log.warn(
           "reconnectBackgroundService function not found - forcing full re-registration"
         );
 
@@ -974,15 +928,15 @@ export class PlayerService {
       // Sync the store with TrackPlayer state
       await this.syncStoreWithTrackPlayer();
 
-      this.log.info("Background service reconnection complete");
+      log.info("Background service reconnection complete");
     } catch (error) {
-      this.log.error("Error reconnecting background service", error as Error);
+      log.error("Error reconnecting background service", error as Error);
 
       // Last resort: try to sync state anyway
       try {
         await this.syncStoreWithTrackPlayer();
       } catch (syncError) {
-        this.log.error(
+        log.error(
           "Failed to sync store after reconnection error",
           syncError as Error
         );

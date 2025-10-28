@@ -38,6 +38,11 @@ export function formatTimeRemainingInDownload(
   return formatTimeRemaining(secondsRemaining);
 }
 
+/**
+ * Format time remaining for display (e.g., "1m", "2h 30m")
+ * @param seconds - Time in seconds
+ * @returns Time in HH:MM:SS or MM:SS format
+ */
 export function formatTimeRemaining(seconds: number): string {
   if (seconds < 60) {
     return `${Math.ceil(seconds)}s`;
@@ -51,6 +56,11 @@ export function formatTimeRemaining(seconds: number): string {
   }
 }
 
+/**
+ * Format time in HH:MM:SS or MM:SS format
+ * @param seconds - Time in seconds
+ * @returns Time in HH:MM:SS or MM:SS format
+ */
 export function formatTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);

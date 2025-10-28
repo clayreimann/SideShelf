@@ -93,6 +93,35 @@ export async function endListeningSession(
 }
 
 /**
+ * End a stale listening session using its last update time as the end timestamp
+ * This is used when cleaning up sessions that were abandoned/stale - the session
+ * actually ended at its last update time, not at the current time
+ */
+export async function endStaleListeningSession(
+    sessionId: string,
+    endTime: number
+): Promise<void> {
+    // Get the session to retrieve its last updated timestamp
+    const session = await getListeningSession(sessionId);
+    if (!session) {
+        throw new Error(`Session ${sessionId} not found`);
+    }
+
+    // Use the session's updatedAt as the sessionEnd timestamp
+    // This represents when the session was actually last active
+    await db
+        .update(localListeningSessions)
+        .set({
+            sessionEnd: session.updatedAt,
+            endTime,
+            updatedAt: session.updatedAt, // Keep the original updatedAt
+        })
+        .where(eq(localListeningSessions.id, sessionId));
+
+    console.log(`[LocalListeningSessions] Ended stale session ${sessionId} at ${endTime}s (session ended at ${session.updatedAt.toISOString()})`);
+}
+
+/**
  * Update current progress in an active session
  */
 export async function updateSessionProgress(

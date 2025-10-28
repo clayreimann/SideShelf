@@ -11,16 +11,16 @@ import { getItem, SECURE_KEYS } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
 import { AppState } from "react-native";
 import TrackPlayer, {
-  Event,
-  PlaybackActiveTrackChangedEvent,
-  PlaybackErrorEvent,
-  PlaybackProgressUpdatedEvent,
-  PlaybackState as PlaybackStateEvent,
-  RemoteDuckEvent,
-  RemoteJumpBackwardEvent,
-  RemoteJumpForwardEvent,
-  RemoteSeekEvent,
-  State,
+    Event,
+    PlaybackActiveTrackChangedEvent,
+    PlaybackErrorEvent,
+    PlaybackProgressUpdatedEvent,
+    PlaybackState as PlaybackStateEvent,
+    RemoteDuckEvent,
+    RemoteJumpBackwardEvent,
+    RemoteJumpForwardEvent,
+    RemoteSeekEvent,
+    State,
 } from "react-native-track-player";
 import { playerService } from "./PlayerService";
 import { unifiedProgressService } from "./ProgressService";
@@ -278,6 +278,11 @@ async function handlePlaybackProgressUpdated(
     if (Math.floor(event.position) % 5 === 0) {
       log.info(`Playback progress updated: position=${event.position.toFixed(2)}s appState=${AppState.currentState}`);
     }
+
+    // Update the store with current position
+    const store = useAppStore.getState();
+    store.updatePosition(event.position);
+
     const currentSession = unifiedProgressService.getCurrentSession();
     if (currentSession) {
       const playbackRate = await TrackPlayer.getRate();
@@ -294,15 +299,42 @@ async function handlePlaybackProgressUpdated(
         isPlaying
       );
 
-      // Update the store with current position
-      const store = useAppStore.getState();
-      store.updatePosition(event.position);
 
       // Check if we should sync to server (uses adaptive intervals based on network type)
       const syncCheck = await unifiedProgressService.shouldSyncToServer();
       if (syncCheck.shouldSync) {
         log.info(`Syncing to server: ${syncCheck.reason} appState=${AppState.currentState}`);
         await unifiedProgressService.syncCurrentSessionToServer();
+      }
+    } else {
+      // No session - try to rehydrate from database if TrackPlayer has a track loaded
+      log.info(`No session, attempting rehydration: position=${event.position.toFixed(2)}s appState=${AppState.currentState}`);
+      const currentLibraryItemId = playerService.getCurrentLibraryItemId();
+      if (currentLibraryItemId) {
+        log.info(`Attempting to rehydrate session for library item: ${currentLibraryItemId}`);
+        await unifiedProgressService.forceRehydrateSession(currentLibraryItemId);
+
+        // If rehydration succeeded, update progress immediately
+        const rehydratedSession = unifiedProgressService.getCurrentSession();
+        if (rehydratedSession) {
+          log.info(`Session rehydrated successfully, updating progress`);
+          const playbackRate = await TrackPlayer.getRate();
+          const volume = await TrackPlayer.getVolume();
+          const state = await TrackPlayer.getPlaybackState();
+          const isPlaying = state.state === State.Playing;
+
+          await unifiedProgressService.updateProgress(
+            event.position,
+            playbackRate,
+            volume,
+            undefined,
+            isPlaying
+          );
+        } else {
+          log.warn(`Failed to rehydrate session for library item: ${currentLibraryItemId}`);
+        }
+      } else {
+        log.info(`No current track in PlayerService, cannot rehydrate session`);
       }
     }
   } catch (error) {
