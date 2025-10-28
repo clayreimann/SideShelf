@@ -236,7 +236,7 @@ export async function getLibraryItemsForList(libraryId: string): Promise<{
 
   return rows.map(({ mediaId, ...row }) => ({
     ...row,
-    coverUri: row.coverUri && mediaId ? resolveAppPath(row.coverUri) : ,
+    coverUri: row.coverUri && mediaId ? resolveAppPath(row.coverUri) : undefined,
   }));
 }
 

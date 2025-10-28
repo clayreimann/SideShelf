@@ -5,6 +5,7 @@ alwaysApply: false
 
 - Imports should use the '@/' prefix.
 - Types should be documented with JSDoc.
+- Except when avoiding a circular import, imports should be at the top of the file.
 
 
 ## Import Examples

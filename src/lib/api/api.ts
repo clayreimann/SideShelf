@@ -8,6 +8,7 @@ type ApiConfig = {
 };
 
 const log = logger.forTag("api:fetch");
+const detailedLog = logger.forTag("api:fetch:detailed");
 
 let config: ApiConfig | null = null;
 
@@ -61,10 +62,12 @@ export async function apiFetch(
   }
 
   const method = (rest.method || "GET").toUpperCase();
-  log.info(`${method} ${url} ${JSON.stringify(redactHeaders(headerObj))}`);
+  log.info(`-> ${method} ${url}`);
+  detailedLog.info(`-> ${method} ${url} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${rest.body}`);
 
   const res = await fetch(url, { ...rest, headers: headerObj });
-  log.info(`<- ${res.status} ${res.statusText} for ${method} ${url}`);
+  log.info(`<- ${res.status} ${method} ${url} ${res.headers.get("content-type")} ${res.headers.get("content-length")}`);
+  detailedLog.info(`<- ${res.status} ${method} ${url} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()}`);
   if (res.status === 401) {
     log.info("access token expired, refreshing token...");
     const success = await config?.refreshAccessToken();
@@ -108,6 +111,8 @@ function redactHeaders(
   for (const [key, value] of Object.entries(headers)) {
     if (key.toLowerCase() === "authorization") {
       redacted[key] = "<redacted>";
+    } else if (key.toLowerCase() === "user-agent" && value === getCustomUserAgent()) {
+      redacted[key] = "STD_USER_AGENT";
     } else {
       redacted[key] = value;
     }

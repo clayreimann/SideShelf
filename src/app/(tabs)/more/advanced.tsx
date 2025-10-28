@@ -22,6 +22,7 @@ import { Stack } from 'expo-router';
 import { defaultDatabaseDirectory } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, SectionList, Text, View } from 'react-native';
+import TrackPlayer, { State, Track } from 'react-native-track-player';
 
 type Section = {
   title: string;
@@ -105,6 +106,40 @@ function normalizeTitle(value: string | null | undefined): string {
   return trimmed;
 }
 
+function getStateLabel(state: State): string {
+  switch (state) {
+    case State.None:
+      return 'None';
+    case State.Ready:
+      return 'Ready';
+    case State.Playing:
+      return 'Playing';
+    case State.Paused:
+      return 'Paused';
+    case State.Stopped:
+      return 'Stopped';
+    case State.Buffering:
+      return 'Buffering';
+    case State.Connecting:
+      return 'Connecting';
+    case State.Error:
+      return 'Error';
+    default:
+      return 'Unknown';
+  }
+}
+
+function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
 export default function AdvancedScreen() {
   const { styles, isDark } = useThemedStyles();
   const { accessToken, logout } = useAuth();
@@ -128,12 +163,74 @@ export default function AdvancedScreen() {
 
   const [storageEntries, setStorageEntries] = useState<StorageEntry[]>([]);
 
+  const [trackPlayerState, setTrackPlayerState] = useState<{
+    state: string;
+    queueLength: number;
+    currentTrackIndex: number | null;
+    currentTrack: Track | null;
+    position: number;
+    duration: number;
+    buffered: number;
+    rate: number;
+    volume: number;
+  }>({
+    state: 'Unknown',
+    queueLength: 0,
+    currentTrackIndex: null,
+    currentTrack: null,
+    position: 0,
+    duration: 0,
+    buffered: 0,
+    rate: 1.0,
+    volume: 1.0,
+  });
+
   const refreshCounts = useCallback(async () => {
     try {
       const newCounts = await statisticsHelpers.getAllCounts();
       setCounts(newCounts);
     } catch (error) {
       console.error('Failed to fetch counts:', error);
+    }
+  }, []);
+
+  const refreshTrackPlayerState = useCallback(async () => {
+    try {
+      const [state, queue, progress, rate, volume, activeTrackIndex] = await Promise.all([
+        TrackPlayer.getPlaybackState(),
+        TrackPlayer.getQueue(),
+        TrackPlayer.getProgress(),
+        TrackPlayer.getRate(),
+        TrackPlayer.getVolume(),
+        TrackPlayer.getActiveTrackIndex(),
+      ]);
+
+      const currentTrack = activeTrackIndex !== undefined && activeTrackIndex >= 0 ? queue[activeTrackIndex] : null;
+
+      setTrackPlayerState({
+        state: getStateLabel(state.state),
+        queueLength: queue.length,
+        currentTrackIndex: activeTrackIndex ?? null,
+        currentTrack: currentTrack ?? null,
+        position: progress.position,
+        duration: progress.duration,
+        buffered: progress.buffered,
+        rate,
+        volume,
+      });
+    } catch (error) {
+      console.error('Failed to refresh TrackPlayer state:', error);
+      setTrackPlayerState({
+        state: 'Error',
+        queueLength: 0,
+        currentTrackIndex: null,
+        currentTrack: null,
+        position: 0,
+        duration: 0,
+        buffered: 0,
+        rate: 1.0,
+        volume: 1.0,
+      });
     }
   }, []);
 
@@ -328,6 +425,22 @@ export default function AdvancedScreen() {
         .filter((entry) => entry.count > 0)
         .sort((a, b) => a.title.localeCompare(b.title));
 
+      // Calculate total storage
+      const totalSize = entries.reduce((sum, entry) => sum + entry.size, 0) +
+                       downloadEntries.reduce((sum, entry) => sum + entry.size, 0);
+      const totalCount = entries.reduce((sum, entry) => sum + entry.count, 0) +
+                        downloadEntries.reduce((sum, entry) => sum + entry.count, 0);
+
+      // Add total entry at the beginning
+      const totalEntry: StorageEntry = {
+        id: 'total',
+        title: 'Total storage used',
+        count: totalCount,
+        size: totalSize,
+      };
+
+      entries.unshift(totalEntry);
+
       setStorageEntries([...entries, ...downloadEntries]);
     } catch (error) {
       console.error('Failed to refresh storage stats:', error);
@@ -335,9 +448,9 @@ export default function AdvancedScreen() {
     }
   }, []);
 
-  const handleRefreshCounts = useCallback(async () => {
-    await Promise.all([refreshCounts(), refreshStorageStats()]);
-  }, [refreshCounts, refreshStorageStats]);
+  const handleRefreshAll = useCallback(async () => {
+    await Promise.all([refreshCounts(), refreshStorageStats(), refreshTrackPlayerState()]);
+  }, [refreshCounts, refreshStorageStats, refreshTrackPlayerState]);
 
   const clearCoverCache = useCallback(async () => {
     try {
@@ -353,7 +466,8 @@ export default function AdvancedScreen() {
   useEffect(() => {
     void refreshCounts();
     void refreshStorageStats();
-  }, [refreshCounts, refreshStorageStats]);
+    void refreshTrackPlayerState();
+  }, [refreshCounts, refreshStorageStats, refreshTrackPlayerState]);
 
   const sections = useMemo<Section[]>(() => {
     const librarySection: Section = {
@@ -389,6 +503,32 @@ export default function AdvancedScreen() {
       ],
     };
 
+    const hasTrack = trackPlayerState.currentTrack !== null;
+    const trackPlayerSection: Section = {
+      title: 'Track Player',
+      data: [
+        { label: `State: ${trackPlayerState.state}`, onPress: disabledOnPress, disabled: true },
+        { label: `Queue length: ${trackPlayerState.queueLength}`, onPress: disabledOnPress, disabled: true },
+        {
+          label: `Current track: ${trackPlayerState.currentTrackIndex !== null ? `#${trackPlayerState.currentTrackIndex}` : 'None'}`,
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: `Track: ${trackPlayerState.currentTrack?.title ?? 'None'}` + (hasTrack ? ` (${trackPlayerState.currentTrack?.id ?? 'None'})` : ''),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: `Position: ${formatDuration(trackPlayerState.position)} / ${formatDuration(trackPlayerState.duration)} (${formatDuration(trackPlayerState.buffered)} buffered)`,
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        { label: `Playback rate: ${trackPlayerState.rate.toFixed(2)}x`, onPress: disabledOnPress, disabled: true },
+        { label: `Volume: ${(trackPlayerState.volume * 100).toFixed(0)}%`, onPress: disabledOnPress, disabled: true },
+      ],
+    };
+
     const actionsSection: Section = {
       title: 'Actions',
       data: [
@@ -407,8 +547,8 @@ export default function AdvancedScreen() {
           disabled: false,
         },
         {
-          label: 'Refresh counts',
-          onPress: handleRefreshCounts,
+          label: 'Refresh all stats',
+          onPress: handleRefreshAll,
           disabled: false,
         },
         {
@@ -428,15 +568,16 @@ export default function AdvancedScreen() {
       ],
     };
 
-    return [actionsSection, librarySection, storageSection];
+    return [librarySection, storageSection, trackPlayerSection, actionsSection];
   }, [
     libraries,
     selectedLibrary,
     counts,
     storageEntries,
+    trackPlayerState,
     accessToken,
     refresh,
-    handleRefreshCounts,
+    handleRefreshAll,
     clearCoverCache,
     resetDatabase,
     logout,

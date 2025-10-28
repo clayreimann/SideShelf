@@ -32,6 +32,9 @@ import {
 
 type LogLevel = "all" | "debug" | "info" | "warn" | "error";
 
+// Maximum length for log messages in the UI (prevent overwhelming rendering)
+const MAX_LOG_MESSAGE_LENGTH = 1000;
+
 // Create cached sublogger for this screen
 const log = logger.forTag("LogsScreen");
 
@@ -81,6 +84,23 @@ interface ActionButtonsProps {
 }
 
 // ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Truncate a log message to a maximum length
+ * @param message - The log message to truncate
+ * @param maxLength - Maximum length before truncation
+ * @returns Truncated message with indicator if truncated
+ */
+function truncateLogMessage(message: string, maxLength: number = MAX_LOG_MESSAGE_LENGTH): string {
+  if (message.length <= maxLength) {
+    return message;
+  }
+  return message.substring(0, maxLength) + `... (${message.length - maxLength} more chars)`;
+}
+
+// ============================================================================
 // Subcomponents
 // ============================================================================
 
@@ -126,7 +146,7 @@ const LogItem: React.FC<LogItemProps> = React.memo(({ item, colors, isDark }) =>
         </Text>
       </View>
       <Text style={[localStyles.logMessage, { color: colors.textPrimary }]}>
-        {item.message}
+        {truncateLogMessage(item.message)}
       </Text>
     </View>
   );

@@ -5,6 +5,7 @@
  * to reduce noise during development and debugging.
  */
 
+import Toggle from '@/components/ui/Toggle';
 import { getAllTags, logger } from '@/lib/logger';
 import { useThemedStyles } from '@/lib/theme';
 import { Stack } from 'expo-router';
@@ -111,31 +112,7 @@ export default function LoggerSettingsScreen() {
         }}
       >
         <Text style={{ fontSize: 15, color: colors.textPrimary, flex: 1 }}>{tag}</Text>
-        <View
-          style={{
-            width: 51,
-            height: 31,
-            borderRadius: 15.5,
-            backgroundColor: isEnabled ? primaryColor : isDark ? '#3A3A3C' : '#C7C7CC',
-            justifyContent: 'center',
-            paddingHorizontal: 2,
-          }}
-        >
-          <View
-            style={{
-              width: 27,
-              height: 27,
-              borderRadius: 13.5,
-              backgroundColor: '#FFFFFF',
-              alignSelf: isEnabled ? 'flex-end' : 'flex-start',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: 0.3,
-              shadowRadius: 3,
-              elevation: 3,
-            }}
-          />
-        </View>
+        <Toggle value={isEnabled} onValueChange={() => toggleTagEnabled(tag)} />
       </Pressable>
     );
   };

@@ -19,6 +19,7 @@ import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { getApiConfig } from "@/lib/api/api";
 import { startPlaySession } from "@/lib/api/endpoints";
+import { calculateSmartRewindTime, getSmartRewindEnabled } from '@/lib/appSettings';
 import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
 import { logger } from "@/lib/logger";
@@ -54,6 +55,7 @@ export class PlayerService {
   private currentUsername: string | null = null;
   private cachedApiInfo: { baseUrl: string; accessToken: string } | null = null;
   private currentPlaySessionId: string | null = null; // Track the current server session ID
+  private lastPauseTime: number | null = null; // Track when playback was paused (for smart rewind)
   private log = logger.forTag("PlayerService"); // Cached sublogger
   private diagLog = logger.forDiagnostics("PlayerService"); // Diagnostic logger
 
@@ -391,9 +393,9 @@ export class PlayerService {
     const state = await TrackPlayer.getPlaybackState();
 
     if (state.state === State.Playing) {
-      await TrackPlayer.pause();
+      await this.pause();
     } else {
-      await TrackPlayer.play();
+      await this.play();
     }
   }
 
@@ -401,13 +403,75 @@ export class PlayerService {
    * Pause playback
    */
   async pause(): Promise<void> {
+    this.lastPauseTime = Date.now();
+    this.log.info(`Pausing playback at ${new Date(this.lastPauseTime).toISOString()}`);
     await TrackPlayer.pause();
   }
 
   /**
-   * Resume playback
+   * Resume playback with optional smart rewind
    */
   async play(): Promise<void> {
+    // Check if smart rewind is enabled and apply it
+    const smartRewindEnabled = await getSmartRewindEnabled();
+
+    if (smartRewindEnabled) {
+      let lastPlayedTime: number | null = null;
+
+      // First, try to use the in-memory pause time from current session
+      if (this.lastPauseTime) {
+        lastPlayedTime = this.lastPauseTime;
+        this.log.info(`Using current session pause time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+      } else if (this.currentTrack?.libraryItemId && this.currentUsername) {
+        // Cold boot scenario - check the database for last played time
+        try {
+          const user = await getUserByUsername(this.currentUsername);
+          if (user?.id) {
+            const activeSession = await getActiveSession(user.id, this.currentTrack.libraryItemId);
+            const savedProgress = await getMediaProgressForLibraryItem(
+              this.currentTrack.libraryItemId,
+              user.id
+            );
+
+            // Use whichever was updated most recently
+            if (activeSession && savedProgress?.lastUpdate) {
+              const sessionTime = activeSession.updatedAt.getTime();
+              const progressTime = savedProgress.lastUpdate.getTime();
+
+              if (sessionTime > progressTime) {
+                lastPlayedTime = sessionTime;
+                this.log.info(`Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+              } else {
+                lastPlayedTime = progressTime;
+                this.log.info(`Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+              }
+            } else if (activeSession) {
+              lastPlayedTime = activeSession.updatedAt.getTime();
+              this.log.info(`Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+            } else if (savedProgress?.lastUpdate) {
+              lastPlayedTime = savedProgress.lastUpdate.getTime();
+              this.log.info(`Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+            }
+          }
+        } catch (error) {
+          this.log.error('Failed to get last played time from database for smart rewind', error as Error);
+        }
+      }
+
+      // Apply smart rewind if we have a last played time
+      if (lastPlayedTime) {
+        const rewindSeconds = calculateSmartRewindTime(lastPlayedTime);
+        if (rewindSeconds > 0) {
+          const currentPosition = await TrackPlayer.getProgress();
+          const newPosition = Math.max(0, currentPosition.position - rewindSeconds);
+          this.log.info(`Smart rewind: jumping back ${rewindSeconds}s (from ${currentPosition.position.toFixed(2)}s to ${newPosition.toFixed(2)}s)`);
+          await TrackPlayer.seekTo(newPosition);
+        }
+      }
+    }
+
+    // Clear pause time since we're resuming
+    this.lastPauseTime = null;
     await TrackPlayer.play();
   }
 
@@ -764,6 +828,16 @@ export class PlayerService {
 
   async configureTrackPlayer(): Promise<void> {
     this.log.info("Configuring TrackPlayer options");
+
+    // Load jump intervals from settings
+    const { getJumpForwardInterval, getJumpBackwardInterval } = await import('@/lib/appSettings');
+    const [forwardInterval, backwardInterval] = await Promise.all([
+      getJumpForwardInterval(),
+      getJumpBackwardInterval(),
+    ]);
+
+    this.log.info(`Configuring jump intervals: forward=${forwardInterval}s, backward=${backwardInterval}s`);
+
     await TrackPlayer.updateOptions({
       android: {
         appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
@@ -776,8 +850,8 @@ export class PlayerService {
         Capability.JumpForward,
       ],
       compactCapabilities: [Capability.Play, Capability.Pause],
-      forwardJumpInterval: 30,
-      backwardJumpInterval: 30,
+      forwardJumpInterval: forwardInterval,
+      backwardJumpInterval: backwardInterval,
       progressUpdateEventInterval: 1, // Update every second
     });
   }

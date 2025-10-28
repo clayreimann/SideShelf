@@ -14,11 +14,12 @@ import PlayPauseButton from '@/components/player/PlayPauseButton';
 import SkipButton from '@/components/player/SkipButton';
 import { ProgressBar } from '@/components/ui';
 import CoverImage from '@/components/ui/CoverImange';
+import { getJumpBackwardInterval, getJumpForwardInterval } from '@/lib/appSettings';
 import { useThemedStyles } from '@/lib/theme';
 import { playerService } from '@/services/PlayerService';
 import { usePlayer } from '@/stores/appStore';
 import { router, Stack } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Text,
   TouchableOpacity,
@@ -53,6 +54,21 @@ export default function FullScreenPlayer() {
   const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
+  const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
+  const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
+
+  // Load jump intervals from settings
+  useEffect(() => {
+    const loadIntervals = async () => {
+      const [forward, backward] = await Promise.all([
+        getJumpForwardInterval(),
+        getJumpBackwardInterval(),
+      ]);
+      setJumpForwardInterval(forward);
+      setJumpBackwardInterval(backward);
+    };
+    loadIntervals();
+  }, []);
 
   const handleClose = useCallback(() => {
     router.back();
@@ -86,19 +102,19 @@ export default function FullScreenPlayer() {
 
   const handleSkipBackward = useCallback(async () => {
     try {
-      await playerService.seekTo(Math.max(position - 15, 0));
+      await playerService.seekTo(Math.max(position - jumpBackwardInterval, 0));
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to skip backward:', error);
     }
-  }, [position]);
+  }, [position, jumpBackwardInterval]);
 
   const handleSkipForward = useCallback(async () => {
     try {
-      await playerService.seekTo(position + 30);
+      await playerService.seekTo(position + jumpForwardInterval);
     } catch (error) {
       console.error('[FullScreenPlayer] Failed to skip forward:', error);
     }
-  }, [position]);
+  }, [position, jumpForwardInterval]);
 
   const handleRateChange = useCallback(async (rate: number) => {
     try {
@@ -222,9 +238,19 @@ export default function FullScreenPlayer() {
             marginBottom: 32,
           }}>
             <JumpTrackButton direction="backward" onPress={handleStartOfChapter} hitBoxSize={60} />
-            <SkipButton direction="backward" onPress={handleSkipBackward} hitBoxSize={60} />
+            <SkipButton
+              direction="backward"
+              interval={jumpBackwardInterval}
+              onPress={handleSkipBackward}
+              hitBoxSize={60}
+            />
             <PlayPauseButton onPress={handlePlayPause} hitBoxSize={100} iconSize={48} />
-            <SkipButton direction="forward" onPress={handleSkipForward} hitBoxSize={60} />
+            <SkipButton
+              direction="forward"
+              interval={jumpForwardInterval}
+              onPress={handleSkipForward}
+              hitBoxSize={60}
+            />
             <JumpTrackButton direction="forward" onPress={handleNextChapter} hitBoxSize={60} />
           </View>
 

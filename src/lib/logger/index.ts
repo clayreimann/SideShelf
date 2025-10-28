@@ -31,6 +31,7 @@ import type { LogLevel, SubLogger } from './types';
 
 const DISABLED_TAGS_KEY = '@logger/disabled_tags';
 const RETENTION_DURATION_KEY = '@logger/retention_duration_ms';
+const DEFAULTED_TO_DISABLED_KEY = '@logger/defaulted_to_disabled';
 
 // Re-export types and DB functions for convenience
 export { clearAllLogs, getAllLogs, getAllTags, getLogsByLevel, getLogsByTag } from './db';
@@ -40,6 +41,13 @@ export type { LogEntry, LogLevel, SubLogger } from './types';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const MIN_LOG_RETENTION_MS = ONE_HOUR_MS; // Always keep at least 1 hour of logs
 const DEFAULT_LOG_RETENTION_MS = ONE_HOUR_MS; // Default retention when no preference is stored
+
+/**
+ * Tags that should be disabled by default when first encountered.
+ * This list can be updated over time as new verbose logging tags are added.
+ * The system tracks which tags have been processed to avoid overriding user preferences.
+ */
+const DEFAULT_DISABLED_TAGS = ['api:fetch:detailed'];
 
 let currentRetentionDurationMs = DEFAULT_LOG_RETENTION_MS;
 
@@ -170,15 +178,42 @@ class Logger {
    */
   private async loadSettings(): Promise<void> {
     try {
-      const [storedTags, storedRetention] = await Promise.all([
+      const [storedTags, storedRetention, storedDefaulted] = await Promise.all([
         AsyncStorage.getItem(DISABLED_TAGS_KEY),
         AsyncStorage.getItem(RETENTION_DURATION_KEY),
+        AsyncStorage.getItem(DEFAULTED_TO_DISABLED_KEY),
       ]);
 
+      // Load existing disabled tags
       if (storedTags) {
         const tags = JSON.parse(storedTags) as string[];
         this.disabledTags = new Set(tags);
         console.log(`[Logger] Loaded ${tags.length} disabled tags from storage`);
+      }
+
+      // Load the set of tags that have already been processed for default disabling
+      const defaultedTags = storedDefaulted
+        ? new Set(JSON.parse(storedDefaulted) as string[])
+        : new Set<string>();
+
+      // Check for new tags in DEFAULT_DISABLED_TAGS that haven't been processed yet
+      const newTagsToDisable: string[] = [];
+      for (const tag of DEFAULT_DISABLED_TAGS) {
+        if (!defaultedTags.has(tag)) {
+          // This tag is new - add it to disabled tags
+          this.disabledTags.add(tag);
+          defaultedTags.add(tag);
+          newTagsToDisable.push(tag);
+        }
+      }
+
+      // If we processed any new default tags, save the updated state
+      if (newTagsToDisable.length > 0) {
+        console.log(`[Logger] Applied default disabled state to ${newTagsToDisable.length} new tags: ${newTagsToDisable.join(', ')}`);
+        await Promise.all([
+          this.saveDisabledTags(),
+          AsyncStorage.setItem(DEFAULTED_TO_DISABLED_KEY, JSON.stringify(Array.from(defaultedTags))),
+        ]);
       }
 
       if (storedRetention) {
