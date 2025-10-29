@@ -3,7 +3,7 @@ import { setApiConfig } from '@/lib/api/api';
 import { login as doLogin } from '@/lib/api/endpoints';
 import { getItem, saveItem, SECURE_KEYS } from '@/lib/secureStore';
 import { useDb } from '@/providers/DbProvider';
-import { unifiedProgressService } from '@/services/ProgressService';
+import { progressService } from '@/services/ProgressService';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 
@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (nextAppState === 'active') {
                 console.log('[AuthProvider] App became active');
                 // Sync progress when app becomes active
-                unifiedProgressService.fetchServerProgress().catch(error => {
+                progressService.fetchServerProgress().catch(error => {
                     console.error('[AuthProvider] Failed to sync progress on app foreground:', error);
                 });
             }

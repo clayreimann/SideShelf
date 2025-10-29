@@ -5,7 +5,7 @@ import { translate } from '@/i18n';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { libraryItemBatchService } from '@/services/libraryItemBatchService';
-import { unifiedProgressService } from '@/services/ProgressService';
+import { progressService } from '@/services/ProgressService';
 import { useHome, usePlayer } from '@/stores';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -72,7 +72,7 @@ export default function HomeScreen() {
           }
 
           // Fetch server progress before refreshing home data
-          await unifiedProgressService.fetchServerProgress();
+          await progressService.fetchServerProgress();
 
           // Refresh home data (uses cache if still valid)
           await refreshHome(user.id);
@@ -126,7 +126,7 @@ export default function HomeScreen() {
       }
 
       // Fetch server progress before refreshing
-      await unifiedProgressService.fetchServerProgress();
+      await progressService.fetchServerProgress();
 
       // Force refresh home data
       await refreshHome(user.id, true);

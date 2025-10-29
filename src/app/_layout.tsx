@@ -7,7 +7,7 @@ import { AuthProvider } from "@/providers/AuthProvider";
 import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
-import { unifiedProgressService } from "@/services/ProgressService";
+import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
 import {
   FontAwesome6,
@@ -107,6 +107,9 @@ export default function RootLayout() {
           const isConnected = await playerService.verifyConnection();
           log.info(`Player service connection status: ${isConnected ? "connected" : "disconnected"}`);
 
+          // Reconcile TrackPlayer state to ensure sync
+          await playerService.reconcileTrackPlayerState();
+
           if (reconnectionEnabled && (!isConnected || contextRecreated)) {
             log.warn("Connection mismatch or context recreated, reconnecting background service");
             await playerService.reconnectBackgroundService();
@@ -117,7 +120,7 @@ export default function RootLayout() {
 
         log.info("Triggering progress refetch on app foreground");
         // Fetch latest progress from server when app becomes active
-        unifiedProgressService.fetchServerProgress().catch((error) => {
+        progressService.fetchServerProgress().catch((error) => {
           log.error("Failed to fetch server progress on app foreground", error as Error);
         });
       }

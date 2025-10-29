@@ -11,14 +11,14 @@ import { getCoverUri } from "@/lib/covers";
 import { useAuth } from "@/providers/AuthProvider";
 import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
-import { unifiedProgressService } from "@/services/ProgressService";
+import { progressService } from "@/services/ProgressService";
 import { useDownloads, useLibraryItemDetails, usePlayer } from "@/stores";
 import { Stack } from "expo-router";
 import React, { useCallback, useEffect, useMemo } from "react";
 import {
-  ActivityIndicator,
-  ScrollView,
-  useWindowDimensions,
+    ActivityIndicator,
+    ScrollView,
+    useWindowDimensions,
 } from "react-native";
 import RenderHtml from "react-native-render-html";
 import CoverImage from "../ui/CoverImange";
@@ -154,7 +154,7 @@ export default function LibraryItemDetail({
 
       try {
         // Fetch latest progress from server
-        await unifiedProgressService.fetchServerProgress();
+        await progressService.fetchServerProgress();
 
         // Get the local progress data
         const user = await getUserByUsername(username);

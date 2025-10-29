@@ -1,5 +1,5 @@
 /**
- * Unified Progress Service
+ * Progress Service
  *
  * Merges the concepts of localListeningSessions and server playback sessions.
  * Handles progress tracking and syncing only for downloaded media.
@@ -149,10 +149,24 @@ export class ProgressService {
       const isStale = sessionAge > this.PAUSE_TIMEOUT;
 
       if (isStale) {
-        log.info(`Rehydrating stale session ${session.id} (${Math.round(sessionAge / 1000)}s old) - will be expired on next update`);
-      } else {
-        log.info(`Rehydrating session ${session.id} for ${session.libraryItemId} at position ${session.currentTime}`);
+        log.info(`Ending stale session ${session.id} for ${session.libraryItemId} immediately (${Math.round(sessionAge / 1000)}s old)`);
+        // Sync before ending (set currentSession temporarily for sync)
+        this.currentSession = {
+          sessionId: session.id,
+          libraryItemId: session.libraryItemId,
+          mediaId: session.mediaId,
+          startTime: session.startTime,
+          currentTime: session.currentTime,
+          duration: session.duration,
+          isDownloaded: true,
+        };
+        await this.syncCurrentSessionToServer();
+        await endStaleListeningSession(session.id, session.currentTime);
+        this.currentSession = null; // Clear after ending
+        return; // Don't rehydrate stale sessions
       }
+
+      log.info(`Rehydrating session ${session.id} for ${session.libraryItemId} at position ${session.currentTime}`);
 
       this.currentSession = {
         sessionId: session.id,
@@ -169,12 +183,7 @@ export class ProgressService {
       this.lastSyncTime = session.updatedAt.getTime();
       this.failedSyncs = 0;
       this.isPaused = false;
-
-      // Mark the session as stale if it's old - will be handled in updateProgress
-      if (isStale) {
-        // Store the stale flag in a property so updateProgress can handle it
-        this.sessionIsStale = true;
-      }
+      this.sessionIsStale = false; // Clear stale flag for rehydrated session
 
       log.info('Session rehydration complete');
     } catch (error) {
@@ -413,6 +422,12 @@ export class ProgressService {
     isPlaying: boolean = true
   ): Promise<void> {
     if (!this.currentSession) {
+      // If playback is active but no session exists, we can't update progress
+      // PlayerBackgroundService should handle creating a new session
+      // We return early here - the caller (PlayerBackgroundService) will handle session creation
+      if (isPlaying) {
+        log.info(`updateProgress called with no session but playback is active - expecting PlayerBackgroundService to create session`);
+      }
       return;
     }
 
@@ -750,7 +765,7 @@ export class ProgressService {
       }
 
       // Close streaming session if local session is ended
-      if (isStreamingSession && session.sessionEnd) {
+      if (isStreamingSession && session.sessionEnd && session.serverSessionId) {
         await closeSession(session.serverSessionId);
 
         // Fetch final progress after closing session
@@ -879,7 +894,7 @@ export class ProgressService {
         ? session.mediaId
         : undefined;
 
-    let duration = session.duration ?? undefined;
+    let duration: number | undefined = session.duration ?? undefined;
     if (duration == null) {
       const metadata = await getMediaMetadataByLibraryItemId(session.libraryItemId);
       duration = metadata?.duration ?? undefined;
@@ -895,7 +910,7 @@ export class ProgressService {
       startTime: session.startTime,
       currentTime,
       timeListening,
-      duration,
+      duration: duration,
       startedAt: session.sessionStart?.getTime(),
       updatedAt: session.updatedAt?.getTime(),
     });
@@ -955,4 +970,4 @@ export class ProgressService {
 }
 
 // Export singleton instance
-export const unifiedProgressService = ProgressService.getInstance();
+export const progressService = ProgressService.getInstance();

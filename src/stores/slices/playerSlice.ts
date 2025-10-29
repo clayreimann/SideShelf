@@ -8,7 +8,10 @@
  * - Loading states
  */
 
-import { ASYNC_KEYS, saveItem } from '@/lib/asyncStore';
+import { ASYNC_KEYS, getItem, saveItem } from '@/lib/asyncStore';
+import { logger } from '@/lib/logger';
+import { progressService } from '@/services/ProgressService';
+import TrackPlayer from 'react-native-track-player';
 import type { CurrentChapter, PlayerTrack } from '@/types/player';
 import type { SliceCreator } from '@/types/store';
 
@@ -89,11 +92,11 @@ export interface PlayerSlice extends PlayerSliceState, PlayerSliceActions {}
  */
 export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
   restorePersistedState: async () => {
-    const { getItem, ASYNC_KEYS } = await import('@/lib/asyncStore');
-    const { logger } = await import('@/lib/logger');
     const log = logger.forTag('PlayerSlice');
 
     const store = get();
+
+    // Restore from AsyncStorage first
     if (!store.player.currentTrack) {
       const track = await getItem(ASYNC_KEYS.currentTrack);
       if (track) {
@@ -113,29 +116,62 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       store._setVolume(volume);
       log.info('Restored volume from AsyncStorage');
     }
-    const position = await getItem(ASYNC_KEYS.position);
-    if (position !== null && position !== undefined) {
-      store.updatePosition(position);
-      log.info(`Restored position from AsyncStorage: ${position}s`);
-
-      // Try to apply position to TrackPlayer if possible
-      // This is a best-effort attempt - if TrackPlayer isn't ready, it will fail silently
-      try {
-        const TrackPlayer = await import('react-native-track-player');
-        const queue = await TrackPlayer.default.getQueue();
-        if (queue.length > 0) {
-          await TrackPlayer.default.seekTo(position);
-          log.info(`Applied restored position to TrackPlayer: ${position}s`);
-        }
-      } catch (error) {
-        // Ignore errors - TrackPlayer might not be ready yet
-        log.info('Could not apply position to TrackPlayer (player may not be ready)');
-      }
+    const asyncStoragePosition = await getItem(ASYNC_KEYS.position);
+    if (asyncStoragePosition !== null && asyncStoragePosition !== undefined) {
+      store.updatePosition(asyncStoragePosition);
+      log.info(`Restored position from AsyncStorage: ${asyncStoragePosition}s`);
     }
     const isPlaying = await getItem(ASYNC_KEYS.isPlaying);
     if (isPlaying !== null && isPlaying !== undefined) {
       store.updatePlayingState(isPlaying);
       log.info('Restored isPlaying from AsyncStorage');
+    }
+
+    // Reconcile with ProgressService database (source of truth)
+    try {
+      const dbSession = progressService.getCurrentSession();
+
+      if (dbSession) {
+        log.info(`Found active session in DB for ${dbSession.libraryItemId}, reconciling state`);
+
+        // Check if position should be updated from DB session
+        // DB session position is authoritative
+        if (dbSession.currentTime !== store.player.position) {
+          const positionDiff = Math.abs(dbSession.currentTime - store.player.position);
+          if (positionDiff > 1) { // Only update if difference is significant (>1s)
+            log.info(`Position mismatch: AsyncStorage=${store.player.position.toFixed(2)}s, DB=${dbSession.currentTime.toFixed(2)}s, updating from DB`);
+            store.updatePosition(dbSession.currentTime);
+          }
+        }
+
+        // Check if currentTrack should be updated from DB session
+        const currentTrackLibraryItemId = store.player.currentTrack?.libraryItemId;
+        if (!currentTrackLibraryItemId || currentTrackLibraryItemId !== dbSession.libraryItemId) {
+          log.info(`Track mismatch: AsyncStorage=${currentTrackLibraryItemId || 'none'}, DB=${dbSession.libraryItemId}, track will be restored when playback starts`);
+          // Note: We can't fully restore PlayerTrack here without loading metadata/files
+          // The track will be restored by PlayerService.restorePlayerServiceFromSession() or playTrack()
+        }
+      } else {
+        log.info('No active session in DB, using AsyncStorage values');
+      }
+    } catch (error) {
+      log.error('Failed to reconcile with ProgressService', error as Error);
+      // Continue with AsyncStorage values if reconciliation fails
+    }
+
+    // Try to apply position to TrackPlayer if possible
+    // This is a best-effort attempt - if TrackPlayer isn't ready, it will fail silently
+    if (store.player.position > 0) {
+      try {
+        const queue = await TrackPlayer.getQueue();
+        if (queue.length > 0) {
+          await TrackPlayer.seekTo(store.player.position);
+          log.info(`Applied restored position to TrackPlayer: ${store.player.position}s`);
+        }
+      } catch (error) {
+        // Ignore errors - TrackPlayer might not be ready yet
+        log.info('Could not apply position to TrackPlayer (player may not be ready)');
+      }
     }
   },
   // Initial scoped state
@@ -156,7 +192,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   // Actions
   initializePlayerSlice: async () => {
-    const { logger } = await import('@/lib/logger');
     const log = logger.forTag('PlayerSlice');
     log.info('Initializing player slice');
     set((state: PlayerSlice) => ({

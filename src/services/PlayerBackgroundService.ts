@@ -11,19 +11,19 @@ import { getItem, SECURE_KEYS } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
 import { AppState } from "react-native";
 import TrackPlayer, {
-    Event,
-    PlaybackActiveTrackChangedEvent,
-    PlaybackErrorEvent,
-    PlaybackProgressUpdatedEvent,
-    PlaybackState as PlaybackStateEvent,
-    RemoteDuckEvent,
-    RemoteJumpBackwardEvent,
-    RemoteJumpForwardEvent,
-    RemoteSeekEvent,
-    State,
+  Event,
+  PlaybackActiveTrackChangedEvent,
+  PlaybackErrorEvent,
+  PlaybackProgressUpdatedEvent,
+  PlaybackState as PlaybackStateEvent,
+  RemoteDuckEvent,
+  RemoteJumpBackwardEvent,
+  RemoteJumpForwardEvent,
+  RemoteSeekEvent,
+  State,
 } from "react-native-track-player";
 import { playerService } from "./PlayerService";
-import { unifiedProgressService } from "./ProgressService";
+import { progressService } from "./ProgressService";
 
 // Create a cached sublogger for this service (more efficient than calling logger.X('tag', ...) each time)
 const log = logger.forTag("PlayerBackgroundService");
@@ -81,7 +81,7 @@ async function handleRemotePause(): Promise<void> {
 async function handleRemoteStop(): Promise<void> {
   diagLog.info(`RemoteStop received (${describeRuntimeContext()})`);
   await TrackPlayer.stop();
-  await unifiedProgressService.endCurrentSession();
+  await progressService.endCurrentSession();
 }
 
 /**
@@ -98,13 +98,13 @@ async function handleRemoteJumpForward(
   await TrackPlayer.seekTo(newPosition);
 
   try {
-    const currentSession = unifiedProgressService.getCurrentSession();
+    const currentSession = progressService.getCurrentSession();
     if (currentSession) {
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
       const state = await TrackPlayer.getPlaybackState();
 
-      await unifiedProgressService.updateProgress(
+      await progressService.updateProgress(
         newPosition,
         playbackRate,
         volume,
@@ -134,13 +134,13 @@ async function handleRemoteJumpBackward(
   await TrackPlayer.seekTo(newPosition);
 
   try {
-    const currentSession = unifiedProgressService.getCurrentSession();
+    const currentSession = progressService.getCurrentSession();
     if (currentSession) {
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
       const state = await TrackPlayer.getPlaybackState();
 
-      await unifiedProgressService.updateProgress(
+      await progressService.updateProgress(
         newPosition,
         playbackRate,
         volume,
@@ -183,13 +183,13 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
 
   // Update progress immediately after seek
   try {
-    const currentSession = unifiedProgressService.getCurrentSession();
+    const currentSession = progressService.getCurrentSession();
     if (currentSession) {
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
       const state = await TrackPlayer.getPlaybackState();
 
-      await unifiedProgressService.updateProgress(
+      await progressService.updateProgress(
         event.position,
         playbackRate,
         volume,
@@ -216,13 +216,13 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
   try {
     if (event.permanent) {
       await TrackPlayer.pause();
-      await unifiedProgressService.handleDuck(true);
+      await progressService.handleDuck(true);
     } else if (event.paused) {
       await TrackPlayer.pause();
-      await unifiedProgressService.handleDuck(true);
+      await progressService.handleDuck(true);
     } else {
       await TrackPlayer.play();
-      await unifiedProgressService.handleDuck(false);
+      await progressService.handleDuck(false);
     }
   } catch (error) {
     log.error("Duck event error", error as Error);
@@ -242,7 +242,7 @@ async function handlePlaybackStateChanged(
       store._setTrackLoading(false);
     }
 
-    const currentSession = unifiedProgressService.getCurrentSession();
+    const currentSession = progressService.getCurrentSession();
     if (currentSession) {
       const progress = await TrackPlayer.getProgress();
       const playbackRate = await TrackPlayer.getRate();
@@ -254,7 +254,7 @@ async function handlePlaybackStateChanged(
       store.updatePosition(progress.position);
       store.updatePlayingState(isPlaying);
 
-      await unifiedProgressService.updateProgress(
+      await progressService.updateProgress(
         progress.position,
         playbackRate,
         volume,
@@ -279,19 +279,15 @@ async function handlePlaybackProgressUpdated(
       log.info(`Playback progress updated: position=${event.position.toFixed(2)}s appState=${AppState.currentState}`);
     }
 
-    // Update the store with current position
-    const store = useAppStore.getState();
-    store.updatePosition(event.position);
-
-    const currentSession = unifiedProgressService.getCurrentSession();
+    const currentSession = progressService.getCurrentSession();
     if (currentSession) {
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
       const state = await TrackPlayer.getPlaybackState();
       const isPlaying = state.state === State.Playing;
 
-      // Update session progress
-      await unifiedProgressService.updateProgress(
+      // Update session progress (DB is source of truth)
+      await progressService.updateProgress(
         event.position,
         playbackRate,
         volume,
@@ -299,42 +295,112 @@ async function handlePlaybackProgressUpdated(
         isPlaying
       );
 
+      // Sync store position from session (session.currentTime is authoritative after updateProgress)
+      const updatedSession = progressService.getCurrentSession();
+      if (updatedSession) {
+        const store = useAppStore.getState();
+        // Use session position as source of truth, not TrackPlayer position directly
+        store.updatePosition(updatedSession.currentTime);
+      }
 
       // Check if we should sync to server (uses adaptive intervals based on network type)
-      const syncCheck = await unifiedProgressService.shouldSyncToServer();
+      const syncCheck = await progressService.shouldSyncToServer();
       if (syncCheck.shouldSync) {
         log.info(`Syncing to server: ${syncCheck.reason} appState=${AppState.currentState}`);
-        await unifiedProgressService.syncCurrentSessionToServer();
+        await progressService.syncCurrentSessionToServer();
       }
     } else {
       // No session - try to rehydrate from database if TrackPlayer has a track loaded
       log.info(`No session, attempting rehydration: position=${event.position.toFixed(2)}s appState=${AppState.currentState}`);
       const currentLibraryItemId = playerService.getCurrentLibraryItemId();
+      const currentTrack = playerService.getCurrentTrack();
+      const state = await TrackPlayer.getPlaybackState();
+      const isPlaying = state.state === State.Playing;
+
       if (currentLibraryItemId) {
         log.info(`Attempting to rehydrate session for library item: ${currentLibraryItemId}`);
-        await unifiedProgressService.forceRehydrateSession(currentLibraryItemId);
+        await progressService.forceRehydrateSession(currentLibraryItemId);
 
         // If rehydration succeeded, update progress immediately
-        const rehydratedSession = unifiedProgressService.getCurrentSession();
-        if (rehydratedSession) {
+        let session = progressService.getCurrentSession();
+        if (session) {
           log.info(`Session rehydrated successfully, updating progress`);
           const playbackRate = await TrackPlayer.getRate();
           const volume = await TrackPlayer.getVolume();
-          const state = await TrackPlayer.getPlaybackState();
-          const isPlaying = state.state === State.Playing;
 
-          await unifiedProgressService.updateProgress(
+          await progressService.updateProgress(
             event.position,
             playbackRate,
             volume,
             undefined,
             isPlaying
           );
+
+          // Sync store position from rehydrated session (DB is source of truth)
+          session = progressService.getCurrentSession();
+          if (session) {
+            const store = useAppStore.getState();
+            store.updatePosition(session.currentTime);
+          }
+        } else if (currentTrack && isPlaying) {
+          // Rehydration failed but playback is active - start a new session
+          // This handles the case where a stale session was cleared but TrackPlayer is still playing
+          log.info(`Rehydration failed but playback is active, starting new session for ${currentTrack.libraryItemId}`);
+          const username = await getItem(SECURE_KEYS.username);
+          if (username) {
+            const playbackRate = await TrackPlayer.getRate();
+            const volume = await TrackPlayer.getVolume();
+            const sessionId = playerService.getCurrentPlaySessionId();
+
+            try {
+              await progressService.startSession(
+                username,
+                currentTrack.libraryItemId,
+                currentTrack.mediaId,
+                event.position, // Start at current position
+                currentTrack.duration,
+                playbackRate,
+                volume,
+                sessionId || undefined
+              );
+
+              // Now update progress with the new session
+              await progressService.updateProgress(
+                event.position,
+                playbackRate,
+                volume,
+                undefined,
+                isPlaying
+              );
+
+              // Sync store position from new session
+              session = progressService.getCurrentSession();
+              if (session) {
+                const store = useAppStore.getState();
+                store.updatePosition(session.currentTime);
+              }
+            } catch (error) {
+              log.error(`Failed to start new session after stale session cleared: ${(error as Error).message}`);
+              // Fallback: update store from TrackPlayer position
+              const store = useAppStore.getState();
+              store.updatePosition(event.position);
+            }
+          } else {
+            log.warn(`No username available, cannot start new session`);
+            const store = useAppStore.getState();
+            store.updatePosition(event.position);
+          }
         } else {
-          log.warn(`Failed to rehydrate session for library item: ${currentLibraryItemId}`);
+          log.warn(`Failed to rehydrate session for library item: ${currentLibraryItemId}, and playback is not active`);
+          // Fallback: update store from TrackPlayer position if no session
+          const store = useAppStore.getState();
+          store.updatePosition(event.position);
         }
       } else {
-        log.info(`No current track in PlayerService, cannot rehydrate session`);
+        log.info(`No current track in PlayerService, cannot rehydrate or start session`);
+        // Fallback: update store from TrackPlayer position if no session
+        const store = useAppStore.getState();
+        store.updatePosition(event.position);
       }
     }
   } catch (error) {
@@ -373,7 +439,7 @@ async function handleActiveTrackChanged(
       const volume = await TrackPlayer.getVolume();
       const sessionId = playerService.getCurrentPlaySessionId();
 
-      await unifiedProgressService.startSession(
+      await progressService.startSession(
         username,
         currentTrack.libraryItemId,
         currentTrack.mediaId,
@@ -408,10 +474,10 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
 
   try {
     // End current session on critical playback errors
-    const currentSession = unifiedProgressService.getCurrentSession();
+    const currentSession = progressService.getCurrentSession();
     if (currentSession) {
       log.info("Ending session due to playback error");
-      await unifiedProgressService.endCurrentSession();
+      await progressService.endCurrentSession();
     }
 
     // Clear loading state

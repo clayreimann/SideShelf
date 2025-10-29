@@ -16,6 +16,7 @@ import 'react-native-get-random-values';
 import { getFullVersionString, getPreviousVersion, hasAppBeenUpdated, saveCurrentVersion } from '@/lib/appVersion';
 import { logger } from '@/lib/logger';
 import { playerService } from '@/services/PlayerService';
+import { useAppStore } from '@/stores/appStore';
 import TrackPlayer from 'react-native-track-player';
 
 const log = logger.forTag('App');
@@ -64,6 +65,21 @@ export async function initializeApp(): Promise<void> {
 
     // Initialize React Native Track Player
     await initializeTrackPlayer();
+
+    // Restore persisted player state on cold boot
+    try {
+      await useAppStore.getState().restorePersistedState();
+      log.info('Player state restored from persistence');
+
+      // Restore PlayerService state from ProgressService session
+      await playerService.restorePlayerServiceFromSession();
+
+      // Reconcile TrackPlayer state with JS state
+      await playerService.reconcileTrackPlayerState();
+    } catch (error) {
+      log.error('Failed to restore persisted player state', error as Error);
+      // Don't throw - continue initialization even if state restoration fails
+    }
 
     // Initialize other services here as needed
     // await downloadService.initialize();
@@ -137,7 +153,7 @@ async function initializeTrackPlayer(): Promise<void> {
  * Re-export commonly used services for convenience
  */
 export { playerService } from '@/services/PlayerService';
-export { unifiedProgressService } from '@/services/ProgressService';
+export { progressService as unifiedProgressService } from '@/services/ProgressService';
 
 // Future service exports will go here:
 // export { downloadService } from '@/services/DownloadService';
