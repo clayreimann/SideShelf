@@ -5,118 +5,72 @@
  */
 
 import Toggle from '@/components/ui/Toggle';
-import {
-  getBackgroundServiceReconnectionEnabled,
-  getJumpBackwardInterval,
-  getJumpForwardInterval,
-  getSmartRewindEnabled,
-  setBackgroundServiceReconnectionEnabled,
-  setJumpBackwardInterval,
-  setJumpForwardInterval,
-  setSmartRewindEnabled,
-} from '@/lib/appSettings';
-import { logger } from '@/lib/logger';
 import { useThemedStyles } from '@/lib/theme';
-import { playerService } from '@/services/PlayerService';
+import { useSettings } from '@/stores';
 import { Stack } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
-
-const log = logger.forTag('SettingsScreen');
 
 const INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90];
 
 export default function SettingsScreen() {
   const { colors, isDark } = useThemedStyles();
-  const [backgroundServiceReconnection, setBackgroundServiceReconnection] = useState<boolean>(true);
-  const [jumpForwardInterval, setJumpForwardIntervalState] = useState<number>(30);
-  const [jumpBackwardInterval, setJumpBackwardIntervalState] = useState<number>(15);
-  const [smartRewindEnabled, setSmartRewindEnabledState] = useState<boolean>(true);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const {
+    jumpForwardInterval,
+    jumpBackwardInterval,
+    smartRewindEnabled,
+    backgroundServiceReconnection,
+    isLoading,
+    updateJumpForwardInterval,
+    updateJumpBackwardInterval,
+    updateSmartRewindEnabled,
+    updateBackgroundServiceReconnection,
+  } = useSettings();
 
   // Helper colors
   const textSecondary = isDark ? '#999999' : '#666666';
   const primaryColor = isDark ? '#4A9EFF' : '#007AFF';
   const cardBackground = isDark ? '#2C2C2E' : '#E5E5EA';
 
-  // Load settings on mount
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const [reconnection, forward, backward, smartRewind] = await Promise.all([
-          getBackgroundServiceReconnectionEnabled(),
-          getJumpForwardInterval(),
-          getJumpBackwardInterval(),
-          getSmartRewindEnabled(),
-        ]);
-        setBackgroundServiceReconnection(reconnection);
-        setJumpForwardIntervalState(forward);
-        setJumpBackwardIntervalState(backward);
-        setSmartRewindEnabledState(smartRewind);
-      } catch (error) {
-        log.error('Failed to load settings', error as Error);
-        Alert.alert('Error', 'Failed to load settings');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadSettings();
-  }, []);
-
   // Toggle background service reconnection
   const toggleBackgroundServiceReconnection = useCallback(async (value: boolean) => {
-    setBackgroundServiceReconnection(value);
     try {
-      await setBackgroundServiceReconnectionEnabled(value);
-      log.info(`Background service reconnection ${value ? 'enabled' : 'disabled'}`);
+      await updateBackgroundServiceReconnection(value);
     } catch (error) {
-      log.error('Failed to save setting', error as Error);
+      console.error('Failed to update background service reconnection', error);
       Alert.alert('Error', 'Failed to save setting');
-      setBackgroundServiceReconnection(!value);
     }
-  }, []);
+  }, [updateBackgroundServiceReconnection]);
 
   // Update jump forward interval
   const handleJumpForwardChange = useCallback(async (seconds: number) => {
-    setJumpForwardIntervalState(seconds);
     try {
-      await setJumpForwardInterval(seconds);
-      // Reconfigure TrackPlayer with new interval
-      await playerService.configureTrackPlayer();
-      log.info(`Jump forward interval set to ${seconds}s`);
+      await updateJumpForwardInterval(seconds);
     } catch (error) {
-      log.error('Failed to save jump forward interval', error as Error);
+      console.error('Failed to update jump forward interval', error);
       Alert.alert('Error', 'Failed to save setting');
     }
-  }, []);
+  }, [updateJumpForwardInterval]);
 
   // Update jump backward interval
   const handleJumpBackwardChange = useCallback(async (seconds: number) => {
-    setJumpBackwardIntervalState(seconds);
     try {
-      await setJumpBackwardInterval(seconds);
-      // Reconfigure TrackPlayer with new interval
-      await playerService.configureTrackPlayer();
-      log.info(`Jump backward interval set to ${seconds}s`);
+      await updateJumpBackwardInterval(seconds);
     } catch (error) {
-      log.error('Failed to save jump backward interval', error as Error);
+      console.error('Failed to update jump backward interval', error);
       Alert.alert('Error', 'Failed to save setting');
     }
-  }, []);
+  }, [updateJumpBackwardInterval]);
 
   // Toggle smart rewind
   const toggleSmartRewind = useCallback(async (value: boolean) => {
-    setSmartRewindEnabledState(value);
     try {
-      await setSmartRewindEnabled(value);
-      log.info(`Smart rewind ${value ? 'enabled' : 'disabled'}`);
+      await updateSmartRewindEnabled(value);
     } catch (error) {
-      log.error('Failed to save smart rewind setting', error as Error);
+      console.error('Failed to update smart rewind setting', error);
       Alert.alert('Error', 'Failed to save setting');
-      setSmartRewindEnabledState(!value);
     }
-  }, []);
+  }, [updateSmartRewindEnabled]);
 
   if (isLoading) {
     return (

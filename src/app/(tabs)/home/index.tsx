@@ -1,21 +1,21 @@
 import Item from '@/components/home/Item';
-import { translate } from '@/i18n';
-import { getHomeScreenData, getItemsWithProgressNeedingFullRefresh, type HomeScreenItem } from '@/db/helpers/homeScreen';
+import { getItemsWithProgressNeedingFullRefresh, type HomeScreenItem } from '@/db/helpers/homeScreen';
 import { getUserByUsername } from '@/db/helpers/users';
+import { translate } from '@/i18n';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { libraryItemBatchService } from '@/services/libraryItemBatchService';
 import { unifiedProgressService } from '@/services/ProgressService';
-import { usePlayer } from '@/stores';
+import { useHome, usePlayer } from '@/stores';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-  SectionList,
-  Text,
-  View
+    ActivityIndicator,
+    Alert,
+    RefreshControl,
+    SectionList,
+    Text,
+    View
 } from "react-native";
 
 interface HomeSection {
@@ -27,81 +27,76 @@ export default function HomeScreen() {
   const { styles, tabs, colors } = useThemedStyles();
   const { username, isAuthenticated } = useAuth();
   const { currentTrack } = usePlayer();
-  const [sections, setSections] = useState<HomeSection[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { continueListening, downloaded, listenAgain, isLoadingHome, refreshHome } = useHome();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const loadHomeData = useCallback(async (showLoading = true) => {
-    if (!username || !isAuthenticated) return;
+  // Build sections array from home store data
+  const sections = useMemo<HomeSection[]>(() => {
+    const newSections: HomeSection[] = [];
 
-    if (showLoading) setIsLoading(true);
-
-    try {
-      // Get current user from database
-      const user = await getUserByUsername(username);
-      if (!user?.id) {
-        console.error('[HomeScreen] No user found for username:', username);
-        return;
-      }
-
-      await unifiedProgressService.fetchServerProgress();
-
-      // Get home screen data
-      const data = await getHomeScreenData(user.id);
-
-      // Build sections array
-      const newSections: HomeSection[] = [];
-
-      if (data.continueListening.length > 0) {
-        newSections.push({
-          title: translate('home.sections.continueListening'),
-          data: data.continueListening,
-        });
-      }
-
-      if (data.downloaded.length > 0) {
-        newSections.push({
-          title: translate('home.sections.downloaded'),
-          data: data.downloaded,
-        });
-      }
-
-      if (data.listenAgain.length > 0) {
-        newSections.push({
-          title: translate('home.sections.listenAgain'),
-          data: data.listenAgain,
-        });
-      }
-
-      setSections(newSections);
-
-      // Process items with progress in the background
-      const itemsNeedingRefresh = await getItemsWithProgressNeedingFullRefresh(user.id);
-      if (itemsNeedingRefresh.length > 0) {
-        console.log(`[HomeScreen] Found ${itemsNeedingRefresh.length} items needing full refresh`);
-        libraryItemBatchService.processItemsWithProgress(user.id, itemsNeedingRefresh)
-          .catch(error => {
-            console.error('[HomeScreen] Error processing items with progress:', error);
-          });
-      }
-
-    } catch (error) {
-      console.error('[HomeScreen] Error loading home data:', error);
-      Alert.alert(
-        translate('common.error'),
-        translate('home.errors.loadHomeData')
-      );
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+    if (continueListening.length > 0) {
+      newSections.push({
+        title: translate('home.sections.continueListening'),
+        data: continueListening,
+      });
     }
-  }, [username, isAuthenticated]);
 
-  // Load data when screen comes into focus
+    if (downloaded.length > 0) {
+      newSections.push({
+        title: translate('home.sections.downloaded'),
+        data: downloaded,
+      });
+    }
+
+    if (listenAgain.length > 0) {
+      newSections.push({
+        title: translate('home.sections.listenAgain'),
+        data: listenAgain,
+      });
+    }
+
+    return newSections;
+  }, [continueListening, downloaded, listenAgain]);
+
+  // Refresh home data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      loadHomeData();
-    }, [loadHomeData])
+      const refreshData = async () => {
+        if (!username || !isAuthenticated) return;
+
+        try {
+          const user = await getUserByUsername(username);
+          if (!user?.id) {
+            console.error('[HomeScreen] No user found for username:', username);
+            return;
+          }
+
+          // Fetch server progress before refreshing home data
+          await unifiedProgressService.fetchServerProgress();
+
+          // Refresh home data (uses cache if still valid)
+          await refreshHome(user.id);
+
+          // Process items with progress in the background
+          const itemsNeedingRefresh = await getItemsWithProgressNeedingFullRefresh(user.id);
+          if (itemsNeedingRefresh.length > 0) {
+            console.log(`[HomeScreen] Found ${itemsNeedingRefresh.length} items needing full refresh`);
+            libraryItemBatchService.processItemsWithProgress(user.id, itemsNeedingRefresh)
+              .catch((error: unknown) => {
+                console.error('[HomeScreen] Error processing items with progress:', error);
+              });
+          }
+        } catch (error) {
+          console.error('[HomeScreen] Error refreshing home data:', error);
+          Alert.alert(
+            translate('common.error'),
+            translate('home.errors.loadHomeData')
+          );
+        }
+      };
+
+      refreshData();
+    }, [username, isAuthenticated, refreshHome])
   );
 
   // Start background processing when component mounts
@@ -117,10 +112,34 @@ export default function HomeScreen() {
     startBackgroundProcessing();
   }, [username, isAuthenticated]);
 
-  const onRefresh = useCallback(() => {
+  // Handle pull-to-refresh
+  const onRefresh = useCallback(async () => {
+    if (!username || !isAuthenticated) return;
+
     setIsRefreshing(true);
-    loadHomeData(false);
-  }, [loadHomeData]);
+
+    try {
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        console.error('[HomeScreen] No user found for username:', username);
+        return;
+      }
+
+      // Fetch server progress before refreshing
+      await unifiedProgressService.fetchServerProgress();
+
+      // Force refresh home data
+      await refreshHome(user.id, true);
+    } catch (error) {
+      console.error('[HomeScreen] Error refreshing:', error);
+      Alert.alert(
+        translate('common.error'),
+        translate('home.errors.loadHomeData')
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [username, isAuthenticated, refreshHome]);
 
   const renderSectionHeader = ({ section }: { section: HomeSection }) => (
     <View style={{ marginBottom: 12, marginTop: 20, paddingHorizontal: 16 }}>
@@ -134,7 +153,7 @@ export default function HomeScreen() {
     </View>
   );
 
-  if (isLoading) {
+  if (isLoadingHome && sections.length === 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={colors.link} />

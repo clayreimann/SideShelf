@@ -1,3 +1,4 @@
+import { formatBytes } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import DeviceInfo from "react-native-device-info";
 
@@ -40,10 +41,10 @@ export type ApiFetchOptions = RequestInit & {
 };
 
 export async function apiFetch(
-  input: string,
+  pathOrUrl: string,
   init?: ApiFetchOptions
 ): Promise<Response> {
-  const url = resolveUrl(input);
+  const url = resolveUrl(pathOrUrl);
   const { auth = true, headers, ...rest } = init || {};
   const token = config?.getAccessToken();
 
@@ -62,17 +63,17 @@ export async function apiFetch(
   }
 
   const method = (rest.method || "GET").toUpperCase();
-  log.info(`-> ${method} ${url}`);
-  detailedLog.info(`-> ${method} ${url} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${rest.body}`);
+  log.info(`-> ${method} ${scrubUrl(url)}`);
+  detailedLog.info(`-> ${method} ${scrubUrl(url)} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${rest.body}`);
 
   const res = await fetch(url, { ...rest, headers: headerObj });
-  log.info(`<- ${res.status} ${method} ${url} ${res.headers.get("content-type")} ${res.headers.get("content-length")}`);
+  log.info(`<- ${res.status} ${method} ${url} ${res.headers.get("content-type")} ${formatBytes(Number(res.headers.get("content-length")))}`);
   detailedLog.info(`<- ${res.status} ${method} ${url} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()}`);
   if (res.status === 401) {
     log.info("access token expired, refreshing token...");
     const success = await config?.refreshAccessToken();
     if (success) {
-      return await apiFetch(input, { ...init, headers: headerObj });
+      return await apiFetch(pathOrUrl, { ...init, headers: headerObj });
     }
   }
   if (!res.ok) {
@@ -118,6 +119,11 @@ function redactHeaders(
     }
   }
   return redacted;
+}
+
+function scrubUrl(url: string): string {
+  const baseUrl = config?.getBaseUrl();
+  return url.replace(baseUrl || "", baseUrl?.split("://")[0] || "") + "://<base-url>";
 }
 
 function getCustomUserAgent(): string {

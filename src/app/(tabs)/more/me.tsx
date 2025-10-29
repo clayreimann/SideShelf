@@ -1,8 +1,8 @@
-import { getDeviceInfo } from '@/lib/api/endpoints';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
+import { useUserProfile } from '@/stores';
 import { Stack } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { SectionList, Text, View } from 'react-native';
 
 type Section = {
@@ -13,18 +13,14 @@ type Section = {
 export default function AboutMeScreen() {
   const { styles } = useThemedStyles();
   const { username, serverUrl } = useAuth();
-  const [deviceInfo, setDeviceInfo] = useState<any>(null);
-
-  useEffect(() => {
-    getDeviceInfo().then(setDeviceInfo);
-  }, []);
+  const { deviceInfo } = useUserProfile();
 
   const sections = useMemo<Section[]>(() => [
     {
       title: 'Account',
       data: [
-        { label: 'User', value: username },
-        { label: 'Server', value: serverUrl },
+        { label: 'User', value: username || undefined },
+        { label: 'Server', value: serverUrl || undefined },
       ],
     },
     {

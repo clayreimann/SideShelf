@@ -14,10 +14,15 @@
 export {
     useAppStore, // Debug
     useAuthors, useAuthorsActions, useAuthorsState, useAuthorsStoreInitializer, // Authors
-    useDebugStore, // Legacy export for backward compatibility
-    useLibrary, useLibraryActions, useLibraryState, useLibraryStore, useLibraryStoreInitializer, // ApiLibrary
+    useDebugStore, // Debug hook
+    useDownloads, useDownloadsStoreInitializer, // Downloads
+    useHome, useHomeStoreInitializer, // Home
+    useLibrary, useLibraryActions, useLibraryItemDetails, useLibraryState, useLibraryStore, useLibraryStoreInitializer, // ApiLibrary & Item Details
     usePlayer, usePlayerActions, usePlayerState, usePlayerStoreInitializer, // Player
     useSeries, useSeriesActions, useSeriesState, useSeriesStoreInitializer, // ApiSeries
+    useSettings, useSettingsStoreInitializer, // Settings
+    useStatistics, // Statistics
+    useUserProfile, useUserProfileStoreInitializer, // User Profile
     type StoreState
 } from './appStore';
 
@@ -39,8 +44,30 @@ export {
 // Player slice type exports
 export { type PlayerSlice, type PlayerSliceActions, type PlayerSliceState } from './slices/playerSlice';
 
+// Home slice type exports
+export { type HomeSlice, type HomeSliceActions, type HomeSliceState } from './slices/homeSlice';
+
+// LibraryItemDetails slice type exports
+export {
+    type CachedItemDetails, type LibraryItemDetailsSlice, type LibraryItemDetailsSliceActions, type LibraryItemDetailsSliceState
+} from './slices/libraryItemDetailsSlice';
+
+// Settings slice type exports
+export { type SettingsSlice, type SettingsSliceActions, type SettingsSliceState } from './slices/settingsSlice';
+
+// UserProfile slice type exports
+export { type ServerInfo, type DeviceInfo as UserDeviceInfo, type UserProfileSlice, type UserProfileSliceActions, type UserProfileSliceState } from './slices/userProfileSlice';
+
+// Download slice type exports
+export { type DownloadSlice, type DownloadSliceActions, type DownloadSliceState } from './slices/downloadSlice';
+
+// Statistics slice type exports
+export {
+    type DatabaseCounts, type StatisticsSlice, type StatisticsSliceActions, type StatisticsSliceState, type StorageEntry
+} from './slices/statisticsSlice';
+
 // Shared types
-export type { LibraryItemListRow } from '@/types/database';
+export type { LibraryItemRow } from '@/db/schema/libraryItems';
 export {
     type AuthorSortConfig, type AuthorSortField,
     type LoadingStates,

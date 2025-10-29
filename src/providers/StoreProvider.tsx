@@ -7,16 +7,20 @@
 
 import {
     useAuthorsStoreInitializer,
+    useDownloadsStoreInitializer,
+    useHomeStoreInitializer,
     useLibraryStoreInitializer,
     usePlayerStoreInitializer,
-    useSeriesStoreInitializer
+    useSeriesStoreInitializer,
+    useSettingsStoreInitializer,
+    useUserProfileStoreInitializer
 } from '@/stores';
 import React from 'react';
 import { useAuth } from './AuthProvider';
 import { useDb } from './DbProvider';
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-    const { apiConfigured } = useAuth();
+    const { apiConfigured, username } = useAuth();
     const { initialized: dbInitialized } = useDb();
 
     // Initialize all stores
@@ -24,6 +28,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     useAuthorsStoreInitializer(apiConfigured, dbInitialized);
     useSeriesStoreInitializer(apiConfigured, dbInitialized);
     usePlayerStoreInitializer(); // Player doesn't need API/DB dependencies
+    useSettingsStoreInitializer(); // Settings are independent
+    useDownloadsStoreInitializer(); // Downloads are independent
+    useUserProfileStoreInitializer(username); // User profile needs username
+    useHomeStoreInitializer(username ? username : null); // Home needs userId (username)
 
     return <>{children}</>;
 }

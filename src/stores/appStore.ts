@@ -10,9 +10,15 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 
 import { AuthorsSlice, createAuthorsSlice } from './slices/authorsSlice';
+import { createDownloadSlice, DownloadSlice } from './slices/downloadSlice';
+import { createHomeSlice, HomeSlice } from './slices/homeSlice';
+import { createLibraryItemDetailsSlice, LibraryItemDetailsSlice } from './slices/libraryItemDetailsSlice';
 import { createLibrarySlice, LibrarySlice } from './slices/librarySlice';
 import { createPlayerSlice, PlayerSlice } from './slices/playerSlice';
 import { createSeriesSlice, SeriesSlice } from './slices/seriesSlice';
+import { createSettingsSlice, SettingsSlice } from './slices/settingsSlice';
+import { createStatisticsSlice, StatisticsSlice } from './slices/statisticsSlice';
+import { createUserProfileSlice, UserProfileSlice } from './slices/userProfileSlice';
 
 /**
  * Combined store state interface
@@ -20,11 +26,18 @@ import { createSeriesSlice, SeriesSlice } from './slices/seriesSlice';
  * This interface combines all slices into a single store.
  * As new slices are added, they should be included here.
  */
-export interface StoreState extends LibrarySlice, AuthorsSlice, SeriesSlice, PlayerSlice {
-    // Future slices will be added here
-    // For example:
-    // SettingsSlice,
-    // etc.
+export interface StoreState
+    extends LibrarySlice,
+        AuthorsSlice,
+        SeriesSlice,
+        PlayerSlice,
+        HomeSlice,
+        LibraryItemDetailsSlice,
+        SettingsSlice,
+        UserProfileSlice,
+        DownloadSlice,
+        StatisticsSlice {
+    // All slices are now included
 }
 
 /**
@@ -53,8 +66,23 @@ export const useAppStore = create<StoreState>()(
         // Player slice
         ...createPlayerSlice(set, get),
 
-        // Future slices will be spread here
-        // ...createSettingsSlice(set, get),
+        // Home slice
+        ...createHomeSlice(set, get),
+
+        // LibraryItemDetails slice
+        ...createLibraryItemDetailsSlice(set, get),
+
+        // Settings slice
+        ...createSettingsSlice(set, get),
+
+        // UserProfile slice
+        ...createUserProfileSlice(set, get),
+
+        // Download slice
+        ...createDownloadSlice(set, get),
+
+        // Statistics slice
+        ...createStatisticsSlice(set, get),
     }))
 );
 
@@ -619,6 +647,396 @@ export function useSeriesStoreInitializer(apiConfigured: boolean, dbInitialized:
     React.useEffect(() => {
         setSeriesReady(apiConfigured, dbInitialized);
     }, [setSeriesReady, apiConfigured, dbInitialized]);
+}
+
+/**
+ * Hook to use the home slice with automatic subscription management
+ *
+ * @example
+ * ```tsx
+ * function HomeComponent() {
+ *   const {
+ *     continueListening,
+ *     downloaded,
+ *     listenAgain,
+ *     refreshHome
+ *   } = useHome();
+ *
+ *   // Use the store state and actions...
+ * }
+ * ```
+ */
+export function useHome() {
+    const continueListening = useAppStore(state => state.home.continueListening);
+    const downloaded = useAppStore(state => state.home.downloaded);
+    const listenAgain = useAppStore(state => state.home.listenAgain);
+    const isLoadingHome = useAppStore(state => state.home.loading.isLoadingHome);
+    const initialized = useAppStore(state => state.home.initialized);
+    const lastFetchTime = useAppStore(state => state.home.lastFetchTime);
+
+    // Actions
+    const initializeHome = useAppStore(state => state.initializeHome);
+    const refreshHome = useAppStore(state => state.refreshHome);
+    const refreshSection = useAppStore(state => state.refreshSection);
+    const resetHome = useAppStore(state => state.resetHome);
+
+    return React.useMemo(() => ({
+        continueListening,
+        downloaded,
+        listenAgain,
+        isLoadingHome,
+        initialized,
+        lastFetchTime,
+        initializeHome,
+        refreshHome,
+        refreshSection,
+        resetHome,
+    }), [
+        continueListening,
+        downloaded,
+        listenAgain,
+        isLoadingHome,
+        initialized,
+        lastFetchTime,
+        initializeHome,
+        refreshHome,
+        refreshSection,
+        resetHome,
+    ]);
+}
+
+/**
+ * Hook to use the library item details slice
+ *
+ * @example
+ * ```tsx
+ * function ItemDetailComponent({ itemId }: { itemId: string }) {
+ *   const { fetchItemDetails, getCachedItem } = useLibraryItemDetails();
+ *
+ *   // Use the store state and actions...
+ * }
+ * ```
+ */
+export function useLibraryItemDetails() {
+    const itemsCache = useAppStore(state => state.itemDetails.itemsCache);
+    const loading = useAppStore(state => state.itemDetails.loading);
+    const initialized = useAppStore(state => state.itemDetails.initialized);
+
+    // Actions
+    const fetchItemDetails = useAppStore(state => state.fetchItemDetails);
+    const refreshItemDetails = useAppStore(state => state.refreshItemDetails);
+    const updateItemProgress = useAppStore(state => state.updateItemProgress);
+    const invalidateItem = useAppStore(state => state.invalidateItem);
+    const getCachedItem = useAppStore(state => state.getCachedItem);
+    const resetItemDetails = useAppStore(state => state.resetItemDetails);
+
+    return React.useMemo(() => ({
+        itemsCache,
+        loading,
+        initialized,
+        fetchItemDetails,
+        refreshItemDetails,
+        updateItemProgress,
+        invalidateItem,
+        getCachedItem,
+        resetItemDetails,
+    }), [
+        itemsCache,
+        loading,
+        initialized,
+        fetchItemDetails,
+        refreshItemDetails,
+        updateItemProgress,
+        invalidateItem,
+        getCachedItem,
+        resetItemDetails,
+    ]);
+}
+
+/**
+ * Hook to use the settings slice
+ *
+ * @example
+ * ```tsx
+ * function SettingsComponent() {
+ *   const {
+ *     jumpForwardInterval,
+ *     updateJumpForwardInterval
+ *   } = useSettings();
+ *
+ *   // Use the store state and actions...
+ * }
+ * ```
+ */
+export function useSettings() {
+    const jumpForwardInterval = useAppStore(state => state.settings.jumpForwardInterval);
+    const jumpBackwardInterval = useAppStore(state => state.settings.jumpBackwardInterval);
+    const smartRewindEnabled = useAppStore(state => state.settings.smartRewindEnabled);
+    const backgroundServiceReconnection = useAppStore(state => state.settings.backgroundServiceReconnection);
+    const initialized = useAppStore(state => state.settings.initialized);
+    const isLoading = useAppStore(state => state.settings.isLoading);
+
+    // Actions
+    const initializeSettings = useAppStore(state => state.initializeSettings);
+    const updateJumpForwardInterval = useAppStore(state => state.updateJumpForwardInterval);
+    const updateJumpBackwardInterval = useAppStore(state => state.updateJumpBackwardInterval);
+    const updateSmartRewindEnabled = useAppStore(state => state.updateSmartRewindEnabled);
+    const updateBackgroundServiceReconnection = useAppStore(state => state.updateBackgroundServiceReconnection);
+    const resetSettings = useAppStore(state => state.resetSettings);
+
+    return React.useMemo(() => ({
+        jumpForwardInterval,
+        jumpBackwardInterval,
+        smartRewindEnabled,
+        backgroundServiceReconnection,
+        initialized,
+        isLoading,
+        initializeSettings,
+        updateJumpForwardInterval,
+        updateJumpBackwardInterval,
+        updateSmartRewindEnabled,
+        updateBackgroundServiceReconnection,
+        resetSettings,
+    }), [
+        jumpForwardInterval,
+        jumpBackwardInterval,
+        smartRewindEnabled,
+        backgroundServiceReconnection,
+        initialized,
+        isLoading,
+        initializeSettings,
+        updateJumpForwardInterval,
+        updateJumpBackwardInterval,
+        updateSmartRewindEnabled,
+        updateBackgroundServiceReconnection,
+        resetSettings,
+    ]);
+}
+
+/**
+ * Hook to use the user profile slice
+ *
+ * @example
+ * ```tsx
+ * function ProfileComponent() {
+ *   const { deviceInfo, user } = useUserProfile();
+ *
+ *   // Use the store state and actions...
+ * }
+ * ```
+ */
+export function useUserProfile() {
+    const deviceInfo = useAppStore(state => state.userProfile.deviceInfo);
+    const user = useAppStore(state => state.userProfile.user);
+    const serverInfo = useAppStore(state => state.userProfile.serverInfo);
+    const initialized = useAppStore(state => state.userProfile.initialized);
+    const isLoading = useAppStore(state => state.userProfile.isLoading);
+
+    // Actions
+    const initializeUserProfile = useAppStore(state => state.initializeUserProfile);
+    const refreshDeviceInfo = useAppStore(state => state.refreshDeviceInfo);
+    const refreshServerInfo = useAppStore(state => state.refreshServerInfo);
+    const updateUser = useAppStore(state => state.updateUser);
+    const resetUserProfile = useAppStore(state => state.resetUserProfile);
+
+    return React.useMemo(() => ({
+        deviceInfo,
+        user,
+        serverInfo,
+        initialized,
+        isLoading,
+        initializeUserProfile,
+        refreshDeviceInfo,
+        refreshServerInfo,
+        updateUser,
+        resetUserProfile,
+    }), [
+        deviceInfo,
+        user,
+        serverInfo,
+        initialized,
+        isLoading,
+        initializeUserProfile,
+        refreshDeviceInfo,
+        refreshServerInfo,
+        updateUser,
+        resetUserProfile,
+    ]);
+}
+
+/**
+ * Hook to use the downloads slice
+ *
+ * @example
+ * ```tsx
+ * function DownloadComponent({ itemId }: { itemId: string }) {
+ *   const { activeDownloads, startDownload, isItemDownloaded } = useDownloads();
+ *
+ *   // Use the store state and actions...
+ * }
+ * ```
+ */
+export function useDownloads() {
+    const activeDownloads = useAppStore(state => state.downloads.activeDownloads);
+    const downloadedItems = useAppStore(state => state.downloads.downloadedItems);
+    const initialized = useAppStore(state => state.downloads.initialized);
+    const isLoading = useAppStore(state => state.downloads.isLoading);
+
+    // Actions
+    const initializeDownloads = useAppStore(state => state.initializeDownloads);
+    const startDownload = useAppStore(state => state.startDownload);
+    const updateDownloadProgress = useAppStore(state => state.updateDownloadProgress);
+    const completeDownload = useAppStore(state => state.completeDownload);
+    const removeActiveDownload = useAppStore(state => state.removeActiveDownload);
+    const deleteDownload = useAppStore(state => state.deleteDownload);
+    const isItemDownloaded = useAppStore(state => state.isItemDownloaded);
+    const getDownloadProgress = useAppStore(state => state.getDownloadProgress);
+    const resetDownloads = useAppStore(state => state.resetDownloads);
+
+    return React.useMemo(() => ({
+        activeDownloads,
+        downloadedItems,
+        initialized,
+        isLoading,
+        initializeDownloads,
+        startDownload,
+        updateDownloadProgress,
+        completeDownload,
+        removeActiveDownload,
+        deleteDownload,
+        isItemDownloaded,
+        getDownloadProgress,
+        resetDownloads,
+    }), [
+        activeDownloads,
+        downloadedItems,
+        initialized,
+        isLoading,
+        initializeDownloads,
+        startDownload,
+        updateDownloadProgress,
+        completeDownload,
+        removeActiveDownload,
+        deleteDownload,
+        isItemDownloaded,
+        getDownloadProgress,
+        resetDownloads,
+    ]);
+}
+
+/**
+ * Hook to use the statistics slice
+ *
+ * @example
+ * ```tsx
+ * function StatsComponent() {
+ *   const { counts, refreshStatistics } = useStatistics();
+ *
+ *   // Use the store state and actions...
+ * }
+ * ```
+ */
+export function useStatistics() {
+    const counts = useAppStore(state => state.statistics.counts);
+    const storageStats = useAppStore(state => state.statistics.storageStats);
+    const lastUpdated = useAppStore(state => state.statistics.lastUpdated);
+    const isLoading = useAppStore(state => state.statistics.isLoading);
+    const initialized = useAppStore(state => state.statistics.initialized);
+
+    // Actions
+    const refreshStatistics = useAppStore(state => state.refreshStatistics);
+    const refreshStorageStats = useAppStore(state => state.refreshStorageStats);
+    const invalidateCache = useAppStore(state => state.invalidateCache);
+    const isCacheValid = useAppStore(state => state.isCacheValid);
+    const resetStatistics = useAppStore(state => state.resetStatistics);
+
+    return React.useMemo(() => ({
+        counts,
+        storageStats,
+        lastUpdated,
+        isLoading,
+        initialized,
+        refreshStatistics,
+        refreshStorageStats,
+        invalidateCache,
+        isCacheValid,
+        resetStatistics,
+    }), [
+        counts,
+        storageStats,
+        lastUpdated,
+        isLoading,
+        initialized,
+        refreshStatistics,
+        refreshStorageStats,
+        invalidateCache,
+        isCacheValid,
+        resetStatistics,
+    ]);
+}
+
+/**
+ * Hook to initialize the home store
+ */
+export function useHomeStoreInitializer(userId: string | null) {
+    const initializeHome = useAppStore(state => state.initializeHome);
+    const initialized = useAppStore(state => state.home.initialized);
+
+    React.useEffect(() => {
+        if (userId && !initialized) {
+            initializeHome(userId).catch(error => {
+                console.error('[useHomeStoreInitializer] Failed to initialize home', error);
+            });
+        }
+    }, [initializeHome, initialized, userId]);
+}
+
+/**
+ * Hook to initialize the settings store
+ */
+export function useSettingsStoreInitializer() {
+    const initializeSettings = useAppStore(state => state.initializeSettings);
+    const initialized = useAppStore(state => state.settings.initialized);
+
+    React.useEffect(() => {
+        if (!initialized) {
+            initializeSettings().catch(error => {
+                console.error('[useSettingsStoreInitializer] Failed to initialize settings', error);
+            });
+        }
+    }, [initializeSettings, initialized]);
+}
+
+/**
+ * Hook to initialize the user profile store
+ */
+export function useUserProfileStoreInitializer(username: string | null) {
+    const initializeUserProfile = useAppStore(state => state.initializeUserProfile);
+    const initialized = useAppStore(state => state.userProfile.initialized);
+
+    React.useEffect(() => {
+        if (username && !initialized) {
+            initializeUserProfile(username).catch(error => {
+                console.error('[useUserProfileStoreInitializer] Failed to initialize user profile', error);
+            });
+        }
+    }, [initializeUserProfile, initialized, username]);
+}
+
+/**
+ * Hook to initialize the downloads store
+ */
+export function useDownloadsStoreInitializer() {
+    const initializeDownloads = useAppStore(state => state.initializeDownloads);
+    const initialized = useAppStore(state => state.downloads.initialized);
+
+    React.useEffect(() => {
+        if (!initialized) {
+            initializeDownloads().catch(error => {
+                console.error('[useDownloadsStoreInitializer] Failed to initialize downloads', error);
+            });
+        }
+    }, [initializeDownloads, initialized]);
 }
 
 /**

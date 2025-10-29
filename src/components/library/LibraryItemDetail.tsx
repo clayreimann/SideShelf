@@ -5,34 +5,16 @@ import { AuthorIcon, DownloadButton, NarratorIcon, SeriesIcon } from "@/componen
 import ChapterList from "@/components/library/LibraryItemDetail/ChapterList";
 import DownloadProgressView from "@/components/library/LibraryItemDetail/DownloadProgressView";
 import { CollapsibleSection, ProgressBar } from "@/components/ui";
-import { ChapterRow, getChaptersForMedia } from "@/db/helpers/chapters";
-import {
-  AudioFileWithDownloadInfo,
-  getAudioFilesWithDownloadInfo,
-} from "@/db/helpers/combinedQueries";
-import { processFullLibraryItems } from "@/db/helpers/fullLibraryItems";
-import { getLibraryItemById } from "@/db/helpers/libraryItems";
-import { getMediaGenres, getMediaTags } from "@/db/helpers/mediaJoins";
-import {
-  cacheCoverAndUpdateMetadata,
-  getMediaMetadataByLibraryItemId,
-} from "@/db/helpers/mediaMetadata";
-import {
-  getMediaProgressForLibraryItem,
-  MediaProgressRow,
-} from "@/db/helpers/mediaProgress";
+import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
-import { MediaMetadataRow } from "@/db/schema/mediaMetadata";
-import { fetchLibraryItemsBatch } from "@/lib/api/endpoints";
 import { getCoverUri } from "@/lib/covers";
 import { useAuth } from "@/providers/AuthProvider";
-import { DownloadProgress, downloadService } from "@/services/DownloadService";
+import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { unifiedProgressService } from "@/services/ProgressService";
-import { usePlayer } from "@/stores/appStore";
-import type { NewLibraryItemRow } from "@/types/database";
+import { useDownloads, useLibraryItemDetails, usePlayer } from "@/stores";
 import { Stack } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -96,20 +78,29 @@ export default function LibraryItemDetail({
   const { username, serverUrl, accessToken } = useAuth();
   const { currentTrack, position, isPlaying, isLoadingTrack } = usePlayer();
 
-  const [loading, setLoading] = useState(true);
-  const [item, setItem] = useState<NewLibraryItemRow | null>(null);
-  const [metadata, setMetadata] = useState<MediaMetadataRow | null>(null);
-  const [genres, setGenres] = useState<string[]>([]);
-  const [tags, setTags] = useState<string[]>([]);
-  const [progress, setProgress] = useState<MediaProgressRow | null>(null);
-  const [chapters, setChapters] = useState<ChapterRow[]>([]);
-  const [audioFiles, setAudioFiles] = useState<AudioFileWithDownloadInfo[]>([]);
+  // Get store hooks
+  const { fetchItemDetails, getCachedItem, updateItemProgress, loading: itemLoading } = useLibraryItemDetails();
+  const { activeDownloads, isItemDownloaded, startDownload, deleteDownload } = useDownloads();
 
-  // Download states
-  const [isDownloaded, setIsDownloaded] = useState(false);
-  const [downloadProgress, setDownloadProgress] =
-    useState<DownloadProgress | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  // Get cached item data or null
+  const cachedData = useMemo(() => getCachedItem(itemId), [itemId, getCachedItem]);
+
+  // Derive all data from cached data
+  const item = cachedData?.item || null;
+  const metadata = cachedData?.metadata || null;
+  const genres = cachedData?.genres || [];
+  const tags = cachedData?.tags || [];
+  const chapters = cachedData?.chapters || [];
+  const audioFiles = cachedData?.audioFiles || [];
+  const progress = cachedData?.progress || null;
+
+  // Check if item is currently loading
+  const loading = itemLoading[itemId] === true && !cachedData;
+
+  // Download state from store
+  const downloadProgress = activeDownloads[itemId] || null;
+  const isDownloading = !!downloadProgress;
+  const isDownloaded = isItemDownloaded(itemId);
 
   const htmlSource = useMemo(
     () => ({ html: metadata?.description ?? "" }),
@@ -120,77 +111,44 @@ export default function LibraryItemDetail({
     [colors]
   );
 
-  // Main data fetching effect
+  // Fetch item details from store
   useEffect(() => {
-    let isMounted = true;
+    const loadItemDetails = async () => {
+      if (!itemId) return;
 
-    const fetchBasicData = async () => {
-      setLoading(true);
       try {
-        const itemRow = await getLibraryItemById(itemId);
-        const meta = itemRow
-          ? await getMediaMetadataByLibraryItemId(itemRow.id)
-          : null;
-        const genres = meta ? await getMediaGenres(meta.id) : [];
-        const tags = meta ? await getMediaTags(meta.id) : [];
+        // Get user ID for progress fetching
+        const user = username ? await getUserByUsername(username) : null;
+        const userId = user?.id;
 
-        // Get chapters and audio files if metadata exists
-        const chaptersData = meta ? await getChaptersForMedia(meta.id) : [];
-        const audioFilesData = meta
-          ? await getAudioFilesWithDownloadInfo(meta.id)
-          : [];
+        // Fetch item details (uses cache if available)
+        await fetchItemDetails(itemId, userId);
 
-        // Ensure DownloadService is initialized before checking status
-        await downloadService.initialize();
-
-        // Check download status
-        const downloadedStatus = itemRow
-          ? await downloadService.isLibraryItemDownloaded(itemRow.id)
-          : false;
-        const isActiveDownload = itemRow
-          ? downloadService.isDownloadActive(itemRow.id)
-          : false;
-
-        if (isMounted) {
-          setItem(itemRow);
-          setMetadata(meta);
-          setGenres(genres);
-          setTags(tags);
-          setChapters(chaptersData);
-          setAudioFiles(audioFilesData);
-          setIsDownloaded(downloadedStatus);
-          setIsDownloading(isActiveDownload);
-
-          // Notify parent of title change for header
-          const title = meta?.title || "Unknown Title";
+        // Notify parent of title change for header
+        const currentData = getCachedItem(itemId);
+        if (currentData?.metadata) {
+          const title = currentData.metadata.title || "Unknown Title";
           onTitleChange?.(title);
         }
-      } catch (e) {
-        console.error("[LibraryItemDetail] Error fetching item data:", e);
-        if (isMounted) {
-          setItem(null);
-          setMetadata(null);
-          setGenres([]);
-          setTags([]);
-          setChapters([]);
-          setAudioFiles([]);
-          onTitleChange?.("Item not found");
-        }
-      } finally {
-        if (isMounted) setLoading(false);
+      } catch (error) {
+        console.error("[LibraryItemDetail] Error fetching item details:", error);
+        onTitleChange?.("Item not found");
       }
     };
 
-    if (itemId) fetchBasicData();
-    return () => {
-      isMounted = false;
-    };
-  }, [itemId, onTitleChange]);
+    loadItemDetails();
+  }, [itemId, username, fetchItemDetails, getCachedItem, onTitleChange]);
 
-  // User progress fetching effect
+  // Update title when metadata changes
   useEffect(() => {
-    let isMounted = true;
+    if (metadata) {
+      const title = metadata.title || "Unknown Title";
+      onTitleChange?.(title);
+    }
+  }, [metadata, onTitleChange]);
 
+  // User progress fetching effect - update store with latest progress
+  useEffect(() => {
     const fetchUserProgress = async () => {
       if (!username || !item) return;
 
@@ -205,9 +163,8 @@ export default function LibraryItemDetail({
             item.id,
             user.id
           );
-          if (isMounted) {
-            setProgress(progressData);
-          }
+          // Update progress in store (will trigger re-render via store subscription)
+          updateItemProgress(itemId, progressData);
         }
       } catch (error) {
         console.error(
@@ -218,10 +175,7 @@ export default function LibraryItemDetail({
     };
 
     fetchUserProgress();
-    return () => {
-      isMounted = false;
-    };
-  }, [username, item?.id]);
+  }, [username, item?.id, itemId, updateItemProgress]);
 
   // Compute effective progress: use live player position if this item is playing,
   // otherwise use stored progress
@@ -244,218 +198,24 @@ export default function LibraryItemDetail({
     return progress;
   }, [progress, item?.id, currentTrack?.libraryItemId, position]);
 
-  // Background data enhancement effect
-  useEffect(() => {
-    let isMounted = true;
+  // Background enhancement is handled by the store automatically
+  // Download subscriptions are handled by the store automatically
 
-    const enhanceData = async () => {
-      if (!item) return;
-
-      try {
-        // Cache cover in background
-        const wasDownloaded = await cacheCoverAndUpdateMetadata(item.id);
-        if (wasDownloaded && isMounted) {
-          console.log(
-            "Cover was downloaded for item detail, refreshing metadata"
-          );
-          const updatedMeta = await getMediaMetadataByLibraryItemId(item.id);
-          if (isMounted && updatedMeta) {
-            setMetadata(updatedMeta);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to cache cover for item detail:", error);
-      }
-
-      try {
-        // Fetch full item data in background to ensure all relations are populated
-        const libraryItems = await fetchLibraryItemsBatch([item.id]);
-        if (libraryItems.length > 0 && isMounted) {
-          console.log(
-            "[LibraryItemDetail] Fetched full item data, processing..."
-          );
-          await processFullLibraryItems(libraryItems);
-          console.log("[LibraryItemDetail] Full item data processed");
-
-          // Refresh the data after processing
-          if (metadata && isMounted) {
-            const [newChapters, newAudioFiles] = await Promise.all([
-              getChaptersForMedia(metadata.id),
-              getAudioFilesWithDownloadInfo(metadata.id),
-            ]);
-
-            if (isMounted) {
-              setChapters(newChapters);
-              setAudioFiles(newAudioFiles);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("[LibraryItemDetail] Error enhancing data:", error);
-      }
-    };
-
-    enhanceData();
-    return () => {
-      isMounted = false;
-    };
-  }, [item?.id, metadata?.id]);
-
-  // Manage download progress subscription
-  useEffect(() => {
-    if (!item) return;
-
-    let unsubscribe: (() => void) | undefined;
-    let isMounted = true;
-
-    const setupSubscription = async () => {
-      try {
-        // Ensure service is initialized before subscribing
-        await downloadService.initialize();
-
-        if (!isMounted) return; // Component unmounted during initialization
-
-        // Subscribe to progress updates
-        unsubscribe = downloadService.subscribeToProgress(
-          item.id,
-          (progress) => {
-            console.log(
-              "[LibraryItemDetail] Progress update received:",
-              progress
-            );
-            setDownloadProgress(progress);
-
-            // Update download state based on progress
-            if (progress.status === "completed") {
-              setIsDownloading(false);
-              setIsDownloaded(true);
-              setDownloadProgress(null);
-            } else if (
-              progress.status === "error" ||
-              progress.status === "cancelled"
-            ) {
-              setIsDownloading(false);
-              setDownloadProgress(null);
-            } else {
-              setIsDownloading(true);
-            }
-          }
-        );
-
-        // Check if download is currently active
-        const isActive = downloadService.isDownloadActive(item.id);
-        if (isMounted) {
-          setIsDownloading(isActive);
-
-          // If there's an active download, get current progress
-          if (isActive) {
-            const currentProgress = downloadService.getCurrentProgress(item.id);
-            if (currentProgress) {
-              setDownloadProgress(currentProgress);
-            }
-          }
-        }
-      } catch (error) {
-        console.error(
-          "[LibraryItemDetail] Error setting up download subscription:",
-          error
-        );
-      }
-    };
-
-    setupSubscription();
-
-    return () => {
-      isMounted = false;
-      unsubscribe?.();
-    };
-  }, [item?.id]);
-
-  // Download handlers
+  // Download handlers - use store actions
   const handleDownload = useCallback(async () => {
     if (!item || !serverUrl || !accessToken || isDownloading) return;
 
     try {
-      // Check if download is already active before attempting to start
-      await downloadService.initialize();
-      if (downloadService.isDownloadActive(item.id)) {
-        console.log(
-          "[LibraryItemDetail] Download already active, subscribing to progress"
-        );
-        setIsDownloading(true);
-        const currentProgress = downloadService.getCurrentProgress(item.id);
-        if (currentProgress) {
-          setDownloadProgress(currentProgress);
-        }
-        return;
-      }
-
-      // Set downloading state immediately to show UI feedback
-      setIsDownloading(true);
-
-      // Start download with a callback to ensure immediate progress updates
-      await downloadService.startDownload(
-        item.id,
-        serverUrl,
-        accessToken,
-        (progress) => {
-          console.log(
-            "[LibraryItemDetail] Direct progress callback:",
-            progress
-          );
-          setDownloadProgress(progress);
-
-          // Update download state based on progress
-          if (progress.status === "completed") {
-            setIsDownloading(false);
-            setIsDownloaded(true);
-            setDownloadProgress(null);
-          } else if (
-            progress.status === "error" ||
-            progress.status === "cancelled"
-          ) {
-            setIsDownloading(false);
-            setDownloadProgress(null);
-          } else {
-            setIsDownloading(true);
-          }
-        }
-      );
-
-      // The progress subscription will handle state updates
-      // Refresh audio files to show download status when completed
-      if (metadata) {
-        const updatedAudioFiles = await getAudioFilesWithDownloadInfo(
-          metadata.id
-        );
-        setAudioFiles(updatedAudioFiles);
-      }
+      await startDownload(item.id, serverUrl, accessToken);
     } catch (error) {
       console.error("[LibraryItemDetail] Download failed:", error);
-
-      // Handle the specific case where download is already in progress
-      if (
-        error instanceof Error &&
-        error.message.includes("Download already in progress")
-      ) {
-        console.log(
-          "[LibraryItemDetail] Download already in progress, updating UI state"
-        );
-        setIsDownloading(true);
-        const currentProgress = downloadService.getCurrentProgress(item.id);
-        if (currentProgress) {
-          setDownloadProgress(currentProgress);
-        }
-      } else {
-        Alert.alert(
-          "Download Failed",
-          `Failed to download library item: ${error}`,
-          [{ text: "OK" }]
-        );
-        setIsDownloading(false);
-      }
+      Alert.alert(
+        "Download Failed",
+        `Failed to download library item: ${error}`,
+        [{ text: "OK" }]
+      );
     }
-  }, [item, serverUrl, accessToken, isDownloading, metadata]);
+  }, [item, serverUrl, accessToken, isDownloading, startDownload]);
 
   const handleDeleteDownload = useCallback(async () => {
     if (!item) return;
@@ -470,16 +230,7 @@ export default function LibraryItemDetail({
           style: "destructive",
           onPress: async () => {
             try {
-              await downloadService.deleteDownloadedLibraryItem(item.id);
-              setIsDownloaded(false);
-
-              // Refresh audio files to show download status
-              if (metadata) {
-                const updatedAudioFiles = await getAudioFilesWithDownloadInfo(
-                  metadata.id
-                );
-                setAudioFiles(updatedAudioFiles);
-              }
+              await deleteDownload(item.id);
             } catch (error) {
               console.error(
                 "[LibraryItemDetail] Delete download failed:",
@@ -495,7 +246,7 @@ export default function LibraryItemDetail({
         },
       ]
     );
-  }, [item, metadata]);
+  }, [item, deleteDownload]);
 
   const handleCancelDownload = useCallback(() => {
     if (!item) return;

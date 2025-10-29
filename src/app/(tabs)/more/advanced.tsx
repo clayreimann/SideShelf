@@ -1,10 +1,9 @@
 import { db } from '@/db/client';
-import { statisticsHelpers } from '@/db/helpers';
 import {
-  clearAllLocalCovers,
-  getAllDownloadedAudioFiles,
-  getAllDownloadedLibraryFiles,
-  getAllLocalCovers,
+    clearAllLocalCovers,
+    getAllDownloadedAudioFiles,
+    getAllDownloadedLibraryFiles,
+    getAllLocalCovers,
 } from '@/db/helpers/localData';
 import { audioFiles } from '@/db/schema/audioFiles';
 import { libraryFiles } from '@/db/schema/libraryFiles';
@@ -14,7 +13,7 @@ import { formatBytes } from '@/lib/helpers/formatters';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { useDb } from '@/providers/DbProvider';
-import { useLibrary } from '@/stores';
+import { type StorageEntry, useLibrary, useStatistics } from '@/stores';
 import { inArray } from 'drizzle-orm';
 import * as Clipboard from 'expo-clipboard';
 import { Directory, File, Paths } from 'expo-file-system';
@@ -38,13 +37,6 @@ type ActionItem = {
 };
 
 type StorageBucketStats = {
-  count: number;
-  size: number;
-};
-
-type StorageEntry = {
-  id: string;
-  title: string;
   count: number;
   size: number;
 };
@@ -145,21 +137,7 @@ export default function AdvancedScreen() {
   const { accessToken, logout } = useAuth();
   const { refresh, selectedLibrary, libraries } = useLibrary();
   const { resetDatabase } = useDb();
-  const [counts, setCounts] = useState<{
-    authors: number;
-    genres: number;
-    languages: number;
-    narrators: number;
-    series: number;
-    tags: number;
-  }>({
-    authors: 0,
-    genres: 0,
-    languages: 0,
-    narrators: 0,
-    series: 0,
-    tags: 0,
-  });
+  const { counts, refreshStatistics, refreshStorageStats: updateStorageStatsInStore } = useStatistics();
 
   const [storageEntries, setStorageEntries] = useState<StorageEntry[]>([]);
 
@@ -187,12 +165,11 @@ export default function AdvancedScreen() {
 
   const refreshCounts = useCallback(async () => {
     try {
-      const newCounts = await statisticsHelpers.getAllCounts();
-      setCounts(newCounts);
+      await refreshStatistics();
     } catch (error) {
       console.error('Failed to fetch counts:', error);
     }
-  }, []);
+  }, [refreshStatistics]);
 
   const refreshTrackPlayerState = useCallback(async () => {
     try {
@@ -441,12 +418,16 @@ export default function AdvancedScreen() {
 
       entries.unshift(totalEntry);
 
-      setStorageEntries([...entries, ...downloadEntries]);
+      const allEntries = [...entries, ...downloadEntries];
+      setStorageEntries(allEntries);
+
+      // Update storage stats in the store
+      updateStorageStatsInStore(allEntries);
     } catch (error) {
       console.error('Failed to refresh storage stats:', error);
       setStorageEntries([]);
     }
-  }, []);
+  }, [updateStorageStatsInStore]);
 
   const handleRefreshAll = useCallback(async () => {
     await Promise.all([refreshCounts(), refreshStorageStats(), refreshTrackPlayerState()]);
