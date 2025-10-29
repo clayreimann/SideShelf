@@ -66,11 +66,8 @@ export class PlayerService {
   private initializationTimestamp = 0;
   private listenersSetup = false;
   private eventSubscriptions: Array<{ remove: () => void }> = [];
-  private currentTrack: PlayerTrack | null = null;
-  private currentUsername: string | null = null;
   private cachedApiInfo: { baseUrl: string; accessToken: string } | null = null;
-  private currentPlaySessionId: string | null = null; // Track the current server session ID
-  private lastPauseTime: number | null = null; // Track when playback was paused (for smart rewind)
+  // Removed: currentTrack, currentUsername, currentPlaySessionId, lastPauseTime (now in playerSlice)
 
   private constructor() {}
 
@@ -229,7 +226,8 @@ export class PlayerService {
       }
 
       // Check if already playing this item - if so, just resume
-      if (this.currentTrack?.libraryItemId === libraryItemId) {
+      const store = useAppStore.getState();
+      if (store.player.currentTrack?.libraryItemId === libraryItemId) {
         const state = await TrackPlayer.getPlaybackState();
         const queue = await TrackPlayer.getQueue();
 
@@ -329,12 +327,7 @@ export class PlayerService {
         throw new Error(errorMessage);
       }
 
-      // Store current track and username for session tracking
-      this.currentTrack = track;
-      this.currentUsername = username;
-
       // Update store with new track (this also sets loading state)
-      const store = useAppStore.getState();
       store._setCurrentTrack(track);
       store._setTrackLoading(true);
 
@@ -419,8 +412,10 @@ export class PlayerService {
    * Pause playback
    */
   async pause(): Promise<void> {
-    this.lastPauseTime = Date.now();
-    log.info(`Pausing playback at ${new Date(this.lastPauseTime).toISOString()}`);
+    const store = useAppStore.getState();
+    const pauseTime = Date.now();
+    store._setLastPauseTime(pauseTime);
+    log.info(`Pausing playback at ${new Date(pauseTime).toISOString()}`);
     await TrackPlayer.pause();
   }
 
@@ -428,9 +423,11 @@ export class PlayerService {
    * Resume playback with optional smart rewind
    */
   async play(): Promise<void> {
+    const store = useAppStore.getState();
+
     // If currentTrack is null but we should have one (e.g., streaming media not restored),
     // try to rebuild it before playing
-    if (!this.currentTrack) {
+    if (!store.player.currentTrack) {
       await this.rebuildCurrentTrackIfNeeded();
     }
 
@@ -442,7 +439,7 @@ export class PlayerService {
     }
 
     // Clear pause time since we're resuming
-    this.lastPauseTime = null;
+    store._setLastPauseTime(null);
     await TrackPlayer.play();
   }
 
@@ -452,44 +449,36 @@ export class PlayerService {
    */
   private async rebuildCurrentTrackIfNeeded(): Promise<void> {
     try {
-      // First, try to get libraryItemId from playerSlice
       const store = useAppStore.getState();
       const playerSliceTrack = store.player.currentTrack;
 
-      let libraryItemId: string | null = null;
-
       if (playerSliceTrack) {
-        libraryItemId = playerSliceTrack.libraryItemId;
-        log.info(`Rebuilding currentTrack from playerSlice for ${libraryItemId}`);
-
-        // Restore from playerSlice - it already has all the track info
-        this.currentTrack = playerSliceTrack;
+        log.info(`CurrentTrack already in playerSlice for ${playerSliceTrack.libraryItemId}`);
         return;
       }
 
-      // If playerSlice doesn't have it, try ProgressService session
-      const session = progressService.getCurrentSession();
-      if (session) {
-        libraryItemId = session.libraryItemId;
-        log.info(`Rebuilding currentTrack from ProgressService session for ${libraryItemId}`);
-
-        // We need to rebuild the full track - but for streaming, we might not have all files
-        // Try to get it from playerSlice first, or rebuild minimal version
-        if (!this.currentTrack && libraryItemId) {
-          // Try to restore from session (this will only work for downloaded media)
-          // For streaming, we need to rely on playTrack() being called or playerSlice having the track
-          log.info(`Cannot fully rebuild streaming track without playTrack() - currentTrack will remain null`);
-          // Don't throw - TrackPlayer can still play even if currentTrack is null
-        }
+      // If playerSlice doesn't have it, try to get from ProgressService DB session
+      // Need userId and libraryItemId to query DB
+      const username = await getItem(SECURE_KEYS.username);
+      if (!username) {
+        log.warn('No username found, cannot rebuild track from session');
+        return;
       }
 
-      // If we still don't have a track and TrackPlayer has tracks, log warning
-      if (!this.currentTrack) {
-        const queue = await TrackPlayer.getQueue();
-        if (queue.length > 0) {
-          log.warn(`TrackPlayer has tracks but currentTrack is null - some features may not work correctly`);
-        }
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        return;
       }
+
+      // Try to get libraryItemId from TrackPlayer
+      const queue = await TrackPlayer.getQueue();
+      if (queue.length === 0) {
+        return;
+      }
+
+      // Track IDs in queue are audioFile IDs, we need to get libraryItemId from elsewhere
+      // This is a fallback - ideally playerSlice should have the track
+      log.warn(`TrackPlayer has tracks but currentTrack not in playerSlice - some features may not work correctly`);
     } catch (error) {
       log.error('Failed to rebuild currentTrack', error as Error);
       // Don't throw - playback can still proceed
@@ -500,20 +489,26 @@ export class PlayerService {
    * Smart rewind
    */
   async smartRewind(): Promise<void> {
+    const store = useAppStore.getState();
     let lastPlayedTime: number | null = null;
 
-    // First, try to use the in-memory pause time from current session
-    if (this.lastPauseTime) {
-      lastPlayedTime = this.lastPauseTime;
+    // First, try to use the in-memory pause time from playerSlice
+    if (store.player.lastPauseTime) {
+      lastPlayedTime = store.player.lastPauseTime;
       log.info(`Using current session pause time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
-    } else if (this.currentTrack?.libraryItemId && this.currentUsername) {
+    } else if (store.player.currentTrack?.libraryItemId) {
       // Cold boot scenario - check the database for last played time
       try {
-        const user = await getUserByUsername(this.currentUsername);
+        const username = await getItem(SECURE_KEYS.username);
+        if (!username) {
+          return;
+        }
+
+        const user = await getUserByUsername(username);
         if (user?.id) {
-          const activeSession = await getActiveSession(user.id, this.currentTrack.libraryItemId);
+          const activeSession = await getActiveSession(user.id, store.player.currentTrack.libraryItemId);
           const savedProgress = await getMediaProgressForLibraryItem(
-            this.currentTrack.libraryItemId,
+            store.player.currentTrack.libraryItemId,
             user.id
           );
 
@@ -583,9 +578,9 @@ export class PlayerService {
     await TrackPlayer.stop();
     await TrackPlayer.reset();
 
-    this.currentTrack = null;
-    this.currentUsername = null;
-    this.clearPlaySessionId(); // Clear the session ID when stopping
+    const store = useAppStore.getState();
+    store._setCurrentTrack(null);
+    store._setPlaySessionId(null); // Clear the session ID when stopping
   }
 
   /**
@@ -633,7 +628,8 @@ export class PlayerService {
     if (needsStreaming) {
       try {
         playSession = await startPlaySession(playerTrack.libraryItemId);
-        this.currentPlaySessionId = playSession.id; // Store session ID for progress tracking
+        const store = useAppStore.getState();
+        store._setPlaySessionId(playSession.id); // Store session ID in playerSlice for progress tracking
         log.info(`Started play session: ${playSession.id}`);
         log.info(`Got streaming tracks: ${playSession.audioTracks.length}`);
 
@@ -736,28 +732,32 @@ export class PlayerService {
    * Get the current play session ID (for progress tracking)
    */
   getCurrentPlaySessionId(): string | null {
-    return this.currentPlaySessionId;
+    const store = useAppStore.getState();
+    return store.player.currentPlaySessionId;
   }
 
   /**
    * Clear the current play session ID
    */
   clearPlaySessionId(): void {
-    this.currentPlaySessionId = null;
+    const store = useAppStore.getState();
+    store._setPlaySessionId(null);
   }
 
   /**
    * Get the current track (for PlayerBackgroundService)
    */
   getCurrentTrack(): PlayerTrack | null {
-    return this.currentTrack;
+    const store = useAppStore.getState();
+    return store.player.currentTrack;
   }
 
   /**
    * Get the current library item ID (for session rehydration)
    */
   getCurrentLibraryItemId(): string | null {
-    return this.currentTrack?.libraryItemId || null;
+    const store = useAppStore.getState();
+    return store.player.currentTrack?.libraryItemId || null;
   }
 
   /**
@@ -769,12 +769,45 @@ export class PlayerService {
 
   /**
    * Restore PlayerService state from ProgressService session
-   * Repopulates currentTrack and currentUsername from database session
+   * Restores currentTrack to playerSlice from database session
    */
   async restorePlayerServiceFromSession(): Promise<void> {
     try {
-      const session = progressService.getCurrentSession();
+      const username = await getItem(SECURE_KEYS.username);
+      if (!username) {
+        log.info('No username found, skipping PlayerService restoration');
+        return;
+      }
 
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        log.info('User not found, skipping PlayerService restoration');
+        return;
+      }
+
+      // Get active session from DB - need to get libraryItemId first
+      // Try to get it from playerSlice, or query DB for most recent session
+      const store = useAppStore.getState();
+      let libraryItemId: string | null = store.player.currentTrack?.libraryItemId || null;
+
+      if (!libraryItemId) {
+        // Query DB for most recent active session
+        const { getAllActiveSessionsForUser } = await import('@/db/helpers/localListeningSessions');
+        const activeSessions = await getAllActiveSessionsForUser(user.id);
+        if (activeSessions.length > 0) {
+          const mostRecent = activeSessions.sort((a, b) =>
+            b.updatedAt.getTime() - a.updatedAt.getTime()
+          )[0];
+          libraryItemId = mostRecent.libraryItemId;
+        }
+      }
+
+      if (!libraryItemId) {
+        log.info('No active session found, skipping PlayerService restoration');
+        return;
+      }
+
+      const session = await progressService.getCurrentSession(user.id, libraryItemId);
       if (!session) {
         log.info('No active session found, skipping PlayerService restoration');
         return;
@@ -782,15 +815,7 @@ export class PlayerService {
 
       log.info(`Restoring PlayerService from session: ${session.libraryItemId}`);
 
-      // Restore username from secure store or session context
-      const username = await getItem(SECURE_KEYS.username);
-      if (username) {
-        this.currentUsername = username;
-      }
-
-      // Try to restore minimal track info - just enough to allow playTrack() to rebuild later
-      // Only load full track if we have downloaded files (works for downloaded media)
-      // For streaming media, playTrack() will rebuild the full track when called
+      // Try to restore track info - only load full track if we have downloaded files
       try {
         const libraryItem = await getLibraryItemById(session.libraryItemId);
         if (!libraryItem) {
@@ -811,7 +836,7 @@ export class PlayerService {
         );
 
         if (hasDownloadedFiles && audioFiles.length > 0) {
-          // For downloaded media, restore full track
+          // For downloaded media, restore full track to playerSlice
           const chapters = await getChaptersForMedia(metadata.id);
 
           const track: PlayerTrack = {
@@ -830,19 +855,14 @@ export class PlayerService {
             isDownloaded: true,
           };
 
-          this.currentTrack = track;
-          log.info(`Restored PlayerService track: ${track.title}`);
+          store._setCurrentTrack(track);
+          log.info(`Restored PlayerService track to playerSlice: ${track.title}`);
         } else {
           // For streaming media, we can't fully restore the track without opening a new play session
-          // The track will be rebuilt when:
-          // 1. User calls playTrack() - will rebuild fully with new play session
-          // 2. User calls play() - will restore from playerSlice if available (see rebuildCurrentTrackIfNeeded)
-          log.info(`Session is for streaming media - track will be rebuilt on playTrack() or restored from playerSlice on play()`);
-          // Don't set currentTrack here - it will be restored from playerSlice in play() if available
+          log.info(`Session is for streaming media - track will be rebuilt on playTrack()`);
         }
       } catch (error) {
         log.error('Failed to restore currentTrack from session', error as Error);
-        // Don't throw - username restoration is still useful
       }
     } catch (error) {
       log.error('Failed to restore PlayerService from session', error as Error);
@@ -932,29 +952,56 @@ export class PlayerService {
       const tpPosition = tpProgress.position;
       const tpIsPlaying = tpState.state === State.Playing;
 
-      // Get DB session as source of truth for position
-      const dbSession = progressService.getCurrentSession();
-      const dbPosition = dbSession?.currentTime ?? store.player.position;
+      // Get DB session as source of truth for position (if we have libraryItemId)
+      let dbPosition = store.player.position;
+      if (store.player.currentTrack?.libraryItemId) {
+        try {
+          const username = await getItem(SECURE_KEYS.username);
+          if (username) {
+            const user = await getUserByUsername(username);
+            if (user?.id) {
+              const dbSession = await progressService.getCurrentSession(user.id, store.player.currentTrack.libraryItemId);
+              if (dbSession) {
+                dbPosition = dbSession.currentTime;
+              }
+            }
+          }
+        } catch (error) {
+          log.error('Failed to get DB session for reconciliation', error as Error);
+        }
+      }
 
       // 1. Check track mismatch
       if (hasTracks && !store.player.currentTrack) {
         report.trackMismatch = true;
         report.discrepanciesFound = true;
-        // TrackPlayer has tracks but playerSlice doesn't - try to rehydrate
-        if (tpCurrentTrack && this.currentTrack) {
-          store._setCurrentTrack(this.currentTrack);
-          report.actionsTaken.push('Restored currentTrack from PlayerService');
-        } else if (dbSession) {
-          // Try to restore track from DB session
-          try {
-            const libraryItem = await getLibraryItemById(dbSession.libraryItemId);
-            if (libraryItem) {
-              // Can't fully restore PlayerTrack here without more data, but we can note it
-              report.actionsTaken.push(`Found DB session for ${dbSession.libraryItemId} but cannot restore track without metadata`);
+        // TrackPlayer has tracks but playerSlice doesn't - try to restore from DB
+        try {
+          const username = await getItem(SECURE_KEYS.username);
+          if (username) {
+            const user = await getUserByUsername(username);
+            if (user?.id) {
+              // Query DB for most recent active session
+              const { getAllActiveSessionsForUser } = await import('@/db/helpers/localListeningSessions');
+              const activeSessions = await getAllActiveSessionsForUser(user.id);
+              if (activeSessions.length > 0) {
+                const mostRecent = activeSessions.sort((a, b) =>
+                  b.updatedAt.getTime() - a.updatedAt.getTime()
+                )[0];
+                const dbSession = await progressService.getCurrentSession(user.id, mostRecent.libraryItemId);
+                if (dbSession) {
+                  // Try to restore track from DB session
+                  const libraryItem = await getLibraryItemById(dbSession.libraryItemId);
+                  if (libraryItem) {
+                    // Can't fully restore PlayerTrack here without more data, but we can note it
+                    report.actionsTaken.push(`Found DB session for ${dbSession.libraryItemId} but cannot restore track without metadata`);
+                  }
+                }
+              }
             }
-          } catch (error) {
-            log.error('Failed to load library item for reconciliation', error as Error);
           }
+        } catch (error) {
+          log.error('Failed to load library item for reconciliation', error as Error);
         }
       }
 

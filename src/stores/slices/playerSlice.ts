@@ -8,8 +8,9 @@
  * - Loading states
  */
 
-import { ASYNC_KEYS, getItem, saveItem } from '@/lib/asyncStore';
+import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from '@/lib/asyncStore';
 import { logger } from '@/lib/logger';
+import { getItem, SECURE_KEYS } from '@/lib/secureStore';
 import { progressService } from '@/services/ProgressService';
 import TrackPlayer from 'react-native-track-player';
 import type { CurrentChapter, PlayerTrack } from '@/types/player';
@@ -32,6 +33,10 @@ export interface PlayerSliceState {
     playbackRate: number;
     /** Volume (0.0 to 1.0) */
     volume: number;
+    /** Current play session ID (for streaming sessions) */
+    currentPlaySessionId: string | null;
+    /** Timestamp of last pause (for smart rewind) */
+    lastPauseTime: number | null;
     /** Whether the full-screen modal is visible */
     isModalVisible: boolean;
     /** Loading states */
@@ -80,6 +85,10 @@ export interface PlayerSliceActions {
   _setPlaybackRate: (rate: number) => void;
   /** Update volume in store */
   _setVolume: (volume: number) => void;
+  /** Set current play session ID (for streaming sessions) */
+  _setPlaySessionId: (sessionId: string | null) => void;
+  /** Set last pause time (for smart rewind) */
+  _setLastPauseTime: (timestamp: number | null) => void;
 }
 
 /**
@@ -98,7 +107,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     // Restore from AsyncStorage first
     if (!store.player.currentTrack) {
-      const track = await getItem(ASYNC_KEYS.currentTrack);
+      const track = await getAsyncItem(ASYNC_KEYS.currentTrack);
       if (track) {
         store._setCurrentTrack(track);
         log.info('Restored currentTrack from AsyncStorage');
@@ -106,30 +115,55 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         log.info('No currentTrack found in AsyncStorage');
       }
     }
-    const playbackRate = await getItem(ASYNC_KEYS.playbackRate);
+    const playbackRate = await getAsyncItem(ASYNC_KEYS.playbackRate);
     if (playbackRate !== null && playbackRate !== undefined) {
       store._setPlaybackRate(playbackRate);
       log.info('Restored playbackRate from AsyncStorage');
     }
-    const volume = await getItem(ASYNC_KEYS.volume);
+    const volume = await getAsyncItem(ASYNC_KEYS.volume);
     if (volume !== null && volume !== undefined) {
       store._setVolume(volume);
       log.info('Restored volume from AsyncStorage');
     }
-    const asyncStoragePosition = await getItem(ASYNC_KEYS.position);
+    const asyncStoragePosition = await getAsyncItem(ASYNC_KEYS.position);
     if (asyncStoragePosition !== null && asyncStoragePosition !== undefined) {
       store.updatePosition(asyncStoragePosition);
       log.info(`Restored position from AsyncStorage: ${asyncStoragePosition}s`);
     }
-    const isPlaying = await getItem(ASYNC_KEYS.isPlaying);
+    const isPlaying = await getAsyncItem(ASYNC_KEYS.isPlaying);
     if (isPlaying !== null && isPlaying !== undefined) {
       store.updatePlayingState(isPlaying);
       log.info('Restored isPlaying from AsyncStorage');
     }
+    const currentPlaySessionId = await getAsyncItem(ASYNC_KEYS.currentPlaySessionId);
+    if (currentPlaySessionId !== null && currentPlaySessionId !== undefined) {
+      store._setPlaySessionId(currentPlaySessionId);
+      log.info('Restored currentPlaySessionId from AsyncStorage');
+    }
 
     // Reconcile with ProgressService database (source of truth)
     try {
-      const dbSession = progressService.getCurrentSession();
+      // Need userId and libraryItemId to get session - skip if not available
+      const username = await getItem(SECURE_KEYS.username);
+      if (!username) {
+        log.info('No username found, skipping DB reconciliation');
+        return;
+      }
+
+      const { getUserByUsername } = await import('@/db/helpers/users');
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        log.info('User not found, skipping DB reconciliation');
+        return;
+      }
+
+      const libraryItemId = store.player.currentTrack?.libraryItemId;
+      if (!libraryItemId) {
+        log.info('No currentTrack found, skipping DB reconciliation');
+        return;
+      }
+
+      const dbSession = await progressService.getCurrentSession(user.id, libraryItemId);
 
       if (dbSession) {
         log.info(`Found active session in DB for ${dbSession.libraryItemId}, reconciling state`);
@@ -182,6 +216,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     currentChapter: null,
     playbackRate: 1.0,
     volume: 1.0,
+    currentPlaySessionId: null,
+    lastPauseTime: null,
     isModalVisible: false,
     loading: {
       isLoadingTrack: false,
@@ -335,5 +371,27 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     saveItem(ASYNC_KEYS.volume, clampedVolume);
+  },
+
+  _setPlaySessionId: (sessionId: string | null) => {
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        currentPlaySessionId: sessionId,
+      },
+    }));
+    saveItem(ASYNC_KEYS.currentPlaySessionId, sessionId);
+  },
+
+  _setLastPauseTime: (timestamp: number | null) => {
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        lastPauseTime: timestamp,
+      },
+    }));
+    // Note: lastPauseTime is not persisted - it's ephemeral state for smart rewind
   },
 });
