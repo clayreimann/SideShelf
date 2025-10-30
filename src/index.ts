@@ -16,6 +16,7 @@ import 'react-native-get-random-values';
 import { getFullVersionString, getPreviousVersion, hasAppBeenUpdated, saveCurrentVersion } from '@/lib/appVersion';
 import { logger } from '@/lib/logger';
 import { playerService } from '@/services/PlayerService';
+import { progressService } from '@/services/ProgressService';
 import { useAppStore } from '@/stores/appStore';
 import TrackPlayer from 'react-native-track-player';
 
@@ -70,6 +71,10 @@ export async function initializeApp(): Promise<void> {
     try {
       await useAppStore.getState().restorePersistedState();
       log.info('Player state restored from persistence');
+
+      // Rehydrate ProgressService session from database (explicit call, no longer in constructor)
+      await progressService.rehydrateActiveSession();
+      log.info('ProgressService session rehydrated');
 
       // Restore PlayerService state from ProgressService session
       await playerService.restorePlayerServiceFromSession();

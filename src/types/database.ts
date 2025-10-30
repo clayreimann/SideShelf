@@ -5,6 +5,7 @@
  * and used throughout the application for database operations.
  */
 
+import type { LibraryItemDisplayRow } from './components';
 import { audioFiles } from '@/db/schema/audioFiles';
 import { authors } from '@/db/schema/authors';
 import { chapters } from '@/db/schema/chapters';
@@ -68,6 +69,12 @@ export type NewMediaTagRow = typeof mediaTags.$inferInsert;
 export type NewMediaNarratorRow = typeof mediaNarrators.$inferInsert;
 
 // Specialized types for database operations
+
+/**
+ * Library item list row type alias for sorting operations
+ * This matches LibraryItemDisplayRow and includes all fields needed for sorting
+ */
+export type LibraryItemListRow = LibraryItemDisplayRow;
 
 /**
  * Home screen item interface for displaying items on the home screen

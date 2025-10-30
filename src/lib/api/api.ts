@@ -63,16 +63,20 @@ export async function apiFetch(
   }
 
   const method = (rest.method || "GET").toUpperCase();
+  const startTime = Date.now();
   log.info(`-> ${method} ${scrubUrl(url)}`);
   detailedLog.info(`-> ${method} ${scrubUrl(url)} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${rest.body}`);
 
   const res = await fetch(url, { ...rest, headers: headerObj });
-  log.info(`<- ${res.status} ${method} ${scrubUrl(url)} ${res.headers.get("content-type")} ${formatBytes(Number(res.headers.get("content-length")))}`);
-  detailedLog.info(`<- ${res.status} ${method} ${scrubUrl(url)} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()}`);
+  const endTime = Date.now();
+  const duration = endTime - startTime;
+  log.info(`<- ${res.status} ${method} ${scrubUrl(url)} ${res.headers.get("content-type")} ${formatBytes(Number(res.headers.get("content-length")))} [${duration}ms]`);
+  detailedLog.info(`<- ${res.status} ${method} ${scrubUrl(url)} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()} [${duration}ms]`);
   if (res.status === 401) {
     log.info("access token expired, refreshing token...");
     const success = await config?.refreshAccessToken();
     if (success) {
+      // Recursive call will have its own timing
       return await apiFetch(pathOrUrl, { ...init, headers: headerObj });
     }
   }

@@ -18,14 +18,14 @@ import {
 } from '@/db/helpers/libraries';
 import {
     getLibraryItemsForList,
-    marshalLibraryItemsFromResponse,
+    marshalLibraryItemFromApi,
     transformItemsToDisplayFormat,
     upsertLibraryItems
 } from '@/db/helpers/libraryItems';
-import { cacheCoversForLibraryItems, upsertBooksMetadata, upsertPodcastsMetadata } from '@/db/helpers/mediaMetadata';
-import { fetchLibraries, fetchLibraryItems } from '@/lib/api/endpoints';
+import { cacheCoversForLibraryItems } from '@/db/helpers/mediaMetadata';
+import { processFullLibraryItems } from '@/db/helpers/fullLibraryItems';
+import { fetchAllLibraryItems, fetchLibraries, fetchLibraryItemsBatch } from '@/lib/api/endpoints';
 import { logger } from '@/lib/logger';
-import type { ApiBook, ApiPodcast } from '@/types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LibraryItemDisplayRow } from '@/types/components';
@@ -481,73 +481,121 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         try {
             log.info(' Refreshing items for library:', selectedLibraryId, 'type:', selectedLibrary.mediaType);
 
-            // Fetch library items from API
-            const response = await fetchLibraryItems(selectedLibraryId);
-            const libraryItemRows = marshalLibraryItemsFromResponse(response);
+            // Step 1: Fetch all simple item details across all pages
+            log.info(' Fetching all library items (simple details)...');
+            const allItems = await fetchAllLibraryItems(selectedLibraryId);
+            log.info(` Fetched ${allItems.length} items from API`);
+
+            // Step 2: Upsert all library items to database
+            const libraryItemRows = allItems.map(marshalLibraryItemFromApi);
             await upsertLibraryItems(libraryItemRows);
+            log.info(' Upserted all library items to database');
 
-            // Process media metadata based on library type
-            if (selectedLibrary.mediaType === 'book') {
-                // Extract books from library items and process metadata
-                const books = response.results
-                    .filter(item => item.mediaType === 'book' && item.media)
-                    .map(item => ({ ...item.media, libraryItemId: item.id }) as ApiBook);
+            // Step 3: Get initial items from database for display (may have limited metadata)
+            const initialDbItems = await getLibraryItemsForList(selectedLibraryId);
+            const initialDisplayItems = transformItemsToDisplayFormat(initialDbItems);
 
-                if (books.length > 0) {
-                    log.info(' Processing book metadata for', books.length, 'books');
-                    await upsertBooksMetadata(books);
-                }
-            } else if (selectedLibrary.mediaType === 'podcast') {
-                // Extract podcasts from library items and process metadata
-                const podcasts = response.results
-                    .filter(item => item.mediaType === 'podcast' && item.media)
-                    .map(item => ({ ...item.media, libraryItemId: item.id }) as ApiPodcast);
-
-                if (podcasts.length > 0) {
-                    log.info(' Processing podcast metadata for', podcasts.length, 'podcasts');
-                    await upsertPodcastsMetadata(podcasts);
-                }
-            }
-
-            // Get the items from database with full metadata for display
-            const dbItems = await getLibraryItemsForList(selectedLibraryId);
-            const displayItems = transformItemsToDisplayFormat(dbItems);
-
+            // Update UI with initial items and clear loading state (refresh indicator goes away)
             set((state: LibrarySlice) => ({
                 ...state,
                 library: {
                     ...state.library,
-                    rawItems: displayItems,
-                    items: sortLibraryItems(displayItems, state.library.sortConfig)
+                    rawItems: initialDisplayItems,
+                    items: sortLibraryItems(initialDisplayItems, state.library.sortConfig),
+                    loading: { ...state.library.loading, isLoadingItems: false }
                 }
             }));
 
-            // Cache covers in the background (don't await to avoid blocking UI)
-            cacheCoversForLibraryItems(selectedLibraryId).then(async (result) => {
-                log.info(` Cover caching completed. Downloaded: ${result.downloadedCount}/${result.totalCount}`);
+            log.info(` Updated UI with ${initialDisplayItems.length} items (loading cleared, batch fetch starting in background)`);
 
-                // Always refresh the UI after cover caching to show cached covers
-                // This ensures that covers persist after refresh and get updated when newly cached
-                log.info(' Refreshing display with cached covers');
-                const updatedItems = await getLibraryItemsForList(selectedLibraryId)
-                const updatedDisplayItems = transformItemsToDisplayFormat(updatedItems);
-                log.info(` Refreshing display with ${updatedDisplayItems.length} items after cover caching ${updatedDisplayItems.filter(i => i.coverUri).length} with covers`);
+            // Step 4: Fetch full details in batches using batch endpoint (background, don't await)
+            const allItemIds = allItems.map(item => item.id);
+            log.info(` Starting background batch fetch for ${allItemIds.length} items`);
 
-                set((state: LibrarySlice) => ({
-                    ...state,
-                    library: {
-                        ...state.library,
-                        rawItems: updatedDisplayItems,
-                        items: sortLibraryItems(updatedDisplayItems, state.library.sortConfig)
+            // Process batches in background
+            (async () => {
+                try {
+                    const BATCH_SIZE = 50;
+                    let processedCount = 0;
+
+                    for (let i = 0; i < allItemIds.length; i += BATCH_SIZE) {
+                        const batch = allItemIds.slice(i, i + BATCH_SIZE);
+                        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+                        const totalBatches = Math.ceil(allItemIds.length / BATCH_SIZE);
+
+                        log.info(` [Background] Fetching batch ${batchNumber}/${totalBatches} (${batch.length} items)...`);
+                        const fullItems = await fetchLibraryItemsBatch(batch);
+                        log.info(` [Background] Processing batch ${batchNumber}/${totalBatches} (${fullItems.length} items)...`);
+
+                        await processFullLibraryItems(fullItems);
+                        processedCount += fullItems.length;
+
+                        log.info(` [Background] Completed batch ${batchNumber}/${totalBatches} (${processedCount}/${allItemIds.length} items processed)`);
+
+                        // Update UI after each batch to show progress
+                        const updatedDbItems = await getLibraryItemsForList(selectedLibraryId);
+                        const updatedDisplayItems = transformItemsToDisplayFormat(updatedDbItems);
+
+                        set((state: LibrarySlice) => ({
+                            ...state,
+                            library: {
+                                ...state.library,
+                                rawItems: updatedDisplayItems,
+                                items: sortLibraryItems(updatedDisplayItems, state.library.sortConfig)
+                            }
+                        }));
+
+                        // Small delay between batches to keep UI responsive
+                        if (i + BATCH_SIZE < allItemIds.length) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                        }
                     }
-                }));
-            }).catch(error => {
-                log.error(' Cover caching failed:', error);
-            });
+
+                    log.info(` [Background] Finished processing all ${processedCount} items with full details`);
+
+                    // Final UI update after all batches complete
+                    const finalDbItems = await getLibraryItemsForList(selectedLibraryId);
+                    const finalDisplayItems = transformItemsToDisplayFormat(finalDbItems);
+
+                    set((state: LibrarySlice) => ({
+                        ...state,
+                        library: {
+                            ...state.library,
+                            rawItems: finalDisplayItems,
+                            items: sortLibraryItems(finalDisplayItems, state.library.sortConfig)
+                        }
+                    }));
+
+                    // Start cover caching after batch fetch completes
+                    log.info(' [Background] Starting cover caching...');
+                    cacheCoversForLibraryItems(selectedLibraryId).then(async (result) => {
+                        log.info(` [Background] Cover caching completed. Downloaded: ${result.downloadedCount}/${result.totalCount}`);
+
+                        // Refresh the UI after cover caching to show cached covers
+                        log.info(' [Background] Refreshing display with cached covers');
+                        const updatedItems = await getLibraryItemsForList(selectedLibraryId);
+                        const updatedDisplayItems = transformItemsToDisplayFormat(updatedItems);
+                        log.info(` [Background] Refreshing display with ${updatedDisplayItems.length} items after cover caching ${updatedDisplayItems.filter(i => i.coverUri).length} with covers`);
+
+                        set((state: LibrarySlice) => ({
+                            ...state,
+                            library: {
+                                ...state.library,
+                                rawItems: updatedDisplayItems,
+                                items: sortLibraryItems(updatedDisplayItems, state.library.sortConfig)
+                            }
+                        }));
+                    }).catch(error => {
+                        log.error(' [Background] Cover caching failed:', error);
+                    });
+                } catch (error) {
+                    log.error(' [Background] Batch fetch failed:', error);
+                }
+            })();
 
         } catch (error) {
             log.error(' Failed to refresh items:', error);
-        } finally {
+            // Make sure loading state is cleared even on error
             set((state: LibrarySlice) => ({
                 ...state,
                 library: {

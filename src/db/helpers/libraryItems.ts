@@ -6,9 +6,10 @@ import { resolveAppPath } from '@/lib/fileSystem';
 import type { ApiLibraryItem, ApiLibraryItemsResponse } from '@/types/api';
 import type { LibraryItemDisplayRow } from '@/types/components';
 import type { LibraryItemRow, NewLibraryItemRow } from '@/types/database';
-import { and, eq, inArray, not } from 'drizzle-orm';
+import { and, eq, inArray, not, sql } from 'drizzle-orm';
 import { audioFiles } from '../schema/audioFiles';
-import { mediaAuthors } from '../schema/mediaJoins';
+import { mediaAuthors, mediaNarrators, mediaSeries } from '../schema/mediaJoins';
+import { series } from '../schema/series';
 
 // Marshal a single ApiLibraryItem from API to database row
 export function marshalLibraryItemFromApi(item: ApiLibraryItem): NewLibraryItemRow {
@@ -199,6 +200,27 @@ export async function getLibraryItemsForList(libraryId: string): Promise<{
   explicit: boolean;
   seriesName: string;
 }[]> {
+  // Subquery to aggregate narrators
+  const narratorsSubquery = db
+    .select({
+      mediaId: mediaNarrators.mediaId,
+      narratorNames: sql<string | null>`GROUP_CONCAT(${mediaNarrators.narratorName}, ', ')`.as('narrator_names'),
+    })
+    .from(mediaNarrators)
+    .groupBy(mediaNarrators.mediaId)
+    .as('narrators_agg');
+
+  // Subquery to aggregate series names
+  const seriesSubquery = db
+    .select({
+      mediaId: mediaSeries.mediaId,
+      seriesNames: sql<string | null>`GROUP_CONCAT(${series.name}, ', ')`.as('series_names'),
+    })
+    .from(mediaSeries)
+    .leftJoin(series, eq(mediaSeries.seriesId, series.id))
+    .groupBy(mediaSeries.mediaId)
+    .as('series_agg');
+
   const baseQuery = db
     .select({
       id: libraryItems.id,
@@ -214,7 +236,7 @@ export async function getLibraryItemsForList(libraryId: string): Promise<{
       author: mediaMetadata.author, // For podcasts
       authorName: mediaMetadata.authorName, // For books
       authorNameLF: mediaMetadata.authorNameLF, // For sorting by author last name first
-      narrator: mediaMetadata.narratorName,
+      narrator: narratorsSubquery.narratorNames,
       releaseDate: mediaMetadata.publishedDate,
       publishedDate: mediaMetadata.publishedDate,
       publishedYear: mediaMetadata.publishedYear, // For sorting by published year
@@ -223,12 +245,14 @@ export async function getLibraryItemsForList(libraryId: string): Promise<{
       description: mediaMetadata.description,
       language: mediaMetadata.language,
       explicit: mediaMetadata.explicit,
-      seriesName: mediaMetadata.seriesName,
+      seriesName: seriesSubquery.seriesNames,
       mediaId: mediaMetadata.id,
     })
     .from(libraryItems)
     .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
-    .leftJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId));
+    .leftJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId))
+    .leftJoin(narratorsSubquery, eq(mediaMetadata.id, narratorsSubquery.mediaId))
+    .leftJoin(seriesSubquery, eq(mediaMetadata.id, seriesSubquery.mediaId));
 
   const rows = await baseQuery
     .where(eq(libraryItems.libraryId, libraryId))
@@ -249,6 +273,7 @@ export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof
     mediaType: item.mediaType,
     title: item.title || 'Unknown Title',
     author: item.author || item.authorName || 'Unknown ApiAuthor',
+    authorName: item.authorName || null,
     authorNameLF: item.authorNameLF,
     narrator: item.narrator || null,
     releaseDate: item.releaseDate || item.publishedDate || null,
@@ -256,5 +281,6 @@ export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof
     addedAt: item.addedAt,
     duration: item.duration || 0,
     coverUri: item.coverUri,
+    seriesName: item.seriesName || null,
   }));
 }

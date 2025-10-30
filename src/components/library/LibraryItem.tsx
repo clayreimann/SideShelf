@@ -4,6 +4,8 @@ import { LibraryItemDisplayRow } from "@/types/components";
 import { Link } from "expo-router";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
+import AuthorIcon from "../icons/AuthorIcon";
+import NarratorIcon from "../icons/NarratorIcon";
 interface LibraryItemProps {
   item: LibraryItemDisplayRow;
   variant?: "grid" | "list";
@@ -33,7 +35,7 @@ export function GridItem({ item }: { item: LibraryItemDisplayRow }) {
 }
 
 export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
-  const { colors, isDark } = useThemedStyles();
+  const { colors } = useThemedStyles();
   return (
     <Link
       href={{ pathname: "/(tabs)/library/[item]", params: { item: item.id } }}
@@ -45,20 +47,15 @@ export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
           backgroundColor: colors.background,
           marginHorizontal: 12,
           marginBottom: 8,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.1,
-          shadowRadius: 2,
-          elevation: 2,
         }}
       >
         <View style={{ flexDirection: "row", width: "100%", padding: 8 }}>
           <View
             style={{
-              width: 60,
-              height: 60,
+              width: 70,
+              height: 70,
               borderRadius: 4,
-              backgroundColor: isDark ? "#333" : "#f0f0f0",
+              backgroundColor: colors.coverBackground,
               overflow: "hidden",
               marginRight: 12,
             }}
@@ -68,7 +65,7 @@ export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
           <View style={{ flex: 1, justifyContent: "center" }}>
             <Text
               style={{
-                color: isDark ? "#fff" : "#000",
+                color: colors.textPrimary,
                 fontSize: 16,
                 fontWeight: "600",
                 marginBottom: 4,
@@ -77,32 +74,73 @@ export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
             >
               {item.title}
             </Text>
-            <Text
-              style={{
-                color: isDark ? "#aaa" : "#666",
-                fontSize: 14,
-                marginBottom: 2,
-              }}
-              numberOfLines={1}
-            >
-              {item.author}
-            </Text>
-            {item.narrator && (
-              <Text
-                style={{
-                  color: isDark ? "#888" : "#888",
-                  fontSize: 12,
-                }}
-                numberOfLines={1}
-              >
-                Narrated by {item.narrator}
-              </Text>
-            )}
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={{ flexDirection: "column", flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <AuthorIcon style={{ marginRight: 4 }} />
+                  <Text
+                    style={{
+                      color: colors.textSecondary,
+                      fontSize: 12,
+                      marginBottom: 2,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {item.author}
+                  </Text>
+                </View>
+                {item.narrator && (
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <NarratorIcon style={{ marginRight: 4 }} />
+                    <Text
+                      style={{
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                        marginBottom: 2,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {item.narrator}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={{ flexDirection: "column", alignItems: "flex-end" }}>
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 12,
+                  }}
+                >
+                  {item.publishedYear}
+                </Text>
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 12,
+                  }}
+                >
+                  {item.duration && item.duration > 0
+                    ? formatDuration(item.duration)
+                    : ""}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
       </Pressable>
     </Link>
   );
+}
+
+function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
 }
 
 export default function ApiLibraryItem({

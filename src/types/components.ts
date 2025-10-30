@@ -24,6 +24,7 @@ export interface LibraryItemDisplayRow {
   mediaType: string | null;
   title: string | null;
   author: string | null;
+  authorName: string | null;
   authorNameLF: string | null;
   narrator: string | null;
   releaseDate: string | null;
@@ -31,6 +32,7 @@ export interface LibraryItemDisplayRow {
   addedAt: number | null;
   duration: number | null;
   coverUri: string | null;
+  seriesName: string | null;
 }
 
 export type ViewMode = 'grid' | 'list';

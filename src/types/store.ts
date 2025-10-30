@@ -8,7 +8,7 @@
 /**
  * Supported sort fields for library items
  */
-export type SortField = 'title' | 'author' | 'publishedYear' | 'addedAt';
+export type SortField = 'title' | 'authorName' | 'authorNameLF' | 'publishedYear' | 'addedAt';
 
 /**
  * Supported sort fields for authors

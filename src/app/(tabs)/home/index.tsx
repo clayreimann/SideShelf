@@ -1,14 +1,13 @@
 import Item from '@/components/home/Item';
-import { getItemsWithProgressNeedingFullRefresh, type HomeScreenItem } from '@/db/helpers/homeScreen';
+import type { HomeScreenItem } from '@/db/helpers/homeScreen';
 import { getUserByUsername } from '@/db/helpers/users';
 import { translate } from '@/i18n';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
-import { libraryItemBatchService } from '@/services/libraryItemBatchService';
 import { progressService } from '@/services/ProgressService';
 import { useHome, usePlayer } from '@/stores';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -76,16 +75,6 @@ export default function HomeScreen() {
 
           // Refresh home data (uses cache if still valid)
           await refreshHome(user.id);
-
-          // Process items with progress in the background
-          const itemsNeedingRefresh = await getItemsWithProgressNeedingFullRefresh(user.id);
-          if (itemsNeedingRefresh.length > 0) {
-            console.log(`[HomeScreen] Found ${itemsNeedingRefresh.length} items needing full refresh`);
-            libraryItemBatchService.processItemsWithProgress(user.id, itemsNeedingRefresh)
-              .catch((error: unknown) => {
-                console.error('[HomeScreen] Error processing items with progress:', error);
-              });
-          }
         } catch (error) {
           console.error('[HomeScreen] Error refreshing home data:', error);
           Alert.alert(
@@ -99,18 +88,6 @@ export default function HomeScreen() {
     }, [username, isAuthenticated, refreshHome])
   );
 
-  // Start background processing when component mounts
-  useEffect(() => {
-    const startBackgroundProcessing = async () => {
-      if (username && isAuthenticated) {
-        const user = await getUserByUsername(username);
-        if (user?.id) {
-          libraryItemBatchService.startBackgroundProcessing(user.id);
-        }
-      }
-    };
-    startBackgroundProcessing();
-  }, [username, isAuthenticated]);
 
   // Handle pull-to-refresh
   const onRefresh = useCallback(async () => {

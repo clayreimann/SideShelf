@@ -42,15 +42,27 @@ function compareByTitle(a: LibraryItemListRow, b: LibraryItemListRow, config: So
 }
 
 /**
- * Compare two library items by author (using authorNameLF for proper sorting)
+ * Compare two library items by author name (first name)
  */
-function compareByAuthor(a: LibraryItemListRow, b: LibraryItemListRow, config: SortConfig): number {
-    // Use authorNameLF for proper last name first sorting, fallback to author
-    const aValue = (a.authorNameLF || a.author)?.toLowerCase() || '';
-    const bValue = (b.authorNameLF || b.author)?.toLowerCase() || '';
+function compareByAuthorName(a: LibraryItemListRow, b: LibraryItemListRow, config: SortConfig): number {
+    const aValue = (a.authorName || a.author)?.toLowerCase() || '';
+    const bValue = (b.authorName || b.author)?.toLowerCase() || '';
     if (aValue < bValue) return -1;
     if (aValue > bValue) return 1;
-    return 0;
+    // Secondary sort by title when authors match
+    return compareByTitle(a, b, config);
+}
+
+/**
+ * Compare two library items by author name (last name first)
+ */
+function compareByAuthorNameLF(a: LibraryItemListRow, b: LibraryItemListRow, config: SortConfig): number {
+    const aValue = (a.authorNameLF || a.authorName || a.author)?.toLowerCase() || '';
+    const bValue = (b.authorNameLF || b.authorName || b.author)?.toLowerCase() || '';
+    if (aValue < bValue) return -1;
+    if (aValue > bValue) return 1;
+    // Secondary sort by title when authors match
+    return compareByTitle(a, b, config);
 }
 
 /**
@@ -61,7 +73,8 @@ function compareByPublishedYear(a: LibraryItemListRow, b: LibraryItemListRow, co
     const bValue = b.publishedYear || '';
     if (aValue < bValue) return -1;
     if (aValue > bValue) return 1;
-    return 0;
+    // Secondary sort by title when years match
+    return compareByTitle(a, b, config);
 }
 
 /**
@@ -85,8 +98,11 @@ export function sortLibraryItems(items: LibraryItemListRow[], config: SortConfig
         case 'title':
             compareFn = compareByTitle;
             break;
-        case 'author':
-            compareFn = compareByAuthor;
+        case 'authorName':
+            compareFn = compareByAuthorName;
+            break;
+        case 'authorNameLF':
+            compareFn = compareByAuthorNameLF;
             break;
         case 'publishedYear':
             compareFn = compareByPublishedYear;

@@ -1,3 +1,5 @@
+import type { SortConfig, SortField } from '@/types/store';
+import { MenuAction, MenuView } from '@react-native-menu/menu';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -9,6 +11,9 @@ export interface HeaderControlsProps {
   showViewToggle?: boolean;
   sortLabel?: string;
   viewToggleLabel?: string;
+  sortConfig?: SortConfig;
+  sortMenuActions?: Array<MenuAction>;
+  onSortMenuAction?: (field: SortField) => void;
 }
 
 export default function HeaderControls({
@@ -19,6 +24,9 @@ export default function HeaderControls({
   showViewToggle = true,
   sortLabel = 'Sort',
   viewToggleLabel,
+  sortConfig,
+  sortMenuActions,
+  onSortMenuAction,
 }: HeaderControlsProps) {
   const buttonStyle = {
     paddingHorizontal: 12,
@@ -33,7 +41,14 @@ export default function HeaderControls({
     fontSize: 14,
   };
 
+  const iconColor = isDark ? '#fff' : '#000';
   const computedViewToggleLabel = viewToggleLabel || (viewMode === 'grid' ? 'List' : 'Grid');
+
+  const sortButton = (
+    <Pressable onPress={onSort} style={[buttonStyle, { marginRight: 0 }]}>
+      <Text style={textStyle}>{sortLabel}</Text>
+    </Pressable>
+  );
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -42,9 +57,18 @@ export default function HeaderControls({
           <Text style={textStyle}>{computedViewToggleLabel}</Text>
         </Pressable>
       )}
-      <Pressable onPress={onSort} style={[buttonStyle, { marginRight: 0 }]}>
-        <Text style={textStyle}>{sortLabel}</Text>
-      </Pressable>
+      {sortMenuActions && onSortMenuAction ? (
+        <MenuView
+          onPressAction={({ nativeEvent }) => {
+            onSortMenuAction(nativeEvent.event as SortField);
+          }}
+          actions={sortMenuActions}
+        >
+          {sortButton}
+        </MenuView>
+      ) : (
+        sortButton
+      )}
     </View>
   );
 }

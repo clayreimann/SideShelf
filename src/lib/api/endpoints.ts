@@ -70,11 +70,40 @@ export async function fetchLibraryWithFilterData(
 }
 
 export async function fetchLibraryItems(
-  libraryId: string
+  libraryId: string,
+  page: number = 0,
+  limit: number = 100
 ): Promise<ApiLibraryItemsResponse> {
-  const response = await apiFetch(`/api/libraries/${libraryId}/items`);
+  const response = await apiFetch(
+    `/api/libraries/${libraryId}/items?page=${page}&limit=${limit}&minified=1`
+  );
   await handleResponseError(response, "Failed to fetch library items");
   return response.json();
+}
+
+/**
+ * Fetch all library items across all pages
+ * This function handles pagination automatically and returns all items
+ */
+export async function fetchAllLibraryItems(
+  libraryId: string
+): Promise<ApiLibraryItem[]> {
+  const allItems: ApiLibraryItem[] = [];
+  let page = 0;
+  let hasMore = true;
+  const limit = 100;
+
+  while (hasMore) {
+    const response = await fetchLibraryItems(libraryId, page, limit);
+    allItems.push(...response.results);
+
+    // Check if there are more pages
+    const totalPages = Math.ceil(response.total / response.limit);
+    hasMore = page + 1 < totalPages;
+    page++;
+  }
+
+  return allItems;
 }
 
 export async function fetchLibraryItem(
