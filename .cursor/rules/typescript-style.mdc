@@ -21,3 +21,16 @@ import { db } from '@/db/client';
 // src/app/(tabs)/myScreen.tsx
 import { db } from '../../db/client';
 ```
+
+
+## Import examples
+
+```ts
+// good
+import TrackPlayer from "react-native-track-player
+```
+
+```ts
+// bad
+const TrackPlayer = await require("react-native-track-player)
+```
