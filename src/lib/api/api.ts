@@ -67,8 +67,8 @@ export async function apiFetch(
   detailedLog.info(`-> ${method} ${scrubUrl(url)} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${rest.body}`);
 
   const res = await fetch(url, { ...rest, headers: headerObj });
-  log.info(`<- ${res.status} ${method} ${url} ${res.headers.get("content-type")} ${formatBytes(Number(res.headers.get("content-length")))}`);
-  detailedLog.info(`<- ${res.status} ${method} ${url} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()}`);
+  log.info(`<- ${res.status} ${method} ${scrubUrl(url)} ${res.headers.get("content-type")} ${formatBytes(Number(res.headers.get("content-length")))}`);
+  detailedLog.info(`<- ${res.status} ${method} ${scrubUrl(url)} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()}`);
   if (res.status === 401) {
     log.info("access token expired, refreshing token...");
     const success = await config?.refreshAccessToken();
@@ -123,7 +123,7 @@ function redactHeaders(
 
 function scrubUrl(url: string): string {
   const baseUrl = config?.getBaseUrl();
-  return url.replace(baseUrl || "", baseUrl?.split("://")[0] || "") + "://<base-url>";
+  return url.replace(baseUrl?.split("://")[1] || "SKIP", "<base-url>");
 }
 
 function getCustomUserAgent(): string {
