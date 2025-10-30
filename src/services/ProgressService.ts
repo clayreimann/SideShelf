@@ -196,6 +196,9 @@ export class ProgressService {
       let shouldEndExistingSession = false;
       let resumePosition = startTime;
 
+      // Get saved progress to use as fallback
+      const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
+
       if (existingSession) {
         // Check if session is stale (more than 10 minutes old)
         const sessionAge = Date.now() - existingSession.updatedAt.getTime();
@@ -208,12 +211,20 @@ export class ProgressService {
           log.info('Found recent active session for same item, will resume');
           shouldEndExistingSession = false;
           // Use active session's current time (most recent position)
-          resumePosition = existingSession.currentTime;
-          log.info(`Resuming from active session: ${resumePosition}`);
+          // But if currentTime is 0 or very small, fall back to saved progress
+          if (existingSession.currentTime > 1) {
+            resumePosition = existingSession.currentTime;
+            log.info(`Resuming from active session: ${resumePosition}`);
+          } else if (savedProgress?.currentTime) {
+            resumePosition = savedProgress.currentTime;
+            log.info(`Resuming from saved progress (session currentTime was ${existingSession.currentTime}): ${resumePosition}`);
+          } else {
+            resumePosition = existingSession.currentTime;
+            log.info(`Resuming from active session: ${resumePosition}`);
+          }
         }
       } else {
         // Fall back to saved progress
-        const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
         resumePosition = savedProgress?.currentTime || startTime;
         if (savedProgress?.currentTime) {
           log.info(`Resuming from saved progress: ${resumePosition}`);
@@ -256,7 +267,7 @@ export class ProgressService {
         await this.syncSessionToServer(user.id, libraryItemId);
       }
 
-      log.info(`Started session ${sessionId} for ${libraryItemId} at position ${resumePosition}`);
+      log.info(`Started session ${sessionId} for ${libraryItemId} at position ${resumePosition} session=${sessionId} item=${libraryItemId}`);
     } catch (error) {
       log.error('Failed to start session:', error as Error);
       throw error;
@@ -285,9 +296,9 @@ export class ProgressService {
         // Final sync to server
         await this.syncSessionToServer(userId, libraryItemId);
 
-        log.info(`Ended session ${session.id}`);
+        log.info(`Ended session ${session.id} session=${session.id} item=${libraryItemId}`);
       } else {
-        log.info(`Session too short (${sessionDuration}s), not recording`);
+        log.info(`Session too short (${sessionDuration}s), not recording session=${session.id} item=${libraryItemId}`);
       }
     } catch (error) {
       log.error('Failed to end session:', error as Error);
@@ -355,11 +366,11 @@ export class ProgressService {
       const isStale = sessionAge > this.PAUSE_TIMEOUT;
 
       if (isStale) {
-        log.info('Handling stale session - ending old session and starting new one');
+        log.info(`Handling stale session - ending old session and starting new one session=${session.id} item=${libraryItemId}`);
 
         // End the stale session at its last known position (when it was last updated)
         const staleSessionEndTime = session.currentTime;
-        log.info(`Ending stale session at its last position: ${staleSessionEndTime}s (not current position: ${currentTime}s)`);
+        log.info(`Ending stale session at its last position: ${staleSessionEndTime}s (not current position: ${currentTime}s) session=${session.id} item=${libraryItemId}`);
         await this.endStaleSession(userId, libraryItemId, staleSessionEndTime);
 
         // Get username for starting new session
@@ -372,7 +383,7 @@ export class ProgressService {
             duration = metadata?.duration || 0;
           }
 
-          log.info(`Starting new session for ${libraryItemId} at position ${currentTime}`);
+          log.info(`Starting new session for ${libraryItemId} at position ${currentTime} session=${session.id} item=${libraryItemId}`);
           await this.startSession(
             username,
             libraryItemId,
@@ -407,11 +418,11 @@ export class ProgressService {
 
       if (isPlaying && wasPaused) {
         // Resuming from pause
-        log.info('Resumed playback');
+        log.info(`Resumed playback session=${session.id} item=${libraryItemId}`);
       } else if (!isPlaying && !wasPaused) {
         // Starting pause - immediate sync on pause
         await this.syncSessionToServer(userId, libraryItemId);
-        log.info('Paused playback, synced to server');
+        log.info(`Paused playback, synced to server session=${session.id} item=${libraryItemId}`);
       }
 
       // Update session progress
@@ -508,7 +519,11 @@ export class ProgressService {
 
     const isUnmetered = netInfo.type === 'wifi' || netInfo.type === 'ethernet';
     const syncInterval = isUnmetered ? this.SYNC_INTERVAL_UNMETERED : this.SYNC_INTERVAL_METERED;
-    const timeSinceLastSync = timeSinceUpdate;
+
+    // Use lastSyncTime for sync interval check (not updatedAt, which updates every second)
+    const timeSinceLastSync = session.lastSyncTime
+      ? Date.now() - session.lastSyncTime.getTime()
+      : Infinity; // If never synced, sync immediately
 
     if (timeSinceLastSync < syncInterval) {
       return {
@@ -570,9 +585,10 @@ export class ProgressService {
       // Use the existing syncSingleSession method
       await this.syncSingleSession(sessionData);
 
-      log.info(`Synced session to server: ${libraryItemId}`);
+      log.info(`Synced session to server session=${session.id} item=${libraryItemId}`);
     } catch (error) {
-      log.error(`Failed to sync session to server: ${(error as Error).message}`);
+      const session = await getActiveSession(userId, libraryItemId);
+      log.error(`Failed to sync session to server: ${(error as Error).message} session=${session?.id || 'none'} item=${libraryItemId}`);
     }
   }
 
@@ -604,12 +620,12 @@ export class ProgressService {
 
     // Skip sessions that are too short
     if (timeListening < this.MIN_SESSION_DURATION) {
-      log.info(`Skipping short session ${session.id} (${timeListening}s)`);
+      log.info(`Skipping short session ${session.id} (${timeListening}s) session=${session.id} item=${session.libraryItemId}`);
       await markSessionAsSynced(session.id);
       return;
     }
 
-    log.info(`Syncing session ${session.id} for library item ${session.libraryItemId}`);
+    log.info(`Syncing session ${session.id} for library item ${session.libraryItemId} session=${session.id} item=${session.libraryItemId}`);
 
     // Determine whether we are tracking an open (streaming) session
     let isStreamingSession =
@@ -618,7 +634,7 @@ export class ProgressService {
     // Get the library item to reference metadata when needed
     const libraryItem = await getLibraryItemById(session.libraryItemId);
     if (!libraryItem) {
-      log.warn(`Library item ${session.libraryItemId} no longer exists; marking session as synced`);
+      log.warn(`Library item ${session.libraryItemId} no longer exists; marking session as synced session=${session.id} item=${session.libraryItemId}`);
       await markSessionAsSynced(session.id);
       return;
     }
@@ -655,9 +671,9 @@ export class ProgressService {
       try {
         const progressResponse = await fetchMediaProgress(session.libraryItemId);
         await upsertMediaProgress([marshalMediaProgressFromApi(progressResponse, session.userId)]);
-        log.info(`Fetched and updated progress after sync for ${session.libraryItemId}`);
+        log.info(`Fetched and updated progress after sync for ${session.libraryItemId} session=${session.id} item=${session.libraryItemId}`);
       } catch (fetchError) {
-        log.warn(`Failed to fetch progress after sync: ${fetchError}`);
+        log.warn(`Failed to fetch progress after sync: ${fetchError} session=${session.id} item=${session.libraryItemId}`);
         // Don't fail the entire sync if progress fetch fails
       }
 
@@ -669,9 +685,9 @@ export class ProgressService {
         try {
           const finalProgress = await fetchMediaProgress(session.libraryItemId);
           await upsertMediaProgress([marshalMediaProgressFromApi(finalProgress, session.userId)]);
-          log.info(`Fetched final progress after closing session for ${session.libraryItemId}`);
+          log.info(`Fetched final progress after closing session for ${session.libraryItemId} session=${session.id} item=${session.libraryItemId}`);
         } catch (fetchError) {
-          log.warn(`Failed to fetch final progress: ${fetchError}`);
+          log.warn(`Failed to fetch final progress: ${fetchError} session=${session.id} item=${session.libraryItemId}`);
         }
       }
 
@@ -686,7 +702,7 @@ export class ProgressService {
     // Mark as synced
     await markSessionAsSynced(session.id);
 
-    log.info(`Successfully synced session to server: ${session.libraryItemId}`);
+    log.info(`Successfully synced session to server session=${session.id} item=${session.libraryItemId}`);
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message.toLowerCase() : '';
@@ -699,7 +715,7 @@ export class ProgressService {
       errorMessage.includes('not found')
     ) {
       log.warn(
-        `Server session ${session.serverSessionId} missing for ${session.libraryItemId}; recreating`
+        `Server session ${session.serverSessionId} missing for ${session.libraryItemId}; recreating session=${session.id} item=${session.libraryItemId}`
       );
       await updateServerSessionId(session.id, null);
       session.serverSessionId = null;
@@ -709,7 +725,7 @@ export class ProgressService {
     }
 
     // Handle sync failure - record in database
-    log.error(`Failed to sync session ${session.id}: ${(error as Error).message}`);
+    log.error(`Failed to sync session ${session.id}: ${(error as Error).message} session=${session.id} item=${session.libraryItemId}`);
 
     // Record the sync failure in database
     await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown sync error');
@@ -801,7 +817,7 @@ export class ProgressService {
       return id;
     } catch (error) {
       if (error instanceof Error && error.message.includes('Media item not found')) {
-        log.info(`Library item ${session.libraryItemId} not found on server, marking session as synced`);
+        log.info(`Library item ${session.libraryItemId} not found on server, marking session as synced session=${session.id} item=${session.libraryItemId}`);
         await markSessionAsSynced(session.id);
         return null;
       }
