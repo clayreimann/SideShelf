@@ -8,13 +8,14 @@
  * - Loading states
  */
 
+import { getUserByUsername } from '@/db/helpers/users';
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from '@/lib/asyncStore';
 import { logger } from '@/lib/logger';
 import { getItem, SECURE_KEYS } from '@/lib/secureStore';
 import { progressService } from '@/services/ProgressService';
-import TrackPlayer from 'react-native-track-player';
 import type { CurrentChapter, PlayerTrack } from '@/types/player';
 import type { SliceCreator } from '@/types/store';
+import TrackPlayer from 'react-native-track-player';
 
 /**
  * Player slice state interface - scoped under 'player' to avoid conflicts
@@ -150,7 +151,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         return;
       }
 
-      const { getUserByUsername } = await import('@/db/helpers/users');
       const user = await getUserByUsername(username);
       if (!user?.id) {
         log.info('User not found, skipping DB reconciliation');

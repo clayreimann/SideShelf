@@ -13,7 +13,7 @@ import { getChaptersForMedia } from "@/db/helpers/chapters";
 import type { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getLibraryItemById } from "@/db/helpers/libraryItems";
-import { getActiveSession } from "@/db/helpers/localListeningSessions";
+import { getActiveSession, getAllActiveSessionsForUser } from "@/db/helpers/localListeningSessions";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
@@ -55,6 +55,15 @@ interface ReconciliationReport {
   positionMismatch: boolean;
   rateMismatch: boolean;
   volumeMismatch: boolean;
+}
+
+type ResumeSource = "activeSession" | "savedProgress" | "asyncStorage" | "store";
+
+interface ResumePositionInfo {
+  position: number;
+  source: ResumeSource;
+  authoritativePosition: number | null;
+  asyncStoragePosition: number | null;
 }
 
 /**
@@ -334,36 +343,19 @@ export class PlayerService {
       // Add tracks to queue
       await TrackPlayer.add(tracks);
 
-      // Get resume position using priority: activeSession > savedProgress > AsyncStorage
-      let resumePosition = 0;
-      const activeSession = await getActiveSession(user.id, libraryItemId);
-      const savedProgress = await getMediaProgressForLibraryItem(
-        libraryItemId,
-        user.id
-      );
-      const asyncStoragePosition = await getAsyncItem(ASYNC_KEYS.position) as number | null;
-
-      // Priority order: activeSession > savedProgress > AsyncStorage
-      if (activeSession) {
-        resumePosition = activeSession.currentTime;
-        log.info(`Resuming from active session: ${resumePosition}s`);
-      } else if (savedProgress?.currentTime) {
-        resumePosition = savedProgress.currentTime;
-        log.info(`Resuming from saved progress: ${resumePosition}s`);
-      } else if (asyncStoragePosition !== null && asyncStoragePosition !== undefined) {
-        resumePosition = asyncStoragePosition;
-        log.info(`Resuming from AsyncStorage: ${resumePosition}s`);
+      const resumeInfo = await this.determineResumePosition(libraryItemId);
+      if (
+        resumeInfo.authoritativePosition !== null &&
+        resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition
+      ) {
+        await saveItem(ASYNC_KEYS.position, resumeInfo.authoritativePosition);
+        log.info(`Synced AsyncStorage position to authoritative value: ${resumeInfo.authoritativePosition.toFixed(2)}s`);
       }
 
-      // Sync AsyncStorage to match DB value (DB is source of truth)
-      if (resumePosition > 0) {
-        // Use DB value if available, otherwise keep AsyncStorage value
-        const positionToSync = activeSession?.currentTime || savedProgress?.currentTime || resumePosition;
-        if (positionToSync !== asyncStoragePosition) {
-          await saveItem(ASYNC_KEYS.position, positionToSync);
-          log.info(`Synced AsyncStorage position to DB value: ${positionToSync}s`);
-        }
-        await TrackPlayer.seekTo(resumePosition);
+      if (resumeInfo.position > 0) {
+        await TrackPlayer.seekTo(resumeInfo.position);
+        store.updatePosition(resumeInfo.position);
+        log.info(`Resuming playback from ${resumeInfo.source}: ${resumeInfo.position.toFixed(2)}s`);
       }
 
       // Apply playback settings from store to TrackPlayer
@@ -423,66 +415,199 @@ export class PlayerService {
    * Resume playback with optional smart rewind
    */
   async play(): Promise<void> {
-    const store = useAppStore.getState();
-
-    // If currentTrack is null but we should have one (e.g., streaming media not restored),
-    // try to rebuild it before playing
-    if (!store.player.currentTrack) {
-      await this.rebuildCurrentTrackIfNeeded();
+    const prepared = await this.rebuildCurrentTrackIfNeeded();
+    if (!prepared) {
+      log.warn("Playback request ignored: no track available after restoration");
+      return;
     }
 
-    // Check if smart rewind is enabled and apply it
-    const smartRewindEnabled = await getSmartRewindEnabled();
+    try {
+      const store = useAppStore.getState();
 
-    if (smartRewindEnabled) {
-      await this.smartRewind();
+      // Check if smart rewind is enabled and apply it
+      const smartRewindEnabled = await getSmartRewindEnabled();
+
+      if (smartRewindEnabled) {
+        await this.smartRewind();
+      }
+
+      // Clear pause time since we're resuming
+      store._setLastPauseTime(null);
+      await TrackPlayer.play();
+    } catch (error) {
+      const store = useAppStore.getState();
+      store._setTrackLoading(false);
+      throw error;
     }
-
-    // Clear pause time since we're resuming
-    store._setLastPauseTime(null);
-    await TrackPlayer.play();
   }
 
   /**
    * Rebuild currentTrack if it's missing but should exist
    * Handles case where streaming media wasn't restored but playback should resume
    */
-  private async rebuildCurrentTrackIfNeeded(): Promise<void> {
+  private async rebuildCurrentTrackIfNeeded(): Promise<boolean> {
     try {
       const store = useAppStore.getState();
-      const playerSliceTrack = store.player.currentTrack;
+      let playerSliceTrack = store.player.currentTrack;
 
-      if (playerSliceTrack) {
-        log.info(`CurrentTrack already in playerSlice for ${playerSliceTrack.libraryItemId}`);
-        return;
+      if (!playerSliceTrack) {
+        log.info("No currentTrack in store, attempting to restore from session");
+        await this.restorePlayerServiceFromSession();
+        playerSliceTrack = useAppStore.getState().player.currentTrack;
       }
 
-      // If playerSlice doesn't have it, try to get from ProgressService DB session
-      // Need userId and libraryItemId to query DB
-      const username = await getItem(SECURE_KEYS.username);
-      if (!username) {
-        log.warn('No username found, cannot rebuild track from session');
-        return;
+      if (!playerSliceTrack) {
+        log.warn("Unable to rebuild player state - no track information available");
+        return false;
       }
 
-      const user = await getUserByUsername(username);
-      if (!user?.id) {
-        return;
-      }
-
-      // Try to get libraryItemId from TrackPlayer
       const queue = await TrackPlayer.getQueue();
-      if (queue.length === 0) {
-        return;
+      const expectedIds = playerSliceTrack.audioFiles.map((file) => file.id);
+      const queueIds = queue.map((track) => track.id);
+      const queueMatchesTrack =
+        queue.length > 0 &&
+        queue.length === expectedIds.length &&
+        queueIds.every((id, index) => id === expectedIds[index]);
+
+      if (queueMatchesTrack) {
+        log.info(`TrackPlayer queue already prepared for ${playerSliceTrack.libraryItemId}`);
+        return true;
       }
 
-      // Track IDs in queue are audioFile IDs, we need to get libraryItemId from elsewhere
-      // This is a fallback - ideally playerSlice should have the track
-      log.warn(`TrackPlayer has tracks but currentTrack not in playerSlice - some features may not work correctly`);
+      log.info(`TrackPlayer queue missing or mismatched, rebuilding for ${playerSliceTrack.libraryItemId}`);
+      const rebuilt = await this.reloadTrackPlayerQueue(playerSliceTrack);
+
+      if (!rebuilt) {
+        log.warn(`Failed to rebuild TrackPlayer queue for ${playerSliceTrack.libraryItemId}`);
+      }
+
+      return rebuilt;
     } catch (error) {
-      log.error('Failed to rebuild currentTrack', error as Error);
+      log.error("Failed to rebuild currentTrack", error as Error);
       // Don't throw - playback can still proceed
+      return false;
     }
+  }
+
+  /**
+   * Prepare TrackPlayer queue based on the current track stored in playerSlice
+   */
+  private async reloadTrackPlayerQueue(track: PlayerTrack): Promise<boolean> {
+    const store = useAppStore.getState();
+    store._setTrackLoading(true);
+
+    let success = false;
+
+    try {
+      await TrackPlayer.reset();
+
+      const tracks = await this.buildTrackList(track);
+      if (tracks.length === 0) {
+        log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
+        return false;
+      }
+
+      await TrackPlayer.add(tracks);
+
+      const resumeInfo = await this.determineResumePosition(track.libraryItemId);
+      if (
+        resumeInfo.authoritativePosition !== null &&
+        resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition
+      ) {
+        await saveItem(ASYNC_KEYS.position, resumeInfo.authoritativePosition);
+        log.info(`Synced AsyncStorage position to authoritative value: ${resumeInfo.authoritativePosition.toFixed(2)}s`);
+      }
+
+      if (resumeInfo.position > 0) {
+        await TrackPlayer.seekTo(resumeInfo.position);
+        const updatedStore = useAppStore.getState();
+        updatedStore.updatePosition(resumeInfo.position);
+        log.info(`Prepared resume position from ${resumeInfo.source}: ${resumeInfo.position.toFixed(2)}s`);
+      } else {
+        log.info("Prepared queue with no resume position (starting from beginning)");
+      }
+
+      const updatedStore = useAppStore.getState();
+      if (updatedStore.player.playbackRate !== 1.0) {
+        await TrackPlayer.setRate(updatedStore.player.playbackRate);
+        log.info(`Applied stored playback rate: ${updatedStore.player.playbackRate}`);
+      }
+
+      if (updatedStore.player.volume !== 1.0) {
+        await TrackPlayer.setVolume(updatedStore.player.volume);
+        log.info(`Applied stored volume: ${updatedStore.player.volume}`);
+      }
+
+      success = true;
+      return true;
+    } catch (error) {
+      log.error("Failed to rebuild TrackPlayer queue", error as Error);
+      return false;
+    } finally {
+      if (!success) {
+        const updatedStore = useAppStore.getState();
+        updatedStore._setTrackLoading(false);
+      }
+    }
+  }
+
+  /**
+   * Determine resume position using DB session, saved progress, or stored values
+   */
+  private async determineResumePosition(libraryItemId: string): Promise<ResumePositionInfo> {
+    const store = useAppStore.getState();
+    const asyncStoragePosition = (await getAsyncItem(ASYNC_KEYS.position)) as number | null;
+
+    let position = store.player.position;
+    let source: ResumeSource = "store";
+    let authoritativePosition: number | null = null;
+
+    if (asyncStoragePosition !== null && asyncStoragePosition !== undefined) {
+      position = asyncStoragePosition;
+      source = "asyncStorage";
+      authoritativePosition = asyncStoragePosition;
+    }
+
+    try {
+      const username = await getItem(SECURE_KEYS.username);
+      if (username) {
+        const user = await getUserByUsername(username);
+        if (user?.id) {
+          const [activeSession, savedProgress] = await Promise.all([
+            getActiveSession(user.id, libraryItemId),
+            getMediaProgressForLibraryItem(libraryItemId, user.id),
+          ]);
+
+          if (activeSession) {
+            position = activeSession.currentTime;
+            source = "activeSession";
+            authoritativePosition = activeSession.currentTime;
+            log.info(`Resume position from active session: ${position.toFixed(2)}s`);
+          } else if (savedProgress?.currentTime) {
+            position = savedProgress.currentTime;
+            source = "savedProgress";
+            authoritativePosition = savedProgress.currentTime;
+            log.info(`Resume position from saved progress: ${position.toFixed(2)}s`);
+          }
+        }
+      }
+    } catch (error) {
+      log.error("Failed to determine resume position", error as Error);
+    }
+
+    if (source === "store") {
+      authoritativePosition = null;
+      if (position > 0) {
+        log.info(`Using in-memory store position for resume: ${position.toFixed(2)}s`);
+      }
+    }
+
+    return {
+      position,
+      source,
+      authoritativePosition,
+      asyncStoragePosition,
+    };
   }
 
   /**
@@ -792,7 +917,6 @@ export class PlayerService {
 
       if (!libraryItemId) {
         // Query DB for most recent active session
-        const { getAllActiveSessionsForUser } = await import('@/db/helpers/localListeningSessions');
         const activeSessions = await getAllActiveSessionsForUser(user.id);
         if (activeSessions.length > 0) {
           const mostRecent = activeSessions.sort((a, b) =>
@@ -831,36 +955,36 @@ export class PlayerService {
 
         // Check if we have downloaded audio files (indicates downloaded media)
         const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
+        if (audioFiles.length === 0) {
+          log.warn(`No audio files found for ${session.libraryItemId}, cannot restore track`);
+          return;
+        }
+
+        const chapters = await getChaptersForMedia(metadata.id);
         const hasDownloadedFiles = audioFiles.some(
           (file: AudioFileWithDownloadInfo) => file.downloadInfo?.isDownloaded
         );
 
-        if (hasDownloadedFiles && audioFiles.length > 0) {
-          // For downloaded media, restore full track to playerSlice
-          const chapters = await getChaptersForMedia(metadata.id);
+        const track: PlayerTrack = {
+          libraryItemId: libraryItem.id,
+          mediaId: metadata.id,
+          title: metadata.title || 'Unknown Title',
+          author: metadata.authorName || metadata.author || 'Unknown Author',
+          coverUri: metadata.imageUrl || getCoverUri(libraryItem.id),
+          audioFiles,
+          chapters,
+          duration: audioFiles.reduce(
+            (total: number, file: AudioFileWithDownloadInfo) =>
+              total + (file.duration || 0),
+            0
+          ),
+          isDownloaded: hasDownloadedFiles,
+        };
 
-          const track: PlayerTrack = {
-            libraryItemId: libraryItem.id,
-            mediaId: metadata.id,
-            title: metadata.title || 'Unknown Title',
-            author: metadata.authorName || metadata.author || 'Unknown Author',
-            coverUri: metadata.imageUrl || getCoverUri(libraryItem.id),
-            audioFiles,
-            chapters,
-            duration: audioFiles.reduce(
-              (total: number, file: AudioFileWithDownloadInfo) =>
-                total + (file.duration || 0),
-              0
-            ),
-            isDownloaded: true,
-          };
-
-          store._setCurrentTrack(track);
-          log.info(`Restored PlayerService track to playerSlice: ${track.title}`);
-        } else {
-          // For streaming media, we can't fully restore the track without opening a new play session
-          log.info(`Session is for streaming media - track will be rebuilt on playTrack()`);
-        }
+        store._setCurrentTrack(track);
+        log.info(
+          `Restored PlayerService track to playerSlice (${hasDownloadedFiles ? 'downloaded' : 'streaming'}): ${track.title}`
+        );
       } catch (error) {
         log.error('Failed to restore currentTrack from session', error as Error);
       }
@@ -982,7 +1106,6 @@ export class PlayerService {
             const user = await getUserByUsername(username);
             if (user?.id) {
               // Query DB for most recent active session
-              const { getAllActiveSessionsForUser } = await import('@/db/helpers/localListeningSessions');
               const activeSessions = await getAllActiveSessionsForUser(user.id);
               if (activeSessions.length > 0) {
                 const mostRecent = activeSessions.sort((a, b) =>
