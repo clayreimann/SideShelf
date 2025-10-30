@@ -83,7 +83,7 @@ export default function LibraryItemDetail({
   const { activeDownloads, isItemDownloaded, startDownload, deleteDownload } = useDownloads();
 
   // Get cached item data or null
-  const cachedData = useMemo(() => getCachedItem(itemId), [itemId, getCachedItem]);
+  const cachedData = getCachedItem(itemId);
 
   // Derive all data from cached data
   const item = cachedData?.item || null;
