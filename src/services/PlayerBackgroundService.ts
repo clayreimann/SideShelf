@@ -376,12 +376,31 @@ async function handlePlaybackProgressUpdated(
 
       // Sync store position from session (DB is source of truth after updateProgress)
       const updatedSession = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
+      const previousChapter = store.player.currentChapter;
+
       if (updatedSession) {
         // Use session position as source of truth, not TrackPlayer position directly
+        // Position is always absolute (book position), not chapter-relative
         store.updatePosition(updatedSession.currentTime);
       } else {
         // Fallback to TrackPlayer position if session not found
+        // Position is absolute (book position)
         store.updatePosition(event.position);
+      }
+
+      // Check if chapter changed (non-gated update)
+      const currentChapter = store.player.currentChapter;
+      if (previousChapter?.chapter.id !== currentChapter?.chapter.id && currentChapter) {
+        // Chapter changed - update now playing metadata immediately (non-gated)
+        await playerService.updateNowPlayingMetadata();
+      }
+
+      // Periodic now playing metadata updates (gated by setting)
+      // Throttle to every 2 seconds to avoid excessive updates
+      const { getPeriodicNowPlayingUpdatesEnabled } = await import('@/lib/appSettings');
+      const periodicUpdatesEnabled = await getPeriodicNowPlayingUpdatesEnabled();
+      if (periodicUpdatesEnabled && Math.floor(event.position) % 2 === 0) {
+        await playerService.updateNowPlayingMetadata();
       }
 
       // Check if we should sync to server (uses adaptive intervals based on network type)

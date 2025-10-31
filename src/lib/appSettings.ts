@@ -11,12 +11,14 @@ const SETTINGS_KEYS = {
   jumpForwardInterval: '@app/jumpForwardInterval',
   jumpBackwardInterval: '@app/jumpBackwardInterval',
   enableSmartRewind: '@app/enableSmartRewind',
+  enablePeriodicNowPlayingUpdates: '@app/enablePeriodicNowPlayingUpdates',
 } as const;
 
 // Default values
 const DEFAULT_JUMP_FORWARD_INTERVAL = 30;
 const DEFAULT_JUMP_BACKWARD_INTERVAL = 15;
 const DEFAULT_SMART_REWIND_ENABLED = true;
+const DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED = true;
 
 /**
  * Get whether background service auto-reconnection is enabled
@@ -126,6 +128,32 @@ export async function setSmartRewindEnabled(enabled: boolean): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.enableSmartRewind, enabled ? 'true' : 'false');
   } catch (error) {
     console.error('[AppSettings] Failed to save smart rewind setting:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get whether periodic now playing metadata updates are enabled
+ * Default: true (enabled)
+ */
+export async function getPeriodicNowPlayingUpdatesEnabled(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.enablePeriodicNowPlayingUpdates);
+    return value === null ? DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED : value === 'true';
+  } catch (error) {
+    console.error('[AppSettings] Failed to get periodic now playing updates setting:', error);
+    return DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED;
+  }
+}
+
+/**
+ * Set whether periodic now playing metadata updates are enabled
+ */
+export async function setPeriodicNowPlayingUpdatesEnabled(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.enablePeriodicNowPlayingUpdates, enabled ? 'true' : 'false');
+  } catch (error) {
+    console.error('[AppSettings] Failed to save periodic now playing updates setting:', error);
     throw error;
   }
 }

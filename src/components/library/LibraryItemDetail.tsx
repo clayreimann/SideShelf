@@ -577,7 +577,12 @@ export default function LibraryItemDetail({
         )}
 
         {/* Collapsible Chapters */}
-        <ChapterList chapters={chapters} />
+        <ChapterList
+          chapters={chapters}
+          currentPosition={currentTrack?.libraryItemId === itemId ? position : 0}
+          libraryItemId={itemId}
+          isCurrentlyPlaying={currentTrack?.libraryItemId === itemId && isPlaying}
+        />
 
         {/* Collapsible Audio Files */}
         {audioFiles.length > 0 && (

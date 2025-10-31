@@ -14,13 +14,17 @@ import PlayPauseButton from '@/components/player/PlayPauseButton';
 import SkipButton from '@/components/player/SkipButton';
 import { ProgressBar } from '@/components/ui';
 import CoverImage from '@/components/ui/CoverImange';
+import { getCurrentChapterIndex } from '@/db/helpers/chapters';
+import { formatTime } from '@/lib/helpers/formatters';
 import { getJumpBackwardInterval, getJumpForwardInterval } from '@/lib/appSettings';
 import { useThemedStyles } from '@/lib/theme';
 import { playerService } from '@/services/PlayerService';
 import { usePlayer } from '@/stores/appStore';
 import { router, Stack } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  FlatList,
   Text,
   TouchableOpacity,
   useWindowDimensions,
@@ -56,6 +60,12 @@ export default function FullScreenPlayer() {
   const [sliderValue, setSliderValue] = useState(0);
   const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
   const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
+  const [showChapterList, setShowChapterList] = useState(false);
+
+  // Animation values
+  const coverSizeAnim = useRef(new Animated.Value(0)).current; // 0 = full size, 1 = minimized
+  const chapterListAnim = useRef(new Animated.Value(0)).current; // 0 = hidden, 1 = visible
+  const chapterListRef = useRef<FlatList>(null);
 
   // Load jump intervals from settings
   useEffect(() => {
@@ -68,6 +78,49 @@ export default function FullScreenPlayer() {
       setJumpBackwardInterval(backward);
     };
     loadIntervals();
+  }, []);
+
+  // Animate chapter list visibility
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(coverSizeAnim, {
+        toValue: showChapterList ? 1 : 0,
+        duration: 300,
+        useNativeDriver: false, // Cannot use native driver for width/height
+      }),
+      Animated.timing(chapterListAnim, {
+        toValue: showChapterList ? 1 : 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Auto-scroll to current chapter when list opens
+    if (showChapterList && currentTrack?.chapters && currentChapter) {
+      const currentIndex = getCurrentChapterIndex(currentTrack.chapters, position);
+      if (currentIndex >= 0) {
+        setTimeout(() => {
+          chapterListRef.current?.scrollToIndex({
+            index: currentIndex,
+            animated: true,
+            viewPosition: 0.3, // Position current chapter 30% from top
+          });
+        }, 350); // Wait for animation to complete
+      }
+    }
+  }, [showChapterList, currentTrack, currentChapter, position, coverSizeAnim, chapterListAnim]);
+
+  const toggleChapterList = useCallback(() => {
+    setShowChapterList((prev) => !prev);
+  }, []);
+
+  const handleChapterPress = useCallback(async (chapterStart: number) => {
+    try {
+      await playerService.seekTo(chapterStart);
+      setShowChapterList(false); // Close chapter list after selection
+    } catch (error) {
+      console.error('[FullScreenPlayer] Failed to seek to chapter:', error);
+    }
   }, []);
 
   const handleClose = useCallback(() => {
@@ -164,7 +217,28 @@ export default function FullScreenPlayer() {
   const chapterPosition = currentChapter?.positionInChapter || 0;
   const chapterDuration = currentChapter?.chapterDuration || 0;
 
-  const coverSize = Math.min(width - 64, height * 0.4);
+  const fullCoverSize = Math.min(width - 64, height * 0.4);
+  const minimizedCoverSize = 60;
+
+  // Interpolate cover size based on animation
+  const animatedCoverSize = coverSizeAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [fullCoverSize, minimizedCoverSize],
+  });
+
+  const animatedCoverMarginBottom = coverSizeAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [24, 8],
+  });
+
+  // Interpolate chapter list opacity and translateY
+  const chapterListOpacity = chapterListAnim;
+  const chapterListTranslateY = chapterListAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [100, 0], // Slide up from 100px below
+  });
+
+  const chapters = currentTrack?.chapters || [];
 
   return (
     <>
@@ -181,10 +255,16 @@ export default function FullScreenPlayer() {
       }}>
         {/* Cover and Track Info */}
         <View style={{ alignItems: 'center' }}>
-          {/* Cover Image */}
-          <View style={{ width: coverSize, height: coverSize, borderRadius: 12, marginBottom: 24, overflow: 'hidden' }}>
+          {/* Cover Image - Animated */}
+          <Animated.View style={{
+            width: animatedCoverSize,
+            height: animatedCoverSize,
+            borderRadius: 12,
+            marginBottom: animatedCoverMarginBottom,
+            overflow: 'hidden'
+          }}>
             <CoverImage uri={currentTrack.coverUri} title={currentTrack.title} fontSize={48} />
-          </View>
+          </Animated.View>
 
           {/* Track Info */}
           <Text
@@ -213,6 +293,23 @@ export default function FullScreenPlayer() {
 
         {/* Progress and Controls */}
         <View>
+          {/* Chapter List Toggle Button */}
+          {chapters.length > 0 && (
+            <TouchableOpacity
+              onPress={toggleChapterList}
+              style={{
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                marginBottom: 8,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
+                {showChapterList ? 'Hide Chapters' : `Show Chapters (${chapters.length})`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <ProgressBar
             progress={chapterPosition / chapterDuration}
             variant="large"
@@ -229,6 +326,88 @@ export default function FullScreenPlayer() {
             showPercentage={true}
             customPercentageText={`${formatTimeWithUnits(duration - currentPosition, false)} remaining`}
           />
+
+          {/* Chapter List - Animated */}
+          {chapters.length > 0 && (
+            <Animated.View
+              style={{
+                maxHeight: height * 0.4,
+                opacity: chapterListOpacity,
+                transform: [{ translateY: chapterListTranslateY }],
+                marginBottom: 16,
+              }}
+            >
+              <FlatList
+                ref={chapterListRef}
+                data={chapters}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item, index }) => {
+                  const isCurrentChapter = currentChapter?.chapter.id === item.id;
+                  const chapterDuration = item.end - item.start;
+
+                  return (
+                    <TouchableOpacity
+                      onPress={() => handleChapterPress(item.start)}
+                      style={{
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        backgroundColor: isCurrentChapter
+                          ? (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)')
+                          : 'transparent',
+                        borderLeftWidth: isCurrentChapter ? 3 : 0,
+                        borderLeftColor: isDark ? '#007AFF' : '#007AFF',
+                        borderBottomWidth: index < chapters.length - 1 ? 1 : 0,
+                        borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={[
+                              styles.text,
+                              {
+                                fontWeight: isCurrentChapter ? '600' : '400',
+                                fontSize: 14,
+                                marginBottom: 4,
+                              },
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {item.title}
+                          </Text>
+                          <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>
+                            {formatTime(item.start)} - {formatTime(item.end)} • {formatTime(chapterDuration)}
+                          </Text>
+                        </View>
+                        {isCurrentChapter && (
+                          <View
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: '#007AFF',
+                              marginLeft: 12,
+                            }}
+                          />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+                onScrollToIndexFailed={(info) => {
+                  // Fallback: scroll to offset if index scroll fails
+                  const wait = new Promise((resolve) => setTimeout(resolve, 500));
+                  wait.then(() => {
+                    chapterListRef.current?.scrollToOffset({
+                      offset: info.averageItemLength * info.index,
+                      animated: true,
+                    });
+                  });
+                }}
+                scrollEnabled={true}
+              />
+            </Animated.View>
+          )}
 
           {/* Main Controls */}
           <View style={{

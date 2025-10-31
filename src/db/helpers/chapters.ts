@@ -86,3 +86,28 @@ export async function getChaptersForMedia(mediaId: string): Promise<ChapterRow[]
 export async function deleteChaptersForMedia(mediaId: string): Promise<void> {
   await db.delete(chapters).where(eq(chapters.mediaId, mediaId));
 }
+
+/**
+ * Get chapters that have already been played (position > chapter.end)
+ */
+export function getPlayedChapters(chapterList: ChapterRow[], currentPosition: number): ChapterRow[] {
+  return chapterList.filter((chapter) => currentPosition > chapter.end);
+}
+
+/**
+ * Get chapters that are upcoming (position < chapter.end)
+ * Includes the current chapter if one exists
+ */
+export function getUpcomingChapters(chapterList: ChapterRow[], currentPosition: number): ChapterRow[] {
+  return chapterList.filter((chapter) => currentPosition < chapter.end);
+}
+
+/**
+ * Get the index of the current chapter based on position
+ * Returns -1 if no chapter matches
+ */
+export function getCurrentChapterIndex(chapterList: ChapterRow[], currentPosition: number): number {
+  return chapterList.findIndex(
+    (chapter) => currentPosition >= chapter.start && currentPosition < chapter.end
+  );
+}

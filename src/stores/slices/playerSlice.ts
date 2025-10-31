@@ -251,6 +251,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   updatePosition: (position: number) => {
     const state = get() as PlayerSlice;
+    // Position is always absolute (book position in seconds), not chapter-relative
     set((state: PlayerSlice) => ({
       ...state,
       player: {
@@ -259,7 +260,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     saveItem(ASYNC_KEYS.position, position);
-    // Update current chapter
+    // Update current chapter (calculates chapter-relative position internally)
     state._updateCurrentChapter(position);
   },
 
@@ -327,12 +328,14 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       return;
     }
 
-    // Find the current chapter based on position
+    // Find the current chapter based on absolute position (book position)
     const currentChapter = currentTrack.chapters.find(
       (chapter) => position >= chapter.start && position < chapter.end
     );
 
     if (currentChapter) {
+      // Calculate chapter-relative position: absolute position minus chapter start
+      // This is used for now playing elapsedTime display (resets to 0 at chapter start)
       const positionInChapter = position - currentChapter.start;
       const chapterDuration = currentChapter.end - currentChapter.start;
 
@@ -347,6 +350,9 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
           },
         },
       }));
+
+      // Note: Now playing metadata updates are handled in PlayerBackgroundService
+      // when chapters change (non-gated) and periodically during playback (gated by setting)
     }
   },
 
