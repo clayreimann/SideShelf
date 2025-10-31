@@ -253,7 +253,7 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
 
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
-        log.info(`Seek: position=${event.position.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`);
+        log.info(`Seek: position=${formatTime(event.position)}s session=${session.sessionId} item=${ids.libraryItemId}`);
       }
     }
   } catch (error) {
@@ -393,7 +393,7 @@ async function handlePlaybackProgressUpdated(
       }
     } else if (currentTrack) {
       // No session - try to rehydrate from database if TrackPlayer has a track loaded
-      log.info(`No session, attempting rehydration: position=${event.position.toFixed(2)}s appState=${AppState.currentState} item=${currentTrack.libraryItemId}`);
+      log.info(`No session, attempting rehydration: position=${formatTime(event.position)}s appState=${AppState.currentState} item=${currentTrack.libraryItemId}`);
       const state = await TrackPlayer.getPlaybackState();
       const isPlaying = state.state === State.Playing;
 

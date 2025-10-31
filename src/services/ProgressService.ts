@@ -625,7 +625,7 @@ export class ProgressService {
       return;
     }
 
-    log.info(`Syncing session ${session.id} for library item ${session.libraryItemId} session=${session.id} item=${session.libraryItemId}`);
+    log.info(`Syncing session session=${session.id} item=${session.libraryItemId}`);
 
     // Determine whether we are tracking an open (streaming) session
     let isStreamingSession =
@@ -671,7 +671,7 @@ export class ProgressService {
       try {
         const progressResponse = await fetchMediaProgress(session.libraryItemId);
         await upsertMediaProgress([marshalMediaProgressFromApi(progressResponse, session.userId)]);
-        log.info(`Fetched and updated progress after sync for ${session.libraryItemId} session=${session.id} item=${session.libraryItemId}`);
+        log.info(`Fetched and updated progress after sync session=${session.id} item=${session.libraryItemId}`);
       } catch (fetchError) {
         log.warn(`Failed to fetch progress after sync: ${fetchError} session=${session.id} item=${session.libraryItemId}`);
         // Don't fail the entire sync if progress fetch fails
@@ -685,7 +685,7 @@ export class ProgressService {
         try {
           const finalProgress = await fetchMediaProgress(session.libraryItemId);
           await upsertMediaProgress([marshalMediaProgressFromApi(finalProgress, session.userId)]);
-          log.info(`Fetched final progress after closing session for ${session.libraryItemId} session=${session.id} item=${session.libraryItemId}`);
+          log.info(`Fetched final progress after closing session session=${session.id} item=${session.libraryItemId}`);
         } catch (fetchError) {
           log.warn(`Failed to fetch final progress: ${fetchError} session=${session.id} item=${session.libraryItemId}`);
         }
@@ -725,7 +725,7 @@ export class ProgressService {
     }
 
     // Handle sync failure - record in database
-    log.error(`Failed to sync session ${session.id}: ${(error as Error).message} session=${session.id} item=${session.libraryItemId}`);
+    log.error(`Failed to sync session: ${(error as Error).message} session=${session.id} item=${session.libraryItemId}`);
 
     // Record the sync failure in database
     await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown sync error');
@@ -817,7 +817,7 @@ export class ProgressService {
       return id;
     } catch (error) {
       if (error instanceof Error && error.message.includes('Media item not found')) {
-        log.info(`Library item ${session.libraryItemId} not found on server, marking session as synced session=${session.id} item=${session.libraryItemId}`);
+        log.info(`Library item not found on server, marking session as synced session=${session.id} item=${session.libraryItemId}`);
         await markSessionAsSynced(session.id);
         return null;
       }

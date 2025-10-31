@@ -349,13 +349,13 @@ export class PlayerService {
         resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition
       ) {
         await saveItem(ASYNC_KEYS.position, resumeInfo.authoritativePosition);
-        log.info(`Synced AsyncStorage position to authoritative value: ${resumeInfo.authoritativePosition.toFixed(2)}s`);
+        log.info(`Synced AsyncStorage position to authoritative value: ${formatTime(resumeInfo.authoritativePosition)}s`);
       }
 
       if (resumeInfo.position > 0) {
         await TrackPlayer.seekTo(resumeInfo.position);
         store.updatePosition(resumeInfo.position);
-        log.info(`Resuming playback from ${resumeInfo.source}: ${resumeInfo.position.toFixed(2)}s`);
+        log.info(`Resuming playback from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`);
       }
 
       // Apply playback settings from store to TrackPlayer
@@ -470,6 +470,16 @@ export class PlayerService {
         queueIds.every((id, index) => id === expectedIds[index]);
 
       if (queueMatchesTrack) {
+        const requiresStreaming = playerSliceTrack.audioFiles.some(
+          (audioFile) => !audioFile.downloadInfo?.isDownloaded
+        );
+        if (!requiresStreaming) {
+          const refreshedStore = useAppStore.getState();
+          if (refreshedStore.player.currentPlaySessionId) {
+            log.info(`Clearing stale streaming session ID for downloaded track ${playerSliceTrack.libraryItemId}`);
+            refreshedStore._setPlaySessionId(null);
+          }
+        }
         log.info(`TrackPlayer queue already prepared for ${playerSliceTrack.libraryItemId}`);
         return true;
       }
@@ -515,14 +525,14 @@ export class PlayerService {
         resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition
       ) {
         await saveItem(ASYNC_KEYS.position, resumeInfo.authoritativePosition);
-        log.info(`Synced AsyncStorage position to authoritative value: ${resumeInfo.authoritativePosition.toFixed(2)}s`);
+        log.info(`Synced AsyncStorage position to authoritative value: ${formatTime(resumeInfo.authoritativePosition)}s`);
       }
 
       if (resumeInfo.position > 0) {
         await TrackPlayer.seekTo(resumeInfo.position);
         const updatedStore = useAppStore.getState();
         updatedStore.updatePosition(resumeInfo.position);
-        log.info(`Prepared resume position from ${resumeInfo.source}: ${resumeInfo.position.toFixed(2)}s`);
+        log.info(`Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`);
       } else {
         log.info("Prepared queue with no resume position (starting from beginning)");
       }
@@ -582,12 +592,12 @@ export class PlayerService {
             position = activeSession.currentTime;
             source = "activeSession";
             authoritativePosition = activeSession.currentTime;
-            log.info(`Resume position from active session: ${position.toFixed(2)}s`);
+            log.info(`Resume position from active session: ${formatTime(position)}s`);
           } else if (savedProgress?.currentTime) {
             position = savedProgress.currentTime;
             source = "savedProgress";
             authoritativePosition = savedProgress.currentTime;
-            log.info(`Resume position from saved progress: ${position.toFixed(2)}s`);
+            log.info(`Resume position from saved progress: ${formatTime(position)}s`);
           }
         }
       }
@@ -598,7 +608,7 @@ export class PlayerService {
     if (source === "store") {
       authoritativePosition = null;
       if (position > 0) {
-        log.info(`Using in-memory store position for resume: ${position.toFixed(2)}s`);
+        log.info(`Using in-memory store position for resume: ${formatTime(position)}s`);
       }
     }
 
@@ -749,11 +759,11 @@ export class PlayerService {
     const needsStreaming = playerTrack.audioFiles.some(
       (audioFile) => !locallyAvailableFiles.has(audioFile.id)
     );
+    const store = useAppStore.getState();
 
     if (needsStreaming) {
       try {
         playSession = await startPlaySession(playerTrack.libraryItemId);
-        const store = useAppStore.getState();
         store._setPlaySessionId(playSession.id); // Store session ID in playerSlice for progress tracking
         log.info(`Started play session: ${playSession.id}`);
         log.info(`Got streaming tracks: ${playSession.audioTracks.length}`);
@@ -770,6 +780,9 @@ export class PlayerService {
       } catch (error) {
         log.error("Failed to start play session", error as Error);
       }
+    } else if (store.player.currentPlaySessionId) {
+      log.info(`Clearing stale streaming session ID before local playback for ${playerTrack.libraryItemId}`);
+      store._setPlaySessionId(null);
     }
 
     // Get API info once for all streaming URLs
@@ -1134,11 +1147,11 @@ export class PlayerService {
         report.positionMismatch = true;
         report.discrepanciesFound = true;
         // Use DB position as authoritative source
-        log.info(`Position mismatch detected: TrackPlayer=${tpPosition.toFixed(2)}s, DB=${dbPosition.toFixed(2)}s, diff=${positionDiff.toFixed(2)}s`);
+        log.info(`Position mismatch detected: TrackPlayer=${formatTime(tpPosition)}s, DB=${formatTime(dbPosition)}s, diff=${formatTime(positionDiff)}s`);
         if (hasTracks) {
           await TrackPlayer.seekTo(dbPosition);
           store.updatePosition(dbPosition);
-          report.actionsTaken.push(`Adjusted TrackPlayer position to DB value: ${dbPosition.toFixed(2)}s`);
+          report.actionsTaken.push(`Adjusted TrackPlayer position to DB value: ${formatTime(dbPosition)}s`);
         }
       }
 
