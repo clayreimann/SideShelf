@@ -581,6 +581,9 @@ export class PlayerService {
     let source: ResumeSource = "store";
     let authoritativePosition: number | null = null;
 
+    const MIN_PLAUSIBLE_POSITION = 5; // seconds
+    const LARGE_DIFF_THRESHOLD = 30; // seconds
+
     if (asyncStoragePosition !== null && asyncStoragePosition !== undefined) {
       position = asyncStoragePosition;
       source = "asyncStorage";
@@ -598,10 +601,59 @@ export class PlayerService {
           ]);
 
           if (activeSession) {
-            position = activeSession.currentTime;
-            source = "activeSession";
-            authoritativePosition = activeSession.currentTime;
-            log.info(`Resume position from active session: ${formatTime(position)}s`);
+            const sessionPosition = activeSession.currentTime;
+            const sessionUpdatedAt = activeSession.updatedAt.getTime();
+            const savedPosition = savedProgress?.currentTime;
+            const savedLastUpdate = savedProgress?.lastUpdate?.getTime();
+
+            // Check if session position is implausibly small
+            if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
+              if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
+                log.warn(`Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : 'unknown'})`);
+                position = savedPosition;
+                source = "savedProgress";
+                authoritativePosition = savedPosition;
+              } else if (asyncStoragePosition && asyncStoragePosition >= MIN_PLAUSIBLE_POSITION) {
+                log.warn(`Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`);
+                position = asyncStoragePosition;
+                source = "asyncStorage";
+                authoritativePosition = asyncStoragePosition;
+              } else {
+                // Session position is small but no better alternative exists
+                position = sessionPosition;
+                source = "activeSession";
+                authoritativePosition = sessionPosition;
+                log.info(`Resume position from active session (small but no alternative): ${formatTime(position)}s`);
+              }
+            } else if (savedPosition && savedLastUpdate) {
+              // Both exist - compare timestamps to determine which is more recent
+              const positionDiff = Math.abs(sessionPosition - savedPosition);
+
+              if (positionDiff > LARGE_DIFF_THRESHOLD) {
+                // Large discrepancy - prefer the more recent timestamp
+                const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
+                const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
+                const preferredSource = isSessionNewer ? "activeSession" : "savedProgress";
+
+                log.warn(`Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`);
+
+                position = preferredPosition;
+                source = preferredSource;
+                authoritativePosition = preferredPosition;
+              } else {
+                // Positions are close - use session (more frequently updated)
+                position = sessionPosition;
+                source = "activeSession";
+                authoritativePosition = sessionPosition;
+                log.info(`Resume position from active session: ${formatTime(position)}s`);
+              }
+            } else {
+              // Normal case - use session position
+              position = sessionPosition;
+              source = "activeSession";
+              authoritativePosition = sessionPosition;
+              log.info(`Resume position from active session: ${formatTime(position)}s`);
+            }
           } else if (savedProgress?.currentTime) {
             position = savedProgress.currentTime;
             source = "savedProgress";

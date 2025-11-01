@@ -10,6 +10,7 @@
 
 import { getUserByUsername } from '@/db/helpers/users';
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from '@/lib/asyncStore';
+import { formatTime } from '@/lib/helpers/formatters';
 import { logger } from '@/lib/logger';
 import { getItem, SECURE_KEYS } from '@/lib/secureStore';
 import { progressService } from '@/services/ProgressService';
@@ -105,92 +106,124 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     const log = logger.forTag('PlayerSlice');
 
     const store = get();
+    const restored: string[] = [];
+    const notFound: string[] = [];
 
     // Restore from AsyncStorage first
     if (!store.player.currentTrack) {
       const track = await getAsyncItem(ASYNC_KEYS.currentTrack);
       if (track) {
         store._setCurrentTrack(track);
-        log.info('Restored currentTrack from AsyncStorage');
+        restored.push(`currentTrack`);
       } else {
-        log.info('No currentTrack found in AsyncStorage');
+        notFound.push(`currentTrack`);
       }
     }
+
     const playbackRate = await getAsyncItem(ASYNC_KEYS.playbackRate);
     if (playbackRate !== null && playbackRate !== undefined) {
       store._setPlaybackRate(playbackRate);
-      log.info('Restored playbackRate from AsyncStorage');
+      restored.push(`playbackRate=${playbackRate}`);
+    } else {
+      notFound.push(`playbackRate`);
     }
+
     const volume = await getAsyncItem(ASYNC_KEYS.volume);
     if (volume !== null && volume !== undefined) {
       store._setVolume(volume);
-      log.info('Restored volume from AsyncStorage');
+      restored.push(`volume=${volume}`);
+    } else {
+      notFound.push(`volume`);
     }
+
     const asyncStoragePosition = await getAsyncItem(ASYNC_KEYS.position);
     if (asyncStoragePosition !== null && asyncStoragePosition !== undefined) {
       store.updatePosition(asyncStoragePosition);
-      log.info(`Restored position from AsyncStorage: ${asyncStoragePosition}s`);
+      restored.push(`position=${formatTime(asyncStoragePosition)}s`);
+    } else {
+      notFound.push(`position`);
     }
+
     const isPlaying = await getAsyncItem(ASYNC_KEYS.isPlaying);
     if (isPlaying !== null && isPlaying !== undefined) {
       store.updatePlayingState(isPlaying);
-      log.info('Restored isPlaying from AsyncStorage');
+      restored.push(`isPlaying=${isPlaying}`);
+    } else {
+      notFound.push(`isPlaying`);
     }
+
     const currentPlaySessionId = await getAsyncItem(ASYNC_KEYS.currentPlaySessionId);
     if (currentPlaySessionId !== null && currentPlaySessionId !== undefined) {
       store._setPlaySessionId(currentPlaySessionId);
-      log.info('Restored currentPlaySessionId from AsyncStorage');
+      restored.push(`currentPlaySessionId`);
+    } else {
+      notFound.push(`currentPlaySessionId`);
     }
 
+    // Log consolidated summary
+    log.info(`State restoration from AsyncStorage: restored=[${restored.join(', ')}], notFound=[${notFound.join(', ')}]`);
+
     // Reconcile with ProgressService database (source of truth)
+    let dbReconciliationSummary: string[] = [];
     try {
       // Need userId and libraryItemId to get session - skip if not available
       const username = await getItem(SECURE_KEYS.username);
       if (!username) {
-        log.info('No username found, skipping DB reconciliation');
-        return;
-      }
+        dbReconciliationSummary.push('skipped (no username)');
+        log.info('DB reconciliation: skipped (no username)');
+      } else {
+        const user = await getUserByUsername(username);
+        if (!user?.id) {
+          dbReconciliationSummary.push('skipped (user not found)');
+          log.info('DB reconciliation: skipped (user not found)');
+        } else {
+          const libraryItemId = store.player.currentTrack?.libraryItemId;
+          if (!libraryItemId) {
+            dbReconciliationSummary.push('skipped (no currentTrack)');
+            log.info('DB reconciliation: skipped (no currentTrack)');
+          } else {
+            const dbSession = await progressService.getCurrentSession(user.id, libraryItemId);
 
-      const user = await getUserByUsername(username);
-      if (!user?.id) {
-        log.info('User not found, skipping DB reconciliation');
-        return;
-      }
+            if (dbSession) {
+              dbReconciliationSummary.push(`found session for ${libraryItemId}`);
 
-      const libraryItemId = store.player.currentTrack?.libraryItemId;
-      if (!libraryItemId) {
-        log.info('No currentTrack found, skipping DB reconciliation');
-        return;
-      }
+              // Check if position should be updated from DB session
+              // DB session position is authoritative
+              if (dbSession.currentTime !== store.player.position) {
+                const positionDiff = Math.abs(dbSession.currentTime - store.player.position);
+                if (positionDiff > 1) { // Only update if difference is significant (>1s)
+                  dbReconciliationSummary.push(`position updated: ${formatTime(store.player.position)}s -> ${formatTime(dbSession.currentTime)}s`);
+                  store.updatePosition(dbSession.currentTime);
+                } else {
+                  dbReconciliationSummary.push(`position match (diff=${formatTime(positionDiff)}s)`);
+                }
+              } else {
+                dbReconciliationSummary.push(`position match`);
+              }
 
-      const dbSession = await progressService.getCurrentSession(user.id, libraryItemId);
-
-      if (dbSession) {
-        log.info(`Found active session in DB for ${dbSession.libraryItemId}, reconciling state`);
-
-        // Check if position should be updated from DB session
-        // DB session position is authoritative
-        if (dbSession.currentTime !== store.player.position) {
-          const positionDiff = Math.abs(dbSession.currentTime - store.player.position);
-          if (positionDiff > 1) { // Only update if difference is significant (>1s)
-            log.info(`Position mismatch: AsyncStorage=${store.player.position.toFixed(2)}s, DB=${dbSession.currentTime.toFixed(2)}s, updating from DB`);
-            store.updatePosition(dbSession.currentTime);
+              // Check if currentTrack should be updated from DB session
+              const currentTrackLibraryItemId = store.player.currentTrack?.libraryItemId;
+              if (!currentTrackLibraryItemId || currentTrackLibraryItemId !== dbSession.libraryItemId) {
+                dbReconciliationSummary.push(`track mismatch: AsyncStorage=${currentTrackLibraryItemId || 'none'}, DB=${dbSession.libraryItemId}`);
+                // Note: We can't fully restore PlayerTrack here without loading metadata/files
+                // The track will be restored by PlayerService.restorePlayerServiceFromSession() or playTrack()
+              } else {
+                dbReconciliationSummary.push(`track match`);
+              }
+            } else {
+              dbReconciliationSummary.push('no active session found');
+            }
           }
         }
-
-        // Check if currentTrack should be updated from DB session
-        const currentTrackLibraryItemId = store.player.currentTrack?.libraryItemId;
-        if (!currentTrackLibraryItemId || currentTrackLibraryItemId !== dbSession.libraryItemId) {
-          log.info(`Track mismatch: AsyncStorage=${currentTrackLibraryItemId || 'none'}, DB=${dbSession.libraryItemId}, track will be restored when playback starts`);
-          // Note: We can't fully restore PlayerTrack here without loading metadata/files
-          // The track will be restored by PlayerService.restorePlayerServiceFromSession() or playTrack()
-        }
-      } else {
-        log.info('No active session in DB, using AsyncStorage values');
       }
     } catch (error) {
+      dbReconciliationSummary.push(`error: ${(error as Error).message}`);
       log.error('Failed to reconcile with ProgressService', error as Error);
       // Continue with AsyncStorage values if reconciliation fails
+    }
+
+    if (dbReconciliationSummary.length > 0) {
+      log.info(`DB reconciliation: ${dbReconciliationSummary.join(', ')}`);
     }
 
     // Try to apply position to TrackPlayer if possible
@@ -200,7 +233,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         const queue = await TrackPlayer.getQueue();
         if (queue.length > 0) {
           await TrackPlayer.seekTo(store.player.position);
-          log.info(`Applied restored position to TrackPlayer: ${store.player.position}s`);
+          log.info(`Applied restored position to TrackPlayer: ${formatTime(store.player.position)}s`);
         }
       } catch (error) {
         // Ignore errors - TrackPlayer might not be ready yet

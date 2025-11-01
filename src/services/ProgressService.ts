@@ -191,8 +191,43 @@ export class ProgressService {
         throw new Error('User not found');
       }
 
-      // Check for existing active session for this item
-      const existingSession = await getActiveSession(user.id, libraryItemId);
+      // Check for multiple active sessions for this item and clean up duplicates
+      const allActiveSessionsForItem = (await getAllActiveSessionsForUser(user.id))
+        .filter(s => s.libraryItemId === libraryItemId);
+
+      let existingSession: LocalListeningSessionRow | null = null;
+
+      if (allActiveSessionsForItem.length > 1) {
+        log.warn(`Found ${allActiveSessionsForItem.length} active sessions for item ${libraryItemId}, cleaning up duplicates`);
+
+        // Sort by updatedAt DESC (most recent first)
+        const sortedSessions = allActiveSessionsForItem.sort((a, b) =>
+          b.updatedAt.getTime() - a.updatedAt.getTime()
+        );
+
+        const bestSession = sortedSessions[0]; // Keep this one
+        const sessionsToEnd = sortedSessions.slice(1);
+
+        for (const session of sessionsToEnd) {
+          const hasInvalidProgress = session.currentTime < 5;
+          const isMuchOlder = (bestSession.updatedAt.getTime() - session.updatedAt.getTime()) > 10 * 60 * 1000; // 10 minutes
+
+          if (hasInvalidProgress || isMuchOlder) {
+            log.info(`Ending duplicate session ${session.id} (currentTime=${session.currentTime}, updatedAt=${session.updatedAt.toISOString()}) session=${session.id} item=${libraryItemId}`);
+            await endListeningSession(session.id, session.currentTime);
+          } else {
+            log.warn(`Multiple valid sessions found, keeping most recent (${bestSession.id}) session=${bestSession.id} item=${libraryItemId}`);
+            // Still end the older one to avoid duplicates
+            await endListeningSession(session.id, session.currentTime);
+          }
+        }
+
+        // Use the best session as existingSession
+        existingSession = bestSession;
+      } else if (allActiveSessionsForItem.length === 1) {
+        existingSession = allActiveSessionsForItem[0];
+      }
+
       let shouldEndExistingSession = false;
       let resumePosition = startTime;
 
@@ -425,6 +460,11 @@ export class ProgressService {
         log.info(`Paused playback, synced to server session=${session.id} item=${libraryItemId}`);
       }
 
+      // Defensive logging: warn if writing currentTime=0 for an active session
+      if (currentTime === 0 && session.currentTime > 0) {
+        log.warn(`Writing currentTime=0 for active session (previous position was ${session.currentTime}s) session=${session.id} item=${libraryItemId}`);
+      }
+
       // Update session progress
       await updateSessionProgress(
         session.id,
@@ -615,6 +655,12 @@ export class ProgressService {
   ): Promise<void> {
     // Use current time for active sessions, endTime for completed sessions
     const currentTime = session.endTime || session.currentTime;
+
+    // Defensive logging: warn if syncing currentTime=0 for an active session
+    if (currentTime === 0 && !session.endTime) {
+      log.warn(`Syncing active session with currentTime=0 session=${session.id} item=${session.libraryItemId}`);
+    }
+
     // Use the tracked timeListening field, which represents actual listening time
     const timeListening = session.timeListening || 0;
 

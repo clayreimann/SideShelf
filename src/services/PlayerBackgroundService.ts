@@ -548,11 +548,32 @@ async function handleActiveTrackChanged(
       const volume = await TrackPlayer.getVolume();
       const sessionId = store.player.currentPlaySessionId;
 
+      // Get current position before starting session
+      let startPosition = 0;
+      const MIN_PLAUSIBLE_POSITION = 5; // seconds
+
+      try {
+        const currentProgress = await TrackPlayer.getProgress();
+        startPosition = currentProgress.position || 0;
+      } catch (error) {
+        log.warn(`Failed to get TrackPlayer progress, using store position`);
+        startPosition = store.player.position || 0;
+      }
+
+      // Validate position - if it's implausibly small, prefer store position
+      if (startPosition < MIN_PLAUSIBLE_POSITION && store.player.position >= MIN_PLAUSIBLE_POSITION) {
+        log.warn(`TrackPlayer position ${formatTime(startPosition)}s is implausibly small, using store position ${formatTime(store.player.position)}s`);
+        startPosition = store.player.position;
+      }
+
+      // If still implausible, let startSession() handle it (it has fallback logic)
+      // startSession will use activeSession or savedProgress if startTime is 0 or small
+
       await progressService.startSession(
         username,
         currentTrack.libraryItemId,
         currentTrack.mediaId,
-        0, // startTime - will be determined by active session or saved progress in ProgressService
+        startPosition,
         currentTrack.duration,
         playbackRate,
         volume,
