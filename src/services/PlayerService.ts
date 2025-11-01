@@ -27,6 +27,7 @@ import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getItem, SECURE_KEYS } from "@/lib/secureStore";
 import { progressService } from "@/services/ProgressService";
+import { updateNowPlayingMetadata } from "@/services/playerNowPlaying";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
 import type { PlayerTrack } from "@/types/player";
@@ -379,7 +380,7 @@ export class PlayerService {
       // Wait a bit for the chapter to be calculated
       setTimeout(() => {
         this.updateNowPlayingMetadata().catch((error) => {
-          log.warn('Failed to update now playing metadata on track load:', error);
+          log.warn(`Failed to update now playing metadata on track load: ${error instanceof Error ? error.message : String(error)}`);
         });
       }, 1000);
 
@@ -701,56 +702,10 @@ export class PlayerService {
 
   /**
    * Update now playing metadata with chapter information
-   *
-   * Updates the now playing center with:
-   * - Title: Current chapter title
-   * - Album: Book title
-   * - Duration: Chapter duration (so progress bar shows chapter progress)
-   * - Elapsed time: Chapter-relative position (resets to 0 at start of each chapter)
-   *
-   * Note: TrackPlayer's actual playback position is always absolute (book position),
-   * but we set elapsedTime to chapter-relative position so the now playing center
-   * shows progress within the current chapter.
+   * Delegates to the standalone helper function to avoid circular dependencies
    */
   async updateNowPlayingMetadata(): Promise<void> {
-    try {
-      const store = useAppStore.getState();
-      const { currentTrack, currentChapter } = store.player;
-
-      if (!currentTrack || !currentChapter) {
-        // No chapter info - use default track metadata
-        return;
-      }
-
-      // Use chapter-relative position for elapsed time
-      // positionInChapter is calculated as: absolutePosition - chapter.start
-      const chapterElapsedTime = currentChapter.positionInChapter;
-      const chapterDuration = currentChapter.chapterDuration;
-      const chapterTitle = currentChapter.chapter.title;
-      const bookTitle = currentTrack.title;
-      const author = currentTrack.author;
-
-      // Get the active track index to update its metadata
-      const activeTrackIndex = await TrackPlayer.getActiveTrackIndex();
-      if (activeTrackIndex === null) {
-        return;
-      }
-
-      // Update now playing metadata with chapter info
-      // TrackPlayer will use this for the lock screen and notification controls
-      await TrackPlayer.updateMetadataForTrack(activeTrackIndex, {
-        title: chapterTitle,
-        artist: author,
-        album: bookTitle,
-        artwork: currentTrack.coverUri || undefined,
-        duration: chapterDuration,
-        elapsedTime: chapterElapsedTime,
-      });
-
-      log.debug(`Updated now playing: chapter="${chapterTitle}" elapsed=${formatTime(chapterElapsedTime)}/${formatTime(chapterDuration)}`);
-    } catch (error) {
-      log.error('Failed to update now playing metadata:', error as Error);
-    }
+    await updateNowPlayingMetadata();
   }
 
   /**

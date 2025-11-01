@@ -10,6 +10,8 @@ import { getUserByUsername } from "@/db/helpers/users";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getItem, SECURE_KEYS } from "@/lib/secureStore";
+import { updateNowPlayingMetadata } from "@/services/playerNowPlaying";
+import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
 import { AppState } from "react-native";
 import TrackPlayer, {
@@ -24,7 +26,6 @@ import TrackPlayer, {
   RemoteSeekEvent,
   State,
 } from "react-native-track-player";
-import { progressService } from "./ProgressService";
 
 // Create a cached sublogger for this service (more efficient than calling logger.X('tag', ...) each time)
 const log = logger.forTag("PlayerBackgroundService");
@@ -392,7 +393,7 @@ async function handlePlaybackProgressUpdated(
       const currentChapter = store.player.currentChapter;
       if (previousChapter?.chapter.id !== currentChapter?.chapter.id && currentChapter) {
         // Chapter changed - update now playing metadata immediately (non-gated)
-        await playerService.updateNowPlayingMetadata();
+        await updateNowPlayingMetadata();
       }
 
       // Periodic now playing metadata updates (gated by setting)
@@ -400,7 +401,7 @@ async function handlePlaybackProgressUpdated(
       const { getPeriodicNowPlayingUpdatesEnabled } = await import('@/lib/appSettings');
       const periodicUpdatesEnabled = await getPeriodicNowPlayingUpdatesEnabled();
       if (periodicUpdatesEnabled && Math.floor(event.position) % 2 === 0) {
-        await playerService.updateNowPlayingMetadata();
+        await updateNowPlayingMetadata();
       }
 
       // Check if we should sync to server (uses adaptive intervals based on network type)
