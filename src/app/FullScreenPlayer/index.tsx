@@ -61,6 +61,7 @@ export default function FullScreenPlayer() {
   const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
   const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
   const [showChapterList, setShowChapterList] = useState(false);
+  const [hasScrolledToChapter, setHasScrolledToChapter] = useState(false);
 
   // Animation values
   const coverSizeAnim = useRef(new Animated.Value(0)).current; // 0 = full size, 1 = minimized
@@ -91,12 +92,12 @@ export default function FullScreenPlayer() {
       Animated.timing(chapterListAnim, {
         toValue: showChapterList ? 1 : 0,
         duration: 300,
-        useNativeDriver: true,
+        useNativeDriver: false, // Need to animate height, so can't use native driver
       }),
     ]).start();
 
-    // Auto-scroll to current chapter when list opens
-    if (showChapterList && currentTrack?.chapters && currentChapter) {
+    // Auto-scroll to current chapter when list opens (only once per open)
+    if (showChapterList && currentTrack?.chapters && currentChapter && !hasScrolledToChapter) {
       const currentIndex = getCurrentChapterIndex(currentTrack.chapters, position);
       if (currentIndex >= 0) {
         setTimeout(() => {
@@ -105,10 +106,41 @@ export default function FullScreenPlayer() {
             animated: true,
             viewPosition: 0.3, // Position current chapter 30% from top
           });
+          setHasScrolledToChapter(true);
         }, 350); // Wait for animation to complete
       }
     }
-  }, [showChapterList, currentTrack, currentChapter, position, coverSizeAnim, chapterListAnim]);
+
+    // Reset scroll flag when list closes
+    if (!showChapterList) {
+      setHasScrolledToChapter(false);
+    }
+  }, [showChapterList, currentTrack, currentChapter, coverSizeAnim, chapterListAnim, hasScrolledToChapter]);
+
+  // Track chapter changes and auto-scroll if list is open and user hasn't manually scrolled
+  const previousChapterIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const currentChapterId = currentChapter?.chapter.id;
+    if (
+      showChapterList &&
+      currentChapterId &&
+      currentChapterId !== previousChapterIdRef.current &&
+      currentTrack?.chapters &&
+      !hasScrolledToChapter
+    ) {
+      const currentIndex = getCurrentChapterIndex(currentTrack.chapters, position);
+      if (currentIndex >= 0) {
+        setTimeout(() => {
+          chapterListRef.current?.scrollToIndex({
+            index: currentIndex,
+            animated: true,
+            viewPosition: 0.3,
+          });
+        }, 100);
+      }
+    }
+    previousChapterIdRef.current = currentChapterId;
+  }, [currentChapter?.chapter.id, showChapterList, currentTrack, position, hasScrolledToChapter]);
 
   const toggleChapterList = useCallback(() => {
     setShowChapterList((prev) => !prev);
@@ -231,11 +263,18 @@ export default function FullScreenPlayer() {
     outputRange: [24, 8],
   });
 
-  // Interpolate chapter list opacity and translateY
-  const chapterListOpacity = chapterListAnim;
+  // Interpolate chapter list opacity, translateY, and height
+  const chapterListOpacity = chapterListAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
   const chapterListTranslateY = chapterListAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [100, 0], // Slide up from 100px below
+    outputRange: [20, 0], // Slide up from 20px below
+  });
+  const chapterListHeight = chapterListAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, height * 0.4], // Animate height from 0 to maxHeight
   });
 
   const chapters = currentTrack?.chapters || [];
@@ -331,10 +370,11 @@ export default function FullScreenPlayer() {
           {chapters.length > 0 && (
             <Animated.View
               style={{
-                maxHeight: height * 0.4,
+                height: chapterListHeight,
                 opacity: chapterListOpacity,
                 transform: [{ translateY: chapterListTranslateY }],
                 marginBottom: 16,
+                overflow: 'hidden',
               }}
             >
               <FlatList
@@ -393,6 +433,10 @@ export default function FullScreenPlayer() {
                       </View>
                     </TouchableOpacity>
                   );
+                }}
+                onScrollBeginDrag={() => {
+                  // User started scrolling manually - don't auto-scroll anymore
+                  setHasScrolledToChapter(true);
                 }}
                 onScrollToIndexFailed={(info) => {
                   // Fallback: scroll to offset if index scroll fails

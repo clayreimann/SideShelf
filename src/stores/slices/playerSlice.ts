@@ -170,17 +170,14 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       const username = await getItem(SECURE_KEYS.username);
       if (!username) {
         dbReconciliationSummary.push('skipped (no username)');
-        log.info('DB reconciliation: skipped (no username)');
       } else {
         const user = await getUserByUsername(username);
         if (!user?.id) {
           dbReconciliationSummary.push('skipped (user not found)');
-          log.info('DB reconciliation: skipped (user not found)');
         } else {
           const libraryItemId = store.player.currentTrack?.libraryItemId;
           if (!libraryItemId) {
             dbReconciliationSummary.push('skipped (no currentTrack)');
-            log.info('DB reconciliation: skipped (no currentTrack)');
           } else {
             const dbSession = await progressService.getCurrentSession(user.id, libraryItemId);
 
@@ -195,7 +192,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
                   dbReconciliationSummary.push(`position updated: ${formatTime(store.player.position)}s -> ${formatTime(dbSession.currentTime)}s`);
                   store.updatePosition(dbSession.currentTime);
                 } else {
-                  dbReconciliationSummary.push(`position match (diff=${formatTime(positionDiff)}s)`);
+                  dbReconciliationSummary.push(`position match (diff=${positionDiff}s)`);
                 }
               } else {
                 dbReconciliationSummary.push(`position match`);
