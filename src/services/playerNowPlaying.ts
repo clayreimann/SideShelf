@@ -32,6 +32,7 @@ export async function updateNowPlayingMetadata(): Promise<void> {
   try {
     const store = useAppStore.getState();
     const { currentTrack, currentChapter } = store.player;
+    log.debug('Updating now playing metadata');
 
     if (!currentTrack || !currentChapter) {
       // No chapter info - use default track metadata

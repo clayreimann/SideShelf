@@ -18,6 +18,8 @@ import type { CurrentChapter, PlayerTrack } from '@/types/player';
 import type { SliceCreator } from '@/types/store';
 import TrackPlayer from 'react-native-track-player';
 
+const log = logger.forTag('PlayerSlice');
+
 /**
  * Player slice state interface - scoped under 'player' to avoid conflicts
  */
@@ -103,7 +105,6 @@ export interface PlayerSlice extends PlayerSliceState, PlayerSliceActions {}
  */
 export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
   restorePersistedState: async () => {
-    const log = logger.forTag('PlayerSlice');
 
     const store = get();
     const restored: string[] = [];
@@ -258,7 +259,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   // Actions
   initializePlayerSlice: async () => {
-    const log = logger.forTag('PlayerSlice');
     log.info('Initializing player slice');
     set((state: PlayerSlice) => ({
       ...state,
@@ -352,29 +352,32 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   _updateCurrentChapter: (position: number) => {
     const state = get() as PlayerSlice;
-    const { currentTrack } = state.player;
+    const { currentTrack, currentChapter } = state.player;
+    const chapter = currentChapter?.chapter;
 
     if (!currentTrack || !currentTrack.chapters.length) {
+      log.debug(`Cannot update curent chapter hasTrack=${!!currentTrack} hasChapters=${currentTrack?.chapters?.length ?? 0}`);
       return;
     }
 
     // Find the current chapter based on absolute position (book position)
-    const currentChapter = currentTrack.chapters.find(
+    const nextChapter = position < (chapter?.end || 0) ? chapter : currentTrack.chapters.find(
       (chapter) => position >= chapter.start && position < chapter.end
     );
 
-    if (currentChapter) {
+    if (nextChapter) {
+      log.debug(`Current chapter updated: "${nextChapter.title}" (${formatTime(nextChapter.start)}s - ${formatTime(nextChapter.end)}s)`);
       // Calculate chapter-relative position: absolute position minus chapter start
       // This is used for now playing elapsedTime display (resets to 0 at chapter start)
-      const positionInChapter = position - currentChapter.start;
-      const chapterDuration = currentChapter.end - currentChapter.start;
+      const positionInChapter = position - nextChapter.start;
+      const chapterDuration = nextChapter.end - nextChapter.start;
 
       set((state: PlayerSlice) => ({
         ...state,
         player: {
           ...state.player,
           currentChapter: {
-            chapter: currentChapter,
+            chapter: nextChapter,
             positionInChapter,
             chapterDuration,
           },

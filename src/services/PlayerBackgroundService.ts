@@ -352,12 +352,13 @@ async function handlePlaybackProgressUpdated(
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
     const ids = await getUserIdAndLibraryItemId();
+    const previousChapter = store.player.currentChapter;
 
     if (ids) {
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
 
       if (Math.floor(event.position) % 5 === 0) {
-        log.info(`Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} session=${session?.sessionId || 'none'} item=${ids.libraryItemId}`);
+        log.info(`Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} session=${session?.sessionId || 'none'} item=${ids.libraryItemId} chapter=${JSON.stringify(store.player.currentChapter?.chapter)}`);
       }
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
@@ -377,7 +378,6 @@ async function handlePlaybackProgressUpdated(
 
       // Sync store position from session (DB is source of truth after updateProgress)
       const updatedSession = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
-      const previousChapter = store.player.currentChapter;
 
       if (updatedSession) {
         // Use session position as source of truth, not TrackPlayer position directly
