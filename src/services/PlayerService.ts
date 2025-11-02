@@ -1090,7 +1090,7 @@ export class PlayerService {
       // Check if track matches
       const trackMatches =
       (!currentTrack && !store.player.currentTrack) ||
-      (currentTrack as any)?.id.startsWith(store.player.currentTrack?.libraryItemId || "");
+      (currentTrack as any)?.id.startsWith(store.player.currentTrack?.mediaId || "");
 
       // Check if position is roughly the same (within 5 seconds)
       const positionMatches =
@@ -1108,7 +1108,8 @@ export class PlayerService {
           `Connection mismatch - Track: ${trackMatches ? "match" : "mismatch"}, Position: ${positionMatches ? "match" : "mismatch"}, Playing: ${playingMatches ? "match" : "mismatch"}`
         );
         if (!trackMatches) {
-          diagLog.info(`From TrackPlayer: ${JSON.stringify(currentTrack)}\n\nFrom store: ${JSON.stringify(store.player.currentTrack)}}`)
+          const { audioFiles, chapters, ...interestingProps } = store.player.currentTrack || {};
+          diagLog.info(`From TrackPlayer:\n${JSON.stringify(currentTrack)}\nFrom store:\n${JSON.stringify(interestingProps)}`)
         }
         if (!positionMatches) {
           diagLog.info(`From store position: ${store.player.position}, from TrackPlayer position: ${progress.position}`);
