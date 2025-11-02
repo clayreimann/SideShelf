@@ -5,6 +5,7 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
+import { ASYNC_KEYS, getItem as getAsyncItem, saveItem as saveAsyncItem } from '@/lib/asyncStore';
 
 export const SECURE_KEYS = {
   serverUrl: 'abs.serverUrl',
@@ -35,4 +36,21 @@ export async function getItem(key: SecureKeyType): Promise<string | null> {
     console.error(`[secureStore] Failed to get item ${key}:`, error);
     return null;
   }
+}
+
+export async function persistUsername(username: string | null): Promise<void> {
+  await Promise.all([
+    saveItem(SECURE_KEYS.username, username),
+    saveAsyncItem(ASYNC_KEYS.username, username),
+  ]);
+}
+
+export async function getStoredUsername(): Promise<string | null> {
+  const secureUsername = await getItem(SECURE_KEYS.username);
+  if (secureUsername) {
+    return secureUsername;
+  }
+
+  const fallback = await getAsyncItem(ASYNC_KEYS.username);
+  return typeof fallback === 'string' ? fallback : null;
 }

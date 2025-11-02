@@ -9,7 +9,7 @@
 import { getUserByUsername } from "@/db/helpers/users";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
-import { getItem, SECURE_KEYS } from "@/lib/secureStore";
+import { getStoredUsername } from "@/lib/secureStore";
 import { updateNowPlayingMetadata } from "@/services/playerNowPlaying";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
@@ -87,7 +87,7 @@ async function getUserIdAndLibraryItemId(): Promise<{ userId: string; libraryIte
     return null;
   }
 
-  const username = await getItem(SECURE_KEYS.username);
+  const username = await getStoredUsername();
   if (!username) {
     return null;
   }
@@ -447,7 +447,7 @@ async function handlePlaybackProgressUpdated(
         } else if (isPlaying) {
           // Rehydration failed but playback is active - start a new session
           log.info(`Rehydration failed but playback is active, starting new session item=${currentTrack.libraryItemId}`);
-          const username = await getItem(SECURE_KEYS.username);
+          const username = await getStoredUsername();
           if (username) {
             const playbackRate = await TrackPlayer.getRate();
             const volume = await TrackPlayer.getVolume();
@@ -537,7 +537,7 @@ async function handleActiveTrackChanged(
     // Get track info from playerSlice and username from secure store
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
-    const username = await getItem(SECURE_KEYS.username);
+    const username = await getStoredUsername();
 
     log.info(`Active track changed: ${event.track?.title || "unknown"} item=${currentTrack?.libraryItemId || 'unknown'}`);
 

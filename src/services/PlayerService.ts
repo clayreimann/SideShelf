@@ -25,7 +25,7 @@ import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
-import { getItem, SECURE_KEYS } from "@/lib/secureStore";
+import { getStoredUsername } from "@/lib/secureStore";
 import { progressService } from "@/services/ProgressService";
 import { updateNowPlayingMetadata } from "@/services/playerNowPlaying";
 import { useAppStore } from "@/stores/appStore";
@@ -224,7 +224,7 @@ export class PlayerService {
       log.info(`Loading track for library item: ${libraryItemId}`);
 
       // Get username from secure storage
-      const username = await getItem(SECURE_KEYS.username);
+      const username = await getStoredUsername();
       if (!username) {
         throw new Error("No authenticated user found");
       }
@@ -591,7 +591,7 @@ export class PlayerService {
     }
 
     try {
-      const username = await getItem(SECURE_KEYS.username);
+      const username = await getStoredUsername();
       if (username) {
         const user = await getUserByUsername(username);
         if (user?.id) {
@@ -695,7 +695,7 @@ export class PlayerService {
     } else if (store.player.currentTrack?.libraryItemId) {
       // Cold boot scenario - check the database for last played time
       try {
-        const username = await getItem(SECURE_KEYS.username);
+        const username = await getStoredUsername();
         if (!username) {
           return;
         }
@@ -980,7 +980,7 @@ export class PlayerService {
    */
   async restorePlayerServiceFromSession(): Promise<void> {
     try {
-      const username = await getItem(SECURE_KEYS.username);
+      const username = await getStoredUsername();
       if (!username) {
         log.info('No username found, skipping PlayerService restoration');
         return;
@@ -1162,7 +1162,7 @@ export class PlayerService {
       let dbPosition = store.player.position;
       if (store.player.currentTrack?.libraryItemId) {
         try {
-          const username = await getItem(SECURE_KEYS.username);
+          const username = await getStoredUsername();
           if (username) {
             const user = await getUserByUsername(username);
             if (user?.id) {
@@ -1183,7 +1183,7 @@ export class PlayerService {
         report.discrepanciesFound = true;
         // TrackPlayer has tracks but playerSlice doesn't - try to restore from DB
         try {
-          const username = await getItem(SECURE_KEYS.username);
+          const username = await getStoredUsername();
           if (username) {
             const user = await getUserByUsername(username);
             if (user?.id) {

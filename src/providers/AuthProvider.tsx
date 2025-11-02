@@ -1,7 +1,7 @@
 import { authHelpers, mediaProgressHelpers, userHelpers } from '@/db/helpers';
 import { setApiConfig } from '@/lib/api/api';
 import { login as doLogin } from '@/lib/api/endpoints';
-import { getItem, saveItem, SECURE_KEYS } from '@/lib/secureStore';
+import { getItem, getStoredUsername, persistUsername, saveItem, SECURE_KEYS } from '@/lib/secureStore';
 import { useDb } from '@/providers/DbProvider';
 import { progressService } from '@/services/ProgressService';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -34,10 +34,13 @@ async function persistTokensAndState(
         username,
     }: { accessToken: string | null; refreshToken: string | null; username?: string | null }
 ): Promise<void> {
+    const usernamePersistence =
+        username !== undefined ? persistUsername(username) : Promise.resolve();
+
     await Promise.all([
         saveItem(SECURE_KEYS.accessToken, accessToken),
         saveItem(SECURE_KEYS.refreshToken, refreshToken),
-        username !== undefined ? saveItem(SECURE_KEYS.username, username) : Promise.resolve(),
+        usernamePersistence,
     ]);
     setState((s) => ({
         ...s,
@@ -57,12 +60,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         (async () => {
             if (!dbInitialized) return;
-            const [serverUrl, accessToken, refreshToken, username] = await Promise.all([
+            const [serverUrl, accessToken, refreshToken] = await Promise.all([
                 getItem(SECURE_KEYS.serverUrl),
                 getItem(SECURE_KEYS.accessToken),
                 getItem(SECURE_KEYS.refreshToken),
-                getItem(SECURE_KEYS.username),
             ]);
+            const username = await getStoredUsername();
+            await persistUsername(username);
             setState(s => ({ ...s, serverUrl, accessToken, refreshToken, username }));
             setInitialized(true);
         })();
@@ -163,8 +167,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await Promise.all([
             saveItem(SECURE_KEYS.accessToken, null),
             saveItem(SECURE_KEYS.refreshToken, null),
+            persistUsername(null),
         ]);
-        setState((s) => ({ ...s, accessToken: null, refreshToken: null }));
+        setState((s) => ({ ...s, accessToken: null, refreshToken: null, username: null }));
     }, []);
 
     const value = useMemo<AuthContextValue>(() => ({

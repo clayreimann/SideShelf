@@ -29,7 +29,7 @@ import type { LibraryItemRow } from '@/db/schema/libraryItems';
 import { LocalListeningSessionRow } from '@/db/schema/localData';
 import { closeSession, createLocalSession, fetchMe, fetchMediaProgress, syncSession } from '@/lib/api/endpoints';
 import { logger } from '@/lib/logger';
-import { getItem, SECURE_KEYS } from '@/lib/secureStore';
+import { getStoredUsername } from '@/lib/secureStore';
 import NetInfo from "@react-native-community/netinfo";
 
 // Create cached sublogger for this service
@@ -99,7 +99,7 @@ export class ProgressService {
    */
   async rehydrateActiveSession(matchLibraryItemId?: string): Promise<void> {
     try {
-      const username = await getItem(SECURE_KEYS.username);
+      const username = await getStoredUsername();
       if (!username) {
         log.info('No username found, skipping session rehydration');
         return;
@@ -116,6 +116,8 @@ export class ProgressService {
       if (activeSessions.length === 0) {
         log.info('No active sessions to rehydrate');
         return;
+      } else if (activeSessions.length > 1) {
+        log.warn(`Multiple (${activeSessions.length}) active sessions found during rehydration`);
       }
 
       // Use the most recently updated session
@@ -409,7 +411,7 @@ export class ProgressService {
         await this.endStaleSession(userId, libraryItemId, staleSessionEndTime);
 
         // Get username for starting new session
-        const username = await getItem(SECURE_KEYS.username);
+        const username = await getStoredUsername();
         if (username) {
           // Get track duration from session or metadata
           let duration = session.duration;

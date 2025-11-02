@@ -12,7 +12,7 @@ import { getUserByUsername } from '@/db/helpers/users';
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from '@/lib/asyncStore';
 import { formatTime } from '@/lib/helpers/formatters';
 import { logger } from '@/lib/logger';
-import { getItem, SECURE_KEYS } from '@/lib/secureStore';
+import { getStoredUsername } from '@/lib/secureStore';
 import { progressService } from '@/services/ProgressService';
 import type { CurrentChapter, PlayerTrack } from '@/types/player';
 import type { SliceCreator } from '@/types/store';
@@ -168,7 +168,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     let dbReconciliationSummary: string[] = [];
     try {
       // Need userId and libraryItemId to get session - skip if not available
-      const username = await getItem(SECURE_KEYS.username);
+      const username = await getStoredUsername();
       if (!username) {
         dbReconciliationSummary.push('skipped (no username)');
       } else {

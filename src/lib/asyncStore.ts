@@ -7,6 +7,7 @@ export const ASYNC_KEYS = {
   position: 'abs.position',
   isPlaying: 'abs.isPlaying',
   currentPlaySessionId: 'abs.currentPlaySessionId',
+  username: 'abs.username',
 };
 
 export async function saveItem(key: string, value: any): Promise<void> {
