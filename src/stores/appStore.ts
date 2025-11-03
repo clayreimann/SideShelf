@@ -5,21 +5,30 @@
  * Each slice handles a specific domain of the application state.
  */
 
-import React from 'react';
-import { create } from 'zustand';
-import { subscribeWithSelector } from 'zustand/middleware';
+import React from "react";
+import { create } from "zustand";
+import { subscribeWithSelector } from "zustand/middleware";
 
-import { AuthorsSlice, createAuthorsSlice } from './slices/authorsSlice';
-import { createDownloadSlice, DownloadSlice } from './slices/downloadSlice';
-import { createHomeSlice, HomeSlice } from './slices/homeSlice';
-import { createLibraryItemDetailsSlice, LibraryItemDetailsSlice } from './slices/libraryItemDetailsSlice';
-import { createLibrarySlice, LibrarySlice } from './slices/librarySlice';
-import { createPlayerSlice, PlayerSlice } from './slices/playerSlice';
-import { createSeriesSlice, SeriesSlice } from './slices/seriesSlice';
-import { createSettingsSlice, SettingsSlice } from './slices/settingsSlice';
-import { createStatisticsSlice, StatisticsSlice } from './slices/statisticsSlice';
-import { createUserProfileSlice, UserProfileSlice } from './slices/userProfileSlice';
-import { createLoggerSlice, LoggerSlice } from './slices/loggerSlice';
+import { AuthorsSlice, createAuthorsSlice } from "./slices/authorsSlice";
+import { createDownloadSlice, DownloadSlice } from "./slices/downloadSlice";
+import { createHomeSlice, HomeSlice } from "./slices/homeSlice";
+import {
+    createLibraryItemDetailsSlice,
+    LibraryItemDetailsSlice,
+} from "./slices/libraryItemDetailsSlice";
+import { createLibrarySlice, LibrarySlice } from "./slices/librarySlice";
+import { createLoggerSlice, LoggerSlice } from "./slices/loggerSlice";
+import { createPlayerSlice, PlayerSlice } from "./slices/playerSlice";
+import { createSeriesSlice, SeriesSlice } from "./slices/seriesSlice";
+import { createSettingsSlice, SettingsSlice } from "./slices/settingsSlice";
+import {
+    createStatisticsSlice,
+    StatisticsSlice,
+} from "./slices/statisticsSlice";
+import {
+    createUserProfileSlice,
+    UserProfileSlice,
+} from "./slices/userProfileSlice";
 
 /**
  * Combined store state interface
@@ -28,18 +37,17 @@ import { createLoggerSlice, LoggerSlice } from './slices/loggerSlice';
  * As new slices are added, they should be included here.
  */
 export interface StoreState
-    extends LibrarySlice,
-        AuthorsSlice,
-        SeriesSlice,
-        PlayerSlice,
-        HomeSlice,
-        LibraryItemDetailsSlice,
-        SettingsSlice,
-        UserProfileSlice,
-        DownloadSlice,
-        StatisticsSlice,
-        LoggerSlice {
-}
+  extends LibrarySlice,
+    AuthorsSlice,
+    SeriesSlice,
+    PlayerSlice,
+    HomeSlice,
+    LibraryItemDetailsSlice,
+    SettingsSlice,
+    UserProfileSlice,
+    DownloadSlice,
+    StatisticsSlice,
+    LoggerSlice {}
 
 /**
  * Main Zustand store with slice pattern
@@ -54,40 +62,40 @@ export interface StoreState
  * - Reusable slice logic
  */
 export const useAppStore = create<StoreState>()(
-    subscribeWithSelector((set, get) => ({
-        // ApiLibrary slice
-        ...createLibrarySlice(set, get),
+  subscribeWithSelector((set, get) => ({
+    // ApiLibrary slice
+    ...createLibrarySlice(set, get),
 
-        // Authors slice
-        ...createAuthorsSlice(set, get),
+    // Authors slice
+    ...createAuthorsSlice(set, get),
 
-        // ApiSeries slice
-        ...createSeriesSlice(set, get),
+    // ApiSeries slice
+    ...createSeriesSlice(set, get),
 
-        // Player slice
-        ...createPlayerSlice(set, get),
+    // Player slice
+    ...createPlayerSlice(set, get),
 
-        // Home slice
-        ...createHomeSlice(set, get),
+    // Home slice
+    ...createHomeSlice(set, get),
 
-        // LibraryItemDetails slice
-        ...createLibraryItemDetailsSlice(set, get),
+    // LibraryItemDetails slice
+    ...createLibraryItemDetailsSlice(set, get),
 
-        // Settings slice
-        ...createSettingsSlice(set, get),
+    // Settings slice
+    ...createSettingsSlice(set, get),
 
-        // UserProfile slice
-        ...createUserProfileSlice(set, get),
+    // UserProfile slice
+    ...createUserProfileSlice(set, get),
 
-        // Download slice
-        ...createDownloadSlice(set, get),
+    // Download slice
+    ...createDownloadSlice(set, get),
 
-        // Statistics slice
-        ...createStatisticsSlice(set, get),
+    // Statistics slice
+    ...createStatisticsSlice(set, get),
 
-        // Logger slice
-        ...createLoggerSlice(set, get),
-    }))
+    // Logger slice
+    ...createLoggerSlice(set, get),
+  }))
 );
 
 /**
@@ -118,60 +126,73 @@ export const useLibraryStore = useAppStore;
  * ```
  */
 export function useLibrary() {
-    const selectedLibraryId = useAppStore(state => state.library.selectedLibraryId);
-    const selectedLibrary = useAppStore(state => state.library.selectedLibrary);
-    const libraries = useAppStore(state => state.library.libraries);
-    const items = useAppStore(state => state.library.items);
-    const sortConfig = useAppStore(state => state.library.sortConfig);
-    const isLoadingLibraries = useAppStore(state => state.library.loading.isLoadingLibraries);
-    const isLoadingItems = useAppStore(state => state.library.loading.isLoadingItems);
-    const isSelectingLibrary = useAppStore(state => state.library.loading.isSelectingLibrary);
-    const isInitializing = useAppStore(state => state.library.loading.isInitializing);
-    const initialized = useAppStore(state => state.library.initialized);
-    const ready = useAppStore(state => state.library.ready);
+  const selectedLibraryId = useAppStore(
+    (state) => state.library.selectedLibraryId
+  );
+  const selectedLibrary = useAppStore((state) => state.library.selectedLibrary);
+  const libraries = useAppStore((state) => state.library.libraries);
+  const items = useAppStore((state) => state.library.items);
+  const sortConfig = useAppStore((state) => state.library.sortConfig);
+  const isLoadingLibraries = useAppStore(
+    (state) => state.library.loading.isLoadingLibraries
+  );
+  const isLoadingItems = useAppStore(
+    (state) => state.library.loading.isLoadingItems
+  );
+  const isSelectingLibrary = useAppStore(
+    (state) => state.library.loading.isSelectingLibrary
+  );
+  const isInitializing = useAppStore(
+    (state) => state.library.loading.isInitializing
+  );
+  const initialized = useAppStore((state) => state.library.initialized);
+  const ready = useAppStore((state) => state.library.ready);
 
-    // Actions (these don't change so we can get them once)
-    const initialize = useAppStore(state => state.initializeLibrarySlice);
-    const selectLibrary = useAppStore(state => state.selectLibrary);
-    const refresh = useAppStore(state => state.refresh);
-    const setSortConfig = useAppStore(state => state.setSortConfig);
-    const reset = useAppStore(state => state.resetLibrary);
+  // Actions (these don't change so we can get them once)
+  const initialize = useAppStore((state) => state.initializeLibrarySlice);
+  const selectLibrary = useAppStore((state) => state.selectLibrary);
+  const refresh = useAppStore((state) => state.refresh);
+  const setSortConfig = useAppStore((state) => state.setSortConfig);
+  const reset = useAppStore((state) => state.resetLibrary);
 
-    return React.useMemo(() => ({
-        selectedLibraryId,
-        selectedLibrary,
-        libraries,
-        items,
-        sortConfig,
-        isLoadingLibraries,
-        isLoadingItems,
-        isSelectingLibrary,
-        isInitializing,
-        initialized,
-        ready,
-        initialize,
-        selectLibrary,
-        refresh,
-        setSortConfig,
-        reset,
-    }), [
-        selectedLibraryId,
-        selectedLibrary,
-        libraries,
-        items,
-        sortConfig,
-        isLoadingLibraries,
-        isLoadingItems,
-        isSelectingLibrary,
-        isInitializing,
-        initialized,
-        ready,
-        initialize,
-        selectLibrary,
-        refresh,
-        setSortConfig,
-        reset,
-    ]);
+  return React.useMemo(
+    () => ({
+      selectedLibraryId,
+      selectedLibrary,
+      libraries,
+      items,
+      sortConfig,
+      isLoadingLibraries,
+      isLoadingItems,
+      isSelectingLibrary,
+      isInitializing,
+      initialized,
+      ready,
+      initialize,
+      selectLibrary,
+      refresh,
+      setSortConfig,
+      reset,
+    }),
+    [
+      selectedLibraryId,
+      selectedLibrary,
+      libraries,
+      items,
+      sortConfig,
+      isLoadingLibraries,
+      isLoadingItems,
+      isSelectingLibrary,
+      isInitializing,
+      initialized,
+      ready,
+      initialize,
+      selectLibrary,
+      refresh,
+      setSortConfig,
+      reset,
+    ]
+  );
 }
 
 /**
@@ -190,7 +211,7 @@ export function useLibrary() {
  * ```
  */
 export function useLibraryState<T>(selector: (state: LibrarySlice) => T): T {
-    return useAppStore(selector);
+  return useAppStore(selector);
 }
 
 /**
@@ -213,13 +234,13 @@ export function useLibraryState<T>(selector: (state: LibrarySlice) => T): T {
  * ```
  */
 export function useLibraryActions() {
-    return useAppStore((state) => ({
-        initialize: state.initializeLibrarySlice,
-        selectLibrary: state.selectLibrary,
-        refresh: state.refresh,
-        setSortConfig: state.setSortConfig,
-        reset: state.resetLibrary,
-    }));
+  return useAppStore((state) => ({
+    initialize: state.initializeLibrarySlice,
+    selectLibrary: state.selectLibrary,
+    refresh: state.refresh,
+    setSortConfig: state.setSortConfig,
+    reset: state.resetLibrary,
+  }));
 }
 
 /**
@@ -243,22 +264,27 @@ export function useLibraryActions() {
  * }
  * ```
  */
-export function useLibraryStoreInitializer(apiConfigured: boolean, dbInitialized: boolean) {
-    const initializeLibrary = useAppStore(state => state.initializeLibrarySlice);
-    const setLibraryReady = useAppStore(state => state._setLibraryReady);
-    const initialized = useAppStore(state => state.library.initialized);
+export function useLibraryStoreInitializer(
+  apiConfigured: boolean,
+  dbInitialized: boolean
+) {
+  const initializeLibrary = useAppStore(
+    (state) => state.initializeLibrarySlice
+  );
+  const setLibraryReady = useAppStore((state) => state._setLibraryReady);
+  const initialized = useAppStore((state) => state.library.initialized);
 
-    // Initialize the store when dependencies are ready
-    React.useEffect(() => {
-        if (!initialized && (apiConfigured || dbInitialized)) {
-            initializeLibrary(apiConfigured, dbInitialized);
-        }
-    }, [initializeLibrary, initialized, apiConfigured, dbInitialized]);
+  // Initialize the store when dependencies are ready
+  React.useEffect(() => {
+    if (!initialized && (apiConfigured || dbInitialized)) {
+      initializeLibrary(apiConfigured, dbInitialized);
+    }
+  }, [initializeLibrary, initialized, apiConfigured, dbInitialized]);
 
-    // Update ready state when dependencies change
-    React.useEffect(() => {
-        setLibraryReady(apiConfigured, dbInitialized);
-    }, [setLibraryReady, apiConfigured, dbInitialized]);
+  // Update ready state when dependencies change
+  React.useEffect(() => {
+    setLibraryReady(apiConfigured, dbInitialized);
+  }, [setLibraryReady, apiConfigured, dbInitialized]);
 }
 
 /**
@@ -283,45 +309,52 @@ export function useLibraryStoreInitializer(apiConfigured: boolean, dbInitialized
  * ```
  */
 export function useAuthors() {
-    const authors = useAppStore(state => state.authors.authors);
-    const items = useAppStore(state => state.authors.items);
-    const sortConfig = useAppStore(state => state.authors.sortConfig);
-    const isLoadingItems = useAppStore(state => state.authors.loading.isLoadingItems);
-    const isInitializing = useAppStore(state => state.authors.loading.isInitializing);
-    const initialized = useAppStore(state => state.authors.initialized);
-    const ready = useAppStore(state => state.authors.ready);
+  const authors = useAppStore((state) => state.authors.authors);
+  const items = useAppStore((state) => state.authors.items);
+  const sortConfig = useAppStore((state) => state.authors.sortConfig);
+  const isLoadingItems = useAppStore(
+    (state) => state.authors.loading.isLoadingItems
+  );
+  const isInitializing = useAppStore(
+    (state) => state.authors.loading.isInitializing
+  );
+  const initialized = useAppStore((state) => state.authors.initialized);
+  const ready = useAppStore((state) => state.authors.ready);
 
-    // Actions (these don't change so we can get them once)
-    const initialize = useAppStore(state => state.initializeAuthors);
-    const refetchAuthors = useAppStore(state => state.refetchAuthors);
-    const setSortConfig = useAppStore(state => state.setAuthorsSortConfig);
-    const reset = useAppStore(state => state.resetAuthors);
+  // Actions (these don't change so we can get them once)
+  const initialize = useAppStore((state) => state.initializeAuthors);
+  const refetchAuthors = useAppStore((state) => state.refetchAuthors);
+  const setSortConfig = useAppStore((state) => state.setAuthorsSortConfig);
+  const reset = useAppStore((state) => state.resetAuthors);
 
-    return React.useMemo(() => ({
-        authors,
-        items,
-        sortConfig,
-        isLoadingItems,
-        isInitializing,
-        initialized,
-        ready,
-        initialize,
-        refetchAuthors,
-        setSortConfig,
-        reset,
-    }), [
-        authors,
-        items,
-        sortConfig,
-        isLoadingItems,
-        isInitializing,
-        initialized,
-        ready,
-        initialize,
-        refetchAuthors,
-        setSortConfig,
-        reset,
-    ]);
+  return React.useMemo(
+    () => ({
+      authors,
+      items,
+      sortConfig,
+      isLoadingItems,
+      isInitializing,
+      initialized,
+      ready,
+      initialize,
+      refetchAuthors,
+      setSortConfig,
+      reset,
+    }),
+    [
+      authors,
+      items,
+      sortConfig,
+      isLoadingItems,
+      isInitializing,
+      initialized,
+      ready,
+      initialize,
+      refetchAuthors,
+      setSortConfig,
+      reset,
+    ]
+  );
 }
 
 /**
@@ -346,45 +379,52 @@ export function useAuthors() {
  * ```
  */
 export function useSeries() {
-    const series = useAppStore(state => state.series.series);
-    const items = useAppStore(state => state.series.items);
-    const sortConfig = useAppStore(state => state.series.sortConfig);
-    const isLoadingItems = useAppStore(state => state.series.loading.isLoadingItems);
-    const isInitializing = useAppStore(state => state.series.loading.isInitializing);
-    const initialized = useAppStore(state => state.series.initialized);
-    const ready = useAppStore(state => state.series.ready);
+  const series = useAppStore((state) => state.series.series);
+  const items = useAppStore((state) => state.series.items);
+  const sortConfig = useAppStore((state) => state.series.sortConfig);
+  const isLoadingItems = useAppStore(
+    (state) => state.series.loading.isLoadingItems
+  );
+  const isInitializing = useAppStore(
+    (state) => state.series.loading.isInitializing
+  );
+  const initialized = useAppStore((state) => state.series.initialized);
+  const ready = useAppStore((state) => state.series.ready);
 
-    // Actions (these don't change so we can get them once)
-    const initialize = useAppStore(state => state.initializeSeries);
-    const refetchSeries = useAppStore(state => state.refetchSeries);
-    const setSortConfig = useAppStore(state => state.setSeriesSortConfig);
-    const reset = useAppStore(state => state.resetSeries);
+  // Actions (these don't change so we can get them once)
+  const initialize = useAppStore((state) => state.initializeSeries);
+  const refetchSeries = useAppStore((state) => state.refetchSeries);
+  const setSortConfig = useAppStore((state) => state.setSeriesSortConfig);
+  const reset = useAppStore((state) => state.resetSeries);
 
-    return React.useMemo(() => ({
-        series,
-        items,
-        sortConfig,
-        isLoadingItems,
-        isInitializing,
-        initialized,
-        ready,
-        initialize,
-        refetchSeries,
-        setSortConfig,
-        reset,
-    }), [
-        series,
-        items,
-        sortConfig,
-        isLoadingItems,
-        isInitializing,
-        initialized,
-        ready,
-        initialize,
-        refetchSeries,
-        setSortConfig,
-        reset,
-    ]);
+  return React.useMemo(
+    () => ({
+      series,
+      items,
+      sortConfig,
+      isLoadingItems,
+      isInitializing,
+      initialized,
+      ready,
+      initialize,
+      refetchSeries,
+      setSortConfig,
+      reset,
+    }),
+    [
+      series,
+      items,
+      sortConfig,
+      isLoadingItems,
+      isInitializing,
+      initialized,
+      ready,
+      initialize,
+      refetchSeries,
+      setSortConfig,
+      reset,
+    ]
+  );
 }
 
 /**
@@ -400,7 +440,7 @@ export function useSeries() {
  * ```
  */
 export function useAuthorsState<T>(selector: (state: AuthorsSlice) => T): T {
-    return useAppStore(selector);
+  return useAppStore(selector);
 }
 
 /**
@@ -416,7 +456,7 @@ export function useAuthorsState<T>(selector: (state: AuthorsSlice) => T): T {
  * ```
  */
 export function useSeriesState<T>(selector: (state: SeriesSlice) => T): T {
-    return useAppStore(selector);
+  return useAppStore(selector);
 }
 
 /**
@@ -436,12 +476,12 @@ export function useSeriesState<T>(selector: (state: SeriesSlice) => T): T {
  * ```
  */
 export function useAuthorsActions() {
-    return useAppStore((state) => ({
-        initialize: state.initializeAuthors,
-        refetchAuthors: state.refetchAuthors,
-        setSortConfig: state.setAuthorsSortConfig,
-        reset: state.resetAuthors,
-    }));
+  return useAppStore((state) => ({
+    initialize: state.initializeAuthors,
+    refetchAuthors: state.refetchAuthors,
+    setSortConfig: state.setAuthorsSortConfig,
+    reset: state.resetAuthors,
+  }));
 }
 
 /**
@@ -461,12 +501,12 @@ export function useAuthorsActions() {
  * ```
  */
 export function useSeriesActions() {
-    return useAppStore((state) => ({
-        initialize: state.initializeSeries,
-        refetchSeries: state.refetchSeries,
-        setSortConfig: state.setSeriesSortConfig,
-        reset: state.resetSeries,
-    }));
+  return useAppStore((state) => ({
+    initialize: state.initializeSeries,
+    refetchSeries: state.refetchSeries,
+    setSortConfig: state.setSeriesSortConfig,
+    reset: state.resetSeries,
+  }));
 }
 
 /**
@@ -490,45 +530,50 @@ export function useSeriesActions() {
  * ```
  */
 export function usePlayer() {
-    const currentTrack = useAppStore(state => state.player.currentTrack);
-    const isPlaying = useAppStore(state => state.player.isPlaying);
-    const position = useAppStore(state => state.player.position);
-    const currentChapter = useAppStore(state => state.player.currentChapter);
-    const playbackRate = useAppStore(state => state.player.playbackRate);
-    const volume = useAppStore(state => state.player.volume);
-    const isModalVisible = useAppStore(state => state.player.isModalVisible);
-    const isLoadingTrack = useAppStore(state => state.player.loading.isLoadingTrack);
-    const isSeeking = useAppStore(state => state.player.loading.isSeeking);
-    const initialized = useAppStore(state => state.player.initialized);
+  const currentTrack = useAppStore((state) => state.player.currentTrack);
+  const isPlaying = useAppStore((state) => state.player.isPlaying);
+  const position = useAppStore((state) => state.player.position);
+  const currentChapter = useAppStore((state) => state.player.currentChapter);
+  const playbackRate = useAppStore((state) => state.player.playbackRate);
+  const volume = useAppStore((state) => state.player.volume);
+  const isModalVisible = useAppStore((state) => state.player.isModalVisible);
+  const isLoadingTrack = useAppStore(
+    (state) => state.player.loading.isLoadingTrack
+  );
+  const isSeeking = useAppStore((state) => state.player.loading.isSeeking);
+  const initialized = useAppStore((state) => state.player.initialized);
 
-    // Only UI-only action
-    const setModalVisible = useAppStore(state => state.setModalVisible);
+  // Only UI-only action
+  const setModalVisible = useAppStore((state) => state.setModalVisible);
 
-    return React.useMemo(() => ({
-        currentTrack,
-        isPlaying,
-        position,
-        currentChapter,
-        playbackRate,
-        volume,
-        isModalVisible,
-        isLoadingTrack,
-        isSeeking,
-        initialized,
-        setModalVisible,
-    }), [
-        currentTrack,
-        isPlaying,
-        position,
-        currentChapter,
-        playbackRate,
-        volume,
-        isModalVisible,
-        isLoadingTrack,
-        isSeeking,
-        initialized,
-        setModalVisible,
-    ]);
+  return React.useMemo(
+    () => ({
+      currentTrack,
+      isPlaying,
+      position,
+      currentChapter,
+      playbackRate,
+      volume,
+      isModalVisible,
+      isLoadingTrack,
+      isSeeking,
+      initialized,
+      setModalVisible,
+    }),
+    [
+      currentTrack,
+      isPlaying,
+      position,
+      currentChapter,
+      playbackRate,
+      volume,
+      isModalVisible,
+      isLoadingTrack,
+      isSeeking,
+      initialized,
+      setModalVisible,
+    ]
+  );
 }
 
 /**
@@ -544,7 +589,7 @@ export function usePlayer() {
  * ```
  */
 export function usePlayerState<T>(selector: (state: PlayerSlice) => T): T {
-    return useAppStore(selector);
+  return useAppStore(selector);
 }
 
 /**
@@ -567,9 +612,9 @@ export function usePlayerState<T>(selector: (state: PlayerSlice) => T): T {
  * ```
  */
 export function usePlayerActions() {
-    return useAppStore((state) => ({
-        setModalVisible: state.setModalVisible,
-    }));
+  return useAppStore((state) => ({
+    setModalVisible: state.setModalVisible,
+  }));
 }
 
 /**
@@ -588,15 +633,15 @@ export function usePlayerActions() {
  * ```
  */
 export function usePlayerStoreInitializer() {
-    const initializePlayer = useAppStore(state => state.initializePlayerSlice);
-    const initialized = useAppStore(state => state.player.initialized);
+  const initializePlayer = useAppStore((state) => state.initializePlayerSlice);
+  const initialized = useAppStore((state) => state.player.initialized);
 
-    // Initialize the player store on mount
-    React.useEffect(() => {
-        if (!initialized) {
-            initializePlayer();
-        }
-    }, [initializePlayer, initialized]);
+  // Initialize the player store on mount
+  React.useEffect(() => {
+    if (!initialized) {
+      initializePlayer();
+    }
+  }, [initializePlayer, initialized]);
 }
 
 /**
@@ -608,22 +653,25 @@ export function usePlayerStoreInitializer() {
  * @param apiConfigured - Whether the API is configured and ready
  * @param dbInitialized - Whether the database is initialized and ready
  */
-export function useAuthorsStoreInitializer(apiConfigured: boolean, dbInitialized: boolean) {
-    const initializeAuthors = useAppStore(state => state.initializeAuthors);
-    const setAuthorsReady = useAppStore(state => state._setAuthorsReady);
-    const initialized = useAppStore(state => state.authors.initialized);
+export function useAuthorsStoreInitializer(
+  apiConfigured: boolean,
+  dbInitialized: boolean
+) {
+  const initializeAuthors = useAppStore((state) => state.initializeAuthors);
+  const setAuthorsReady = useAppStore((state) => state._setAuthorsReady);
+  const initialized = useAppStore((state) => state.authors.initialized);
 
-    // Initialize the store when dependencies are ready
-    React.useEffect(() => {
-        if (!initialized && (apiConfigured || dbInitialized)) {
-            initializeAuthors(apiConfigured, dbInitialized);
-        }
-    }, [initializeAuthors, initialized, apiConfigured, dbInitialized]);
+  // Initialize the store when dependencies are ready
+  React.useEffect(() => {
+    if (!initialized && (apiConfigured || dbInitialized)) {
+      initializeAuthors(apiConfigured, dbInitialized);
+    }
+  }, [initializeAuthors, initialized, apiConfigured, dbInitialized]);
 
-    // Update ready state when dependencies change
-    React.useEffect(() => {
-        setAuthorsReady(apiConfigured, dbInitialized);
-    }, [setAuthorsReady, apiConfigured, dbInitialized]);
+  // Update ready state when dependencies change
+  React.useEffect(() => {
+    setAuthorsReady(apiConfigured, dbInitialized);
+  }, [setAuthorsReady, apiConfigured, dbInitialized]);
 }
 
 /**
@@ -635,22 +683,25 @@ export function useAuthorsStoreInitializer(apiConfigured: boolean, dbInitialized
  * @param apiConfigured - Whether the API is configured and ready
  * @param dbInitialized - Whether the database is initialized and ready
  */
-export function useSeriesStoreInitializer(apiConfigured: boolean, dbInitialized: boolean) {
-    const initializeSeries = useAppStore(state => state.initializeSeries);
-    const setSeriesReady = useAppStore(state => state._setSeriesReady);
-    const initialized = useAppStore(state => state.series.initialized);
+export function useSeriesStoreInitializer(
+  apiConfigured: boolean,
+  dbInitialized: boolean
+) {
+  const initializeSeries = useAppStore((state) => state.initializeSeries);
+  const setSeriesReady = useAppStore((state) => state._setSeriesReady);
+  const initialized = useAppStore((state) => state.series.initialized);
 
-    // Initialize the store when dependencies are ready
-    React.useEffect(() => {
-        if (!initialized && (apiConfigured || dbInitialized)) {
-            initializeSeries(apiConfigured, dbInitialized);
-        }
-    }, [initializeSeries, initialized, apiConfigured, dbInitialized]);
+  // Initialize the store when dependencies are ready
+  React.useEffect(() => {
+    if (!initialized && (apiConfigured || dbInitialized)) {
+      initializeSeries(apiConfigured, dbInitialized);
+    }
+  }, [initializeSeries, initialized, apiConfigured, dbInitialized]);
 
-    // Update ready state when dependencies change
-    React.useEffect(() => {
-        setSeriesReady(apiConfigured, dbInitialized);
-    }, [setSeriesReady, apiConfigured, dbInitialized]);
+  // Update ready state when dependencies change
+  React.useEffect(() => {
+    setSeriesReady(apiConfigured, dbInitialized);
+  }, [setSeriesReady, apiConfigured, dbInitialized]);
 }
 
 /**
@@ -671,42 +722,49 @@ export function useSeriesStoreInitializer(apiConfigured: boolean, dbInitialized:
  * ```
  */
 export function useHome() {
-    const continueListening = useAppStore(state => state.home.continueListening);
-    const downloaded = useAppStore(state => state.home.downloaded);
-    const listenAgain = useAppStore(state => state.home.listenAgain);
-    const isLoadingHome = useAppStore(state => state.home.loading.isLoadingHome);
-    const initialized = useAppStore(state => state.home.initialized);
-    const lastFetchTime = useAppStore(state => state.home.lastFetchTime);
+  const continueListening = useAppStore(
+    (state) => state.home.continueListening
+  );
+  const downloaded = useAppStore((state) => state.home.downloaded);
+  const listenAgain = useAppStore((state) => state.home.listenAgain);
+  const isLoadingHome = useAppStore(
+    (state) => state.home.loading.isLoadingHome
+  );
+  const initialized = useAppStore((state) => state.home.initialized);
+  const lastFetchTime = useAppStore((state) => state.home.lastFetchTime);
 
-    // Actions
-    const initializeHome = useAppStore(state => state.initializeHome);
-    const refreshHome = useAppStore(state => state.refreshHome);
-    const refreshSection = useAppStore(state => state.refreshSection);
-    const resetHome = useAppStore(state => state.resetHome);
+  // Actions
+  const initializeHome = useAppStore((state) => state.initializeHome);
+  const refreshHome = useAppStore((state) => state.refreshHome);
+  const refreshSection = useAppStore((state) => state.refreshSection);
+  const resetHome = useAppStore((state) => state.resetHome);
 
-    return React.useMemo(() => ({
-        continueListening,
-        downloaded,
-        listenAgain,
-        isLoadingHome,
-        initialized,
-        lastFetchTime,
-        initializeHome,
-        refreshHome,
-        refreshSection,
-        resetHome,
-    }), [
-        continueListening,
-        downloaded,
-        listenAgain,
-        isLoadingHome,
-        initialized,
-        lastFetchTime,
-        initializeHome,
-        refreshHome,
-        refreshSection,
-        resetHome,
-    ]);
+  return React.useMemo(
+    () => ({
+      continueListening,
+      downloaded,
+      listenAgain,
+      isLoadingHome,
+      initialized,
+      lastFetchTime,
+      initializeHome,
+      refreshHome,
+      refreshSection,
+      resetHome,
+    }),
+    [
+      continueListening,
+      downloaded,
+      listenAgain,
+      isLoadingHome,
+      initialized,
+      lastFetchTime,
+      initializeHome,
+      refreshHome,
+      refreshSection,
+      resetHome,
+    ]
+  );
 }
 
 /**
@@ -722,39 +780,42 @@ export function useHome() {
  * ```
  */
 export function useLibraryItemDetails() {
-    const itemsCache = useAppStore(state => state.itemDetails.itemsCache);
-    const loading = useAppStore(state => state.itemDetails.loading);
-    const initialized = useAppStore(state => state.itemDetails.initialized);
+  const itemsCache = useAppStore((state) => state.itemDetails.itemsCache);
+  const loading = useAppStore((state) => state.itemDetails.loading);
+  const initialized = useAppStore((state) => state.itemDetails.initialized);
 
-    // Actions
-    const fetchItemDetails = useAppStore(state => state.fetchItemDetails);
-    const refreshItemDetails = useAppStore(state => state.refreshItemDetails);
-    const updateItemProgress = useAppStore(state => state.updateItemProgress);
-    const invalidateItem = useAppStore(state => state.invalidateItem);
-    const getCachedItem = useAppStore(state => state.getCachedItem);
-    const resetItemDetails = useAppStore(state => state.resetItemDetails);
+  // Actions
+  const fetchItemDetails = useAppStore((state) => state.fetchItemDetails);
+  const refreshItemDetails = useAppStore((state) => state.refreshItemDetails);
+  const updateItemProgress = useAppStore((state) => state.updateItemProgress);
+  const invalidateItem = useAppStore((state) => state.invalidateItem);
+  const getCachedItem = useAppStore((state) => state.getCachedItem);
+  const resetItemDetails = useAppStore((state) => state.resetItemDetails);
 
-    return React.useMemo(() => ({
-        itemsCache,
-        loading,
-        initialized,
-        fetchItemDetails,
-        refreshItemDetails,
-        updateItemProgress,
-        invalidateItem,
-        getCachedItem,
-        resetItemDetails,
-    }), [
-        itemsCache,
-        loading,
-        initialized,
-        fetchItemDetails,
-        refreshItemDetails,
-        updateItemProgress,
-        invalidateItem,
-        getCachedItem,
-        resetItemDetails,
-    ]);
+  return React.useMemo(
+    () => ({
+      itemsCache,
+      loading,
+      initialized,
+      fetchItemDetails,
+      refreshItemDetails,
+      updateItemProgress,
+      invalidateItem,
+      getCachedItem,
+      resetItemDetails,
+    }),
+    [
+      itemsCache,
+      loading,
+      initialized,
+      fetchItemDetails,
+      refreshItemDetails,
+      updateItemProgress,
+      invalidateItem,
+      getCachedItem,
+      resetItemDetails,
+    ]
+  );
 }
 
 /**
@@ -773,48 +834,67 @@ export function useLibraryItemDetails() {
  * ```
  */
 export function useSettings() {
-    const jumpForwardInterval = useAppStore(state => state.settings.jumpForwardInterval);
-    const jumpBackwardInterval = useAppStore(state => state.settings.jumpBackwardInterval);
-    const smartRewindEnabled = useAppStore(state => state.settings.smartRewindEnabled);
-    const backgroundServiceReconnection = useAppStore(state => state.settings.backgroundServiceReconnection);
-    const initialized = useAppStore(state => state.settings.initialized);
-    const isLoading = useAppStore(state => state.settings.isLoading);
+  const jumpForwardInterval = useAppStore(
+    (state) => state.settings.jumpForwardInterval
+  );
+  const jumpBackwardInterval = useAppStore(
+    (state) => state.settings.jumpBackwardInterval
+  );
+  const smartRewindEnabled = useAppStore(
+    (state) => state.settings.smartRewindEnabled
+  );
+  const backgroundServiceReconnection = useAppStore(
+    (state) => state.settings.backgroundServiceReconnection
+  );
+  const initialized = useAppStore((state) => state.settings.initialized);
+  const isLoading = useAppStore((state) => state.settings.isLoading);
 
-    // Actions
-    const initializeSettings = useAppStore(state => state.initializeSettings);
-    const updateJumpForwardInterval = useAppStore(state => state.updateJumpForwardInterval);
-    const updateJumpBackwardInterval = useAppStore(state => state.updateJumpBackwardInterval);
-    const updateSmartRewindEnabled = useAppStore(state => state.updateSmartRewindEnabled);
-    const updateBackgroundServiceReconnection = useAppStore(state => state.updateBackgroundServiceReconnection);
-    const resetSettings = useAppStore(state => state.resetSettings);
+  // Actions
+  const initializeSettings = useAppStore((state) => state.initializeSettings);
+  const updateJumpForwardInterval = useAppStore(
+    (state) => state.updateJumpForwardInterval
+  );
+  const updateJumpBackwardInterval = useAppStore(
+    (state) => state.updateJumpBackwardInterval
+  );
+  const updateSmartRewindEnabled = useAppStore(
+    (state) => state.updateSmartRewindEnabled
+  );
+  const updateBackgroundServiceReconnection = useAppStore(
+    (state) => state.updateBackgroundServiceReconnection
+  );
+  const resetSettings = useAppStore((state) => state.resetSettings);
 
-    return React.useMemo(() => ({
-        jumpForwardInterval,
-        jumpBackwardInterval,
-        smartRewindEnabled,
-        backgroundServiceReconnection,
-        initialized,
-        isLoading,
-        initializeSettings,
-        updateJumpForwardInterval,
-        updateJumpBackwardInterval,
-        updateSmartRewindEnabled,
-        updateBackgroundServiceReconnection,
-        resetSettings,
-    }), [
-        jumpForwardInterval,
-        jumpBackwardInterval,
-        smartRewindEnabled,
-        backgroundServiceReconnection,
-        initialized,
-        isLoading,
-        initializeSettings,
-        updateJumpForwardInterval,
-        updateJumpBackwardInterval,
-        updateSmartRewindEnabled,
-        updateBackgroundServiceReconnection,
-        resetSettings,
-    ]);
+  return React.useMemo(
+    () => ({
+      jumpForwardInterval,
+      jumpBackwardInterval,
+      smartRewindEnabled,
+      backgroundServiceReconnection,
+      initialized,
+      isLoading,
+      initializeSettings,
+      updateJumpForwardInterval,
+      updateJumpBackwardInterval,
+      updateSmartRewindEnabled,
+      updateBackgroundServiceReconnection,
+      resetSettings,
+    }),
+    [
+      jumpForwardInterval,
+      jumpBackwardInterval,
+      smartRewindEnabled,
+      backgroundServiceReconnection,
+      initialized,
+      isLoading,
+      initializeSettings,
+      updateJumpForwardInterval,
+      updateJumpBackwardInterval,
+      updateSmartRewindEnabled,
+      updateBackgroundServiceReconnection,
+      resetSettings,
+    ]
+  );
 }
 
 /**
@@ -830,42 +910,47 @@ export function useSettings() {
  * ```
  */
 export function useUserProfile() {
-    const deviceInfo = useAppStore(state => state.userProfile.deviceInfo);
-    const user = useAppStore(state => state.userProfile.user);
-    const serverInfo = useAppStore(state => state.userProfile.serverInfo);
-    const initialized = useAppStore(state => state.userProfile.initialized);
-    const isLoading = useAppStore(state => state.userProfile.isLoading);
+  const deviceInfo = useAppStore((state) => state.userProfile.deviceInfo);
+  const user = useAppStore((state) => state.userProfile.user);
+  const serverInfo = useAppStore((state) => state.userProfile.serverInfo);
+  const initialized = useAppStore((state) => state.userProfile.initialized);
+  const isLoading = useAppStore((state) => state.userProfile.isLoading);
 
-    // Actions
-    const initializeUserProfile = useAppStore(state => state.initializeUserProfile);
-    const refreshDeviceInfo = useAppStore(state => state.refreshDeviceInfo);
-    const refreshServerInfo = useAppStore(state => state.refreshServerInfo);
-    const updateUser = useAppStore(state => state.updateUser);
-    const resetUserProfile = useAppStore(state => state.resetUserProfile);
+  // Actions
+  const initializeUserProfile = useAppStore(
+    (state) => state.initializeUserProfile
+  );
+  const refreshDeviceInfo = useAppStore((state) => state.refreshDeviceInfo);
+  const refreshServerInfo = useAppStore((state) => state.refreshServerInfo);
+  const updateUser = useAppStore((state) => state.updateUser);
+  const resetUserProfile = useAppStore((state) => state.resetUserProfile);
 
-    return React.useMemo(() => ({
-        deviceInfo,
-        user,
-        serverInfo,
-        initialized,
-        isLoading,
-        initializeUserProfile,
-        refreshDeviceInfo,
-        refreshServerInfo,
-        updateUser,
-        resetUserProfile,
-    }), [
-        deviceInfo,
-        user,
-        serverInfo,
-        initialized,
-        isLoading,
-        initializeUserProfile,
-        refreshDeviceInfo,
-        refreshServerInfo,
-        updateUser,
-        resetUserProfile,
-    ]);
+  return React.useMemo(
+    () => ({
+      deviceInfo,
+      user,
+      serverInfo,
+      initialized,
+      isLoading,
+      initializeUserProfile,
+      refreshDeviceInfo,
+      refreshServerInfo,
+      updateUser,
+      resetUserProfile,
+    }),
+    [
+      deviceInfo,
+      user,
+      serverInfo,
+      initialized,
+      isLoading,
+      initializeUserProfile,
+      refreshDeviceInfo,
+      refreshServerInfo,
+      updateUser,
+      resetUserProfile,
+    ]
+  );
 }
 
 /**
@@ -881,51 +966,62 @@ export function useUserProfile() {
  * ```
  */
 export function useDownloads() {
-    const activeDownloads = useAppStore(state => state.downloads.activeDownloads);
-    const downloadedItems = useAppStore(state => state.downloads.downloadedItems);
-    const initialized = useAppStore(state => state.downloads.initialized);
-    const isLoading = useAppStore(state => state.downloads.isLoading);
+  const activeDownloads = useAppStore(
+    (state) => state.downloads.activeDownloads
+  );
+  const downloadedItems = useAppStore(
+    (state) => state.downloads.downloadedItems
+  );
+  const initialized = useAppStore((state) => state.downloads.initialized);
+  const isLoading = useAppStore((state) => state.downloads.isLoading);
 
-    // Actions
-    const initializeDownloads = useAppStore(state => state.initializeDownloads);
-    const startDownload = useAppStore(state => state.startDownload);
-    const updateDownloadProgress = useAppStore(state => state.updateDownloadProgress);
-    const completeDownload = useAppStore(state => state.completeDownload);
-    const removeActiveDownload = useAppStore(state => state.removeActiveDownload);
-    const deleteDownload = useAppStore(state => state.deleteDownload);
-    const isItemDownloaded = useAppStore(state => state.isItemDownloaded);
-    const getDownloadProgress = useAppStore(state => state.getDownloadProgress);
-    const resetDownloads = useAppStore(state => state.resetDownloads);
+  // Actions
+  const initializeDownloads = useAppStore((state) => state.initializeDownloads);
+  const startDownload = useAppStore((state) => state.startDownload);
+  const updateDownloadProgress = useAppStore(
+    (state) => state.updateDownloadProgress
+  );
+  const completeDownload = useAppStore((state) => state.completeDownload);
+  const removeActiveDownload = useAppStore(
+    (state) => state.removeActiveDownload
+  );
+  const deleteDownload = useAppStore((state) => state.deleteDownload);
+  const isItemDownloaded = useAppStore((state) => state.isItemDownloaded);
+  const getDownloadProgress = useAppStore((state) => state.getDownloadProgress);
+  const resetDownloads = useAppStore((state) => state.resetDownloads);
 
-    return React.useMemo(() => ({
-        activeDownloads,
-        downloadedItems,
-        initialized,
-        isLoading,
-        initializeDownloads,
-        startDownload,
-        updateDownloadProgress,
-        completeDownload,
-        removeActiveDownload,
-        deleteDownload,
-        isItemDownloaded,
-        getDownloadProgress,
-        resetDownloads,
-    }), [
-        activeDownloads,
-        downloadedItems,
-        initialized,
-        isLoading,
-        initializeDownloads,
-        startDownload,
-        updateDownloadProgress,
-        completeDownload,
-        removeActiveDownload,
-        deleteDownload,
-        isItemDownloaded,
-        getDownloadProgress,
-        resetDownloads,
-    ]);
+  return React.useMemo(
+    () => ({
+      activeDownloads,
+      downloadedItems,
+      initialized,
+      isLoading,
+      initializeDownloads,
+      startDownload,
+      updateDownloadProgress,
+      completeDownload,
+      removeActiveDownload,
+      deleteDownload,
+      isItemDownloaded,
+      getDownloadProgress,
+      resetDownloads,
+    }),
+    [
+      activeDownloads,
+      downloadedItems,
+      initialized,
+      isLoading,
+      initializeDownloads,
+      startDownload,
+      updateDownloadProgress,
+      completeDownload,
+      removeActiveDownload,
+      deleteDownload,
+      isItemDownloaded,
+      getDownloadProgress,
+      resetDownloads,
+    ]
+  );
 }
 
 /**
@@ -941,106 +1037,123 @@ export function useDownloads() {
  * ```
  */
 export function useStatistics() {
-    const counts = useAppStore(state => state.statistics.counts);
-    const storageStats = useAppStore(state => state.statistics.storageStats);
-    const lastUpdated = useAppStore(state => state.statistics.lastUpdated);
-    const isLoading = useAppStore(state => state.statistics.isLoading);
-    const initialized = useAppStore(state => state.statistics.initialized);
+  const counts = useAppStore((state) => state.statistics.counts);
+  const storageStats = useAppStore((state) => state.statistics.storageStats);
+  const lastUpdated = useAppStore((state) => state.statistics.lastUpdated);
+  const isLoading = useAppStore((state) => state.statistics.isLoading);
+  const initialized = useAppStore((state) => state.statistics.initialized);
 
-    // Actions
-    const refreshStatistics = useAppStore(state => state.refreshStatistics);
-    const refreshStorageStats = useAppStore(state => state.refreshStorageStats);
-    const invalidateCache = useAppStore(state => state.invalidateCache);
-    const isCacheValid = useAppStore(state => state.isCacheValid);
-    const resetStatistics = useAppStore(state => state.resetStatistics);
+  // Actions
+  const refreshStatistics = useAppStore((state) => state.refreshStatistics);
+  const refreshStorageStats = useAppStore((state) => state.refreshStorageStats);
+  const invalidateCache = useAppStore((state) => state.invalidateCache);
+  const isCacheValid = useAppStore((state) => state.isCacheValid);
+  const resetStatistics = useAppStore((state) => state.resetStatistics);
 
-    return React.useMemo(() => ({
-        counts,
-        storageStats,
-        lastUpdated,
-        isLoading,
-        initialized,
-        refreshStatistics,
-        refreshStorageStats,
-        invalidateCache,
-        isCacheValid,
-        resetStatistics,
-    }), [
-        counts,
-        storageStats,
-        lastUpdated,
-        isLoading,
-        initialized,
-        refreshStatistics,
-        refreshStorageStats,
-        invalidateCache,
-        isCacheValid,
-        resetStatistics,
-    ]);
+  return React.useMemo(
+    () => ({
+      counts,
+      storageStats,
+      lastUpdated,
+      isLoading,
+      initialized,
+      refreshStatistics,
+      refreshStorageStats,
+      invalidateCache,
+      isCacheValid,
+      resetStatistics,
+    }),
+    [
+      counts,
+      storageStats,
+      lastUpdated,
+      isLoading,
+      initialized,
+      refreshStatistics,
+      refreshStorageStats,
+      invalidateCache,
+      isCacheValid,
+      resetStatistics,
+    ]
+  );
 }
 
 /**
  * Hook to initialize the home store
  */
 export function useHomeStoreInitializer(userId: string | null) {
-    const initializeHome = useAppStore(state => state.initializeHome);
-    const initialized = useAppStore(state => state.home.initialized);
+  const initializeHome = useAppStore((state) => state.initializeHome);
+  const initialized = useAppStore((state) => state.home.initialized);
 
-    React.useEffect(() => {
-        if (userId && !initialized) {
-            initializeHome(userId).catch(error => {
-                console.error('[useHomeStoreInitializer] Failed to initialize home', error);
-            });
-        }
-    }, [initializeHome, initialized, userId]);
+  React.useEffect(() => {
+    if (userId && !initialized) {
+      initializeHome(userId).catch((error) => {
+        console.error(
+          "[useHomeStoreInitializer] Failed to initialize home",
+          error
+        );
+      });
+    }
+  }, [initializeHome, initialized, userId]);
 }
 
 /**
  * Hook to initialize the settings store
  */
 export function useSettingsStoreInitializer() {
-    const initializeSettings = useAppStore(state => state.initializeSettings);
-    const initialized = useAppStore(state => state.settings.initialized);
+  const initializeSettings = useAppStore((state) => state.initializeSettings);
+  const initialized = useAppStore((state) => state.settings.initialized);
 
-    React.useEffect(() => {
-        if (!initialized) {
-            initializeSettings().catch(error => {
-                console.error('[useSettingsStoreInitializer] Failed to initialize settings', error);
-            });
-        }
-    }, [initializeSettings, initialized]);
+  React.useEffect(() => {
+    if (!initialized) {
+      initializeSettings().catch((error) => {
+        console.error(
+          "[useSettingsStoreInitializer] Failed to initialize settings",
+          error
+        );
+      });
+    }
+  }, [initializeSettings, initialized]);
 }
 
 /**
  * Hook to initialize the user profile store
  */
 export function useUserProfileStoreInitializer(username: string | null) {
-    const initializeUserProfile = useAppStore(state => state.initializeUserProfile);
-    const initialized = useAppStore(state => state.userProfile.initialized);
+  const initializeUserProfile = useAppStore(
+    (state) => state.initializeUserProfile
+  );
+  const initialized = useAppStore((state) => state.userProfile.initialized);
 
-    React.useEffect(() => {
-        if (username && !initialized) {
-            initializeUserProfile(username).catch(error => {
-                console.error('[useUserProfileStoreInitializer] Failed to initialize user profile', error);
-            });
-        }
-    }, [initializeUserProfile, initialized, username]);
+  React.useEffect(() => {
+    if (username && !initialized) {
+      initializeUserProfile(username).catch((error) => {
+        console.error(
+          "[useUserProfileStoreInitializer] Failed to initialize user profile",
+          error
+        );
+      });
+    }
+  }, [initializeUserProfile, initialized, username]);
 }
 
 /**
  * Hook to initialize the downloads store
  */
 export function useDownloadsStoreInitializer() {
-    const initializeDownloads = useAppStore(state => state.initializeDownloads);
-    const initialized = useAppStore(state => state.downloads.initialized);
+  const initializeDownloads = useAppStore((state) => state.initializeDownloads);
+  const initialized = useAppStore((state) => state.downloads.initialized);
 
-    React.useEffect(() => {
-        if (!initialized) {
-            initializeDownloads().catch(error => {
-                console.error('[useDownloadsStoreInitializer] Failed to initialize downloads', error);
-            });
-        }
-    }, [initializeDownloads, initialized]);
+  React.useEffect(() => {
+    if (!initialized) {
+      initializeDownloads().catch((error) => {
+        console.error(
+          "[useDownloadsStoreInitializer] Failed to initialize downloads",
+          error
+        );
+      });
+    }
+  }, [initializeDownloads, initialized]);
 }
 
 /**
@@ -1063,5 +1176,5 @@ export function useDownloadsStoreInitializer() {
  * ```
  */
 export function useDebugStore() {
-    return useAppStore(state => state);
+  return useAppStore((state) => state);
 }
