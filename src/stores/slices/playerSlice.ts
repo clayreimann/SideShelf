@@ -93,6 +93,8 @@ export interface PlayerSliceActions {
   _setPlaySessionId: (sessionId: string | null) => void;
   /** Set last pause time (for smart rewind) */
   _setLastPauseTime: (timestamp: number | null) => void;
+  /** Update now playing metadata with chapter information */
+  updateNowPlayingMetadata: () => Promise<void>;
 }
 
 /**
@@ -432,5 +434,61 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     // Note: lastPauseTime is not persisted - it's ephemeral state for smart rewind
+  },
+
+  /**
+   * Update now playing metadata with chapter information
+   *
+   * Updates the now playing center with:
+   * - Title: Current chapter title
+   * - Album: Book title
+   * - Duration: Chapter duration (so progress bar shows chapter progress)
+   * - Elapsed time: Chapter-relative position (resets to 0 at start of each chapter)
+   *
+   * Note: TrackPlayer's actual playback position is always absolute (book position),
+   * but we set elapsedTime to chapter-relative position so the now playing center
+   * shows progress within the current chapter.
+   */
+  updateNowPlayingMetadata: async () => {
+    try {
+      const state = get();
+      const { currentTrack, currentChapter } = state.player;
+      log.debug('Updating now playing metadata');
+
+      if (!currentTrack || !currentChapter) {
+        // No chapter info - use default track metadata
+        return;
+      }
+
+      // Use chapter-relative position for elapsed time
+      // positionInChapter is calculated as: absolutePosition - chapter.start
+      const chapterElapsedTime = currentChapter.positionInChapter;
+      const chapterDuration = currentChapter.chapterDuration;
+      const chapterTitle = currentChapter.chapter.title;
+      const bookTitle = currentTrack.title;
+      const author = currentTrack.author;
+
+      // Get the active track index to update its metadata
+      const activeTrackIndex = await TrackPlayer.getActiveTrackIndex();
+      if (!activeTrackIndex) {
+        return;
+      }
+
+      // Update now playing metadata with chapter info
+      // TrackPlayer will use this for the lock screen and notification controls
+      await TrackPlayer.updateMetadataForTrack(activeTrackIndex, {
+        title: chapterTitle,
+        artist: author,
+        album: bookTitle,
+        artwork: currentTrack.coverUri || undefined,
+        duration: chapterDuration,
+        // @ts-ignore - elapsedTime is used by iOS native code (Metadata.swift) but not in TypeScript types
+        elapsedTime: chapterElapsedTime,
+      });
+
+      log.debug(`Updated now playing: chapter="${chapterTitle}" elapsed=${formatTime(chapterElapsedTime)}/${formatTime(chapterDuration)}`);
+    } catch (error) {
+      log.error('Failed to update now playing metadata:', error as Error);
+    }
   },
 });

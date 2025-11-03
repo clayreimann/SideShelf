@@ -1,8 +1,9 @@
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
+import { useAppStore } from '@/stores/appStore';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert, FlatList, Pressable, Text } from 'react-native';
+import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 
 type ActionItem = {
   label: string;
@@ -13,7 +14,10 @@ export default function MoreScreen() {
   const { styles } = useThemedStyles();
   const router = useRouter();
   const { logout } = useAuth();
-
+  const errorCount = useAppStore((state) => state.logger.errorCount);
+  const errorsAcknowledgedTimestamp = useAppStore((state) => state.logger.errorsAcknowledgedTimestamp);
+  // Show badge if there are errors and they haven't been acknowledged (or new errors appeared since acknowledgment)
+  const showErrorBadge = errorCount > 0 && errorsAcknowledgedTimestamp === null;
 
   const data = useMemo(() => {
     return [
@@ -21,7 +25,11 @@ export default function MoreScreen() {
       { label: 'About Me', onPress: () => router.push('/more/me') },
       { label: 'Settings', onPress: () => router.push('/more/settings') },
       { label: 'Advanced', onPress: () => router.push('/more/advanced') },
-      { label: 'Logs', onPress: () => router.push('/more/logs') },
+      {
+        label: 'Logs',
+        onPress: () => router.push('/more/logs'),
+        badge: showErrorBadge ? errorCount : undefined,
+      },
       {
         label: 'Log out',
         styles: { color: 'red' },
@@ -49,7 +57,25 @@ export default function MoreScreen() {
         data={data}
         renderItem={({ item }) => (
         <Pressable style={styles.listItem} onPress={item.onPress}>
-          <Text style={[styles.text, item.styles]}>{item.label}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
+            <Text style={[styles.text, item.styles]}>{item.label}</Text>
+            {item.badge !== undefined && (
+              <View style={{
+                backgroundColor: '#ff3b30',
+                borderRadius: 10,
+                minWidth: 20,
+                height: 20,
+                paddingHorizontal: 6,
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginLeft: 8,
+              }}>
+                <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                  {item.badge > 99 ? '99+' : item.badge}
+                </Text>
+              </View>
+            )}
+          </View>
         </Pressable>
         )}
       />

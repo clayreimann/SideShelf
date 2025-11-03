@@ -3,6 +3,7 @@ import { translate, type TranslationKey } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { DownloadService } from "@/services/DownloadService";
+import { useAppStore } from "@/stores/appStore";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
@@ -125,6 +126,10 @@ export default function TabLayout() {
   const router = useRouter();
   const { initialized, isAuthenticated, loginMessage } = useAuth();
   const { tabs, isDark } = useThemedStyles();
+  const errorCount = useAppStore((state) => state.logger.errorCount);
+  const errorsAcknowledgedTimestamp = useAppStore((state) => state.logger.errorsAcknowledgedTimestamp);
+  // Show badge if there are errors and they haven't been acknowledged (or new errors appeared since acknowledgment)
+  const showErrorBadge = errorCount > 0 && errorsAcknowledgedTimestamp === null;
   useEffect(() => {
     if (initialized && !isAuthenticated) {
       router.push("/login");
@@ -164,12 +169,18 @@ export default function TabLayout() {
         >
           {TAB_CONFIG.map((tab) => {
             const label = translate(tab.titleKey);
+            const isMoreTab = tab.name === "more";
             return (
               <Tabs.Screen
                 key={tab.name}
                 name={tab.name}
                 options={{
                   title: label,
+                  tabBarBadge: isMoreTab && showErrorBadge ? errorCount : undefined,
+                  tabBarBadgeStyle: {
+                    color: tabs.badgeTextColor,
+                    backgroundColor: tabs.badgeBackgroundColor,
+                  },
                   tabBarIcon: ({ focused, color, size }) => (
                     <TabBarIcon
                       config={tab}
@@ -206,6 +217,7 @@ export default function TabLayout() {
       >
         {TAB_CONFIG.map((tab) => {
           const label = translate(tab.titleKey);
+          const isMoreTab = tab.name === "more";
           return (
             <NativeTabs.Trigger
               key={tab.name}
@@ -215,10 +227,8 @@ export default function TabLayout() {
                 selectedIconColor: tabs.selectedIconColor,
                 labelStyle: { color: tabs.labelColor },
                 selectedLabelStyle: { color: tabs.selectedLabelColor },
-                badgeBackgroundColor: tabs.badgeBackgroundColor,
-                selectedBadgeBackgroundColor: tabs.selectedBadgeBackgroundColor,
-                badgeTextColor: tabs.badgeTextColor,
                 backgroundColor: tabs.backgroundColor,
+                badgeValue: isMoreTab && showErrorBadge ? errorCount.toString() : '',
               }}
             >
               <Label selectedStyle={{ color: tabs.selectedLabelColor }}>

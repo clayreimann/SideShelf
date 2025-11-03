@@ -19,6 +19,7 @@ import { createSeriesSlice, SeriesSlice } from './slices/seriesSlice';
 import { createSettingsSlice, SettingsSlice } from './slices/settingsSlice';
 import { createStatisticsSlice, StatisticsSlice } from './slices/statisticsSlice';
 import { createUserProfileSlice, UserProfileSlice } from './slices/userProfileSlice';
+import { createLoggerSlice, LoggerSlice } from './slices/loggerSlice';
 
 /**
  * Combined store state interface
@@ -36,8 +37,8 @@ export interface StoreState
         SettingsSlice,
         UserProfileSlice,
         DownloadSlice,
-        StatisticsSlice {
-    // All slices are now included
+        StatisticsSlice,
+        LoggerSlice {
 }
 
 /**
@@ -83,6 +84,9 @@ export const useAppStore = create<StoreState>()(
 
         // Statistics slice
         ...createStatisticsSlice(set, get),
+
+        // Logger slice
+        ...createLoggerSlice(set, get),
     }))
 );
 

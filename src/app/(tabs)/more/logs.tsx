@@ -13,6 +13,7 @@ import {
   type LogRow,
 } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { useAppStore } from "@/stores/appStore";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { File, Paths } from "expo-file-system";
@@ -374,6 +375,15 @@ export default function LogsScreen() {
     loadLogs();
   }, [loadLogs, loadTags]);
 
+  // Acknowledge errors when logs screen is viewed
+  useEffect(() => {
+    const loggerSlice = useAppStore.getState().logger;
+    // Acknowledge errors if there are any and they haven't been acknowledged yet
+    if (loggerSlice.errorCount > 0 && loggerSlice.errorsAcknowledgedTimestamp === null) {
+      loggerSlice.acknowledgeErrors();
+    }
+  }, []);
+
   // Handlers
   const handleClearLogs = useCallback(() => {
     Alert.alert("Clear All Logs", "Are you sure you want to clear all logs?", [
@@ -385,6 +395,10 @@ export default function LogsScreen() {
           try {
             logger.clearLogs();
             setLogs([]);
+            // Reset error acknowledgment when logs are cleared
+            useAppStore.getState().logger.resetErrorAcknowledgment();
+            // Update counts after clearing
+            useAppStore.getState().logger.updateErrorCounts();
             Alert.alert("Success", "All logs cleared");
           } catch (error) {
             log.error("Failed to clear logs", error as Error);

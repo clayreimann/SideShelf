@@ -43,6 +43,18 @@ export async function initializeApp(): Promise<void> {
     await logger.initialize();
     log.info('Logger initialized and settings loaded');
 
+    // Initialize logger slice and subscribe to count updates
+    const loggerSlice = useAppStore.getState().logger;
+    await loggerSlice.initialize();
+
+    // Subscribe logger to count updates so store stays in sync
+    logger.subscribeToCountUpdates(() => {
+      useAppStore.getState().logger.updateErrorCounts();
+    });
+
+    // Trigger initial purge on app start
+    logger.manualTrim();
+
     // Check if app has been updated
     const appUpdated = await hasAppBeenUpdated();
     if (appUpdated) {

@@ -1,0 +1,50 @@
+/**
+ * TrackPlayer Configuration Helper
+ *
+ * Standalone helper to configure TrackPlayer options without creating circular dependencies.
+ * This can be imported by both PlayerService and settingsSlice without cycles.
+ */
+
+import { getJumpBackwardInterval, getJumpForwardInterval } from '@/lib/appSettings';
+import { logger } from '@/lib/logger';
+import TrackPlayer, {
+  AndroidAudioContentType,
+  AppKilledPlaybackBehavior,
+  Capability,
+  IOSCategory,
+  IOSCategoryMode,
+} from 'react-native-track-player';
+
+const log = logger.forTag('TrackPlayerConfig');
+
+/**
+ * Configure TrackPlayer with current settings
+ */
+export async function configureTrackPlayer(): Promise<void> {
+  log.info("Configuring TrackPlayer options");
+
+  // Load jump intervals from settings
+  const [forwardInterval, backwardInterval] = await Promise.all([
+    getJumpForwardInterval(),
+    getJumpBackwardInterval(),
+  ]);
+
+  log.info(`Configuring jump intervals: forward=${forwardInterval}s, backward=${backwardInterval}s`);
+
+  await TrackPlayer.updateOptions({
+    android: {
+      appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
+    },
+    capabilities: [
+      Capability.Play,
+      Capability.Pause,
+      Capability.SeekTo,
+      Capability.JumpBackward,
+      Capability.JumpForward,
+    ],
+    compactCapabilities: [Capability.Play, Capability.Pause],
+    forwardJumpInterval: forwardInterval,
+    backwardJumpInterval: backwardInterval,
+    progressUpdateEventInterval: 1, // Update every second
+  });
+}

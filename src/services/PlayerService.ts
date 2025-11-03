@@ -19,23 +19,21 @@ import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { getApiConfig } from "@/lib/api/api";
 import { startPlaySession } from "@/lib/api/endpoints";
-import { calculateSmartRewindTime, getJumpBackwardInterval, getJumpForwardInterval, getSmartRewindEnabled } from '@/lib/appSettings';
+import { calculateSmartRewindTime, getSmartRewindEnabled } from '@/lib/appSettings';
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
 import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
+import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { progressService } from "@/services/ProgressService";
-import { updateNowPlayingMetadata } from "@/services/playerNowPlaying";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
 import type { PlayerTrack } from "@/types/player";
 import { AppState } from "react-native";
 import TrackPlayer, {
   AndroidAudioContentType,
-  AppKilledPlaybackBehavior,
-  Capability,
   IOSCategory,
   IOSCategoryMode,
   State,
@@ -174,7 +172,7 @@ export class PlayerService {
         // Android specific options
         androidAudioContentType: AndroidAudioContentType.Speech,
       });
-      await this.configureTrackPlayer();
+      await configureTrackPlayer();
 
       // Set up event listeners
 
@@ -757,7 +755,7 @@ export class PlayerService {
    * Delegates to the standalone helper function to avoid circular dependencies
    */
   async updateNowPlayingMetadata(): Promise<void> {
-    await updateNowPlayingMetadata();
+    await useAppStore.getState().player.updateNowPlayingMetadata();
   }
 
   /**
@@ -1300,35 +1298,6 @@ export class PlayerService {
     }
   }
 
-  async configureTrackPlayer(): Promise<void> {
-    log.info("Configuring TrackPlayer options");
-
-    // Load jump intervals from settings
-    const [forwardInterval, backwardInterval] = await Promise.all([
-      getJumpForwardInterval(),
-      getJumpBackwardInterval(),
-    ]);
-
-    log.info(`Configuring jump intervals: forward=${forwardInterval}s, backward=${backwardInterval}s`);
-
-    await TrackPlayer.updateOptions({
-      android: {
-        appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
-      },
-      capabilities: [
-        Capability.Play,
-        Capability.Pause,
-        Capability.SeekTo,
-        Capability.JumpBackward,
-        Capability.JumpForward,
-      ],
-      compactCapabilities: [Capability.Play, Capability.Pause],
-      forwardJumpInterval: forwardInterval,
-      backwardJumpInterval: backwardInterval,
-      progressUpdateEventInterval: 1, // Update every second
-    });
-  }
-
   /**
    * Reconnect background service and sync state
    *
@@ -1442,7 +1411,7 @@ export class PlayerService {
         );
       }
 
-      await this.configureTrackPlayer();
+      await configureTrackPlayer();
 
       // Sync the store with TrackPlayer state
       await this.syncStoreWithTrackPlayer();

@@ -74,17 +74,43 @@ export function getAllLogs(limit?: number): LogRow[] {
 }
 
 /**
- * Get logs by level
+ * Get logs by level (inclusive filtering)
+ *
+ * Level filtering behavior:
+ * - debug → all levels (debug, info, warn, error)
+ * - info → info, warn, error
+ * - warn → warn, error
+ * - error → error only
  */
 export function getLogsByLevel(level: LogLevel, limit?: number): LogRow[] {
   const db = getLogsDb();
+
+  // Determine which levels to include based on the selected level
+  let levelFilter: string;
+  switch (level) {
+    case "debug":
+      levelFilter = "level IN ('debug', 'info', 'warn', 'error')";
+      break;
+    case "info":
+      levelFilter = "level IN ('info', 'warn', 'error')";
+      break;
+    case "warn":
+      levelFilter = "level IN ('warn', 'error')";
+      break;
+    case "error":
+      levelFilter = "level = 'error'";
+      break;
+    default:
+      levelFilter = "level = ?";
+  }
+
   const sql = limit
-    ? "SELECT * FROM logs WHERE level = ? ORDER BY timestamp DESC LIMIT ?"
-    : "SELECT * FROM logs WHERE level = ? ORDER BY timestamp DESC";
+    ? `SELECT * FROM logs WHERE ${levelFilter} ORDER BY timestamp DESC LIMIT ?`
+    : `SELECT * FROM logs WHERE ${levelFilter} ORDER BY timestamp DESC`;
 
   const rows = limit
-    ? db.getAllSync<LogDbRow>(sql, [level, limit])
-    : db.getAllSync<LogDbRow>(sql, [level]);
+    ? db.getAllSync<LogDbRow>(sql, [limit])
+    : db.getAllSync<LogDbRow>(sql);
 
   return rows.map((row) => ({
     ...row,
@@ -136,4 +162,83 @@ export function getLogsByTag(tag: string, limit?: number): LogRow[] {
     ...row,
     timestamp: new Date(row.timestamp),
   }));
+}
+
+/**
+ * Get count of error level logs since a specific timestamp
+ */
+export function getErrorCountSince(timestamp: number): number {
+  const db = getLogsDb();
+  const row = db.getFirstSync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM logs WHERE level = 'error' AND timestamp >= ?",
+    [timestamp]
+  );
+  return row?.count ?? 0;
+}
+
+/**
+ * Get count of warning level logs since a specific timestamp
+ */
+export function getWarningCountSince(timestamp: number): number {
+  const db = getLogsDb();
+  const row = db.getFirstSync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM logs WHERE level = 'warn' AND timestamp >= ?",
+    [timestamp]
+  );
+  return row?.count ?? 0;
+}
+
+/**
+ * Get count of error level logs
+ */
+export function getErrorCount(): number {
+  const db = getLogsDb();
+  const row = db.getFirstSync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM logs WHERE level = 'error'"
+  );
+  return row?.count ?? 0;
+}
+
+/**
+ * Get count of warning level logs
+ */
+export function getWarningCount(): number {
+  const db = getLogsDb();
+  const row = db.getFirstSync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM logs WHERE level = 'warn'"
+  );
+  return row?.count ?? 0;
+}
+
+/**
+ * Vacuum the database to reclaim space after deletions
+ */
+export function vacuumDatabase(): void {
+  const db = getLogsDb();
+  try {
+    db.execSync('VACUUM');
+    console.log('[Logger] Database vacuumed successfully');
+  } catch (error) {
+    console.error('[Logger] Failed to vacuum database:', error);
+  }
+}
+
+/**
+ * Get database size in bytes (approximate)
+ * Uses log count as a proxy since PRAGMA commands may not work reliably
+ */
+export function getDatabaseSize(): number {
+  const db = getLogsDb();
+  try {
+    // Get log count and estimate size
+    const logCount = db.getFirstSync<{ count: number }>(
+      "SELECT COUNT(*) as count FROM logs"
+    )?.count ?? 0;
+    // Rough estimate: ~500 bytes per log entry on average
+    // This is a conservative estimate - actual size may vary
+    return logCount * 500;
+  } catch (error) {
+    console.error('[Logger] Failed to get database size:', error);
+    return 0;
+  }
 }

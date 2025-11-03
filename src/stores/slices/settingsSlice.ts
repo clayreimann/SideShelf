@@ -19,7 +19,7 @@ import {
     setSmartRewindEnabled
 } from '@/lib/appSettings';
 import { logger } from '@/lib/logger';
-import { playerService } from '@/services/PlayerService';
+import { configureTrackPlayer } from '@/lib/trackPlayerConfig';
 import type { SliceCreator } from '@/types/store';
 
 // Create cached sublogger for this slice
@@ -180,7 +180,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
             await setJumpForwardInterval(seconds);
 
             // Reconfigure TrackPlayer with new interval
-            await playerService.configureTrackPlayer();
+            await configureTrackPlayer();
 
             log.info(`Jump forward interval updated to ${seconds}s`);
         } catch (error) {
@@ -220,7 +220,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
             await setJumpBackwardInterval(seconds);
 
             // Reconfigure TrackPlayer with new interval
-            await playerService.configureTrackPlayer();
+            await configureTrackPlayer();
 
             log.info(`Jump backward interval updated to ${seconds}s`);
         } catch (error) {

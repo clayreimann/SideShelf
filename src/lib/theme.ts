@@ -48,11 +48,9 @@ function createThemedStyles(isDark: boolean) {
     selectedIconColor: colors.textPrimary,
     labelColor: isDark ? 'rgba(255,255,255,0.7)' : '#6A6A6A',
     selectedLabelColor: colors.textPrimary,
-    badgeTextColor: colors.textPrimary,
-    badgeBackgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)',
-    selectedBadgeBackgroundColor: isDark
-      ? 'rgba(255,255,255,0.28)'
-      : 'rgba(0,0,0,0.16)',
+    badgeTextColor: 'white',
+    badgeBackgroundColor: 'red',
+    selectedBadgeBackgroundColor: 'red',
     rippleColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)',
     indicatorColor: colors.textPrimary,
     shadowColor: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.1)',

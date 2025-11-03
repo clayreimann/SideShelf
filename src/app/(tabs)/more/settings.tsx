@@ -6,11 +6,11 @@
 
 import Toggle from '@/components/ui/Toggle';
 import { useThemedStyles } from '@/lib/theme';
-import { useSettings, useLibrary } from '@/stores';
+import { useLibrary, useSettings } from '@/stores';
+import { MenuView } from '@react-native-menu/menu';
 import { Stack } from 'expo-router';
 import { useCallback } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
-import { MenuView } from '@react-native-menu/menu';
 
 const INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90];
 
@@ -131,7 +131,7 @@ export default function SettingsScreen() {
           </Text>
 
           {/* Jump Forward Interval */}
-          <View style={{ marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <Text style={{ fontSize: 15, color: colors.textPrimary, fontWeight: '500', marginBottom: 8 }}>
               Jump Forward Interval
             </Text>
@@ -154,7 +154,7 @@ export default function SettingsScreen() {
           </View>
 
           {/* Jump Backward Interval */}
-          <View style={{ marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <Text style={{ fontSize: 15, color: colors.textPrimary, fontWeight: '500', marginBottom: 8 }}>
               Jump Backward Interval
             </Text>
@@ -181,7 +181,6 @@ export default function SettingsScreen() {
             flexDirection: 'row',
             justifyContent: 'space-between',
             alignItems: 'center',
-            paddingHorizontal: 16,
             paddingVertical: 14,
             backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
             borderRadius: 10,
@@ -209,7 +208,6 @@ export default function SettingsScreen() {
             flexDirection: 'row',
             justifyContent: 'space-between',
             alignItems: 'center',
-            paddingHorizontal: 16,
             paddingVertical: 14,
             backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
             borderRadius: 10,
@@ -224,13 +222,6 @@ export default function SettingsScreen() {
             </View>
             <Toggle value={backgroundServiceReconnection} onValueChange={toggleBackgroundServiceReconnection} />
           </View>
-        </View>
-
-        {/* Info Section */}
-        <View style={{ padding: 16, backgroundColor: cardBackground, marginTop: 24 }}>
-          <Text style={{ fontSize: 14, color: textSecondary, lineHeight: 20 }}>
-            These settings control how the app manages audio playback. Changes take effect immediately.
-          </Text>
         </View>
       </ScrollView>
     </>

@@ -15,10 +15,10 @@ import {
   Octicons,
 } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useRef } from "react";
-import { AppState, AppStateStatus, View } from "react-native";
+import { AppState, AppStateStatus, Linking, View } from "react-native";
 
 // Create cached sublogger for this component
 const log = logger.forTag('RootLayout');
@@ -28,6 +28,7 @@ const diagLog = logger.forDiagnostics('RootLayout');
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const router = useRouter();
   // Diagnostic: log mount/unmount and AppState transitions
   useEffect(() => {
     diagLog.info('RootLayout mounted');
@@ -76,9 +77,12 @@ export default function RootLayout() {
 
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       diagLog.info(`AppState changed: ${nextAppState}`);
+
       if (nextAppState === "background") {
         lastBackgroundTime.current = Date.now();
         log.info("App moved to background");
+        // Trigger log purge when app goes to background
+        logger.manualTrim();
       } else if (nextAppState === "active") {
         const timeInBackground = Date.now() - lastBackgroundTime.current;
         const wasLongBackground = timeInBackground > 30000; // 30 seconds
@@ -135,6 +139,97 @@ export default function RootLayout() {
       subscription?.remove();
     };
   }, []);
+
+  // Handle deep links for logger configuration
+  useEffect(() => {
+    /**
+     * Parse logger configuration from URL query parameters
+     * Format: side-shelf://logger?level[TAG_NAME]=warn&level[TAG_NAME_3]=debug&enabled[TAG_NAME_2]=false
+     */
+    const handleDeepLink = async (url: string) => {
+      try {
+        // Check if this is a logger configuration URL
+        if (!url.includes('://logger')) {
+          return;
+        }
+
+        log.info(`Processing logger deep link: ${url}`);
+        const urlObj = new URL(url);
+
+        // Parse query parameters with bracket notation
+        const tagLevels: Record<string, string> = {};
+        const tagEnabled: Record<string, string> = {};
+
+        urlObj.searchParams.forEach((value, key) => {
+          // Parse level[TAG_NAME]=warn format
+          const levelMatch = key.match(/^level\[(.+)\]$/);
+          if (levelMatch) {
+            const tagName = decodeURIComponent(levelMatch[1]);
+            tagLevels[tagName] = value;
+          }
+
+          // Parse enabled[TAG_NAME]=false format
+          const enabledMatch = key.match(/^enabled\[(.+)\]$/);
+          if (enabledMatch) {
+            const tagName = decodeURIComponent(enabledMatch[1]);
+            tagEnabled[tagName] = value;
+          }
+        });
+
+        // Apply logger configurations
+        let configApplied = false;
+
+        // Set log levels
+        for (const [tag, level] of Object.entries(tagLevels)) {
+          const logLevel = level.toLowerCase() as 'debug' | 'info' | 'warn' | 'error';
+          if (['debug', 'info', 'warn', 'error'].includes(logLevel)) {
+            await logger.setTagLevel(tag, logLevel);
+            log.info(`Set log level for tag "${tag}" to ${logLevel}`);
+            configApplied = true;
+          }
+        }
+
+        // Set enabled/disabled state
+        for (const [tag, enabledValue] of Object.entries(tagEnabled)) {
+          const isEnabled = enabledValue.toLowerCase() !== 'false';
+          if (isEnabled) {
+            logger.enableTag(tag);
+            log.info(`Enabled tag "${tag}"`);
+          } else {
+            logger.disableTag(tag);
+            log.info(`Disabled tag "${tag}"`);
+          }
+          configApplied = true;
+        }
+
+        if (configApplied) {
+          // Navigate to logger settings screen
+          router.push('/more/logger-settings');
+          log.info('Logger configuration applied, navigating to logger settings');
+        } else {
+          log.warn('No valid logger configuration found in deep link');
+        }
+      } catch (error) {
+        log.error('Failed to process logger deep link', error as Error);
+      }
+    };
+
+    // Handle initial URL if app was opened via deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink(url);
+      }
+    });
+
+    // Listen for deep links while app is running
+    const subscription = Linking.addEventListener('url', (event) => {
+      handleDeepLink(event.url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [router]);
 
   if (!fontsLoaded && !fontsError) {
     return null;
