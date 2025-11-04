@@ -141,6 +141,7 @@ export interface SeriesListRow {
   addedAt: Date | null;
   updatedAt: Date | null;
   bookCount: number;
+  firstBookCoverUrl: string | null;
 }
 
 /**
@@ -154,6 +155,7 @@ export function transformSeriesToDisplayFormat(series: SeriesWithBooks[]): Serie
     addedAt: serie.addedAt,
     updatedAt: serie.updatedAt,
     bookCount: serie.books.length,
+    firstBookCoverUrl: serie.books.length > 0 ? serie.books[0].coverUrl : null,
   }));
 }
 

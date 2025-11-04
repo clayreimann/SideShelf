@@ -135,6 +135,17 @@ function compareAuthorsByName(a: AuthorListRow, b: AuthorListRow, config: Author
 }
 
 /**
+ * Compare two authors by name (last name first)
+ */
+function compareAuthorsByNameLF(a: AuthorListRow, b: AuthorListRow, config: AuthorSortConfig): number {
+    const aValue = a.nameLF?.toLowerCase() || a.name?.toLowerCase() || '';
+    const bValue = b.nameLF?.toLowerCase() || b.name?.toLowerCase() || '';
+    if (aValue < bValue) return -1;
+    if (aValue > bValue) return 1;
+    return 0;
+}
+
+/**
  * Compare two authors by number of books
  */
 function compareAuthorsByNumBooks(a: AuthorListRow, b: AuthorListRow, config: AuthorSortConfig): number {
@@ -154,6 +165,9 @@ export function sortAuthors(items: AuthorListRow[], config: AuthorSortConfig): A
     switch (config.field) {
         case 'name':
             compareFn = compareAuthorsByName;
+            break;
+        case 'nameLF':
+            compareFn = compareAuthorsByNameLF;
             break;
         case 'numBooks':
             compareFn = compareAuthorsByNumBooks;
@@ -177,6 +191,17 @@ export function sortAuthors(items: AuthorListRow[], config: AuthorSortConfig): A
 function compareSeriesByName(a: SeriesListRow, b: SeriesListRow, config: SeriesSortConfig): number {
     const aValue = a.name?.toLowerCase() || '';
     const bValue = b.name?.toLowerCase() || '';
+    if (aValue < bValue) return -1;
+    if (aValue > bValue) return 1;
+    return 0;
+}
+
+/**
+ * Compare two series by book count
+ */
+function compareSeriesByBookCount(a: SeriesListRow, b: SeriesListRow, config: SeriesSortConfig): number {
+    const aValue = a.bookCount || 0;
+    const bValue = b.bookCount || 0;
     if (aValue < bValue) return -1;
     if (aValue > bValue) return 1;
     return 0;
@@ -213,6 +238,9 @@ export function sortSeries(items: SeriesListRow[], config: SeriesSortConfig): Se
     switch (config.field) {
         case 'name':
             compareFn = compareSeriesByName;
+            break;
+        case 'bookCount':
+            compareFn = compareSeriesByBookCount;
             break;
         case 'addedAt':
             compareFn = compareSeriesByAddedAt;

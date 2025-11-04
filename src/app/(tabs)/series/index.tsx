@@ -6,24 +6,21 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Stack, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from 'react-native';
+import CoverImage from '@/components/ui/CoverImange';
 
 export default function SeriesScreen() {
-  const { styles, isDark } = useThemedStyles();
-  const { items, isLoadingItems, isInitializing, ready, refetchSeries, sortConfig, setSortConfig } = useSeries();
+  const { styles, isDark, colors } = useThemedStyles();
+  const { items, isInitializing, ready, refetchSeries, sortConfig, setSortConfig } = useSeries();
   const [showSortMenu, setShowSortMenu] = useState(false);
   const router = useRouter();
-
-  const onRefresh = useCallback(async () => {
-    await refetchSeries();
-  }, [refetchSeries]);
 
   // Load series when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      if (ready && items.length === 0) {
+      if (ready && items.length === 0 && !isInitializing) {
         refetchSeries();
       }
-    }, [ready, items.length, refetchSeries])
+    }, [ready, items.length, isInitializing, refetchSeries])
   );
 
   const controls = useCallback(() => (
@@ -37,6 +34,7 @@ export default function SeriesScreen() {
   // Series sort options
   const seriesSortOptions = [
     { field: 'name' as SeriesSortField, label: 'Name' },
+    { field: 'bookCount' as SeriesSortField, label: 'Series Length' },
     { field: 'addedAt' as SeriesSortField, label: 'Date Added' },
     { field: 'updatedAt' as SeriesSortField, label: 'Last Updated' },
   ];
@@ -47,34 +45,43 @@ export default function SeriesScreen() {
       <TouchableOpacity
         onPress={() => router.push(`/series/${item.id}`)}
         style={{
+          flexDirection: 'row',
           padding: 16,
           borderBottomWidth: 1,
           borderBottomColor: styles.text.color + '20',
+          alignItems: 'center',
         }}
         accessibilityRole="button"
         accessibilityHint={`View books in ${item.name}`}
       >
-        <Text style={[styles.text, { fontSize: 16, fontWeight: '600' }]}>
-          {item.name}
-        </Text>
-        <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginTop: 4 }]}>
-          {bookCountLabel}
-        </Text>
-        {item.description && (
-          <Text style={[styles.text, { fontSize: 14, opacity: 0.7, marginTop: 4 }]} numberOfLines={2}>
-            {item.description}
-          </Text>
+        {item.firstBookCoverUrl && (
+          <View style={{ width: 56, height: 84, borderRadius: 6, overflow: 'hidden', marginRight: 12, backgroundColor: colors.coverBackground }}>
+            <CoverImage uri={item.firstBookCoverUrl} title={item.name} fontSize={10} />
+          </View>
         )}
-        {item.updatedAt && (
-          <Text style={[styles.text, { fontSize: 12, opacity: 0.5, marginTop: 4 }]}>
-            Updated: {new Date(item.updatedAt).toLocaleDateString()}
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.text, { fontSize: 16, fontWeight: '600' }]}>
+            {item.name}
           </Text>
-        )}
+          <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginTop: 4 }]}>
+            {bookCountLabel}
+          </Text>
+          {item.description && (
+            <Text style={[styles.text, { fontSize: 14, opacity: 0.7, marginTop: 4 }]} numberOfLines={2}>
+              {item.description}
+            </Text>
+          )}
+          {item.updatedAt && (
+            <Text style={[styles.text, { fontSize: 12, opacity: 0.5, marginTop: 4 }]}>
+              Updated: {new Date(item.updatedAt).toLocaleDateString()}
+            </Text>
+          )}
+        </View>
       </TouchableOpacity>
     );
-  }, [router, styles.text]);
+  }, [router, styles.text, colors.coverBackground]);
 
-  if (!ready || isInitializing) {
+  if (!ready || (isInitializing && items.length === 0)) {
     return (
       <>
         <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -94,20 +101,6 @@ export default function SeriesScreen() {
           <Text style={[styles.text, { fontSize: 12, marginTop: 8, opacity: 0.7 }]}>
             Series will appear here once you have books that are part of a series
           </Text>
-          <TouchableOpacity
-            onPress={onRefresh}
-            style={{
-              marginTop: 20,
-              paddingHorizontal: 20,
-              paddingVertical: 10,
-              borderRadius: 6,
-              backgroundColor: isDark ? '#333' : '#f0f0f0',
-            }}
-          >
-            <Text style={{ color: isDark ? '#fff' : '#000', fontSize: 16 }}>
-              Reload Series
-            </Text>
-          </TouchableOpacity>
           <Stack.Screen options={{ title: 'Series', headerTitle: 'Series', headerRight: controls }} />
         </View>
       </>
@@ -121,8 +114,6 @@ export default function SeriesScreen() {
           data={items}
           renderItem={renderSeries}
           keyExtractor={(item) => item.id}
-          refreshing={isLoadingItems}
-          onRefresh={onRefresh}
           style={styles.flatListContainer}
         />
         <SortMenu
@@ -133,7 +124,7 @@ export default function SeriesScreen() {
           sortOptions={seriesSortOptions}
           isDark={isDark}
         />
-        <Stack.Screen options={{ title: 'Series', headerTitle: `Series (${items.length})`, headerRight: controls }} />
+        <Stack.Screen options={{ title: 'Series', headerTitle: 'Series', headerRight: controls }} />
       </View>
     </>
   );

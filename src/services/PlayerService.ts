@@ -1282,8 +1282,7 @@ export class PlayerService {
 
       // If current track in TrackPlayer doesn't match store, update store
       if (
-        currentTrack &&
-        (currentTrack as any).id !== store.player.currentTrack?.libraryItemId
+        currentTrack?.id.startsWith(store.player.currentTrack?.mediaId || "")
       ) {
         // Find the track info from our current track
         const trackInfo = this.getCurrentTrack();

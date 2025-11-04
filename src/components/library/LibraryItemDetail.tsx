@@ -5,8 +5,9 @@ import { AuthorIcon, DownloadButton, NarratorIcon, SeriesIcon } from "@/componen
 import ChapterList from "@/components/library/LibraryItemDetail/ChapterList";
 import DownloadProgressView from "@/components/library/LibraryItemDetail/DownloadProgressView";
 import { CollapsibleSection, ProgressBar } from "@/components/ui";
-import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
+import { getMediaProgressForLibraryItem, upsertMediaProgress } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
+import { updateMediaProgress } from "@/lib/api/endpoints";
 import { getCoverUri } from "@/lib/covers";
 import { useAuth } from "@/providers/AuthProvider";
 import { downloadService } from "@/services/DownloadService";
@@ -16,9 +17,9 @@ import { useDownloads, useLibraryItemDetails, usePlayer } from "@/stores";
 import { Stack } from "expo-router";
 import React, { useCallback, useEffect, useMemo } from "react";
 import {
-    ActivityIndicator,
-    ScrollView,
-    useWindowDimensions,
+  ActivityIndicator,
+  ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import RenderHtml from "react-native-render-html";
 import CoverImage from "../ui/CoverImange";
@@ -64,9 +65,9 @@ const HTMLTagsStyles = {
   p: { marginBottom: 12, lineHeight: 24 },
   div: { marginBottom: 8 },
   br: { marginBottom: 8 },
-  b: { fontWeight: "bold" },
-  strong: { fontWeight: "bold" },
-  i: { fontStyle: "italic" },
+  b: { fontWeight: 'bold' as const },
+  strong: { fontWeight: 'bold' as const },
+  i: { fontStyle: 'italic' as const },
 };
 
 export default function LibraryItemDetail({
@@ -164,7 +165,9 @@ export default function LibraryItemDetail({
             user.id
           );
           // Update progress in store (will trigger re-render via store subscription)
-          updateItemProgress(itemId, progressData);
+          if (progressData) {
+            updateItemProgress(itemId, progressData);
+          }
         }
       } catch (error) {
         console.error(
@@ -179,24 +182,94 @@ export default function LibraryItemDetail({
 
   // Compute effective progress: use live player position if this item is playing,
   // otherwise use stored progress
+  // Only show progress if there's actual progress (currentTime > 0 or progress > 0) OR if it's finished
   const effectiveProgress = useMemo(() => {
     if (!progress || !item) return null;
 
     // Check if this item is currently playing
     const isThisItemPlaying = currentTrack?.libraryItemId === item.id;
 
+    let computedProgress = progress;
     if (isThisItemPlaying && position !== undefined) {
       // Use live position from player store (updated every second by background service)
-      return {
+      computedProgress = {
         ...progress,
         currentTime: position,
         progress: progress.duration ? position / progress.duration : 0,
       };
     }
 
-    // Use stored progress
-    return progress;
+    // Only show progress if:
+    // 1. Item is finished, OR
+    // 2. There's actual progress (currentTime > 0 or progress > 0)
+    const hasProgress = (computedProgress.currentTime && computedProgress.currentTime > 0) ||
+                        (computedProgress.progress && computedProgress.progress > 0);
+
+    if (computedProgress.isFinished || hasProgress) {
+      return computedProgress;
+    }
+
+    return null;
   }, [progress, item?.id, currentTrack?.libraryItemId, position]);
+
+  const handleToggleFinished = useCallback(async () => {
+    if (!item || !username || !effectiveProgress) return;
+
+    try {
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        Alert.alert("Error", "User not found");
+        return;
+      }
+
+      const newIsFinished = !effectiveProgress.isFinished;
+      const now = new Date();
+
+      // Update progress in database
+      const updatedProgress = {
+        id: effectiveProgress.id || `${user.id}-${item.id}`,
+        userId: user.id,
+        libraryItemId: item.id,
+        episodeId: effectiveProgress.episodeId || null,
+        duration: effectiveProgress.duration || null,
+        progress: newIsFinished ? 1.0 : (effectiveProgress.progress || 0),
+        currentTime: effectiveProgress.currentTime || null,
+        isFinished: newIsFinished,
+        hideFromContinueListening: effectiveProgress.hideFromContinueListening || null,
+        lastUpdate: now,
+        startedAt: effectiveProgress.startedAt || now,
+        finishedAt: newIsFinished ? now : null,
+      };
+
+      await upsertMediaProgress([updatedProgress]);
+
+      // Update via API
+      try {
+        await updateMediaProgress(
+          item.id,
+          updatedProgress.currentTime || 0,
+          updatedProgress.duration || 0,
+          updatedProgress.progress || 0,
+          newIsFinished
+        );
+      } catch (apiError) {
+        console.error("[LibraryItemDetail] Failed to update progress on server:", apiError);
+        // Continue even if API update fails - local update succeeded
+      }
+
+      // Refresh progress in store
+      const refreshedProgress = await getMediaProgressForLibraryItem(item.id, user.id);
+      if (refreshedProgress) {
+        updateItemProgress(itemId, refreshedProgress);
+      }
+
+      // Refresh server progress to sync
+      await progressService.fetchServerProgress();
+    } catch (error) {
+      console.error("[LibraryItemDetail] Failed to toggle finished status:", error);
+      Alert.alert("Error", "Failed to update finished status. Please try again.");
+    }
+  }, [item, username, effectiveProgress, itemId, updateItemProgress]);
 
   // Background enhancement is handled by the store automatically
   // Download subscriptions are handled by the store automatically
@@ -463,6 +536,32 @@ export default function LibraryItemDetail({
                 duration={effectiveProgress.duration || undefined}
                 showPercentage={true}
               />
+              {/* Mark as Finished Button */}
+              <TouchableOpacity
+                onPress={handleToggleFinished}
+                style={{
+                  marginTop: 12,
+                  paddingVertical: 8,
+                  paddingHorizontal: 16,
+                  borderRadius: 6,
+                  backgroundColor: effectiveProgress.isFinished
+                    ? (isDark ? "#444" : "#e0e0e0")
+                    : (isDark ? "#34C759" : "#28a745"),
+                  alignItems: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: effectiveProgress.isFinished
+                      ? (isDark ? "#999" : "#666")
+                      : "white",
+                    fontSize: 14,
+                    fontWeight: "600",
+                  }}
+                >
+                  {effectiveProgress.isFinished ? "Mark as Unfinished" : "Mark as Finished"}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}

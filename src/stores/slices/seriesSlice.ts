@@ -198,6 +198,8 @@ export const createSeriesSlice: SliceCreator<SeriesSlice> = (set, get) => ({
             console.error('[SeriesSlice] Failed to fetch series from database:', error);
             return [];
         } finally {
+            // Add small delay to ensure refresh indicator is visible
+            await new Promise(resolve => setTimeout(resolve, 50));
             set((state: SeriesSlice) => ({
                 ...state,
                 series: {

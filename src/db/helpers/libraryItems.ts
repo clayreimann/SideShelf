@@ -175,6 +175,103 @@ export async function getLibraryItemsNeedingRefresh(limit: number = 50): Promise
 }
 
 
+/**
+ * Get library items filtered by author ID from local database
+ */
+export async function getLibraryItemsByAuthor(libraryId: string, authorId: string): Promise<{
+  id: string;
+  libraryId: string;
+  mediaType: string;
+  addedAt: number;
+  updatedAt: number;
+  isMissing: boolean;
+  isInvalid: boolean;
+  title: string;
+  subtitle: string;
+  author: string;
+  authorName: string;
+  authorNameLF: string;
+  narrator: string;
+  releaseDate: string;
+  publishedDate: string;
+  publishedYear: string;
+  duration: number;
+  coverUri: string;
+  description: string;
+  language: string;
+  explicit: boolean;
+  seriesName: string;
+}[]> {
+  // Subquery to aggregate narrators
+  const narratorsSubquery = db
+    .select({
+      mediaId: mediaNarrators.mediaId,
+      narratorNames: sql<string | null>`GROUP_CONCAT(${mediaNarrators.narratorName}, ', ')`.as('narrator_names'),
+    })
+    .from(mediaNarrators)
+    .groupBy(mediaNarrators.mediaId)
+    .as('narrators_agg');
+
+  // Subquery to aggregate series names
+  const seriesSubquery = db
+    .select({
+      mediaId: mediaSeries.mediaId,
+      seriesNames: sql<string | null>`GROUP_CONCAT(${series.name}, ', ')`.as('series_names'),
+    })
+    .from(mediaSeries)
+    .leftJoin(series, eq(mediaSeries.seriesId, series.id))
+    .groupBy(mediaSeries.mediaId)
+    .as('series_agg');
+
+  const baseQuery = db
+    .select({
+      id: libraryItems.id,
+      libraryId: libraryItems.libraryId,
+      mediaType: libraryItems.mediaType ?? '',
+      addedAt: libraryItems.addedAt,
+      updatedAt: libraryItems.updatedAt,
+      isMissing: libraryItems.isMissing,
+      isInvalid: libraryItems.isInvalid,
+      // Media metadata fields
+      title: mediaMetadata.title,
+      subtitle: mediaMetadata.subtitle,
+      author: mediaMetadata.author, // For podcasts
+      authorName: mediaMetadata.authorName, // For books
+      authorNameLF: mediaMetadata.authorNameLF, // For sorting by author last name first
+      narrator: narratorsSubquery.narratorNames,
+      releaseDate: mediaMetadata.publishedDate,
+      publishedDate: mediaMetadata.publishedDate,
+      publishedYear: mediaMetadata.publishedYear,
+      duration: mediaMetadata.duration,
+      coverUri: localCoverCache.localCoverUrl,
+      description: mediaMetadata.description,
+      language: mediaMetadata.language,
+      explicit: mediaMetadata.explicit,
+      seriesName: seriesSubquery.seriesNames,
+      mediaId: mediaMetadata.id,
+    })
+    .from(libraryItems)
+    .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
+    .innerJoin(mediaAuthors, eq(mediaMetadata.id, mediaAuthors.mediaId))
+    .leftJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId))
+    .leftJoin(narratorsSubquery, eq(mediaMetadata.id, narratorsSubquery.mediaId))
+    .leftJoin(seriesSubquery, eq(mediaMetadata.id, seriesSubquery.mediaId));
+
+  const rows = await baseQuery
+    .where(
+      and(
+        eq(libraryItems.libraryId, libraryId),
+        eq(mediaAuthors.authorId, authorId)
+      )
+    )
+    .orderBy(mediaMetadata.title);
+
+  return rows.map(({ mediaId, ...row }) => ({
+    ...row,
+    coverUri: row.coverUri && mediaId ? resolveAppPath(row.coverUri) : undefined,
+  }));
+}
+
 // Get library items with full metadata for list display
 export async function getLibraryItemsForList(libraryId: string): Promise<{
   id: string;

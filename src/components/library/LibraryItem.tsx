@@ -45,7 +45,6 @@ export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
         style={{
           flexDirection: "row",
           backgroundColor: colors.background,
-          marginHorizontal: 12,
           marginBottom: 8,
         }}
       >

@@ -1,10 +1,10 @@
 import { db } from '@/db/client';
 import { setLocalCoverCached } from '@/db/helpers/localData';
 import { libraryItems } from '@/db/schema/libraryItems';
+import { apiFetch } from '@/lib/api/api';
 import { fetchLibraryItemCoverHead } from '@/lib/api/endpoints';
 import { eq } from 'drizzle-orm';
 import { Directory, File, Paths } from 'expo-file-system';
-import { fetch } from 'expo/fetch';
 
 const coversDirectory = new Directory(Paths.cache, 'covers');
 
@@ -42,7 +42,10 @@ export async function cacheCoverIfMissing(libraryItemId: string): Promise<{ uri:
     const url = res.url;
     if (!url) return { uri: destFile.uri, wasDownloaded: false };
 
-    const response = await fetch(url);
+    // Use apiFetch for the actual image download to ensure proper authentication
+    const response = await apiFetch(url);
+    if (!response.ok) return { uri: destFile.uri, wasDownloaded: false };
+
     const bytes = await response.bytes();
     destFile.write(bytes);
     console.log(`[covers] Downloaded cover for ${libraryItemId}`);

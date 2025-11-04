@@ -9,7 +9,6 @@ import React, { useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  RefreshControl,
   Text,
   TouchableOpacity,
   View,
@@ -21,7 +20,6 @@ export default function SeriesDetailScreen() {
     series: seriesList,
     ready,
     isInitializing,
-    isLoadingItems,
     refetchSeries,
   } = useSeries();
   const router = useRouter();
@@ -41,10 +39,6 @@ export default function SeriesDetailScreen() {
       });
     }, [ready, selectedSeries, refetchSeries])
   );
-
-  const handleRefresh = useCallback(async () => {
-    await refetchSeries();
-  }, [refetchSeries]);
 
   const renderBook = useCallback(
     ({ item }: { item: SeriesBookRow }) => {
@@ -101,7 +95,7 @@ export default function SeriesDetailScreen() {
     );
   }
 
-  if (!ready || isInitializing) {
+  if (!ready || (isInitializing && !selectedSeries)) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={colors.link} />
@@ -117,25 +111,12 @@ export default function SeriesDetailScreen() {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }]}>
         <Text style={[styles.text, { textAlign: 'center', marginBottom: 16 }]}>
-          We could not find that series. Try refreshing to sync the latest data.
+          We could not find that series.
         </Text>
-        <TouchableOpacity
-          onPress={handleRefresh}
-          style={{
-            paddingHorizontal: 20,
-            paddingVertical: 12,
-            borderRadius: 6,
-            backgroundColor: colors.separator,
-          }}
-        >
-          <Text style={[styles.text, { fontWeight: '600' }]}>Refresh</Text>
-        </TouchableOpacity>
         <Stack.Screen options={{ title: 'Series' }} />
       </View>
     );
   }
-
-  const headerTitle = `${selectedSeries.name || 'Series'} (${selectedSeries.books.length})`;
 
   return (
     <>
@@ -143,35 +124,16 @@ export default function SeriesDetailScreen() {
         data={selectedSeries.books}
         keyExtractor={(item) => item.libraryItemId}
         renderItem={renderBook}
-        ListHeaderComponent={
-          <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
-            <Text style={[styles.text, { fontSize: 24, fontWeight: '700' }]} numberOfLines={2}>
-              {selectedSeries.name}
-            </Text>
-            {selectedSeries.description && (
-              <Text style={[styles.text, { marginTop: 8, opacity: 0.8 }]}>
-                {selectedSeries.description}
-              </Text>
-            )}
-            <Text style={[styles.text, { marginTop: 8, opacity: 0.6, fontSize: 12 }]}>
-              {selectedSeries.books.length === 1 ? '1 book' : `${selectedSeries.books.length} books`}
-            </Text>
-          </View>
-        }
         ListEmptyComponent={
           <View style={{ padding: 24, alignItems: 'center' }}>
             <Text style={[styles.text, { opacity: 0.7 }]}>No books found in this series.</Text>
           </View>
-        }
-        refreshControl={
-          <RefreshControl refreshing={isLoadingItems} onRefresh={handleRefresh} tintColor={colors.link} />
         }
         contentContainerStyle={[styles.flatListContainer, { paddingBottom: 40 }]}
       />
       <Stack.Screen
         options={{
           title: selectedSeries.name || 'Series',
-          headerTitle: headerTitle,
         }}
       />
     </>

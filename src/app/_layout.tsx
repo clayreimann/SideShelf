@@ -19,6 +19,7 @@ import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useRef } from "react";
 import { AppState, AppStateStatus, Linking, View } from "react-native";
+import TrackPlayer, { State } from "react-native-track-player";
 
 // Create cached sublogger for this component
 const log = logger.forTag('RootLayout');
@@ -88,6 +89,42 @@ export default function RootLayout() {
         const wasLongBackground = timeInBackground > 30000; // 30 seconds
 
         log.info(`App moved to foreground (was backgrounded for ${(timeInBackground / 1000).toFixed(2)}s)`);
+
+        // Check TrackPlayer directly to see if it's currently playing
+        let trackPlayerIsPlaying = false;
+        try {
+          const tpState = await TrackPlayer.getPlaybackState();
+          trackPlayerIsPlaying = tpState.state === State.Playing;
+        } catch (error) {
+          log.warn("Failed to check TrackPlayer state, assuming not playing", error as Error);
+        }
+
+        if (trackPlayerIsPlaying) {
+          log.info("TrackPlayer is currently playing, syncing state FROM TrackPlayer and skipping restoration");
+
+          // Sync state FROM TrackPlayer to store (don't update TrackPlayer)
+          try {
+            await playerService.syncStoreWithTrackPlayer();
+            log.info("State synced from TrackPlayer successfully");
+          } catch (error) {
+            log.error("Failed to sync state from TrackPlayer", error as Error);
+          }
+
+          // Still update player init timestamp if context was recreated
+          const currentPlayerInitTimestamp = playerService.getInitializationTimestamp();
+          if (currentPlayerInitTimestamp !== playerInitTimestamp.current) {
+            log.warn("JS context was recreated - player init timestamp changed");
+            playerInitTimestamp.current = currentPlayerInitTimestamp;
+          }
+
+          // Still fetch progress from server
+          log.info("Triggering progress refetch on app foreground");
+          progressService.fetchServerProgress().catch((error) => {
+            log.error("Failed to fetch server progress on app foreground", error as Error);
+          });
+
+          return; // Skip all restoration operations that would update TrackPlayer
+        }
 
         // Check if JS context was recreated (player service re-initialized)
         const currentPlayerInitTimestamp = playerService.getInitializationTimestamp();

@@ -13,7 +13,7 @@ export default function SeriesLayout() {
       headerShadowVisible: false,
     }}>
       <Stack.Screen name="index" options={{ title: 'Series' }} />
-      <Stack.Screen name="[seriesId]" options={{ title: 'Series' }} />
+      <Stack.Screen name="[seriesId]/index" options={{ title: 'Series' }} />
       <Stack.Screen name="[seriesId]/item/[itemId]" options={{ headerTitle: '', headerBackButtonDisplayMode: 'minimal' }} />
     </Stack>
   );

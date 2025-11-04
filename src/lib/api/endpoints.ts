@@ -123,6 +123,19 @@ export async function fetchLibraryItemCoverHead(
   });
 }
 
+/**
+ * Fetch author image URL
+ * @param authorId - The author ID
+ * @returns Response with the image URL
+ */
+export async function fetchAuthorImageHead(
+  authorId: string
+): Promise<Response> {
+  return await apiFetch(`/api/authors/${authorId}/image`, {
+    method: "HEAD",
+  });
+}
+
 // Batch fetch library items with full details (includes authors, series, audioFiles, chapters, libraryFiles)
 export async function fetchLibraryItemsBatch(
   libraryItemIds: string[]

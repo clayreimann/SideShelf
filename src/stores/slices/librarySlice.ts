@@ -269,6 +269,21 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                 await get()._refetchItems();
             }
 
+            // Refresh series and authors after library refresh
+            log.info(' Refreshing series and authors after library refresh...');
+            try {
+                await Promise.all([
+                    get().refetchSeries().catch(error => {
+                        log.error(' Failed to refresh series:', error);
+                    }),
+                    get().refetchAuthors().catch(error => {
+                        log.error(' Failed to refresh authors:', error);
+                    }),
+                ]);
+            } catch (error) {
+                log.error(' Failed to refresh series/authors:', error);
+            }
+
             log.info(' Refresh completed successfully');
         } catch (error) {
             log.error(' Failed to refresh:', error);
@@ -508,7 +523,30 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
             log.info(` Updated UI with ${initialDisplayItems.length} items (loading cleared, batch fetch starting in background)`);
 
-            // Step 4: Fetch full details in batches using batch endpoint (background, don't await)
+            // Step 4: Start cover caching before batch updates (so UI updates faster)
+            log.info(' [Background] Starting cover caching...');
+            const coverCachePromise = cacheCoversForLibraryItems(selectedLibraryId).then(async (result) => {
+                log.info(` [Background] Cover caching completed. Downloaded: ${result.downloadedCount}/${result.totalCount}`);
+
+                // Refresh the UI after cover caching to show cached covers
+                log.info(' [Background] Refreshing display with cached covers');
+                const updatedItems = await getLibraryItemsForList(selectedLibraryId);
+                const updatedDisplayItems = transformItemsToDisplayFormat(updatedItems);
+                log.info(` [Background] Refreshing display with ${updatedDisplayItems.length} items after cover caching ${updatedDisplayItems.filter(i => i.coverUri).length} with covers`);
+
+                set((state: LibrarySlice) => ({
+                    ...state,
+                    library: {
+                        ...state.library,
+                        rawItems: updatedDisplayItems,
+                        items: sortLibraryItems(updatedDisplayItems, state.library.sortConfig)
+                    }
+                }));
+            }).catch(error => {
+                log.error(' [Background] Cover caching failed:', error);
+            });
+
+            // Step 5: Fetch full details in batches using batch endpoint (background, don't await)
             const allItemIds = allItems.map(item => item.id);
             log.info(` Starting background batch fetch for ${allItemIds.length} items`);
 
@@ -566,28 +604,8 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
                         }
                     }));
 
-                    // Start cover caching after batch fetch completes
-                    log.info(' [Background] Starting cover caching...');
-                    cacheCoversForLibraryItems(selectedLibraryId).then(async (result) => {
-                        log.info(` [Background] Cover caching completed. Downloaded: ${result.downloadedCount}/${result.totalCount}`);
-
-                        // Refresh the UI after cover caching to show cached covers
-                        log.info(' [Background] Refreshing display with cached covers');
-                        const updatedItems = await getLibraryItemsForList(selectedLibraryId);
-                        const updatedDisplayItems = transformItemsToDisplayFormat(updatedItems);
-                        log.info(` [Background] Refreshing display with ${updatedDisplayItems.length} items after cover caching ${updatedDisplayItems.filter(i => i.coverUri).length} with covers`);
-
-                        set((state: LibrarySlice) => ({
-                            ...state,
-                            library: {
-                                ...state.library,
-                                rawItems: updatedDisplayItems,
-                                items: sortLibraryItems(updatedDisplayItems, state.library.sortConfig)
-                            }
-                        }));
-                    }).catch(error => {
-                        log.error(' [Background] Cover caching failed:', error);
-                    });
+                    // Wait for cover caching to complete if it hasn't already
+                    await coverCachePromise;
                 } catch (error) {
                     log.error(' [Background] Batch fetch failed:', error);
                 }

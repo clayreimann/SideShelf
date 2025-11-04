@@ -36,21 +36,21 @@ export default function HomeScreen() {
     if (continueListening.length > 0) {
       newSections.push({
         title: translate('home.sections.continueListening'),
-        data: continueListening,
+        data: continueListening.slice(0, 3),
       });
     }
 
     if (downloaded.length > 0) {
       newSections.push({
         title: translate('home.sections.downloaded'),
-        data: downloaded,
+        data: downloaded.slice(0, 3),
       });
     }
 
     if (listenAgain.length > 0) {
       newSections.push({
         title: translate('home.sections.listenAgain'),
-        data: listenAgain,
+        data: listenAgain.slice(0, 3),
       });
     }
 

@@ -13,12 +13,12 @@ export type SortField = 'title' | 'authorName' | 'authorNameLF' | 'publishedYear
 /**
  * Supported sort fields for authors
  */
-export type AuthorSortField = 'name' | 'numBooks';
+export type AuthorSortField = 'name' | 'nameLF' | 'numBooks';
 
 /**
  * Supported sort fields for series
  */
-export type SeriesSortField = 'name' | 'addedAt' | 'updatedAt';
+export type SeriesSortField = 'name' | 'bookCount' | 'addedAt' | 'updatedAt';
 
 /**
  * Sort direction for library items

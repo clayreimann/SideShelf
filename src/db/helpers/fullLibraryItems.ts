@@ -91,6 +91,10 @@ export async function processFullLibraryItem(apiItem: ApiLibraryItem): Promise<v
         // 2. Process media metadata
         if (apiItem.mediaType === 'book' && apiItem.media) {
             const book = apiItem.media as ApiBook;
+            // Ensure libraryItemId is set from apiItem if missing from book
+            if (!book.libraryItemId) {
+                book.libraryItemId = apiItem.id;
+            }
             mediaRow = marshalBookToMediaMetadata(book);
 
             await tx.insert(mediaMetadata).values(mediaRow)
@@ -100,6 +104,10 @@ export async function processFullLibraryItem(apiItem: ApiLibraryItem): Promise<v
                 });
         } else if (apiItem.mediaType === 'podcast' && apiItem.media) {
             const podcast = apiItem.media as ApiPodcast;
+            // Ensure libraryItemId is set from apiItem if missing from podcast
+            if (!podcast.libraryItemId) {
+                podcast.libraryItemId = apiItem.id;
+            }
             mediaRow = marshalPodcastToMediaMetadata(podcast);
 
             await tx.insert(mediaMetadata).values(mediaRow)
