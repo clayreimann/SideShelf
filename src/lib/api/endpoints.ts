@@ -326,38 +326,7 @@ export async function createLocalSession(params: CreateLocalSessionParams): Prom
 
   await handleResponseError(response, "Failed to create local session");
 
-  // Try to parse JSON response, but handle non-JSON responses gracefully
-  let serverSessionId = sessionId;
-  let result: any = {};
-  try {
-    const text = await response.text();
-    if (text && text.trim()) {
-      try {
-        result = JSON.parse(text);
-        const parsedId =
-          typeof result?.id === "string" && result.id.length > 0
-            ? result.id
-            : undefined;
-        if (parsedId) {
-          serverSessionId = parsedId;
-        }
-        log.info(
-          `Created local session serverId=${
-            parsedId || sessionId
-          } libraryItem=${libraryItemId} response=${JSON.stringify(result)}`
-        );
-      } catch (parseError) {
-        // Server returned non-JSON response (e.g., "OK"), which is fine for this endpoint
-        log.info(
-          `Created local session localId=${sessionId} libraryItem=${libraryItemId} (server response: ${text})`
-        );
-      }
-    }
-  } catch (error) {
-    log.warn(`Failed to read response body: ${error}`);
-  }
-
-  return { id: serverSessionId };
+  return { id: sessionId };
 }
 
 function sanitizeSeconds(value: number): number {

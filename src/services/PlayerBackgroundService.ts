@@ -64,7 +64,8 @@ declare global {
  * Handle remote play command
  */
 async function handleRemotePlay(): Promise<void> {
-  log.debug(`RemotePlay received (${describeRuntimeContext()})`);
+  const progress = await TrackPlayer.getProgress();
+  log.debug(`RemotePlay received progress=${formatTime(progress.position)} (${describeRuntimeContext()})`);
   await TrackPlayer.play();
 }
 
@@ -331,7 +332,7 @@ async function handlePlaybackStateChanged(
 
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
-        log.info(`Playback state changed: ${event.state} session=${session.sessionId} item=${ids.libraryItemId}`);
+        log.info(`Playback state changed: state=${event.state} progress=${progress.position} session=${session.sessionId} item=${ids.libraryItemId}`);
       }
     }
   } catch (error) {

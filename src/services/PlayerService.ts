@@ -1154,6 +1154,7 @@ export class PlayerService {
       const hasTracks = tpQueue.length > 0;
       const tpPosition = tpProgress.position;
       const tpIsPlaying = tpState.state === State.Playing;
+      const storePosition = store.player.position;
 
       // Get DB session as source of truth for position (if we have libraryItemId)
       let dbPosition = store.player.position;
@@ -1213,7 +1214,12 @@ export class PlayerService {
         report.positionMismatch = true;
         report.discrepanciesFound = true;
         // Use DB position as authoritative source
-        log.info(`Position mismatch detected: TrackPlayer=${formatTime(tpPosition)}s, DB=${formatTime(dbPosition)}s, diff=${formatTime(positionDiff)}s`);
+        const trackInfo = store.player.currentTrack
+          ? `track=${store.player.currentTrack?.id} item=${store.player.currentTrack?.libraryItemId}`
+          : 'track=none';
+        log.info(
+          `Position mismatch detected: TrackPlayer=${formatTime(tpPosition)}s, DB=${formatTime(dbPosition)}s, Store=${formatTime(storePosition)}s, diff=${formatTime(positionDiff)}s, ${trackInfo}`
+        );
         if (hasTracks) {
           await TrackPlayer.seekTo(dbPosition);
           store.updatePosition(dbPosition);

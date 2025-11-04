@@ -8,11 +8,8 @@
 import { getJumpBackwardInterval, getJumpForwardInterval } from '@/lib/appSettings';
 import { logger } from '@/lib/logger';
 import TrackPlayer, {
-  AndroidAudioContentType,
   AppKilledPlaybackBehavior,
   Capability,
-  IOSCategory,
-  IOSCategoryMode,
 } from 'react-native-track-player';
 
 const log = logger.forTag('TrackPlayerConfig');

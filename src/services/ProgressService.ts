@@ -28,6 +28,7 @@ import { getUserByUsername } from '@/db/helpers/users';
 import type { LibraryItemRow } from '@/db/schema/libraryItems';
 import { LocalListeningSessionRow } from '@/db/schema/localData';
 import { closeSession, createLocalSession, fetchMe, fetchMediaProgress, syncSession } from '@/lib/api/endpoints';
+import { formatTime } from '@/lib/helpers/formatters';
 import { logger } from '@/lib/logger';
 import { getStoredUsername } from '@/lib/secureStore';
 import NetInfo from "@react-native-community/netinfo";
@@ -232,6 +233,7 @@ export class ProgressService {
 
       let shouldEndExistingSession = false;
       let resumePosition = startTime;
+      let resumeSource: 'startArgument' | 'activeSession' | 'savedProgress' = 'startArgument';
 
       // Get saved progress to use as fallback
       const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
@@ -251,12 +253,15 @@ export class ProgressService {
           // But if currentTime is 0 or very small, fall back to saved progress
           if (existingSession.currentTime > 1) {
             resumePosition = existingSession.currentTime;
+            resumeSource = 'activeSession';
             log.info(`Resuming from active session: ${resumePosition}`);
           } else if (savedProgress?.currentTime) {
             resumePosition = savedProgress.currentTime;
+            resumeSource = 'savedProgress';
             log.info(`Resuming from saved progress (session currentTime was ${existingSession.currentTime}): ${resumePosition}`);
           } else {
             resumePosition = existingSession.currentTime;
+            resumeSource = 'activeSession';
             log.info(`Resuming from active session: ${resumePosition}`);
           }
         }
@@ -264,6 +269,7 @@ export class ProgressService {
         // Fall back to saved progress
         resumePosition = savedProgress?.currentTime || startTime;
         if (savedProgress?.currentTime) {
+          resumeSource = 'savedProgress';
           log.info(`Resuming from saved progress: ${resumePosition}`);
         }
       }
@@ -279,6 +285,22 @@ export class ProgressService {
           await endListeningSession(session.id, session.currentTime);
         }
       }
+
+      // Log the resolved resume context before creating the session
+      const resumeParts = [
+        `position=${formatTime(resumePosition)}s`,
+        `source=${resumeSource}`
+      ];
+      if (existingSession) {
+        resumeParts.push(`dbCurrent=${formatTime(existingSession.currentTime)}s`);
+        if (existingSession.startTime != null) {
+          resumeParts.push(`dbStart=${formatTime(existingSession.startTime)}s`);
+        }
+        resumeParts.push(`dbUpdatedAt=${existingSession.updatedAt.toISOString()}`);
+      } else if (savedProgress?.currentTime) {
+        resumeParts.push(`savedProgress=${formatTime(savedProgress.currentTime)}s`);
+      }
+      log.info(`Resolved resume position for ${libraryItemId}: ${resumeParts.join(' ')}`);
 
       // Start new session
       const sessionId = await startListeningSession(
@@ -453,18 +475,17 @@ export class ProgressService {
       const timeSinceUpdate = (now - session.updatedAt.getTime()) / 1000;
       const wasPaused = timeSinceUpdate > 60; // If > 60 seconds since update, likely paused
 
-      if (isPlaying && wasPaused) {
-        // Resuming from pause
-        log.info(`Resumed playback session=${session.id} item=${libraryItemId}`);
-      } else if (!isPlaying && !wasPaused) {
-        // Starting pause - immediate sync on pause
-        await this.syncSessionToServer(userId, libraryItemId);
-        log.info(`Paused playback, synced to server session=${session.id} item=${libraryItemId}`);
-      }
-
       // Defensive logging: warn if writing currentTime=0 for an active session
       if (currentTime === 0 && session.currentTime > 0) {
         log.warn(`Writing currentTime=0 for active session (previous position was ${session.currentTime}s) session=${session.id} item=${libraryItemId}`);
+      }
+
+      const diffFromStored = currentTime - session.currentTime;
+      if (Math.abs(diffFromStored) >= 30) {
+        const direction = diffFromStored >= 0 ? 'forward' : 'backward';
+        log.info(
+          `Detected ${direction} jump during progress update session=${session.id} item=${libraryItemId} stored=${formatTime(session.currentTime)}s incoming=${formatTime(currentTime)}s delta=${formatTime(Math.abs(diffFromStored))}s`
+        );
       }
 
       // Update session progress
@@ -474,6 +495,15 @@ export class ProgressService {
         playbackRate,
         volume
       );
+
+      if (isPlaying && wasPaused) {
+        // Resuming from pause
+        log.info(`Resumed playback session=${session.id} item=${libraryItemId}`);
+      } else if (!isPlaying && !wasPaused) {
+        // Starting pause - immediate sync on pause
+        await this.syncSessionToServer(userId, libraryItemId);
+        log.info(`Paused playback, synced to server position=${formatTime(session.currentTime)} session=${session.id} item=${libraryItemId}`);
+      }
     } catch (error) {
       log.error('Failed to update progress:', error as Error);
     }
@@ -627,7 +657,6 @@ export class ProgressService {
       // Use the existing syncSingleSession method
       await this.syncSingleSession(sessionData);
 
-      log.info(`Synced session to server session=${session.id} item=${libraryItemId}`);
     } catch (error) {
       const session = await getActiveSession(userId, libraryItemId);
       log.error(`Failed to sync session to server: ${(error as Error).message} session=${session?.id || 'none'} item=${libraryItemId}`);
@@ -673,7 +702,12 @@ export class ProgressService {
       return;
     }
 
-    log.info(`Syncing session session=${session.id} item=${session.libraryItemId}`);
+    const startTimeSeconds = session.startTime ?? 0;
+    const deltaSinceStart = Math.max(session.currentTime - startTimeSeconds, 0);
+    const updatedAtIso = session.updatedAt?.toISOString() ?? 'unknown';
+    log.info(
+      `Syncing session session=${session.id} item=${session.libraryItemId} start=${formatTime(startTimeSeconds)}s progress=${formatTime(session.currentTime)}s deltaFromStart=${formatTime(deltaSinceStart)}s timeListening=${formatTime(timeListening)}s updatedAt=${updatedAtIso}`
+    );
 
     // Determine whether we are tracking an open (streaming) session
     let isStreamingSession =

@@ -13,6 +13,7 @@ import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from '@/lib/asyncStore'
 import { formatTime } from '@/lib/helpers/formatters';
 import { logger } from '@/lib/logger';
 import { getStoredUsername } from '@/lib/secureStore';
+import { configureTrackPlayer } from '@/lib/trackPlayerConfig';
 import { progressService } from '@/services/ProgressService';
 import type { CurrentChapter, PlayerTrack } from '@/types/player';
 import type { SliceCreator } from '@/types/store';
@@ -496,17 +497,21 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         return;
       }
 
+      const activeTrack = await TrackPlayer.getActiveTrack();
       // Update now playing metadata with chapter info
       // TrackPlayer will use this for the lock screen and notification controls
       await TrackPlayer.updateMetadataForTrack(activeTrackIndex, {
         title: chapterTitle,
         artist: author,
         album: bookTitle,
-        artwork: currentTrack.coverUri || undefined,
+        artwork: activeTrack?.artwork !== currentTrack.coverUri ? currentTrack.coverUri : undefined,
         duration: chapterDuration,
         // @ts-ignore - elapsedTime is used by iOS native code (Metadata.swift) but not in TypeScript types
         elapsedTime: chapterElapsedTime,
       });
+
+      // Double check that we don't lose the trackplayer controls on the lock screen
+      await configureTrackPlayer()
 
       log.debug(`Updated now playing: chapter="${chapterTitle}" elapsed=${formatTime(chapterElapsedTime)}/${formatTime(chapterDuration)}`);
     } catch (error) {

@@ -70,7 +70,7 @@ export async function apiFetch(
   const res = await fetch(url, { ...rest, headers: headerObj });
   const endTime = Date.now();
   const duration = endTime - startTime;
-  log.info(`<- ${res.status} ${method} ${scrubUrl(url)} ${res.headers.get("content-type")} ${formatBytes(Number(res.headers.get("content-length")))} [${duration}ms]`);
+  log.info(`<- ${res.status} ${method} ${scrubUrl(url)} [${formatBytes(Number(res.headers.get("content-length")))}] [${duration}ms] [${res.headers.get("content-type")}]`);
   detailedLog.info(`<- ${res.status} ${method} ${scrubUrl(url)} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()} [${duration}ms]`);
   if (res.status === 401) {
     log.info("access token expired, refreshing token...");
