@@ -118,7 +118,8 @@ export class ProgressService {
         log.info('No active sessions to rehydrate');
         return;
       } else if (activeSessions.length > 1) {
-        log.warn(`Multiple (${activeSessions.length}) active sessions found during rehydration`);
+        const sessionIds = activeSessions.map(s => s.id).join(', ');
+        log.warn(`Multiple (${activeSessions.length}) active sessions found during rehydration: ${sessionIds}`);
       }
 
       // Use the most recently updated session
@@ -442,12 +443,18 @@ export class ProgressService {
             duration = metadata?.duration || 0;
           }
 
-          log.info(`Starting new session for ${libraryItemId} at position ${currentTime} session=${session.id} item=${libraryItemId}`);
+          // Use stale session's position if currentTime is 0 (likely TrackPlayer not restored yet)
+          const startPosition = currentTime > 0 ? currentTime : staleSessionEndTime;
+          if (currentTime === 0 && staleSessionEndTime > 0) {
+            log.info(`Using stale session position ${staleSessionEndTime}s instead of 0 for new session (TrackPlayer may not be restored yet) item=${libraryItemId}`);
+          }
+
+          log.info(`Starting new session for ${libraryItemId} at position ${startPosition} session=${session.id} item=${libraryItemId}`);
           await this.startSession(
             username,
             libraryItemId,
             session.mediaId,
-            currentTime,
+            startPosition,
             duration,
             playbackRate || 1.0,
             volume || 1.0
@@ -475,9 +482,12 @@ export class ProgressService {
       const timeSinceUpdate = (now - session.updatedAt.getTime()) / 1000;
       const wasPaused = timeSinceUpdate > 60; // If > 60 seconds since update, likely paused
 
-      // Defensive logging: warn if writing currentTime=0 for an active session
-      if (currentTime === 0 && session.currentTime > 0) {
-        log.warn(`Writing currentTime=0 for active session (previous position was ${session.currentTime}s) session=${session.id} item=${libraryItemId}`);
+      // Prevent writing currentTime=0 for active sessions (likely indicates TrackPlayer not restored yet)
+      // Use the session's existing position if incoming position is 0 and session has a valid position
+      if (currentTime === 0 && session.currentTime > 0 && !session.endTime) {
+        log.warn(`Preventing write of currentTime=0 for active session (previous position was ${session.currentTime}s) - likely TrackPlayer not restored yet session=${session.id} item=${libraryItemId}`);
+        // Don't update with 0 - keep existing position
+        return;
       }
 
       const diffFromStored = currentTime - session.currentTime;

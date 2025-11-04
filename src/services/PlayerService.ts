@@ -1224,6 +1224,12 @@ export class PlayerService {
           await TrackPlayer.seekTo(dbPosition);
           store.updatePosition(dbPosition);
           report.actionsTaken.push(`Adjusted TrackPlayer position to DB value: ${formatTime(dbPosition)}s`);
+        } else {
+          const reason = store.player.currentTrack
+            ? 'TrackPlayer queue is empty - queue should be rebuilt via restorePlayerServiceFromSession() or playTrack()'
+            : 'No current track in store - track restoration may be needed';
+          log.info(`Position mismatch detected but cannot seek: ${reason}`);
+          report.actionsTaken.push(`Position mismatch detected but cannot seek: ${reason}`);
         }
       }
 
@@ -1251,7 +1257,11 @@ export class PlayerService {
       }
 
       if (report.discrepanciesFound) {
-        log.info(`Reconciliation completed with ${report.actionsTaken.length} actions: ${report.actionsTaken.join(', ')}`);
+        if (report.actionsTaken.length > 0) {
+          log.info(`Reconciliation completed with ${report.actionsTaken.length} actions: ${report.actionsTaken.join(', ')}`);
+        } else {
+          log.info(`Reconciliation completed with 0 actions: discrepancies found but no actions could be taken (trackMismatch=${report.trackMismatch}, positionMismatch=${report.positionMismatch}, rateMismatch=${report.rateMismatch}, volumeMismatch=${report.volumeMismatch})`);
+        }
       } else {
         log.info('Reconciliation: No discrepancies found, state is in sync');
       }

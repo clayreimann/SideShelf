@@ -117,15 +117,9 @@ async function handleAppUpdate(): Promise<void> {
   try {
     log.info('Handling app update...');
 
-    // Force cleanup of any cached modules that might have changed
-    // This is especially important for the PlayerBackgroundService
-    const backgroundServicePath = require.resolve('@/services/PlayerBackgroundService');
-    if (require.cache[backgroundServicePath]) {
-      log.info('Clearing cached PlayerBackgroundService module');
-      delete require.cache[backgroundServicePath];
-    }
-
-    // Any other update-specific logic can go here
+    // Note: Module cache clearing (require.cache) is not available in React Native
+    // React Native handles module hot-reloading differently than Node.js
+    // Any update-specific logic can go here
     // For example: database migrations, cache cleanup, etc.
 
     log.info('App update handling complete');
