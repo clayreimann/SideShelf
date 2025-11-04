@@ -355,39 +355,58 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
   _updateCurrentChapter: (position: number) => {
     const state = get() as PlayerSlice;
     const { currentTrack, currentChapter } = state.player;
-    const chapter = currentChapter?.chapter;
 
     if (!currentTrack || !currentTrack.chapters.length) {
-      log.debug(`Cannot update curent chapter hasTrack=${!!currentTrack} hasChapters=${currentTrack?.chapters?.length ?? 0}`);
+      log.info(
+        `Cannot update current chapter hasTrack=${!!currentTrack} hasChapters=${currentTrack?.chapters?.length ?? 0}`
+      );
       return;
     }
 
-    // Find the current chapter based on absolute position (book position)
-    const nextChapter = position < (chapter?.end || 0) ? chapter : currentTrack.chapters.find(
-      (chapter) => position >= chapter.start && position < chapter.end
-    );
+    const chapters = currentTrack.chapters;
+    const previousChapter = currentChapter?.chapter;
 
-    if (nextChapter) {
-      log.debug(`Current chapter updated: "${nextChapter.title}" (${formatTime(nextChapter.start)}s - ${formatTime(nextChapter.end)}s)`);
-      // Calculate chapter-relative position: absolute position minus chapter start
-      // This is used for now playing elapsedTime display (resets to 0 at chapter start)
-      const positionInChapter = position - nextChapter.start;
-      const chapterDuration = nextChapter.end - nextChapter.start;
+    // Keep prior chapter if position still within its bounds
+    const chapterStillValid =
+      previousChapter &&
+      position >= previousChapter.start &&
+      position < previousChapter.end
+        ? previousChapter
+        : undefined;
 
-      set((state: PlayerSlice) => ({
-        ...state,
-        player: {
-          ...state.player,
-          currentChapter: {
-            chapter: nextChapter,
-            positionInChapter,
-            chapterDuration,
-          },
+    let resolvedChapter =
+      chapterStillValid ??
+      chapters.find((chapter) => position >= chapter.start && position < chapter.end);
+
+    if (!resolvedChapter) {
+      // Clamp to closest chapter when outside known ranges
+      resolvedChapter =
+        position >= chapters[chapters.length - 1].end
+          ? chapters[chapters.length - 1]
+          : chapters[0];
+    }
+
+    const hasChapterChanged = previousChapter?.id !== resolvedChapter.id;
+    const chapterDuration = Math.max(0, resolvedChapter.end - resolvedChapter.start);
+    const rawPositionInChapter = position - resolvedChapter.start;
+    const positionInChapter = Math.max(0, Math.min(chapterDuration, rawPositionInChapter));
+
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        currentChapter: {
+          chapter: resolvedChapter,
+          positionInChapter,
+          chapterDuration,
         },
-      }));
+      },
+    }));
 
-      // Note: Now playing metadata updates are handled in PlayerBackgroundService
-      // when chapters change (non-gated) and periodically during playback (gated by setting)
+    if (hasChapterChanged) {
+      log.info(
+        `Current chapter updated: "${resolvedChapter.title}" (${formatTime(resolvedChapter.start)}s - ${formatTime(resolvedChapter.end)}s)`
+      );
     }
   },
 
@@ -453,12 +472,14 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     try {
       const state = get();
       const { currentTrack, currentChapter } = state.player;
-      log.debug('Updating now playing metadata');
-
       if (!currentTrack || !currentChapter) {
-        // No chapter info - use default track metadata
+        log.debug('Skipping now playing metadata update - missing track or chapter');
         return;
       }
+
+      log.info(
+        `Updating now playing metadata for track=${currentTrack.libraryItemId} chapter=${currentChapter.chapter.id}`
+      );
 
       // Use chapter-relative position for elapsed time
       // positionInChapter is calculated as: absolutePosition - chapter.start
@@ -470,7 +491,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
       // Get the active track index to update its metadata
       const activeTrackIndex = await TrackPlayer.getActiveTrackIndex();
-      if (!activeTrackIndex) {
+      if (activeTrackIndex === undefined || activeTrackIndex === null || activeTrackIndex < 0) {
+        log.warn('Cannot update now playing metadata - no active track index');
         return;
       }
 

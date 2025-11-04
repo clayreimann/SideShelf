@@ -127,9 +127,7 @@ export default function TabLayout() {
   const { initialized, isAuthenticated, loginMessage } = useAuth();
   const { tabs, isDark } = useThemedStyles();
   const errorCount = useAppStore((state) => state.logger.errorCount);
-  const errorsAcknowledgedTimestamp = useAppStore((state) => state.logger.errorsAcknowledgedTimestamp);
-  // Show badge if there are errors and they haven't been acknowledged (or new errors appeared since acknowledgment)
-  const showErrorBadge = errorCount > 0 && errorsAcknowledgedTimestamp === null;
+  const showErrorBadge = errorCount > 0;
   useEffect(() => {
     if (initialized && !isAuthenticated) {
       router.push("/login");

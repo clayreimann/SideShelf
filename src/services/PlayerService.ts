@@ -164,10 +164,12 @@ export class PlayerService {
       }
 
       await TrackPlayer.setupPlayer({
+        // We want to manage metadata updates ourselves so we can send track details
+        autoUpdateMetadata: false,
+
         // iOS specific options
         iosCategory: IOSCategory.Playback,
         iosCategoryMode: IOSCategoryMode.SpokenAudio,
-        iosCategoryOptions: [],
 
         // Android specific options
         androidAudioContentType: AndroidAudioContentType.Speech,
@@ -375,12 +377,9 @@ export class PlayerService {
       await TrackPlayer.play();
 
       // Update now playing metadata with chapter info after track loads
-      // Wait a bit for the chapter to be calculated
-      setTimeout(() => {
-        this.updateNowPlayingMetadata().catch((error) => {
-          log.warn(`Failed to update now playing metadata on track load: ${error instanceof Error ? error.message : String(error)}`);
-        });
-      }, 1000);
+      this.updateNowPlayingMetadata().catch((error) => {
+        log.warn(`Failed to update now playing metadata on track load: ${error instanceof Error ? error.message : String(error)}`);
+      });
 
       // Diagnostic: log current track, position, playing state after loading
       await this.printDebugInfo("playTrack::done");
@@ -752,10 +751,9 @@ export class PlayerService {
 
   /**
    * Update now playing metadata with chapter information
-   * Delegates to the standalone helper function to avoid circular dependencies
    */
   async updateNowPlayingMetadata(): Promise<void> {
-    await useAppStore.getState().player.updateNowPlayingMetadata();
+    await useAppStore.getState().updateNowPlayingMetadata();
   }
 
   /**

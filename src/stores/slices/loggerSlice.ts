@@ -7,9 +7,9 @@
  * - Automatic updates when logs are written
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getErrorCount, getWarningCount, getErrorCountSince, getWarningCountSince } from '@/lib/logger';
+import { getErrorCount, getErrorCountSince, getWarningCount, getWarningCountSince } from '@/lib/logger';
 import type { SliceCreator } from '@/types/store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ERRORS_ACKNOWLEDGED_TIMESTAMP_KEY = '@logger/errors_acknowledged_timestamp';
 
@@ -66,22 +66,10 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
         const state = get().logger;
 
         // If there's an acknowledgment timestamp, check for new errors/warnings since then
-        let errorsAcknowledgedTimestamp = state.errorsAcknowledgedTimestamp;
-        if (errorsAcknowledgedTimestamp !== null) {
+        let errorsAcknowledgedTimestamp = state.errorsAcknowledgedTimestamp ?? 0;
+        if (errorsAcknowledgedTimestamp) {
           const errorsSince = getErrorCountSince(errorsAcknowledgedTimestamp);
           const warningsSince = getWarningCountSince(errorsAcknowledgedTimestamp);
-
-          // If there are no errors/warnings since acknowledgment, keep the timestamp
-          // Otherwise, reset it to null so badge shows again
-          if (errorsSince === 0 && warningsSince === 0) {
-            // Keep the timestamp - all errors/warnings have been acknowledged
-          } else {
-            // New errors/warnings appeared, reset acknowledgment
-            errorsAcknowledgedTimestamp = null;
-            AsyncStorage.removeItem(ERRORS_ACKNOWLEDGED_TIMESTAMP_KEY).catch(() => {
-              // Ignore storage errors
-            });
-          }
         }
 
         set((state) => ({

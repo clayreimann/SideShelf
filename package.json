@@ -24,7 +24,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo prebuild --clean && expo run:ios",
-    "ios:device": "expo run:ios --device",
+    "ios:device": "expo prebuild --clean && expo run:ios --device",
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest --watchAll=false",

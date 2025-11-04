@@ -64,7 +64,7 @@ declare global {
  * Handle remote play command
  */
 async function handleRemotePlay(): Promise<void> {
-  diagLog.info(`RemotePlay received (${describeRuntimeContext()})`);
+  log.debug(`RemotePlay received (${describeRuntimeContext()})`);
   await TrackPlayer.play();
 }
 
@@ -72,7 +72,7 @@ async function handleRemotePlay(): Promise<void> {
  * Handle remote pause command
  */
 async function handleRemotePause(): Promise<void> {
-  diagLog.info(`RemotePause received (${describeRuntimeContext()})`);
+  log.debug(`RemotePause received (${describeRuntimeContext()})`);
   await TrackPlayer.pause();
 }
 
@@ -103,7 +103,7 @@ async function getUserIdAndLibraryItemId(): Promise<{ userId: string; libraryIte
  * Handle remote stop command
  */
 async function handleRemoteStop(): Promise<void> {
-  diagLog.info(`RemoteStop received (${describeRuntimeContext()})`);
+  log.debug(`RemoteStop received (${describeRuntimeContext()})`);
   await TrackPlayer.stop();
 
   const ids = await getUserIdAndLibraryItemId();
@@ -122,7 +122,7 @@ async function handleRemoteStop(): Promise<void> {
 async function handleRemoteJumpForward(
   event: RemoteJumpForwardEvent
 ): Promise<void> {
-  diagLog.info(
+  log.debug(
     `RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`
   );
   const progress = await TrackPlayer.getProgress();
@@ -166,7 +166,7 @@ async function handleRemoteJumpForward(
 async function handleRemoteJumpBackward(
   event: RemoteJumpBackwardEvent
 ): Promise<void> {
-  diagLog.info(
+  log.debug(
     `RemoteJumpBackward received interval=${event.interval} (${describeRuntimeContext()})`
   );
   const progress = await TrackPlayer.getProgress();
@@ -208,7 +208,7 @@ async function handleRemoteJumpBackward(
  * Handle remote next track command
  */
 async function handleRemoteNext(): Promise<void> {
-  diagLog.info(`RemoteNext received (${describeRuntimeContext()})`);
+  log.debug(`RemoteNext received (${describeRuntimeContext()})`);
   await TrackPlayer.skipToNext();
 }
 
@@ -216,7 +216,7 @@ async function handleRemoteNext(): Promise<void> {
  * Handle remote previous track command
  */
 async function handleRemotePrevious(): Promise<void> {
-  diagLog.info(`RemotePrevious received (${describeRuntimeContext()})`);
+  log.debug(`RemotePrevious received (${describeRuntimeContext()})`);
   await TrackPlayer.skipToPrevious();
 }
 
@@ -224,7 +224,7 @@ async function handleRemotePrevious(): Promise<void> {
  * Handle remote seek command
  */
 async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
-  diagLog.info(
+  log.debug(
     `RemoteSeek received position=${event.position} (${describeRuntimeContext()})`
   );
   await TrackPlayer.seekTo(event.position);
@@ -266,7 +266,7 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
  * Handle audio duck events (when other apps need audio focus)
  */
 async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
-  diagLog.info(
+  log.debug(
     `RemoteDuck received permanent=${event.permanent} paused=${event.paused} (${describeRuntimeContext()})`
   );
   try {
@@ -357,7 +357,8 @@ async function handlePlaybackProgressUpdated(
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
 
       if (Math.floor(event.position) % 5 === 0) {
-        log.info(`Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} session=${session?.sessionId || 'none'} item=${ids.libraryItemId} chapter=${JSON.stringify(store.player.currentChapter?.chapter)}`);
+        const { id, title } = store.player.currentChapter?.chapter || { id: null, title: null };
+        log.info(`Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} session=${session?.sessionId || 'none'} item=${ids.libraryItemId} chapter=${JSON.stringify({id, title})}`);
       }
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
@@ -392,7 +393,8 @@ async function handlePlaybackProgressUpdated(
       const currentChapter = store.player.currentChapter;
       if (previousChapter?.chapter.id !== currentChapter?.chapter.id && currentChapter) {
         // Chapter changed - update now playing metadata immediately (non-gated)
-        await store.player.updateNowPlayingMetadata();
+        log.info(`Chapter changed from ${previousChapter?.chapter.id || 'none'} to ${currentChapter.chapter.id}, updating now playing metadata`);
+        await store.updateNowPlayingMetadata();
       }
 
       // Periodic now playing metadata updates (gated by setting)
@@ -400,7 +402,7 @@ async function handlePlaybackProgressUpdated(
       const { getPeriodicNowPlayingUpdatesEnabled } = await import('@/lib/appSettings');
       const periodicUpdatesEnabled = await getPeriodicNowPlayingUpdatesEnabled();
       if (periodicUpdatesEnabled && Math.floor(event.position) % 2 === 0) {
-        await store.player.updateNowPlayingMetadata();
+        await store.updateNowPlayingMetadata();
       }
 
       // Check if we should sync to server (uses adaptive intervals based on network type)
@@ -624,7 +626,7 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
 function cleanupEventListeners(): void {
   if (global.__playerBackgroundServiceSubscriptions) {
     log.info("Cleaning up existing event listeners");
-    diagLog.info(
+    log.debug(
       `Number of listeners to clean up: ${global.__playerBackgroundServiceSubscriptions.length} (${describeRuntimeContext()})`
     );
     global.__playerBackgroundServiceSubscriptions.forEach((unsub, idx) => {
@@ -632,7 +634,7 @@ function cleanupEventListeners(): void {
         // unsub is already the .remove function, just call it
         if (typeof unsub === "function") {
           unsub();
-          diagLog.info(`Cleaned up listener #${idx}`);
+          log.debug(`Cleaned up listener #${idx}`);
         }
       } catch (error) {
         log.error("Error removing event listener", error as Error);
@@ -653,7 +655,7 @@ function setupEventListeners(): Array<() => void> {
     'RemoteSeek', 'RemoteDuck', 'RemoteJumpForward', 'RemoteJumpBackward',
     'PlaybackState', 'PlaybackProgressUpdated', 'PlaybackActiveTrackChanged', 'PlaybackError'
   ];
-  diagLog.info(
+  log.debug(
     `Setting up listeners for events: ${eventTypes.join(
       ", "
     )} (${describeRuntimeContext()})`
@@ -732,12 +734,12 @@ function setupEventListeners(): Array<() => void> {
  */
 export function reconnectBackgroundService(): void {
   log.info("Forcing reconnection of background service");
-  diagLog.info(
+  log.debug(
     `Reconnecting background service: cleaning up and re-setting listeners (${describeRuntimeContext()})`
   );
   cleanupEventListeners();
   global.__playerBackgroundServiceSubscriptions = setupEventListeners();
-  diagLog.info(
+  log.debug(
     `Number of listeners after setup: ${global.__playerBackgroundServiceSubscriptions.length}`
   );
   global.__playerBackgroundServiceInitializedAt = Date.now();
@@ -767,7 +769,7 @@ export function isBackgroundServiceInitialized(): boolean {
  */
 async function trackPlayerBackgroundService(): Promise<void> {
   const now = Date.now();
-  diagLog.info(
+  log.info(
     `trackPlayerBackgroundService invoked (${describeRuntimeContext()})`
   );
 
