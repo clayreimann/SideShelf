@@ -9,14 +9,13 @@
  * - Playback rate and volume controls
  */
 
+import ChapterList from '@/components/player/ChapterList';
 import JumpTrackButton from '@/components/player/JumpTrackButton';
 import PlayPauseButton from '@/components/player/PlayPauseButton';
 import SkipButton from '@/components/player/SkipButton';
 import { ProgressBar } from '@/components/ui';
 import CoverImage from '@/components/ui/CoverImange';
-import { getCurrentChapterIndex } from '@/db/helpers/chapters';
 import { getJumpBackwardInterval, getJumpForwardInterval } from '@/lib/appSettings';
-import { formatTime } from '@/lib/helpers/formatters';
 import { useThemedStyles } from '@/lib/theme';
 import { playerService } from '@/services/PlayerService';
 import { usePlayer } from '@/stores/appStore';
@@ -24,7 +23,7 @@ import { router, Stack } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  FlatList,
+  PanResponder,
   Text,
   TouchableOpacity,
   useWindowDimensions,
@@ -61,12 +60,31 @@ export default function FullScreenPlayer() {
   const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
   const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
   const [showChapterList, setShowChapterList] = useState(false);
-  const [hasScrolledToChapter, setHasScrolledToChapter] = useState(false);
 
   // Animation values
   const coverSizeAnim = useRef(new Animated.Value(0)).current; // 0 = full size, 1 = minimized
   const chapterListAnim = useRef(new Animated.Value(0)).current; // 0 = hidden, 1 = visible
-  const chapterListRef = useRef<FlatList>(null);
+
+  // Swipe down gesture handler - only applies to cover/title/progress area
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only respond to downward swipes (positive dy) that are mostly vertical
+        return gestureState.dy > 10 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Allow the gesture to move freely
+        return true;
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        // If swiped down more than 100px, dismiss the modal
+        if (gestureState.dy > 100) {
+          handleClose();
+        }
+      },
+    })
+  ).current;
 
   // Load jump intervals from settings
   useEffect(() => {
@@ -96,51 +114,7 @@ export default function FullScreenPlayer() {
       }),
     ]).start();
 
-    // Auto-scroll to current chapter when list opens (only once per open)
-    if (showChapterList && currentTrack?.chapters && currentChapter && !hasScrolledToChapter) {
-      const currentIndex = getCurrentChapterIndex(currentTrack.chapters, position);
-      if (currentIndex >= 0) {
-        setTimeout(() => {
-          chapterListRef.current?.scrollToIndex({
-            index: currentIndex,
-            animated: true,
-            viewPosition: 0.3, // Position current chapter 30% from top
-          });
-          setHasScrolledToChapter(true);
-        }, 350); // Wait for animation to complete
-      }
-    }
-
-    // Reset scroll flag when list closes
-    if (!showChapterList) {
-      setHasScrolledToChapter(false);
-    }
-  }, [showChapterList, currentTrack, currentChapter, coverSizeAnim, chapterListAnim, hasScrolledToChapter]);
-
-  // Track chapter changes and auto-scroll if list is open and user hasn't manually scrolled
-  const previousChapterIdRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    const currentChapterId = currentChapter?.chapter.id;
-    if (
-      showChapterList &&
-      currentChapterId &&
-      currentChapterId !== previousChapterIdRef.current &&
-      currentTrack?.chapters &&
-      !hasScrolledToChapter
-    ) {
-      const currentIndex = getCurrentChapterIndex(currentTrack.chapters, position);
-      if (currentIndex >= 0) {
-        setTimeout(() => {
-          chapterListRef.current?.scrollToIndex({
-            index: currentIndex,
-            animated: true,
-            viewPosition: 0.3,
-          });
-        }, 100);
-      }
-    }
-    previousChapterIdRef.current = currentChapterId;
-  }, [currentChapter?.chapter.id, showChapterList, currentTrack, position, hasScrolledToChapter]);
+  }, [showChapterList, coverSizeAnim, chapterListAnim]);
 
   const toggleChapterList = useCallback(() => {
     setShowChapterList((prev) => !prev);
@@ -263,20 +237,6 @@ export default function FullScreenPlayer() {
     outputRange: [24, 8],
   });
 
-  // Interpolate chapter list opacity, translateY, and height
-  const chapterListOpacity = chapterListAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-  const chapterListTranslateY = chapterListAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [20, 0], // Slide up from 20px below
-  });
-  const chapterListHeight = chapterListAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, height * 0.4], // Animate height from 0 to maxHeight
-  });
-
   const chapters = currentTrack?.chapters || [];
 
   return (
@@ -287,68 +247,41 @@ export default function FullScreenPlayer() {
         </TouchableOpacity>)
       }} />
       {/* Content */}
-      <View style={{
-        flex: 1,
-        paddingHorizontal: 32,
-        justifyContent: 'center',
-      }}>
-        {/* Cover and Track Info */}
-        <View style={{ alignItems: 'center' }}>
-          {/* Cover Image - Animated */}
-          <Animated.View style={{
-            width: animatedCoverSize,
-            height: animatedCoverSize,
-            borderRadius: 12,
-            marginBottom: animatedCoverMarginBottom,
-            overflow: 'hidden'
-          }}>
-            <CoverImage uri={currentTrack.coverUri} title={currentTrack.title} fontSize={48} />
-          </Animated.View>
+      <View
+        style={{
+          flex: 1,
+          paddingHorizontal: 32,
+          justifyContent: 'center',
+        }}
+      >
+        {/* Swipeable area: Cover, Title, and Progress Bar */}
+        <View {...panResponder.panHandlers}>
+          {/* Cover and Track Info */}
+          <View style={{ alignItems: 'center' }}>
+            {/* Cover Image - Animated */}
+            <Animated.View style={{
+              width: animatedCoverSize,
+              height: animatedCoverSize,
+              borderRadius: 12,
+              marginBottom: animatedCoverMarginBottom,
+              overflow: 'hidden',
+            }}>
+              <CoverImage uri={currentTrack.coverUri} title={currentTrack.title} fontSize={48} />
+            </Animated.View>
 
-          {/* Track Info */}
-          <Text
-            style={[styles.text, {
-              fontSize: 24,
-              fontWeight: '700',
-              textAlign: 'center',
-              marginBottom: 8,
-            }]}
-            numberOfLines={1}
-          >
-            {chapterTitle}
-          </Text>
-          <Text
-            style={[styles.text, {
-              fontSize: 18,
-              opacity: 0.7,
-              textAlign: 'center',
-              marginBottom: 16,
-            }]}
-            numberOfLines={1}
-          >
-            {currentTrack.author}
-          </Text>
-        </View>
-
-        {/* Progress and Controls */}
-        <View>
-          {/* Chapter List Toggle Button */}
-          {chapters.length > 0 && (
-            <TouchableOpacity
-              onPress={toggleChapterList}
-              style={{
-                paddingVertical: 8,
-                paddingHorizontal: 12,
+            {/* Track Info */}
+            <Text
+              style={[styles.text, {
+                fontSize: 24,
+                // fontWeight: '700',
+                textAlign: 'center',
                 marginBottom: 8,
-                alignItems: 'center',
-              }}
+              }]}
+              numberOfLines={2}
             >
-              <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
-                {showChapterList ? 'Hide Chapters' : `Show Chapters (${chapters.length})`}
-              </Text>
-            </TouchableOpacity>
-          )}
-
+              {chapterTitle}
+            </Text>
+          </View>
           <ProgressBar
             progress={chapterPosition / chapterDuration}
             variant="large"
@@ -365,116 +298,59 @@ export default function FullScreenPlayer() {
             showPercentage={true}
             customPercentageText={`${formatTimeWithUnits(duration - currentPosition, false)} remaining`}
           />
+        </View>
 
-          {/* Chapter List - Animated */}
+        <View>
           {chapters.length > 0 && (
-            <Animated.View
+            <TouchableOpacity
+              onPress={toggleChapterList}
               style={{
-                height: chapterListHeight,
-                opacity: chapterListOpacity,
-                transform: [{ translateY: chapterListTranslateY }],
-                marginBottom: 16,
-                overflow: 'hidden',
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                marginBottom: 8,
+                alignItems: 'center',
               }}
             >
-              <FlatList
-                ref={chapterListRef}
-                data={chapters}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item, index }) => {
-                  const isCurrentChapter = currentChapter?.chapter.id === item.id;
-                  const chapterDuration = item.end - item.start;
-
-                  return (
-                    <TouchableOpacity
-                      onPress={() => handleChapterPress(item.start)}
-                      style={{
-                        paddingVertical: 12,
-                        paddingHorizontal: 16,
-                        backgroundColor: isCurrentChapter
-                          ? (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)')
-                          : 'transparent',
-                        borderLeftWidth: isCurrentChapter ? 3 : 0,
-                        borderLeftColor: isDark ? '#007AFF' : '#007AFF',
-                        borderBottomWidth: index < chapters.length - 1 ? 1 : 0,
-                        borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-                      }}
-                    >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <View style={{ flex: 1 }}>
-                          <Text
-                            style={[
-                              styles.text,
-                              {
-                                fontWeight: isCurrentChapter ? '600' : '400',
-                                fontSize: 14,
-                                marginBottom: 4,
-                              },
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {item.title}
-                          </Text>
-                          <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>
-                            {formatTime(item.start)} - {formatTime(item.end)} • {formatTime(chapterDuration)}
-                          </Text>
-                        </View>
-                        {isCurrentChapter && (
-                          <View
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: 4,
-                              backgroundColor: '#007AFF',
-                              marginLeft: 12,
-                            }}
-                          />
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                }}
-                onScrollBeginDrag={() => {
-                  // User started scrolling manually - don't auto-scroll anymore
-                  setHasScrolledToChapter(true);
-                }}
-                onScrollToIndexFailed={(info) => {
-                  // Fallback: scroll to offset if index scroll fails
-                  const wait = new Promise((resolve) => setTimeout(resolve, 500));
-                  wait.then(() => {
-                    chapterListRef.current?.scrollToOffset({
-                      offset: info.averageItemLength * info.index,
-                      animated: true,
-                    });
-                  });
-                }}
-                scrollEnabled={true}
-              />
-            </Animated.View>
+              <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
+                {showChapterList ? 'Hide Chapters' : `Show Chapters (${chapters.length})`}
+              </Text>
+            </TouchableOpacity>
           )}
+
+          <ChapterList
+            chapters={chapters}
+            currentChapter={currentChapter}
+            position={position}
+            onChapterPress={handleChapterPress}
+            showChapterList={showChapterList}
+            chapterListAnim={chapterListAnim}
+            containerHeight={height * 0.4}
+          />
+        </View>
 
           {/* Main Controls */}
           <View style={{
             flexDirection: 'row',
             justifyContent: 'center',
             alignItems: 'center',
-            marginBottom: 32,
           }}>
-            <JumpTrackButton direction="backward" onPress={handleStartOfChapter} hitBoxSize={60} />
+            <JumpTrackButton direction="backward" onPress={handleStartOfChapter} hitBoxSize={60} iconSize={32} />
             <SkipButton
               direction="backward"
               interval={jumpBackwardInterval}
               onPress={handleSkipBackward}
+              iconSize={32}
               hitBoxSize={60}
             />
-            <PlayPauseButton onPress={handlePlayPause} hitBoxSize={100} iconSize={48} />
+            <PlayPauseButton onPress={handlePlayPause} hitBoxSize={88} iconSize={64} />
             <SkipButton
               direction="forward"
               interval={jumpForwardInterval}
               onPress={handleSkipForward}
+              iconSize={32}
               hitBoxSize={60}
             />
-            <JumpTrackButton direction="forward" onPress={handleNextChapter} hitBoxSize={60} />
+            <JumpTrackButton direction="forward" onPress={handleNextChapter} hitBoxSize={60} iconSize={32} />
           </View>
 
           {/* Secondary Controls */}
@@ -520,7 +396,6 @@ export default function FullScreenPlayer() {
               </Text>
             </View> */}
           </View>
-        </View>
       </View>
 
     </>

@@ -19,14 +19,14 @@ export interface PlayPauseButtonProps {
     onPress: () => void;
 }
 
-export default function PlayPauseButton({ onPress, hitBoxSize: size = 44, iconSize = 24 }: PlayPauseButtonProps) {
+export default function PlayPauseButton({ onPress, hitBoxSize = 44, iconSize = 24 }: PlayPauseButtonProps) {
     const { colors } = useThemedStyles();
     const isLoadingTrack = usePlayerState(state => state.player.loading.isLoadingTrack);
     const isPlaying = usePlayerState(state => state.player.isPlaying);
 
     if (isLoadingTrack) {
         return (
-            <View style={{width: size, height: size, justifyContent: 'center', alignItems: 'center'}}>
+            <View style={{width: hitBoxSize, height: hitBoxSize, justifyContent: 'center', alignItems: 'center'}}>
                 <ActivityIndicator size="small" color={colors.textPrimary} />
             </View>
         );
@@ -36,8 +36,8 @@ export default function PlayPauseButton({ onPress, hitBoxSize: size = 44, iconSi
         <Pressable
             onPress={onPress}
             style={({pressed}) => ({
-                width: size,
-                height: size,
+                width: hitBoxSize,
+                height: hitBoxSize,
                 justifyContent: 'center',
                 alignItems: 'center',
                 opacity: pressed ? 0.5 : 1,
@@ -45,10 +45,9 @@ export default function PlayPauseButton({ onPress, hitBoxSize: size = 44, iconSi
         >
             {Platform.OS === 'ios' ? (
                 <SymbolView
-                    name={isPlaying ? 'pause.circle' : 'play.circle'}
+                    name={isPlaying ? 'pause.circle.fill' : 'play.circle.fill'}
                     size={iconSize}
                     tintColor={colors.textPrimary}
-                    type="hierarchical"
                 />
             ) : (
                 <MaterialIcons

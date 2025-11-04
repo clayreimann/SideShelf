@@ -61,23 +61,22 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
      */
     updateErrorCounts: () => {
       try {
-        const errorCount = getErrorCount();
-        const warningCount = getWarningCount();
+        let errorCount = getErrorCount();
+        let warningCount = getWarningCount();
         const state = get().logger;
 
         // If there's an acknowledgment timestamp, check for new errors/warnings since then
-        let errorsAcknowledgedTimestamp = state.errorsAcknowledgedTimestamp ?? 0;
+        const errorsAcknowledgedTimestamp = state.errorsAcknowledgedTimestamp ?? 0;
         if (errorsAcknowledgedTimestamp) {
-          const errorsSince = getErrorCountSince(errorsAcknowledgedTimestamp);
-          const warningsSince = getWarningCountSince(errorsAcknowledgedTimestamp);
+          errorCount = getErrorCountSince(errorsAcknowledgedTimestamp);
+          warningCount = getWarningCountSince(errorsAcknowledgedTimestamp);
         }
 
-        set((state) => ({
+        set((state: LoggerSliceState) => ({
           logger: {
             ...state.logger,
             errorCount,
             warningCount,
-            errorsAcknowledgedTimestamp,
           },
         }));
       } catch (error) {
@@ -92,12 +91,13 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
       try {
         const timestamp = Date.now();
         await AsyncStorage.setItem(ERRORS_ACKNOWLEDGED_TIMESTAMP_KEY, timestamp.toString());
-        set((state) => ({
+        set((state: LoggerSliceState) => ({
           logger: {
             ...state.logger,
             errorsAcknowledgedTimestamp: timestamp,
           },
         }));
+        await get().updateErrorCounts();
       } catch (error) {
         console.error('[LoggerSlice] Failed to acknowledge errors:', error);
       }
@@ -109,7 +109,7 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
     resetErrorAcknowledgment: async () => {
       try {
         await AsyncStorage.removeItem(ERRORS_ACKNOWLEDGED_TIMESTAMP_KEY);
-        set((state) => ({
+        set((state: LoggerSliceState) => ({
           logger: {
             ...state.logger,
             errorsAcknowledgedTimestamp: null,
@@ -154,7 +154,7 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
           }
         }
 
-        set((state) => ({
+        set((state: LoggerSliceState) => ({
           logger: {
             ...state.logger,
             errorCount,
@@ -165,7 +165,7 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
         }));
       } catch (error) {
         console.error('[LoggerSlice] Failed to initialize:', error);
-        set((state) => ({
+        set((state: LoggerSliceState) => ({
           logger: {
             ...state.logger,
             initialized: true, // Mark as initialized even on error

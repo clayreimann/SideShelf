@@ -35,10 +35,9 @@ export default function JumpTrackButton({ direction, hitBoxSize = 44, iconSize =
         >
             {Platform.OS === 'ios' ? (
                 <SymbolView
-                    name={direction === 'forward' ? 'forward.end.fill' : 'backward.end.fill'}
+                    name={direction === 'forward' ? 'forward.end' : 'backward.end'}
                     size={iconSize}
                     tintColor={colors.textPrimary}
-                    type="hierarchical"
                 />
             ) : (
                 <MaterialIcons
