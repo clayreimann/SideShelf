@@ -31,8 +31,12 @@ const log = logger.forTag("PlayerBackgroundService");
 // Create a diagnostic logger for verbose diagnostic logging
 const diagLog = logger.forDiagnostics("PlayerBackgroundService");
 
+// Generate a unique ID for this module instance to detect multiple instances
+const MODULE_INSTANCE_UUID = `BGS-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
 function describeRuntimeContext(): string {
   const parts: string[] = [];
+  parts.push(`uuid=${MODULE_INSTANCE_UUID}`);
   parts.push(typeof globalThis.window === "undefined" ? "no-window" : "window");
   parts.push(
     typeof globalThis.document === "undefined" ? "no-document" : "document"
@@ -332,7 +336,7 @@ async function handlePlaybackStateChanged(
 
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
-        log.info(`Playback state changed: state=${event.state} progress=${progress.position} session=${session.sessionId} item=${ids.libraryItemId}`);
+        log.info(`Playback state changed: state=${event.state} progress=${progress.position} uuid=${MODULE_INSTANCE_UUID} session=${session.sessionId} item=${ids.libraryItemId}`);
       }
     }
   } catch (error) {
@@ -359,7 +363,7 @@ async function handlePlaybackProgressUpdated(
 
       if (Math.floor(event.position) % 5 === 0) {
         const { id, title } = store.player.currentChapter?.chapter || { id: null, title: null };
-        log.info(`Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} session=${session?.sessionId || 'none'} item=${ids.libraryItemId} chapter=${JSON.stringify({id, title})}`);
+        log.info(`Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} uuid=${MODULE_INSTANCE_UUID} session=${session?.sessionId || 'none'} item=${ids.libraryItemId} chapter=${JSON.stringify({id, title})}`);
       }
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
@@ -771,7 +775,7 @@ export function isBackgroundServiceInitialized(): boolean {
 async function trackPlayerBackgroundService(): Promise<void> {
   const now = Date.now();
   log.info(
-    `trackPlayerBackgroundService invoked (${describeRuntimeContext()})`
+    `trackPlayerBackgroundService invoked uuid=${MODULE_INSTANCE_UUID} (${describeRuntimeContext()})`
   );
 
   if (global.__playerBackgroundServiceInitializedAt) {
@@ -799,7 +803,7 @@ async function trackPlayerBackgroundService(): Promise<void> {
   global.__playerBackgroundServiceSubscriptions = setupEventListeners();
   global.__playerBackgroundServiceInitializedAt = now;
 
-  log.info("Background service initialization complete");
+  log.info(`Background service initialization complete uuid=${MODULE_INSTANCE_UUID}`);
 }
 
 // Attach helpers to the exported function so consumers retaining CommonJS access continue to work

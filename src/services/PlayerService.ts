@@ -1158,6 +1158,7 @@ export class PlayerService {
 
       // Get DB session as source of truth for position (if we have libraryItemId)
       let dbPosition = store.player.position;
+      let dbSessionUpdatedAt: Date | null = null;
       if (store.player.currentTrack?.libraryItemId) {
         try {
           const username = await getStoredUsername();
@@ -1167,6 +1168,7 @@ export class PlayerService {
               const dbSession = await progressService.getCurrentSession(user.id, store.player.currentTrack.libraryItemId);
               if (dbSession) {
                 dbPosition = dbSession.currentTime;
+                dbSessionUpdatedAt = dbSession.updatedAt;
               }
             }
           }
@@ -1213,17 +1215,37 @@ export class PlayerService {
       if (positionDiff > 5) {
         report.positionMismatch = true;
         report.discrepanciesFound = true;
-        // Use DB position as authoritative source
+
         const trackInfo = store.player.currentTrack
           ? `track=${store.player.currentTrack?.id} item=${store.player.currentTrack?.libraryItemId}`
           : 'track=none';
+
+        // Determine which position is authoritative by checking staleness
+        const STALE_SESSION_THRESHOLD = 60000; // 60 seconds
+        let authoritativePosition = dbPosition;
+        let positionSource = 'DB';
+
+        if (dbSessionUpdatedAt) {
+          const sessionAge = Date.now() - dbSessionUpdatedAt.getTime();
+
+          // If DB session is stale (>60s old) and TrackPlayer position is ahead, prefer TrackPlayer
+          if (sessionAge > STALE_SESSION_THRESHOLD && tpPosition > dbPosition) {
+            authoritativePosition = tpPosition;
+            positionSource = 'TrackPlayer (DB session is stale)';
+            log.warn(
+              `DB session is stale (${formatTime(sessionAge / 1000)}s old), preferring TrackPlayer position: ${formatTime(tpPosition)}s over DB: ${formatTime(dbPosition)}s`
+            );
+          }
+        }
+
         log.info(
           `Position mismatch detected: TrackPlayer=${formatTime(tpPosition)}s, DB=${formatTime(dbPosition)}s, Store=${formatTime(storePosition)}s, diff=${formatTime(positionDiff)}s, ${trackInfo}`
         );
+
         if (hasTracks) {
-          await TrackPlayer.seekTo(dbPosition);
-          store.updatePosition(dbPosition);
-          report.actionsTaken.push(`Adjusted TrackPlayer position to DB value: ${formatTime(dbPosition)}s`);
+          await TrackPlayer.seekTo(authoritativePosition);
+          store.updatePosition(authoritativePosition);
+          report.actionsTaken.push(`Adjusted TrackPlayer position to ${positionSource} value: ${formatTime(authoritativePosition)}s`);
         } else {
           const reason = store.player.currentTrack
             ? 'TrackPlayer queue is empty - queue should be rebuilt via restorePlayerServiceFromSession() or playTrack()'

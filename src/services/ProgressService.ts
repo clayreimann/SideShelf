@@ -498,13 +498,18 @@ export class ProgressService {
         );
       }
 
-      // Update session progress
+      // Update session progress in DB - this happens on EVERY progress update
       await updateSessionProgress(
         session.id,
         currentTime,
         playbackRate,
         volume
       );
+
+      // Diagnostic: log DB update every 10 seconds to verify updates are happening
+      if (Math.floor(currentTime) % 10 === 0) {
+        log.debug(`DB session updated: position=${formatTime(currentTime)}s session=${session.id} item=${libraryItemId}`);
+      }
 
       if (isPlaying && wasPaused) {
         // Resuming from pause

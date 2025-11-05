@@ -504,7 +504,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         title: chapterTitle,
         artist: author,
         album: bookTitle,
-        artwork: activeTrack?.artwork !== currentTrack.coverUri ? currentTrack.coverUri : undefined,
+        // Always set artwork when available to ensure it displays
+        artwork: currentTrack.coverUri || undefined,
         duration: chapterDuration,
         // @ts-ignore - elapsedTime is used by iOS native code (Metadata.swift) but not in TypeScript types
         elapsedTime: chapterElapsedTime,
