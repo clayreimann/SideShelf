@@ -10,12 +10,13 @@
 
 import PlayPauseButton from '@/components/player/PlayPauseButton';
 import CoverImage from '@/components/ui/CoverImange';
+import { borderRadius, floatingPlayer, spacing } from '@/lib/styles';
 import { useThemedStyles } from '@/lib/theme';
 import { playerService } from '@/services/PlayerService';
 import { usePlayer } from '@/stores/appStore';
 import { router } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function FloatingPlayer() {
   const { styles, isDark } = useThemedStyles();
@@ -41,41 +42,33 @@ export default function FloatingPlayer() {
   const chapterTitle = currentChapter?.chapter.title || 'Loading...';
 
   return (
-    <View style={{
-      position: 'absolute',
-      bottom: 100, // Above tab bar
-      left: 12,
-      right: 12,
-      height: 64,
-      borderRadius: 8,
-      backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
-      borderTopWidth: 1,
-      borderTopColor: isDark ? '#333' : '#e0e0e0',
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 12,
-      shadowColor: isDark ? '#fff' : '#000',
-      shadowOffset: {
-        width: 0,
-        height: 0,
-      },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      elevation: 8,
-    }}>
+    <View
+      style={[
+        componentStyles.container,
+        {
+          backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
+          borderTopColor: isDark ? '#333' : '#e0e0e0',
+          shadowColor: isDark ? '#fff' : '#000',
+        },
+      ]}
+    >
       {/* Tappable area for opening modal */}
-      <Pressable style={{ flex: 1, flexDirection: 'row', alignItems: 'center', }} onPress={handlePlayerPress}>
+      <Pressable style={componentStyles.pressableArea} onPress={handlePlayerPress}>
         {/* Cover Image */}
-        <View style={{width: 48,height: 48,borderRadius: 6,marginRight: 12,overflow: 'hidden',}}>
-          <CoverImage uri={currentTrack?.coverUri ?? ''} title={currentTrack?.title ?? 'No track selected'} fontSize={48} />
+        <View style={componentStyles.coverContainer}>
+          <CoverImage
+            uri={currentTrack?.coverUri ?? ''}
+            title={currentTrack?.title ?? 'No track selected'}
+            fontSize={48}
+          />
         </View>
 
         {/* Track Info */}
-        <View style={{ flex: 1, marginRight: 12 }}>
-          <Text style={[styles.text, { fontSize: 14, fontWeight: '600', marginBottom: 2, }]} numberOfLines={1}>
+        <View style={componentStyles.infoContainer}>
+          <Text style={[styles.text, componentStyles.chapterTitle]} numberOfLines={1}>
             {chapterTitle}
           </Text>
-          <Text style={[styles.text, { fontSize: 12, opacity: 0.7, }]} numberOfLines={1}>
+          <Text style={[styles.text, componentStyles.trackTitle]} numberOfLines={1}>
             {currentTrack?.title ?? 'No selection'}
           </Text>
         </View>
@@ -85,3 +78,50 @@ export default function FloatingPlayer() {
     </View>
   );
 }
+
+const componentStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    bottom: floatingPlayer.bottomOffset,
+    left: spacing.md,
+    right: spacing.md,
+    height: floatingPlayer.height,
+    borderRadius: borderRadius.md,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  pressableArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  coverContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.sm,
+    marginRight: spacing.md,
+    overflow: 'hidden',
+  },
+  infoContainer: {
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  chapterTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  trackTitle: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+});

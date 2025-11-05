@@ -1,8 +1,9 @@
+import { useFloatingPlayerPadding } from '@/hooks/useFloatingPlayerPadding';
+import { borderRadius, spacing } from '@/lib/styles';
 import { useThemedStyles } from '@/lib/theme';
-import { usePlayer } from '@/stores';
 import type { LibraryItemListRow } from '@/types/database';
 import React, { useCallback, useState } from 'react';
-import { FlatList, RefreshControl, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import LibraryItem from './LibraryItem';
 
 type ViewMode = 'grid' | 'list';
@@ -24,8 +25,8 @@ export default function LibraryItemList({
   searchQuery = '',
   onSearchChange,
 }: LibraryItemListProps) {
-  const { styles, tabs, isDark, colors } = useThemedStyles();
-  const { currentTrack } = usePlayer();
+  const { styles, isDark, colors } = useThemedStyles();
+  const floatingPlayerPadding = useFloatingPlayerPadding();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -36,22 +37,20 @@ export default function LibraryItemList({
   }, [onRefresh]);
 
   const ListHeaderComponent = searchQuery !== undefined && onSearchChange ? (
-    <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-      <View style={{ position: 'relative' }}>
+    <View style={componentStyles.searchContainer}>
+      <View style={componentStyles.searchInputWrapper}>
         <TextInput
           placeholder="Search by author, title, series, or narrator..."
           placeholderTextColor={isDark ? '#888' : '#999'}
-          style={{
-            backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
-            borderRadius: 8,
-            paddingHorizontal: 12,
-            paddingRight: searchQuery ? 40 : 12,
-            paddingVertical: 10,
-            fontSize: 16,
-            color: colors.textPrimary,
-            borderWidth: 1,
-            borderColor: isDark ? '#3A3A3C' : '#C7C7CC',
-          }}
+          style={[
+            componentStyles.searchInput,
+            {
+              backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+              borderColor: isDark ? '#3A3A3C' : '#C7C7CC',
+              color: colors.textPrimary,
+              paddingRight: searchQuery ? 40 : spacing.md,
+            },
+          ]}
           value={searchQuery}
           onChangeText={onSearchChange}
           autoCapitalize="none"
@@ -60,17 +59,11 @@ export default function LibraryItemList({
         {searchQuery.length > 0 && (
           <TouchableOpacity
             onPress={() => onSearchChange('')}
-            style={{
-              position: 'absolute',
-              right: 8,
-              top: '50%',
-              transform: [{ translateY: -10 }],
-              padding: 4,
-            }}
+            style={componentStyles.clearButton}
             accessibilityRole="button"
             accessibilityLabel="Clear search"
           >
-            <Text style={{ fontSize: 18, color: isDark ? '#888' : '#999' }}>✕</Text>
+            <Text style={componentStyles.clearButtonText}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -88,15 +81,19 @@ export default function LibraryItemList({
   }, [viewMode]);
 
   return (
-    <View style={{ flex: 1, width: '100%' }}>
+    <View style={componentStyles.container}>
       <FlatList
         data={items}
         numColumns={numColumns}
         key={`${viewMode}-${numColumns}`} // Force re-render when view mode or columns change
-        columnWrapperStyle={viewMode === 'grid' && numColumns > 1 ? { gap: 12, paddingHorizontal: 12 } : undefined}
-        renderItem={({ item }: { item: LibraryItemListRow }) =>
-          <LibraryItem item={item} variant={viewMode} />
+        columnWrapperStyle={
+          viewMode === 'grid' && numColumns > 1
+            ? componentStyles.gridColumnWrapper
+            : undefined
         }
+        renderItem={({ item }: { item: LibraryItemListRow }) => (
+          <LibraryItem item={item} variant={viewMode} />
+        )}
         ListHeaderComponent={ListHeaderComponent}
         refreshControl={
           onRefresh ? (
@@ -109,15 +106,58 @@ export default function LibraryItemList({
         }
         contentContainerStyle={[
           styles.flatListContainer,
-          {
-            paddingTop: 8,
-            paddingBottom: (currentTrack ? 76 : 0) + tabs.tabBarSpace,
-            ...(viewMode === 'list' && { paddingHorizontal: 0 }),
-            ...(viewMode === 'grid' && { paddingHorizontal: 12 }),
-          }
+          componentStyles.contentContainer,
+          floatingPlayerPadding,
+          viewMode === 'list' && componentStyles.listPadding,
+          viewMode === 'grid' && componentStyles.gridPadding,
         ]}
         indicatorStyle={isDark ? 'white' : 'black'}
       />
     </View>
   );
 }
+
+const componentStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    width: '100%',
+  },
+  searchContainer: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  searchInputWrapper: {
+    position: 'relative',
+  },
+  searchInput: {
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    fontSize: 16,
+    borderWidth: 1,
+  },
+  clearButton: {
+    position: 'absolute',
+    right: spacing.sm,
+    top: '50%',
+    transform: [{ translateY: -10 }],
+    padding: spacing.xs,
+  },
+  clearButtonText: {
+    fontSize: 18,
+    color: '#888',
+  },
+  gridColumnWrapper: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  contentContainer: {
+    paddingTop: spacing.sm,
+  },
+  listPadding: {
+    paddingHorizontal: 0,
+  },
+  gridPadding: {
+    paddingHorizontal: spacing.md,
+  },
+});

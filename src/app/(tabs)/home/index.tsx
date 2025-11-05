@@ -1,11 +1,12 @@
 import Item from '@/components/home/Item';
 import type { HomeScreenItem } from '@/db/helpers/homeScreen';
 import { getUserByUsername } from '@/db/helpers/users';
+import { useFloatingPlayerPadding } from '@/hooks/useFloatingPlayerPadding';
 import { translate } from '@/i18n';
 import { useThemedStyles } from '@/lib/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { progressService } from '@/services/ProgressService';
-import { useHome, usePlayer } from '@/stores';
+import { useHome } from '@/stores';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
@@ -23,9 +24,9 @@ interface HomeSection {
 }
 
 export default function HomeScreen() {
-  const { styles, tabs, colors } = useThemedStyles();
+  const { styles, colors } = useThemedStyles();
   const { username, isAuthenticated } = useAuth();
-  const { currentTrack } = usePlayer();
+  const floatingPlayerPadding = useFloatingPlayerPadding();
   const { continueListening, downloaded, listenAgain, isLoadingHome, refreshHome } = useHome();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -165,7 +166,7 @@ export default function HomeScreen() {
       renderItem={Item}
       renderSectionHeader={renderSectionHeader}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={[styles.flatListContainer, { paddingBottom: (currentTrack ? 76 : 0) + tabs.tabBarSpace } ]}
+      contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
       refreshControl={
         <RefreshControl
           refreshing={isRefreshing}

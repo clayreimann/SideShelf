@@ -1,14 +1,14 @@
-import { useThemedStyles } from "@/lib/theme";
-import { Alert, Text, TouchableOpacity, View } from "react-native";
-
 import { AuthorIcon, DownloadButton, NarratorIcon, SeriesIcon } from "@/components/icons";
 import ChapterList from "@/components/library/LibraryItemDetail/ChapterList";
 import DownloadProgressView from "@/components/library/LibraryItemDetail/DownloadProgressView";
 import { CollapsibleSection, ProgressBar } from "@/components/ui";
 import { getMediaProgressForLibraryItem, upsertMediaProgress } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
+import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { updateMediaProgress } from "@/lib/api/endpoints";
 import { getCoverUri } from "@/lib/covers";
+import { borderRadius, commonStyles, spacing } from "@/lib/styles";
+import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
@@ -18,8 +18,13 @@ import { Stack } from "expo-router";
 import React, { useCallback, useEffect, useMemo } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
   useWindowDimensions,
+  View,
 } from "react-native";
 import RenderHtml from "react-native-render-html";
 import CoverImage from "../ui/CoverImange";
@@ -74,10 +79,11 @@ export default function LibraryItemDetail({
   itemId,
   onTitleChange,
 }: LibraryItemDetailProps) {
-  const { styles, colors, isDark, tabs } = useThemedStyles();
+  const { styles, colors, isDark } = useThemedStyles();
   const { width } = useWindowDimensions();
   const { username, serverUrl, accessToken } = useAuth();
-  const { currentTrack, position, isPlaying, isLoadingTrack } = usePlayer();
+  const { position, isPlaying, isLoadingTrack } = usePlayer();
+  const floatingPlayerPadding = useFloatingPlayerPadding();
 
   // Get store hooks
   const { fetchItemDetails, getCachedItem, updateItemProgress, loading: itemLoading } = useLibraryItemDetails();
@@ -401,15 +407,14 @@ export default function LibraryItemDetail({
   return (
     <>
       <ScrollView
-        style={{
-          flex: 1,
-          backgroundColor: styles.container.backgroundColor,
-          paddingBottom: currentTrack ? 160 : 100,
-        }}
-        contentContainerStyle={{
-          padding: 16,
-          paddingBottom: (currentTrack ? 76 : 0) + tabs.tabBarSpace,
-        }}
+        style={[
+          componentStyles.scrollView,
+          { backgroundColor: styles.container.backgroundColor },
+        ]}
+        contentContainerStyle={[
+          componentStyles.scrollViewContent,
+          floatingPlayerPadding,
+        ]}
       >
         <View style={{ alignItems: "center", marginBottom: 16 }}>
           <View
@@ -741,3 +746,24 @@ export default function LibraryItemDetail({
     </>
   );
 }
+
+const componentStyles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    padding: spacing.lg,
+  },
+  sectionContainer: {
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  coverContainer: {
+    alignItems: "center",
+    marginBottom: spacing.lg,
+  },
+  centerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

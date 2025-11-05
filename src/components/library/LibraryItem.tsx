@@ -1,9 +1,10 @@
 import CoverImage from "@/components/ui/CoverImange";
+import { borderRadius, spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
 import { LibraryItemDisplayRow } from "@/types/components";
 import { Link } from "expo-router";
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import AuthorIcon from "../icons/AuthorIcon";
 import NarratorIcon from "../icons/NarratorIcon";
 interface LibraryItemProps {
@@ -18,14 +19,12 @@ export function GridItem({ item }: { item: LibraryItemDisplayRow }) {
       href={{ pathname: "/(tabs)/library/[item]", params: { item: item.id } }}
       asChild
     >
-      <Pressable style={{ width: "30%", aspectRatio: 1, marginBottom: 12 }}>
+      <Pressable style={styles.gridItemContainer}>
         <View
-          style={{
-            flex: 1,
-            borderRadius: 6,
-            backgroundColor: colors.coverBackground,
-            overflow: "hidden",
-          }}
+          style={[
+            styles.gridCoverContainer,
+            { backgroundColor: colors.coverBackground },
+          ]}
         >
           <CoverImage uri={item.coverUri} title={item.title} fontSize={12} />
         </View>
@@ -42,61 +41,43 @@ export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
       asChild
     >
       <Pressable
-        style={{
-          flexDirection: "row",
-          backgroundColor: colors.background,
-          marginBottom: 8,
-        }}
+        style={[
+          styles.listItemContainer,
+          { backgroundColor: colors.background },
+        ]}
       >
-        <View style={{ flexDirection: "row", width: "100%", padding: 8 }}>
+        <View style={styles.listItemContent}>
           <View
-            style={{
-              width: 70,
-              height: 70,
-              borderRadius: 4,
-              backgroundColor: colors.coverBackground,
-              overflow: "hidden",
-              marginRight: 12,
-            }}
+            style={[
+              styles.listCoverContainer,
+              { backgroundColor: colors.coverBackground },
+            ]}
           >
             <CoverImage uri={item.coverUri} title={item.title} fontSize={24} />
           </View>
-          <View style={{ flex: 1, justifyContent: "center" }}>
+          <View style={styles.listItemInfo}>
             <Text
-              style={{
-                color: colors.textPrimary,
-                fontSize: 16,
-                fontWeight: "600",
-                marginBottom: 4,
-              }}
+              style={[styles.listItemTitle, { color: colors.textPrimary }]}
               numberOfLines={2}
             >
               {item.title}
             </Text>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View style={{ flexDirection: "column", flex: 1 }}>
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <AuthorIcon style={{ marginRight: 4 }} />
+            <View style={styles.listItemDetails}>
+              <View style={styles.listItemMetadata}>
+                <View style={styles.metadataRow}>
+                  <AuthorIcon style={styles.metadataIcon} />
                   <Text
-                    style={{
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      marginBottom: 2,
-                    }}
+                    style={[styles.metadataText, { color: colors.textSecondary }]}
                     numberOfLines={1}
                   >
                     {item.author}
                   </Text>
                 </View>
                 {item.narrator && (
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <NarratorIcon style={{ marginRight: 4 }} />
+                  <View style={styles.metadataRow}>
+                    <NarratorIcon style={styles.metadataIcon} />
                     <Text
-                      style={{
-                        color: colors.textSecondary,
-                        fontSize: 12,
-                        marginBottom: 2,
-                      }}
+                      style={[styles.metadataText, { color: colors.textSecondary }]}
                       numberOfLines={1}
                     >
                       {item.narrator}
@@ -104,21 +85,11 @@ export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
                   </View>
                 )}
               </View>
-              <View style={{ flexDirection: "column", alignItems: "flex-end" }}>
-                <Text
-                  style={{
-                    color: colors.textSecondary,
-                    fontSize: 12,
-                  }}
-                >
+              <View style={styles.listItemStats}>
+                <Text style={[styles.statsText, { color: colors.textSecondary }]}>
                   {item.publishedYear}
                 </Text>
-                <Text
-                  style={{
-                    color: colors.textSecondary,
-                    fontSize: 12,
-                  }}
-                >
+                <Text style={[styles.statsText, { color: colors.textSecondary }]}>
                   {item.duration && item.duration > 0
                     ? formatDuration(item.duration)
                     : ""}
@@ -152,3 +123,70 @@ export default function ApiLibraryItem({
     <ListItem item={item} />
   );
 }
+
+const styles = StyleSheet.create({
+  // Grid item styles
+  gridItemContainer: {
+    width: "30%",
+    aspectRatio: 1,
+    marginBottom: spacing.md,
+  },
+  gridCoverContainer: {
+    flex: 1,
+    borderRadius: borderRadius.sm,
+    overflow: "hidden",
+  },
+
+  // List item styles
+  listItemContainer: {
+    flexDirection: "row",
+    marginBottom: spacing.sm,
+  },
+  listItemContent: {
+    flexDirection: "row",
+    width: "100%",
+    padding: spacing.sm,
+  },
+  listCoverContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: borderRadius.xs,
+    overflow: "hidden",
+    marginRight: spacing.md,
+  },
+  listItemInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  listItemTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: spacing.xs,
+  },
+  listItemDetails: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  listItemMetadata: {
+    flexDirection: "column",
+    flex: 1,
+  },
+  metadataRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  metadataIcon: {
+    marginRight: spacing.xs,
+  },
+  metadataText: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  listItemStats: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+  },
+  statsText: {
+    fontSize: 12,
+  },
+});

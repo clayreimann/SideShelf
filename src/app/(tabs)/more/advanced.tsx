@@ -8,6 +8,7 @@ import {
 import { audioFiles } from '@/db/schema/audioFiles';
 import { libraryFiles } from '@/db/schema/libraryFiles';
 import { mediaMetadata } from '@/db/schema/mediaMetadata';
+import { useFloatingPlayerPadding } from '@/hooks/useFloatingPlayerPadding';
 import { clearAllCoverCache } from '@/lib/covers';
 import { formatBytes } from '@/lib/helpers/formatters';
 import { useThemedStyles } from '@/lib/theme';
@@ -138,6 +139,7 @@ export default function AdvancedScreen() {
   const { refresh, selectedLibrary, libraries } = useLibrary();
   const { resetDatabase } = useDb();
   const { counts, refreshStatistics, refreshStorageStats: updateStorageStatsInStore } = useStatistics();
+  const floatingPlayerPadding = useFloatingPlayerPadding();
 
   const [storageEntries, setStorageEntries] = useState<StorageEntry[]>([]);
 
@@ -626,7 +628,7 @@ export default function AdvancedScreen() {
             </View>
           );
         }}
-        contentContainerStyle={[styles.flatListContainer, { paddingBottom: 80 }]}
+        contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
         indicatorStyle={isDark ? 'white' : 'black'}
         stickySectionHeadersEnabled={false}
       />
