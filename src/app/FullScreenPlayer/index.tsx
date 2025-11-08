@@ -9,27 +9,28 @@
  * - Playback rate and volume controls
  */
 
-import ChapterList from '@/components/player/ChapterList';
-import JumpTrackButton from '@/components/player/JumpTrackButton';
-import PlayPauseButton from '@/components/player/PlayPauseButton';
-import SkipButton from '@/components/player/SkipButton';
-import { ProgressBar } from '@/components/ui';
-import CoverImage from '@/components/ui/CoverImange';
-import { getJumpBackwardInterval, getJumpForwardInterval } from '@/lib/appSettings';
-import { useThemedStyles } from '@/lib/theme';
-import { playerService } from '@/services/PlayerService';
-import { usePlayer } from '@/stores/appStore';
-import { router, Stack } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import ChapterList from "@/components/player/ChapterList";
+import JumpTrackButton from "@/components/player/JumpTrackButton";
+import PlaybackSpeedControl from "@/components/player/PlaybackSpeedControl";
+import PlayPauseButton from "@/components/player/PlayPauseButton";
+import SkipButton from "@/components/player/SkipButton";
+import SleepTimerControl from "@/components/player/SleepTimerControl";
+import { ProgressBar } from "@/components/ui";
+import CoverImage from "@/components/ui/CoverImange";
+import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettings";
+import { useThemedStyles } from "@/lib/theme";
+import { playerService } from "@/services/PlayerService";
+import { usePlayer } from "@/stores/appStore";
+import { router, Stack } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   PanResponder,
   Text,
   TouchableOpacity,
   useWindowDimensions,
-  View
-} from 'react-native';
-
+  View,
+} from "react-native";
 
 function durationToUnits(seconds: number): number[] {
   const hours = Math.floor(seconds / 3600);
@@ -41,14 +42,13 @@ function durationToUnits(seconds: number): number[] {
 function formatTimeWithUnits(seconds: number, includeSeconds: boolean = true): string {
   const [hours, minutes, secs] = durationToUnits(seconds);
 
-  const secondsString = `${secs.toString().padStart(2, '0')}s`;
+  const secondsString = `${secs.toString().padStart(2, "0")}s`;
   if (hours > 0) {
-    return `${hours}h ${minutes}m ${includeSeconds ? secondsString : ''}`;
+    return `${hours}h ${minutes}m ${includeSeconds ? secondsString : ""}`;
   } else {
     return `${minutes}m ${secondsString}`;
   }
 }
-
 
 export default function FullScreenPlayer() {
   const { styles, isDark } = useThemedStyles();
@@ -113,7 +113,6 @@ export default function FullScreenPlayer() {
         useNativeDriver: false, // Need to animate height, so can't use native driver
       }),
     ]).start();
-
   }, [showChapterList, coverSizeAnim, chapterListAnim]);
 
   const toggleChapterList = useCallback(() => {
@@ -125,7 +124,7 @@ export default function FullScreenPlayer() {
       await playerService.seekTo(chapterStart);
       setShowChapterList(false); // Close chapter list after selection
     } catch (error) {
-      console.error('[FullScreenPlayer] Failed to seek to chapter:', error);
+      console.error("[FullScreenPlayer] Failed to seek to chapter:", error);
     }
   }, []);
 
@@ -137,7 +136,7 @@ export default function FullScreenPlayer() {
     try {
       await playerService.togglePlayPause();
     } catch (error) {
-      console.error('[FullScreenPlayer] Failed to toggle play/pause:', error);
+      console.error("[FullScreenPlayer] Failed to toggle play/pause:", error);
     }
   }, []);
 
@@ -155,7 +154,7 @@ export default function FullScreenPlayer() {
     try {
       await playerService.seekTo(value);
     } catch (error) {
-      console.error('[FullScreenPlayer] Failed to seek:', error);
+      console.error("[FullScreenPlayer] Failed to seek:", error);
     }
   }, []);
 
@@ -163,7 +162,7 @@ export default function FullScreenPlayer() {
     try {
       await playerService.seekTo(Math.max(position - jumpBackwardInterval, 0));
     } catch (error) {
-      console.error('[FullScreenPlayer] Failed to skip backward:', error);
+      console.error("[FullScreenPlayer] Failed to skip backward:", error);
     }
   }, [position, jumpBackwardInterval]);
 
@@ -171,7 +170,7 @@ export default function FullScreenPlayer() {
     try {
       await playerService.seekTo(position + jumpForwardInterval);
     } catch (error) {
-      console.error('[FullScreenPlayer] Failed to skip forward:', error);
+      console.error("[FullScreenPlayer] Failed to skip forward:", error);
     }
   }, [position, jumpForwardInterval]);
 
@@ -179,7 +178,7 @@ export default function FullScreenPlayer() {
     try {
       await playerService.setRate(rate);
     } catch (error) {
-      console.error('[FullScreenPlayer] Failed to set playback rate:', error);
+      console.error("[FullScreenPlayer] Failed to set playback rate:", error);
     }
   }, []);
 
@@ -187,7 +186,7 @@ export default function FullScreenPlayer() {
     try {
       await playerService.setVolume(newVolume);
     } catch (error) {
-      console.error('[FullScreenPlayer] Failed to set volume:', error);
+      console.error("[FullScreenPlayer] Failed to set volume:", error);
     }
   }, []);
 
@@ -198,7 +197,7 @@ export default function FullScreenPlayer() {
     try {
       await playerService.seekTo(currentChapter?.chapter.start || 0);
     } catch (error) {
-      console.error('[FullScreenPlayer] Failed to seek to start:', error);
+      console.error("[FullScreenPlayer] Failed to seek to start:", error);
     }
   }, [currentChapter]);
 
@@ -207,9 +206,10 @@ export default function FullScreenPlayer() {
       return;
     }
     try {
-      await playerService.seekTo(currentChapter?.chapter.end || 0);
+      const chapterEnd = currentChapter?.chapter.end || 0;
+      await playerService.seekTo(chapterEnd + 0.1); // Seek just past end to trigger next chapter
     } catch (error) {
-      console.error('[FullScreenPlayer] Failed to seek to next chapter:', error);
+      console.error("[FullScreenPlayer] Failed to seek to next chapter:", error);
     }
   }, [currentChapter]);
 
@@ -219,7 +219,7 @@ export default function FullScreenPlayer() {
 
   const duration = currentTrack.duration;
   const currentPosition = position;
-  const chapterTitle = currentChapter?.chapter.title || 'Loading...';
+  const chapterTitle = currentChapter?.chapter.title || "Loading...";
   const chapterPosition = currentChapter?.positionInChapter || 0;
   const chapterDuration = currentChapter?.chapterDuration || 0;
 
@@ -241,42 +241,52 @@ export default function FullScreenPlayer() {
 
   return (
     <>
-      <Stack.Screen options={{
-        title: currentTrack.title, headerRight: () => (<TouchableOpacity onPress={handleClose}>
-          <Text style={{ fontSize: 16, color: isDark ? 'white' : 'black' }}>Done</Text>
-        </TouchableOpacity>)
-      }} />
+      <Stack.Screen
+        options={{
+          title: currentTrack.title,
+          headerRight: () => (
+            <TouchableOpacity onPress={handleClose}>
+              <Text style={{ fontSize: 16, color: isDark ? "white" : "black" }}>Done</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
       {/* Content */}
       <View
         style={{
           flex: 1,
           paddingHorizontal: 32,
-          justifyContent: 'center',
+          justifyContent: "center",
         }}
       >
         {/* Swipeable area: Cover, Title, and Progress Bar */}
         <View {...panResponder.panHandlers}>
           {/* Cover and Track Info */}
-          <View style={{ alignItems: 'center' }}>
+          <View style={{ alignItems: "center" }}>
             {/* Cover Image - Animated */}
-            <Animated.View style={{
-              width: animatedCoverSize,
-              height: animatedCoverSize,
-              borderRadius: 12,
-              marginBottom: animatedCoverMarginBottom,
-              overflow: 'hidden',
-            }}>
+            <Animated.View
+              style={{
+                width: animatedCoverSize,
+                height: animatedCoverSize,
+                borderRadius: 12,
+                marginBottom: animatedCoverMarginBottom,
+                overflow: "hidden",
+              }}
+            >
               <CoverImage uri={currentTrack.coverUri} title={currentTrack.title} fontSize={48} />
             </Animated.View>
 
             {/* Track Info */}
             <Text
-              style={[styles.text, {
-                fontSize: 24,
-                // fontWeight: '700',
-                textAlign: 'center',
-                marginBottom: 8,
-              }]}
+              style={[
+                styles.text,
+                {
+                  fontSize: 24,
+                  // fontWeight: '700',
+                  textAlign: "center",
+                  marginBottom: 8,
+                },
+              ]}
               numberOfLines={2}
             >
               {chapterTitle}
@@ -308,11 +318,11 @@ export default function FullScreenPlayer() {
                 paddingVertical: 8,
                 paddingHorizontal: 12,
                 marginBottom: 8,
-                alignItems: 'center',
+                alignItems: "center",
               }}
             >
               <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
-                {showChapterList ? 'Hide Chapters' : `Show Chapters (${chapters.length})`}
+                {showChapterList ? "Hide Chapters" : `Show Chapters (${chapters.length})`}
               </Text>
             </TouchableOpacity>
           )}
@@ -328,76 +338,67 @@ export default function FullScreenPlayer() {
           />
         </View>
 
-          {/* Main Controls */}
-          <View style={{
-            flexDirection: 'row',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}>
-            <JumpTrackButton direction="backward" onPress={handleStartOfChapter} hitBoxSize={60} iconSize={32} />
-            <SkipButton
-              direction="backward"
-              interval={jumpBackwardInterval}
-              onPress={handleSkipBackward}
-              iconSize={32}
-              hitBoxSize={60}
-            />
-            <PlayPauseButton onPress={handlePlayPause} hitBoxSize={88} iconSize={64} />
-            <SkipButton
-              direction="forward"
-              interval={jumpForwardInterval}
-              onPress={handleSkipForward}
-              iconSize={32}
-              hitBoxSize={60}
-            />
-            <JumpTrackButton direction="forward" onPress={handleNextChapter} hitBoxSize={60} iconSize={32} />
-          </View>
+        {/* Main Controls */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <JumpTrackButton
+            direction="backward"
+            onPress={handleStartOfChapter}
+            hitBoxSize={60}
+            iconSize={32}
+          />
+          <SkipButton
+            direction="backward"
+            interval={jumpBackwardInterval}
+            onPress={handleSkipBackward}
+            iconSize={32}
+            hitBoxSize={60}
+          />
+          <PlayPauseButton onPress={handlePlayPause} hitBoxSize={88} iconSize={64} />
+          <SkipButton
+            direction="forward"
+            interval={jumpForwardInterval}
+            onPress={handleSkipForward}
+            iconSize={32}
+            hitBoxSize={60}
+          />
+          <JumpTrackButton
+            direction="forward"
+            onPress={handleNextChapter}
+            hitBoxSize={60}
+            iconSize={32}
+          />
+        </View>
 
-          {/* Secondary Controls */}
-          <View style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}>
-            {/* Playback Rate */}
-            {/* <View style={{ alignItems: 'center' }}>
-              <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
-                Speed
-              </Text>
-              <View style={{ flexDirection: 'row' }}>
-                {[0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
-                  <TouchableOpacity
-                    key={rate}
-                    style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 4,
-                      backgroundColor: playbackRate === rate ? '#007AFF' : 'transparent',
-                      marginHorizontal: 2,
-                    }}
-                    onPress={() => handleRateChange(rate)}
-                  >
-                    <Text style={{
-                      fontSize: 12,
-                      color: playbackRate === rate ? 'white' : (isDark ? '#fff' : '#000'),
-                      fontWeight: playbackRate === rate ? '600' : 'normal',
-                    }}>
-                      {rate}x
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View> */}
-
-            {/* Volume */}
-            {/* <View style={{ alignItems: 'center', flex: 1, marginLeft: 32 }}>
-              <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
-                Volume
-              </Text>
-            </View> */}
+        {/* Secondary Controls */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            alignItems: "center",
+            marginTop: 16,
+            gap: 32,
+          }}
+        >
+          <View style={{ alignItems: "center" }}>
+            <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
+              Speed
+            </Text>
+            <PlaybackSpeedControl />
           </View>
+          <View style={{ alignItems: "center" }}>
+            <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
+              Sleep Timer
+            </Text>
+            <SleepTimerControl />
+          </View>
+        </View>
       </View>
-
     </>
   );
 }

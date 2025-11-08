@@ -455,6 +455,41 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
         await store.updateNowPlayingMetadata();
       }
 
+      // Check sleep timer and pause if expired
+      const { sleepTimer } = store.player;
+      if (sleepTimer.type && isPlaying) {
+        let shouldPause = false;
+
+        if (sleepTimer.type === "duration" && sleepTimer.endTime) {
+          // Time-based timer
+          if (Date.now() >= sleepTimer.endTime) {
+            shouldPause = true;
+            log.info("Sleep timer expired (duration-based), pausing playback");
+          }
+        } else if (sleepTimer.type === "chapter" && currentChapter) {
+          // Chapter-based timer
+          const targetChapter =
+            sleepTimer.chapterTarget === "current"
+              ? currentChapter.chapter
+              : currentTrack?.chapters.find((ch) => ch.start === currentChapter.chapter.end);
+
+          if (targetChapter && event.position >= targetChapter.end) {
+            shouldPause = true;
+            log.info(
+              `Sleep timer expired (end of ${sleepTimer.chapterTarget} chapter), pausing playback`
+            );
+          }
+        }
+
+        if (shouldPause) {
+          // Cancel the timer and pause playback
+          store.cancelSleepTimer();
+          const pauseTime = Date.now();
+          store._setLastPauseTime(pauseTime);
+          await TrackPlayer.pause();
+        }
+      }
+
       // Check if we should sync to server (uses adaptive intervals based on network type)
       const syncCheck = await progressService.shouldSyncToServer(ids.userId, ids.libraryItemId);
       if (syncCheck.shouldSync) {

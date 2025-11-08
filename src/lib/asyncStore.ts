@@ -1,13 +1,14 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const ASYNC_KEYS = {
-  currentTrack: 'abs.currentTrack',
-  playbackRate: 'abs.playbackRate',
-  volume: 'abs.volume',
-  position: 'abs.position',
-  isPlaying: 'abs.isPlaying',
-  currentPlaySessionId: 'abs.currentPlaySessionId',
-  username: 'abs.username',
+  currentTrack: "abs.currentTrack",
+  playbackRate: "abs.playbackRate",
+  volume: "abs.volume",
+  position: "abs.position",
+  isPlaying: "abs.isPlaying",
+  currentPlaySessionId: "abs.currentPlaySessionId",
+  username: "abs.username",
+  sleepTimer: "abs.sleepTimer",
 };
 
 export async function saveItem(key: string, value: any): Promise<void> {

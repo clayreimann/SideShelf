@@ -55,6 +55,15 @@ export interface PlayerSliceState {
     initialized: boolean;
     /** Whether we're currently restoring state (prevents premature chapter updates) */
     isRestoringState: boolean;
+    /** Sleep timer state */
+    sleepTimer: {
+      /** End time timestamp (ms since epoch), null if not active */
+      endTime: number | null;
+      /** Timer type: 'duration' for time-based, 'chapter' for chapter-based */
+      type: "duration" | "chapter" | null;
+      /** Chapter target: 'current' or 'next', only used when type is 'chapter' */
+      chapterTarget: "current" | "next" | null;
+    };
   };
 }
 
@@ -100,6 +109,14 @@ export interface PlayerSliceActions {
   updateNowPlayingMetadata: () => Promise<void>;
   /** Set isRestoringState flag to prevent UI jumping during state restoration */
   setIsRestoringState: (isRestoring: boolean) => void;
+  /** Set sleep timer with duration in minutes */
+  setSleepTimer: (minutes: number) => void;
+  /** Set sleep timer to end at chapter boundary */
+  setSleepTimerChapter: (target: "current" | "next") => void;
+  /** Cancel active sleep timer */
+  cancelSleepTimer: () => void;
+  /** Get remaining sleep timer time in seconds, null if not active */
+  getSleepTimerRemaining: () => number | null;
 }
 
 /**
@@ -174,6 +191,40 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       restored.push(`currentPlaySessionId`);
     } else {
       notFound.push(`currentPlaySessionId`);
+    }
+
+    const sleepTimer = await getAsyncItem(ASYNC_KEYS.sleepTimer);
+    if (sleepTimer !== null && sleepTimer !== undefined) {
+      // Validate the restored sleep timer
+      if (sleepTimer.type === "duration" && sleepTimer.endTime) {
+        // Check if the timer has already expired
+        if (sleepTimer.endTime > Date.now()) {
+          set((state: PlayerSlice) => ({
+            ...state,
+            player: {
+              ...state.player,
+              sleepTimer,
+            },
+          }));
+          const remainingMinutes = Math.ceil((sleepTimer.endTime - Date.now()) / 60000);
+          restored.push(`sleepTimer (${remainingMinutes}m remaining)`);
+        } else {
+          restored.push(`sleepTimer (expired, cleared)`);
+        }
+      } else if (sleepTimer.type === "chapter") {
+        set((state: PlayerSlice) => ({
+          ...state,
+          player: {
+            ...state.player,
+            sleepTimer,
+          },
+        }));
+        restored.push(`sleepTimer (${sleepTimer.chapterTarget} chapter)`);
+      } else {
+        notFound.push(`sleepTimer (invalid)`);
+      }
+    } else {
+      notFound.push(`sleepTimer`);
     }
 
     // Log consolidated summary
@@ -297,6 +348,11 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     },
     initialized: false,
     isRestoringState: false,
+    sleepTimer: {
+      endTime: null,
+      type: null,
+      chapterTarget: null,
+    },
   },
 
   // Actions
@@ -572,5 +628,83 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     } catch (error) {
       log.error("Failed to update now playing metadata:", error as Error);
     }
+  },
+
+  setSleepTimer: (minutes: number) => {
+    const endTime = Date.now() + minutes * 60 * 1000;
+    const timerState = {
+      endTime,
+      type: "duration" as const,
+      chapterTarget: null,
+    };
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        sleepTimer: timerState,
+      },
+    }));
+    saveItem(ASYNC_KEYS.sleepTimer, timerState);
+    log.info(`Sleep timer set for ${minutes} minutes`);
+  },
+
+  setSleepTimerChapter: (target: "current" | "next") => {
+    const timerState = {
+      endTime: null, // Will be calculated based on chapter
+      type: "chapter" as const,
+      chapterTarget: target,
+    };
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        sleepTimer: timerState,
+      },
+    }));
+    saveItem(ASYNC_KEYS.sleepTimer, timerState);
+    log.info(`Sleep timer set to end of ${target} chapter`);
+  },
+
+  cancelSleepTimer: () => {
+    const timerState = {
+      endTime: null,
+      type: null,
+      chapterTarget: null,
+    };
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        sleepTimer: timerState,
+      },
+    }));
+    saveItem(ASYNC_KEYS.sleepTimer, timerState);
+    log.info("Sleep timer cancelled");
+  },
+
+  getSleepTimerRemaining: () => {
+    const state = get() as PlayerSlice;
+    const { sleepTimer, currentChapter } = state.player;
+
+    if (sleepTimer.type === "duration" && sleepTimer.endTime) {
+      const remaining = Math.max(0, sleepTimer.endTime - Date.now()) / 1000;
+      return remaining;
+    }
+
+    if (sleepTimer.type === "chapter" && currentChapter) {
+      const targetChapter =
+        sleepTimer.chapterTarget === "current"
+          ? currentChapter.chapter
+          : state.player.currentTrack?.chapters.find(
+              (ch) => ch.start === currentChapter.chapter.end
+            );
+
+      if (targetChapter) {
+        const remaining = targetChapter.end - state.player.position;
+        return Math.max(0, remaining);
+      }
+    }
+
+    return null;
   },
 });
