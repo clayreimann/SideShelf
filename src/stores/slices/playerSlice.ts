@@ -53,6 +53,8 @@ export interface PlayerSliceState {
     };
     /** Whether the player has been initialized */
     initialized: boolean;
+    /** Whether we're currently restoring state (prevents premature chapter updates) */
+    isRestoringState: boolean;
   };
 }
 
@@ -96,6 +98,8 @@ export interface PlayerSliceActions {
   _setLastPauseTime: (timestamp: number | null) => void;
   /** Update now playing metadata with chapter information */
   updateNowPlayingMetadata: () => Promise<void>;
+  /** Set isRestoringState flag to prevent UI jumping during state restoration */
+  setIsRestoringState: (isRestoring: boolean) => void;
 }
 
 /**
@@ -108,6 +112,15 @@ export interface PlayerSlice extends PlayerSliceState, PlayerSliceActions {}
  */
 export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
   restorePersistedState: async () => {
+    // Set flag to prevent premature chapter updates during state restoration
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        isRestoringState: true,
+      },
+    }));
+
     const store = get();
     const restored: string[] = [];
     const notFound: string[] = [];
@@ -252,6 +265,20 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         log.info("Could not apply position to TrackPlayer (player may not be ready)");
       }
     }
+
+    // Clear the restoration flag and update chapter with final position
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        isRestoringState: false,
+      },
+    }));
+
+    // Now update the chapter with the correct position
+    if (store.player.currentTrack && store.player.position > 0) {
+      store._updateCurrentChapter(store.player.position);
+    }
   },
   // Initial scoped state
   player: {
@@ -269,6 +296,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       isSeeking: false,
     },
     initialized: false,
+    isRestoringState: false,
   },
 
   // Actions
@@ -366,7 +394,14 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   _updateCurrentChapter: (position: number) => {
     const state = get() as PlayerSlice;
-    const { currentTrack, currentChapter } = state.player;
+    const { currentTrack, currentChapter, isRestoringState } = state.player;
+
+    // Skip chapter updates during state restoration to prevent UI jumping
+    // The correct chapter will be set after restoration completes
+    if (isRestoringState) {
+      log.debug("Skipping chapter update during state restoration");
+      return;
+    }
 
     if (!currentTrack || !currentTrack.chapters.length) {
       log.info(
@@ -461,6 +496,16 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     // Note: lastPauseTime is not persisted - it's ephemeral state for smart rewind
+  },
+
+  setIsRestoringState: (isRestoring: boolean) => {
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        isRestoringState: isRestoring,
+      },
+    }));
   },
 
   /**

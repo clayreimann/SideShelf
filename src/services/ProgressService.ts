@@ -86,6 +86,9 @@ export class ProgressService {
   // Removed: pauseTimeoutInterval (pause state tracked per session in DB)
   // Removed: lastSyncTime, isPaused, pauseStartTime, lastProgressUpdateTime, failedSyncs, sessionIsStale (tracked per session in DB)
 
+  // Mutex to prevent concurrent startSession calls for the same library item
+  private startSessionLocks: Map<string, Promise<void>> = new Map();
+
   // Configuration
   public readonly SYNC_INTERVAL_UNMETERED = 15000; // 15 seconds on unmetered connections
   public readonly SYNC_INTERVAL_METERED = 60000; // 60 seconds on metered connections
@@ -165,7 +168,7 @@ export class ProgressService {
           `Ending stale session ${session.id} for ${session.libraryItemId} immediately (${Math.round(sessionAge / 1000)}s old)`
         );
         // Sync before ending
-        await this.syncSessionToServer(user.id, session.libraryItemId);
+        await this.syncSessionToServer(user.id, session.libraryItemId, session.id);
         await endStaleListeningSession(session.id, session.currentTime);
         return; // Don't rehydrate stale sessions
       }
@@ -193,6 +196,36 @@ export class ProgressService {
     volume: number = 1.0,
     existingServerSessionId?: string
   ): Promise<void> {
+    // MUTEX: Ensure only one startSession call executes at a time for each library item
+    // Wait for any existing startSession call to complete
+    const existingLock = this.startSessionLocks.get(libraryItemId);
+    if (existingLock) {
+      log.info(`Waiting for existing startSession call to complete for ${libraryItemId}`);
+      await existingLock;
+      // After waiting, check if a session now exists and we can skip this call
+      try {
+        const user = await getUserByUsername(username);
+        if (user?.id) {
+          const session = await getActiveSession(user.id, libraryItemId);
+          if (session) {
+            log.info(
+              `Session already created by previous call, skipping duplicate startSession item=${libraryItemId} session=${session.id}`
+            );
+            return;
+          }
+        }
+      } catch (error) {
+        log.warn(`Failed to check for session after lock: ${error}`);
+      }
+    }
+
+    // Create a new lock promise for this call
+    let releaseLock: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    this.startSessionLocks.set(libraryItemId, lockPromise);
+
     try {
       log.info(`Starting session for library item ${libraryItemId}, media ${mediaId}`);
       if (existingServerSessionId) {
@@ -218,6 +251,21 @@ export class ProgressService {
       const allActiveSessionsForItem = (await getAllActiveSessionsForUser(user.id)).filter(
         (s) => s.libraryItemId === libraryItemId
       );
+
+      // DIAGNOSTIC: Log found sessions to detect race conditions
+      if (allActiveSessionsForItem.length > 0) {
+        const now = Date.now();
+        const sessionDetails = allActiveSessionsForItem
+          .map((s) => {
+            const age = now - s.createdAt.getTime();
+            const isBrandNew = s.currentTime === s.startTime;
+            return `${s.id.slice(0, 8)}(age=${age}ms, brandNew=${isBrandNew}, pos=${formatTime(s.currentTime)}s)`;
+          })
+          .join(", ");
+        log.info(
+          `Found ${allActiveSessionsForItem.length} active session(s) for ${libraryItemId}: ${sessionDetails}`
+        );
+      }
 
       let existingSession: LocalListeningSessionRow | null = null;
 
@@ -350,7 +398,7 @@ export class ProgressService {
         await markSessionAsSynced(sessionId);
       } else {
         // Sync session to server immediately for downloaded content
-        await this.syncSessionToServer(user.id, libraryItemId);
+        await this.syncSessionToServer(user.id, libraryItemId, sessionId);
       }
 
       log.info(
@@ -359,6 +407,10 @@ export class ProgressService {
     } catch (error) {
       log.error("Failed to start session:", error as Error);
       throw error;
+    } finally {
+      // Release the mutex lock
+      releaseLock!();
+      this.startSessionLocks.delete(libraryItemId);
     }
   }
 
@@ -382,7 +434,7 @@ export class ProgressService {
         await endListeningSession(session.id, finalEndTime);
 
         // Final sync to server
-        await this.syncSessionToServer(userId, libraryItemId);
+        await this.syncSessionToServer(userId, libraryItemId, session.id);
 
         log.info(`Ended session ${session.id} session=${session.id} item=${libraryItemId}`);
       } else {
@@ -420,7 +472,7 @@ export class ProgressService {
         await endStaleListeningSession(session.id, finalEndTime);
 
         // Final sync to server
-        await this.syncSessionToServer(userId, libraryItemId);
+        await this.syncSessionToServer(userId, libraryItemId, session.id);
 
         log.info(`Ended stale session ${session.id}`);
       } else {
@@ -560,7 +612,7 @@ export class ProgressService {
         log.info(`Resumed playback session=${session.id} item=${libraryItemId}`);
       } else if (!isPlaying && !wasPaused) {
         // Starting pause - immediate sync on pause
-        await this.syncSessionToServer(userId, libraryItemId);
+        await this.syncSessionToServer(userId, libraryItemId, session.id);
         log.info(
           `Paused playback, synced to server position=${formatTime(session.currentTime)} session=${session.id} item=${libraryItemId}`
         );
@@ -583,7 +635,7 @@ export class ProgressService {
       if (isPaused) {
         // Audio ducked (paused by system)
         // Immediate sync on duck
-        await this.syncSessionToServer(userId, libraryItemId);
+        await this.syncSessionToServer(userId, libraryItemId, session.id);
         log.info("Audio ducked, synced to server");
       } else {
         // Audio unducked (resumed by system)
@@ -694,8 +746,15 @@ export class ProgressService {
 
   /**
    * Sync session to server (public for background service)
+   * @param userId - User ID
+   * @param libraryItemId - Library item ID
+   * @param sessionId - Optional specific session ID to sync. If not provided, syncs the active session.
    */
-  async syncSessionToServer(userId: string, libraryItemId: string): Promise<void> {
+  async syncSessionToServer(
+    userId: string,
+    libraryItemId: string,
+    sessionId?: string
+  ): Promise<void> {
     try {
       // Check network connectivity
       const netInfo = await NetInfo.fetch();
@@ -704,18 +763,28 @@ export class ProgressService {
         return;
       }
 
-      // Get active session from database
-      const session = await getActiveSession(userId, libraryItemId);
-      if (!session) {
-        log.info(`No active session found for ${libraryItemId}, skipping sync`);
-        return;
-      }
+      // Get session data - either the specific session or the active session
+      let sessionData: LocalListeningSessionRow | null;
 
-      // Load full session data from database
-      const sessionData = await getListeningSession(session.id);
-      if (!sessionData) {
-        log.error("Could not load session data for sync");
-        return;
+      if (sessionId) {
+        // Sync specific session
+        sessionData = await getListeningSession(sessionId);
+        if (!sessionData) {
+          log.error(`Could not load session ${sessionId} for sync`);
+          return;
+        }
+      } else {
+        // Fall back to active session (backwards compatibility)
+        const session = await getActiveSession(userId, libraryItemId);
+        if (!session) {
+          log.info(`No active session found for ${libraryItemId}, skipping sync`);
+          return;
+        }
+        sessionData = await getListeningSession(session.id);
+        if (!sessionData) {
+          log.error("Could not load session data for sync");
+          return;
+        }
       }
 
       // Use the existing syncSingleSession method

@@ -625,6 +625,33 @@ async function handleActiveTrackChanged(
       // If still implausible, let startSession() handle it (it has fallback logic)
       // startSession will use activeSession or savedProgress if startTime is 0 or small
 
+      // GUARD: Check if a session already exists to prevent race conditions
+      // This prevents duplicate session creation when app resumes from background
+      // During normal playback, startSession handles resuming existing sessions correctly
+      // But when multiple code paths call it simultaneously, races can occur
+      try {
+        const user = await getUserByUsername(username);
+        if (user?.id) {
+          const existingSession = await progressService.getCurrentSession(
+            user.id,
+            currentTrack.libraryItemId
+          );
+          if (existingSession) {
+            // Session already exists - let it be
+            // startSession() will handle resuming it if needed
+            // But if we just got here from app resume, there might be concurrent calls
+            // So we skip this one and let the other code path (updateProgress) handle it
+            log.info(
+              `Active session already exists, skipping duplicate startSession call item=${currentTrack.libraryItemId} session=${existingSession.sessionId} position=${formatTime(existingSession.currentTime)}s`
+            );
+            return;
+          }
+        }
+      } catch (error) {
+        log.warn(`Failed to check existing session: ${error}`);
+        // Continue with session creation if check fails
+      }
+
       await progressService.startSession(
         username,
         currentTrack.libraryItemId,

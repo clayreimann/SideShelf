@@ -19,7 +19,7 @@ import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { getApiConfig } from "@/lib/api/api";
 import { startPlaySession } from "@/lib/api/endpoints";
-import { calculateSmartRewindTime, getSmartRewindEnabled } from '@/lib/appSettings';
+import { calculateSmartRewindTime, getSmartRewindEnabled } from "@/lib/appSettings";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
 import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
@@ -37,9 +37,8 @@ import TrackPlayer, {
   IOSCategory,
   IOSCategoryMode,
   State,
-  Track
+  Track,
 } from "react-native-track-player";
-
 
 const log = logger.forTag("PlayerService"); // Cached sublogger
 const diagLog = logger.forDiagnostics("PlayerService"); // Diagnostic logger
@@ -127,10 +126,7 @@ export class PlayerService {
         `${from} Track=${trackIdx} Id=${currentTrack?.id} Title=${currentTrack?.title} Position=${formatTime(position)}, State: ${state.state}`
       );
     } catch (diagError) {
-      diagLog.error(
-        "Error fetching TrackPlayer state",
-        diagError as Error
-      );
+      diagLog.error("Error fetching TrackPlayer state", diagError as Error);
     }
   }
 
@@ -183,13 +179,8 @@ export class PlayerService {
       log.info("Track player initialized successfully");
     } catch (error) {
       // Handle the specific "already initialized" error gracefully
-      if (
-        error instanceof Error &&
-        error.message.includes("already been initialized")
-      ) {
-        log.info(
-          "Player was already initialized elsewhere, setting up listeners"
-        );
+      if (error instanceof Error && error.message.includes("already been initialized")) {
+        log.info("Player was already initialized elsewhere, setting up listeners");
         try {
           // Set up our event listeners on the existing player
           this.initialized = true;
@@ -197,10 +188,7 @@ export class PlayerService {
           log.info("Successfully attached to existing player");
           return;
         } catch (attachError) {
-          log.error(
-            "Failed to attach to existing player",
-            attachError as Error
-          );
+          log.error("Failed to attach to existing player", attachError as Error);
         }
       }
 
@@ -216,9 +204,7 @@ export class PlayerService {
    */
   async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
     try {
-      diagLog.info(
-        `playTrack called for libraryItemId: ${libraryItemId}`
-      );
+      diagLog.info(`playTrack called for libraryItemId: ${libraryItemId}`);
       // Diagnostic: log current track, position, playing state before loading
       await this.printDebugInfo("playTrack::init");
       log.info(`Loading track for library item: ${libraryItemId}`);
@@ -285,8 +271,7 @@ export class PlayerService {
         audioFiles,
         chapters,
         duration: audioFiles.reduce(
-          (total: number, file: AudioFileWithDownloadInfo) =>
-            total + (file.duration || 0),
+          (total: number, file: AudioFileWithDownloadInfo) => total + (file.duration || 0),
           0
         ),
         isDownloaded: audioFiles.some(
@@ -304,9 +289,7 @@ export class PlayerService {
 
       if (tracks.length === 0) {
         // Provide more detailed error information
-        const hasDownloadedFiles = track.audioFiles.some(
-          (af) => af.downloadInfo?.isDownloaded
-        );
+        const hasDownloadedFiles = track.audioFiles.some((af) => af.downloadInfo?.isDownloaded);
 
         const needsStreaming = track.audioFiles.some(
           (audioFile) => !audioFile.downloadInfo?.isDownloaded
@@ -327,9 +310,7 @@ export class PlayerService {
         log.error(
           `No playable tracks available: ${JSON.stringify({
             totalAudioFiles: track.audioFiles.length,
-            downloadedFiles: track.audioFiles.filter(
-              (af) => af.downloadInfo?.isDownloaded
-            ).length,
+            downloadedFiles: track.audioFiles.filter((af) => af.downloadInfo?.isDownloaded).length,
             needsStreaming,
           })}`
         );
@@ -350,13 +331,17 @@ export class PlayerService {
         resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition
       ) {
         await saveItem(ASYNC_KEYS.position, resumeInfo.authoritativePosition);
-        log.info(`Synced AsyncStorage position to authoritative value: ${formatTime(resumeInfo.authoritativePosition)}s`);
+        log.info(
+          `Synced AsyncStorage position to authoritative value: ${formatTime(resumeInfo.authoritativePosition)}s`
+        );
       }
 
       if (resumeInfo.position > 0) {
         await TrackPlayer.seekTo(resumeInfo.position);
         store.updatePosition(resumeInfo.position);
-        log.info(`Resuming playback from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`);
+        log.info(
+          `Resuming playback from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
+        );
       }
 
       // Apply playback settings from store to TrackPlayer
@@ -378,7 +363,9 @@ export class PlayerService {
 
       // Update now playing metadata with chapter info after track loads
       this.updateNowPlayingMetadata().catch((error) => {
-        log.warn(`Failed to update now playing metadata on track load: ${error instanceof Error ? error.message : String(error)}`);
+        log.warn(
+          `Failed to update now playing metadata on track load: ${error instanceof Error ? error.message : String(error)}`
+        );
       });
 
       // Diagnostic: log current track, position, playing state after loading
@@ -482,7 +469,9 @@ export class PlayerService {
         if (!requiresStreaming) {
           const refreshedStore = useAppStore.getState();
           if (refreshedStore.player.currentPlaySessionId) {
-            log.info(`Clearing stale streaming session ID for downloaded track ${playerSliceTrack.libraryItemId}`);
+            log.info(
+              `Clearing stale streaming session ID for downloaded track ${playerSliceTrack.libraryItemId}`
+            );
             refreshedStore._setPlaySessionId(null);
           }
         }
@@ -490,7 +479,9 @@ export class PlayerService {
         return true;
       }
 
-      log.info(`TrackPlayer queue missing or mismatched, rebuilding for ${playerSliceTrack.libraryItemId}`);
+      log.info(
+        `TrackPlayer queue missing or mismatched, rebuilding for ${playerSliceTrack.libraryItemId}`
+      );
       const rebuilt = await this.reloadTrackPlayerQueue(playerSliceTrack);
 
       if (!rebuilt) {
@@ -515,11 +506,17 @@ export class PlayerService {
     let success = false;
 
     try {
+      // Set isRestoringState to prevent chapter updates during queue rebuild
+      // This prevents the UI from showing "Opening Credits" when tracks are added at position 0
+      const tempStore = useAppStore.getState();
+      tempStore.setIsRestoringState?.(true);
+
       await TrackPlayer.reset();
 
       const tracks = await this.buildTrackList(track);
       if (tracks.length === 0) {
         log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
+        tempStore.setIsRestoringState?.(false);
         return false;
       }
 
@@ -531,15 +528,26 @@ export class PlayerService {
         resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition
       ) {
         await saveItem(ASYNC_KEYS.position, resumeInfo.authoritativePosition);
-        log.info(`Synced AsyncStorage position to authoritative value: ${formatTime(resumeInfo.authoritativePosition)}s`);
+        log.info(
+          `Synced AsyncStorage position to authoritative value: ${formatTime(resumeInfo.authoritativePosition)}s`
+        );
       }
 
       if (resumeInfo.position > 0) {
         await TrackPlayer.seekTo(resumeInfo.position);
         const updatedStore = useAppStore.getState();
         updatedStore.updatePosition(resumeInfo.position);
-        log.info(`Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`);
+        log.info(
+          `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
+        );
+
+        // Clear isRestoringState and update chapter with correct position
+        updatedStore.setIsRestoringState?.(false);
+        updatedStore._updateCurrentChapter(resumeInfo.position);
       } else {
+        // Clear isRestoringState even when starting from beginning
+        const updatedStore = useAppStore.getState();
+        updatedStore.setIsRestoringState?.(false);
         log.info("Prepared queue with no resume position (starting from beginning)");
       }
 
@@ -606,12 +614,16 @@ export class PlayerService {
             // Check if session position is implausibly small
             if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
               if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
-                log.warn(`Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : 'unknown'})`);
+                log.warn(
+                  `Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : "unknown"})`
+                );
                 position = savedPosition;
                 source = "savedProgress";
                 authoritativePosition = savedPosition;
               } else if (asyncStoragePosition && asyncStoragePosition >= MIN_PLAUSIBLE_POSITION) {
-                log.warn(`Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`);
+                log.warn(
+                  `Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`
+                );
                 position = asyncStoragePosition;
                 source = "asyncStorage";
                 authoritativePosition = asyncStoragePosition;
@@ -620,7 +632,9 @@ export class PlayerService {
                 position = sessionPosition;
                 source = "activeSession";
                 authoritativePosition = sessionPosition;
-                log.info(`Resume position from active session (small but no alternative): ${formatTime(position)}s`);
+                log.info(
+                  `Resume position from active session (small but no alternative): ${formatTime(position)}s`
+                );
               }
             } else if (savedPosition && savedLastUpdate) {
               // Both exist - compare timestamps to determine which is more recent
@@ -632,7 +646,9 @@ export class PlayerService {
                 const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
                 const preferredSource = isSessionNewer ? "activeSession" : "savedProgress";
 
-                log.warn(`Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`);
+                log.warn(
+                  `Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
+                );
 
                 position = preferredPosition;
                 source = preferredSource;
@@ -688,7 +704,9 @@ export class PlayerService {
     // First, try to use the in-memory pause time from playerSlice
     if (store.player.lastPauseTime) {
       lastPlayedTime = store.player.lastPauseTime;
-      log.info(`Using current session pause time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+      log.info(
+        `Using current session pause time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
+      );
     } else if (store.player.currentTrack?.libraryItemId) {
       // Cold boot scenario - check the database for last played time
       try {
@@ -699,7 +717,10 @@ export class PlayerService {
 
         const user = await getUserByUsername(username);
         if (user?.id) {
-          const activeSession = await getActiveSession(user.id, store.player.currentTrack.libraryItemId);
+          const activeSession = await getActiveSession(
+            user.id,
+            store.player.currentTrack.libraryItemId
+          );
           const savedProgress = await getMediaProgressForLibraryItem(
             store.player.currentTrack.libraryItemId,
             user.id
@@ -712,21 +733,29 @@ export class PlayerService {
 
             if (sessionTime > progressTime) {
               lastPlayedTime = sessionTime;
-              log.info(`Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+              log.info(
+                `Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
+              );
             } else {
               lastPlayedTime = progressTime;
-              log.info(`Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+              log.info(
+                `Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
+              );
             }
           } else if (activeSession) {
             lastPlayedTime = activeSession.updatedAt.getTime();
-            log.info(`Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+            log.info(
+              `Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
+            );
           } else if (savedProgress?.lastUpdate) {
             lastPlayedTime = savedProgress.lastUpdate.getTime();
-            log.info(`Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`);
+            log.info(
+              `Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
+            );
           }
         }
       } catch (error) {
-        log.error('Failed to get last played time from database for smart rewind', error as Error);
+        log.error("Failed to get last played time from database for smart rewind", error as Error);
       }
     }
 
@@ -736,7 +765,9 @@ export class PlayerService {
       if (rewindSeconds > 0) {
         const currentPosition = await TrackPlayer.getProgress();
         const newPosition = Math.max(0, currentPosition.position - rewindSeconds);
-        log.info(`Smart rewind: jumping back ${rewindSeconds}s (from ${formatTime(currentPosition.position)} to ${formatTime(newPosition)})`);
+        log.info(
+          `Smart rewind: jumping back ${rewindSeconds}s (from ${formatTime(currentPosition.position)} to ${formatTime(newPosition)})`
+        );
         await TrackPlayer.seekTo(newPosition);
       }
     }
@@ -792,26 +823,19 @@ export class PlayerService {
     // First, check which files we have locally
     const locallyAvailableFiles = new Set<string>();
     for (const audioFile of playerTrack.audioFiles) {
-      if (
-        audioFile.downloadInfo?.isDownloaded &&
-        audioFile.downloadInfo.downloadPath
-      ) {
+      if (audioFile.downloadInfo?.isDownloaded && audioFile.downloadInfo.downloadPath) {
         const storedPath = audioFile.downloadInfo.downloadPath;
         const fileExists = await verifyFileExists(storedPath);
         if (fileExists) {
           locallyAvailableFiles.add(audioFile.id);
         } else {
           const resolvedPath = resolveAppPath(storedPath);
-          log.warn(
-            `File marked as downloaded but missing: ${resolvedPath}`
-          );
+          log.warn(`File marked as downloaded but missing: ${resolvedPath}`);
 
           // Clean up database
           try {
             await clearAudioFileDownloadStatus(audioFile.id);
-            log.info(
-              `Cleared download status for missing file: ${audioFile.id}`
-            );
+            log.info(`Cleared download status for missing file: ${audioFile.id}`);
           } catch (error) {
             log.error("Failed to clear download status", error as Error);
           }
@@ -846,7 +870,9 @@ export class PlayerService {
         log.error("Failed to start play session", error as Error);
       }
     } else if (store.player.currentPlaySessionId) {
-      log.info(`Clearing stale streaming session ID before local playback for ${playerTrack.libraryItemId}`);
+      log.info(
+        `Clearing stale streaming session ID before local playback for ${playerTrack.libraryItemId}`
+      );
       store._setPlaySessionId(null);
     }
 
@@ -861,10 +887,7 @@ export class PlayerService {
       let sourceType: "local" | "streaming" = "local";
 
       // First, try to use local file if available
-      if (
-        locallyAvailableFiles.has(audioFile.id) &&
-        audioFile.downloadInfo?.downloadPath
-      ) {
+      if (locallyAvailableFiles.has(audioFile.id) && audioFile.downloadInfo?.downloadPath) {
         url = resolveAppPath(audioFile.downloadInfo.downloadPath);
         sourceType = "local";
       }
@@ -872,8 +895,7 @@ export class PlayerService {
       else if (playSession && playSession.audioTracks.length > 0) {
         const streamingTrack = playSession.audioTracks.find(
           (track) =>
-            track.metadata.filename === audioFile.filename ||
-            track.index === audioFile.index
+            track.metadata.filename === audioFile.filename || track.index === audioFile.index
         );
 
         if (streamingTrack && this.cachedApiInfo) {
@@ -889,9 +911,7 @@ export class PlayerService {
           sourceType === "streaming"
             ? url.replace(this.cachedApiInfo?.accessToken || "", "<token>")
             : url;
-        log.info(
-          `Using ${sourceType} file for ${audioFile.filename}: ${displayUrl}`
-        );
+        log.info(`Using ${sourceType} file for ${audioFile.filename}: ${displayUrl}`);
 
         tracks.push({
           id: audioFile.id,
@@ -978,13 +998,13 @@ export class PlayerService {
     try {
       const username = await getStoredUsername();
       if (!username) {
-        log.info('No username found, skipping PlayerService restoration');
+        log.info("No username found, skipping PlayerService restoration");
         return;
       }
 
       const user = await getUserByUsername(username);
       if (!user?.id) {
-        log.info('User not found, skipping PlayerService restoration');
+        log.info("User not found, skipping PlayerService restoration");
         return;
       }
 
@@ -997,21 +1017,21 @@ export class PlayerService {
         // Query DB for most recent active session
         const activeSessions = await getAllActiveSessionsForUser(user.id);
         if (activeSessions.length > 0) {
-          const mostRecent = activeSessions.sort((a, b) =>
-            b.updatedAt.getTime() - a.updatedAt.getTime()
+          const mostRecent = activeSessions.sort(
+            (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
           )[0];
           libraryItemId = mostRecent.libraryItemId;
         }
       }
 
       if (!libraryItemId) {
-        log.info('No active session found, skipping PlayerService restoration');
+        log.info("No active session found, skipping PlayerService restoration");
         return;
       }
 
       const session = await progressService.getCurrentSession(user.id, libraryItemId);
       if (!session) {
-        log.info('No active session found, skipping PlayerService restoration');
+        log.info("No active session found, skipping PlayerService restoration");
         return;
       }
 
@@ -1046,14 +1066,13 @@ export class PlayerService {
         const track: PlayerTrack = {
           libraryItemId: libraryItem.id,
           mediaId: metadata.id,
-          title: metadata.title || 'Unknown Title',
-          author: metadata.authorName || metadata.author || 'Unknown Author',
+          title: metadata.title || "Unknown Title",
+          author: metadata.authorName || metadata.author || "Unknown Author",
           coverUri: metadata.imageUrl || getCoverUri(libraryItem.id),
           audioFiles,
           chapters,
           duration: audioFiles.reduce(
-            (total: number, file: AudioFileWithDownloadInfo) =>
-              total + (file.duration || 0),
+            (total: number, file: AudioFileWithDownloadInfo) => total + (file.duration || 0),
             0
           ),
           isDownloaded: hasDownloadedFiles,
@@ -1061,13 +1080,13 @@ export class PlayerService {
 
         store._setCurrentTrack(track);
         log.info(
-          `Restored PlayerService track to playerSlice (${hasDownloadedFiles ? 'downloaded' : 'streaming'}): ${track.title}`
+          `Restored PlayerService track to playerSlice (${hasDownloadedFiles ? "downloaded" : "streaming"}): ${track.title}`
         );
       } catch (error) {
-        log.error('Failed to restore currentTrack from session', error as Error);
+        log.error("Failed to restore currentTrack from session", error as Error);
       }
     } catch (error) {
-      log.error('Failed to restore PlayerService from session', error as Error);
+      log.error("Failed to restore PlayerService from session", error as Error);
     }
   }
 
@@ -1085,17 +1104,15 @@ export class PlayerService {
 
       // Check if track matches
       const trackMatches =
-      (!currentTrack && !store.player.currentTrack) ||
-      (currentTrack as any)?.id.startsWith(store.player.currentTrack?.mediaId || "");
+        (!currentTrack && !store.player.currentTrack) ||
+        (currentTrack as any)?.id.startsWith(store.player.currentTrack?.mediaId || "");
 
       // Check if position is roughly the same (within 5 seconds)
       const positionMatches =
-        !store.player.position ||
-        Math.abs(progress.position - store.player.position) < 5;
+        !store.player.position || Math.abs(progress.position - store.player.position) < 5;
 
       // Check if playing state matches
-      const playingMatches =
-        (state.state === State.Playing) === store.player.isPlaying;
+      const playingMatches = (state.state === State.Playing) === store.player.isPlaying;
 
       const isConnected = trackMatches && positionMatches && playingMatches;
 
@@ -1105,13 +1122,19 @@ export class PlayerService {
         );
         if (!trackMatches) {
           const { audioFiles, chapters, ...interestingProps } = store.player.currentTrack || {};
-          diagLog.info(`From TrackPlayer:\n${JSON.stringify(currentTrack)}\nFrom store:\n${JSON.stringify(interestingProps)}`)
+          diagLog.info(
+            `From TrackPlayer:\n${JSON.stringify(currentTrack)}\nFrom store:\n${JSON.stringify(interestingProps)}`
+          );
         }
         if (!positionMatches) {
-          diagLog.info(`From store position: ${store.player.position}, from TrackPlayer position: ${progress.position}`);
+          diagLog.info(
+            `From store position: ${store.player.position}, from TrackPlayer position: ${progress.position}`
+          );
         }
         if (!playingMatches) {
-          diagLog.info(`From store isPlaying: ${store.player.isPlaying}, from TrackPlayer state: ${state.state}`);
+          diagLog.info(
+            `From store isPlaying: ${store.player.isPlaying}, from TrackPlayer state: ${state.state}`
+          );
         }
       } else {
         log.info("Player connection verified OK");
@@ -1165,7 +1188,10 @@ export class PlayerService {
           if (username) {
             const user = await getUserByUsername(username);
             if (user?.id) {
-              const dbSession = await progressService.getCurrentSession(user.id, store.player.currentTrack.libraryItemId);
+              const dbSession = await progressService.getCurrentSession(
+                user.id,
+                store.player.currentTrack.libraryItemId
+              );
               if (dbSession) {
                 dbPosition = dbSession.currentTime;
                 dbSessionUpdatedAt = dbSession.updatedAt;
@@ -1173,7 +1199,7 @@ export class PlayerService {
             }
           }
         } catch (error) {
-          log.error('Failed to get DB session for reconciliation', error as Error);
+          log.error("Failed to get DB session for reconciliation", error as Error);
         }
       }
 
@@ -1190,23 +1216,28 @@ export class PlayerService {
               // Query DB for most recent active session
               const activeSessions = await getAllActiveSessionsForUser(user.id);
               if (activeSessions.length > 0) {
-                const mostRecent = activeSessions.sort((a, b) =>
-                  b.updatedAt.getTime() - a.updatedAt.getTime()
+                const mostRecent = activeSessions.sort(
+                  (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
                 )[0];
-                const dbSession = await progressService.getCurrentSession(user.id, mostRecent.libraryItemId);
+                const dbSession = await progressService.getCurrentSession(
+                  user.id,
+                  mostRecent.libraryItemId
+                );
                 if (dbSession) {
                   // Try to restore track from DB session
                   const libraryItem = await getLibraryItemById(dbSession.libraryItemId);
                   if (libraryItem) {
                     // Can't fully restore PlayerTrack here without more data, but we can note it
-                    report.actionsTaken.push(`Found DB session for ${dbSession.libraryItemId} but cannot restore track without metadata`);
+                    report.actionsTaken.push(
+                      `Found DB session for ${dbSession.libraryItemId} but cannot restore track without metadata`
+                    );
                   }
                 }
               }
             }
           }
         } catch (error) {
-          log.error('Failed to load library item for reconciliation', error as Error);
+          log.error("Failed to load library item for reconciliation", error as Error);
         }
       }
 
@@ -1218,12 +1249,12 @@ export class PlayerService {
 
         const trackInfo = store.player.currentTrack
           ? `track=${store.player.currentTrack?.id} item=${store.player.currentTrack?.libraryItemId}`
-          : 'track=none';
+          : "track=none";
 
         // Determine which position is authoritative by checking staleness
         const STALE_SESSION_THRESHOLD = 60000; // 60 seconds
         let authoritativePosition = dbPosition;
-        let positionSource = 'DB';
+        let positionSource = "DB";
 
         if (dbSessionUpdatedAt) {
           const sessionAge = Date.now() - dbSessionUpdatedAt.getTime();
@@ -1231,7 +1262,7 @@ export class PlayerService {
           // If DB session is stale (>60s old) and TrackPlayer position is ahead, prefer TrackPlayer
           if (sessionAge > STALE_SESSION_THRESHOLD && tpPosition > dbPosition) {
             authoritativePosition = tpPosition;
-            positionSource = 'TrackPlayer (DB session is stale)';
+            positionSource = "TrackPlayer (DB session is stale)";
             log.warn(
               `DB session is stale (${formatTime(sessionAge / 1000)}s old), preferring TrackPlayer position: ${formatTime(tpPosition)}s over DB: ${formatTime(dbPosition)}s`
             );
@@ -1245,11 +1276,13 @@ export class PlayerService {
         if (hasTracks) {
           await TrackPlayer.seekTo(authoritativePosition);
           store.updatePosition(authoritativePosition);
-          report.actionsTaken.push(`Adjusted TrackPlayer position to ${positionSource} value: ${formatTime(authoritativePosition)}s`);
+          report.actionsTaken.push(
+            `Adjusted TrackPlayer position to ${positionSource} value: ${formatTime(authoritativePosition)}s`
+          );
         } else {
           const reason = store.player.currentTrack
-            ? 'TrackPlayer queue is empty - queue should be rebuilt via restorePlayerServiceFromSession() or playTrack()'
-            : 'No current track in store - track restoration may be needed';
+            ? "TrackPlayer queue is empty - queue should be rebuilt via restorePlayerServiceFromSession() or playTrack()"
+            : "No current track in store - track restoration may be needed";
           log.info(`Position mismatch detected but cannot seek: ${reason}`);
           report.actionsTaken.push(`Position mismatch detected but cannot seek: ${reason}`);
         }
@@ -1280,17 +1313,21 @@ export class PlayerService {
 
       if (report.discrepanciesFound) {
         if (report.actionsTaken.length > 0) {
-          log.info(`Reconciliation completed with ${report.actionsTaken.length} actions: ${report.actionsTaken.join(', ')}`);
+          log.info(
+            `Reconciliation completed with ${report.actionsTaken.length} actions: ${report.actionsTaken.join(", ")}`
+          );
         } else {
-          log.info(`Reconciliation completed with 0 actions: discrepancies found but no actions could be taken (trackMismatch=${report.trackMismatch}, positionMismatch=${report.positionMismatch}, rateMismatch=${report.rateMismatch}, volumeMismatch=${report.volumeMismatch})`);
+          log.info(
+            `Reconciliation completed with 0 actions: discrepancies found but no actions could be taken (trackMismatch=${report.trackMismatch}, positionMismatch=${report.positionMismatch}, rateMismatch=${report.rateMismatch}, volumeMismatch=${report.volumeMismatch})`
+          );
         }
       } else {
-        log.info('Reconciliation: No discrepancies found, state is in sync');
+        log.info("Reconciliation: No discrepancies found, state is in sync");
       }
 
       return report;
     } catch (error) {
-      log.error('Error during reconciliation', error as Error);
+      log.error("Error during reconciliation", error as Error);
       report.discrepanciesFound = true;
       report.actionsTaken.push(`Error: ${(error as Error).message}`);
       return report;
@@ -1317,9 +1354,7 @@ export class PlayerService {
       // Note: Playing state is updated by PlayerBackgroundService event listeners
 
       // If current track in TrackPlayer doesn't match store, update store
-      if (
-        currentTrack?.id.startsWith(store.player.currentTrack?.mediaId || "")
-      ) {
+      if (currentTrack?.id.startsWith(store.player.currentTrack?.mediaId || "")) {
         // Find the track info from our current track
         const trackInfo = this.getCurrentTrack();
         if (trackInfo) {
@@ -1344,20 +1379,14 @@ export class PlayerService {
     try {
       log.info("Reconnecting background service");
       const runtimeParts: string[] = [];
-      runtimeParts.push(
-        typeof globalThis.window === "undefined" ? "no-window" : "window"
-      );
-      runtimeParts.push(
-        typeof globalThis.document === "undefined" ? "no-document" : "document"
-      );
+      runtimeParts.push(typeof globalThis.window === "undefined" ? "no-window" : "window");
+      runtimeParts.push(typeof globalThis.document === "undefined" ? "no-document" : "document");
       try {
         runtimeParts.push(`AppState=${AppState.currentState ?? "unknown"}`);
       } catch {
         runtimeParts.push("AppState=unavailable");
       }
-      diagLog.info(
-        `PlayerService reconnect runtime: ${runtimeParts.join(" ")}`
-      );
+      diagLog.info(`PlayerService reconnect runtime: ${runtimeParts.join(" ")}`);
 
       // Try to load the background service module
       // Using require() here to handle dynamic loading
@@ -1372,10 +1401,8 @@ export class PlayerService {
           cache?: Record<string, unknown>;
         };
         const canResolve =
-          typeof require === "function" &&
-          typeof metroRequire.resolve === "function";
-        const cache =
-          typeof require === "function" ? metroRequire.cache : undefined;
+          typeof require === "function" && typeof metroRequire.resolve === "function";
+        const cache = typeof require === "function" ? metroRequire.cache : undefined;
 
         if (canResolve && metroRequire.resolve) {
           const modulePath = metroRequire.resolve("./PlayerBackgroundService");
@@ -1394,25 +1421,18 @@ export class PlayerService {
 
         PlayerBackgroundServiceModule = require("./PlayerBackgroundService");
       } catch (requireError) {
-        log.error(
-          "Failed to require PlayerBackgroundService module",
-          requireError as Error
-        );
+        log.error("Failed to require PlayerBackgroundService module", requireError as Error);
 
         // If we can't load the module, try to force a full re-registration
         log.warn("Attempting full TrackPlayer service re-registration");
-        TrackPlayer.registerPlaybackService(() =>
-          require("./PlayerBackgroundService")
-        );
+        TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
         await this.syncStoreWithTrackPlayer();
         return;
       }
 
       // Check if the reconnect function exists
-      const reconnectFn =
-        PlayerBackgroundServiceModule.reconnectBackgroundService;
-      const isInitialized =
-        PlayerBackgroundServiceModule.isBackgroundServiceInitialized?.();
+      const reconnectFn = PlayerBackgroundServiceModule.reconnectBackgroundService;
+      const isInitialized = PlayerBackgroundServiceModule.isBackgroundServiceInitialized?.();
 
       if (typeof reconnectFn === "function") {
         log.info(`Background service initialized: ${isInitialized}`);
@@ -1422,28 +1442,19 @@ export class PlayerService {
           log.warn(
             "Background service not initialized; forcing TrackPlayer service re-registration instead of reconnect"
           );
-          TrackPlayer.registerPlaybackService(() =>
-            require("./PlayerBackgroundService")
-          );
+          TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
         }
       } else {
         // Function doesn't exist (old version or incompatible module)
-        log.warn(
-          "reconnectBackgroundService function not found - forcing full re-registration"
-        );
+        log.warn("reconnectBackgroundService function not found - forcing full re-registration");
 
         // Shutdown if the function exists
-        if (
-          typeof PlayerBackgroundServiceModule.shutdownBackgroundService ===
-          "function"
-        ) {
+        if (typeof PlayerBackgroundServiceModule.shutdownBackgroundService === "function") {
           PlayerBackgroundServiceModule.shutdownBackgroundService();
         }
 
         // Force re-registration
-        TrackPlayer.registerPlaybackService(() =>
-          require("./PlayerBackgroundService")
-        );
+        TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
       }
 
       await configureTrackPlayer();
@@ -1459,10 +1470,7 @@ export class PlayerService {
       try {
         await this.syncStoreWithTrackPlayer();
       } catch (syncError) {
-        log.error(
-          "Failed to sync store after reconnection error",
-          syncError as Error
-        );
+        log.error("Failed to sync store after reconnection error", syncError as Error);
       }
     }
   }
