@@ -1,30 +1,30 @@
 module.exports = {
-  preset: 'jest-expo',
-  setupFiles: ['<rootDir>/src/__tests__/setup-before.js'],
-  setupFilesAfterEnv: ['expo-sqlite-mock/src/setup.ts', '<rootDir>/src/__tests__/setup.ts'],
+  preset: "jest-expo",
+  setupFiles: ["<rootDir>/src/__tests__/setup-before.js"],
+  setupFilesAfterEnv: ["expo-sqlite-mock/src/setup.ts", "<rootDir>/src/__tests__/setup.ts"],
   testTimeout: 10000,
   testMatch: [
-    '<rootDir>/src/**/__tests__/**/*.(test|spec).(ts|tsx|js|jsx)',
-    '<rootDir>/src/**/?(*.)(test|spec).(ts|tsx|js|jsx)'
+    "<rootDir>/src/**/__tests__/**/*.(test|spec).(ts|tsx|js|jsx)",
+    "<rootDir>/src/**/?(*.)(test|spec).(ts|tsx|js|jsx)",
   ],
   testPathIgnorePatterns: [
-    '<rootDir>/src/__tests__/setup.ts',
-    '<rootDir>/src/__tests__/fixtures/',
-    '<rootDir>/src/__tests__/utils/'
+    "<rootDir>/src/__tests__/setup.ts",
+    "<rootDir>/src/__tests__/fixtures/",
+    "<rootDir>/src/__tests__/utils/",
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|zustand|@kesha-antonov/react-native-background-downloader)'
+    "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|zustand|@kesha-antonov/react-native-background-downloader|uuid)",
   ],
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
+    "^@/(.*)$": "<rootDir>/src/$1",
   },
   collectCoverageFrom: [
-    'src/**/*.{ts,tsx}',
-    '!src/**/*.d.ts',
-    '!src/**/__tests__/**/*',
-    '!src/**/types.ts',
-    '!src/app/**/*',
+    "src/**/*.{ts,tsx}",
+    "!src/**/*.d.ts",
+    "!src/**/__tests__/**/*",
+    "!src/**/types.ts",
+    "!src/app/**/*",
   ],
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
+  coverageDirectory: "coverage",
+  coverageReporters: ["text", "lcov", "html"],
 };

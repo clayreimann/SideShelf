@@ -14,7 +14,7 @@
 import { useThemedStyles } from "@/lib/theme";
 import { useAppStore } from "@/stores/appStore";
 import { MenuView } from "@react-native-menu/menu";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
 const TIME_OPTIONS = [5, 10, 15, 30, 45, 60]; // minutes
@@ -71,7 +71,7 @@ export default function SleepTimerControl() {
     [setSleepTimer, setSleepTimerChapter, cancelSleepTimer]
   );
 
-  const getDisplayText = () => {
+  const getDisplayText = useCallback(() => {
     if (!sleepTimer.type || remainingTime === null) {
       return "Off";
     }
@@ -82,9 +82,33 @@ export default function SleepTimerControl() {
     }
 
     return formatTime(remainingTime);
-  };
+  }, [sleepTimer, remainingTime]);
 
   const isActive = sleepTimer.type !== null;
+
+  const actions = useMemo(
+    () =>
+      [
+        ...TIME_OPTIONS.map((minutes) => ({
+          id: minutes.toString(),
+          title: `${minutes} minutes`,
+        })),
+        {
+          id: "end-of-chapter",
+          title: "End of Current Chapter",
+        },
+        {
+          id: "end-of-next-chapter",
+          title: "End of Next Chapter",
+        },
+        {
+          id: "off",
+          title: "Turn Off",
+          attributes: { destructive: true },
+        },
+      ].reverse(),
+    [TIME_OPTIONS]
+  );
 
   return (
     <View style={{ alignItems: "center" }}>
@@ -93,42 +117,7 @@ export default function SleepTimerControl() {
         onPressAction={({ nativeEvent }) => {
           handleMenuAction(nativeEvent.event);
         }}
-        actions={[
-          {
-            id: "time-section",
-            title: "",
-            subtitle: "Timer Duration",
-            attributes: { disabled: true },
-          },
-          ...TIME_OPTIONS.map((minutes) => ({
-            id: minutes.toString(),
-            title: `${minutes} minutes`,
-          })),
-          {
-            id: "chapter-section",
-            title: "",
-            subtitle: "Chapter Boundary",
-            attributes: { disabled: true },
-          },
-          {
-            id: "end-of-chapter",
-            title: "End of Current Chapter",
-          },
-          {
-            id: "end-of-next-chapter",
-            title: "End of Next Chapter",
-          },
-          {
-            id: "control-section",
-            title: "",
-            attributes: { disabled: true },
-          },
-          {
-            id: "off",
-            title: "Turn Off",
-            attributes: { destructive: true },
-          },
-        ]}
+        actions={actions}
       >
         <View
           style={{
@@ -140,14 +129,7 @@ export default function SleepTimerControl() {
             backgroundColor: isActive ? "rgba(0, 122, 255, 0.2)" : "rgba(128, 128, 128, 0.2)",
           }}
         >
-          <Text
-            style={[
-              styles.text,
-              { fontSize: 14, fontWeight: "600", color: isActive ? "#007AFF" : undefined },
-            ]}
-          >
-            {getDisplayText()}
-          </Text>
+          <Text style={[styles.text, { fontSize: 14, fontWeight: "600" }]}>{getDisplayText()}</Text>
         </View>
       </MenuView>
     </View>

@@ -9,319 +9,328 @@
  */
 
 import {
-    getBackgroundServiceReconnectionEnabled,
-    getJumpBackwardInterval,
-    getJumpForwardInterval,
-    getSmartRewindEnabled,
-    setBackgroundServiceReconnectionEnabled,
-    setJumpBackwardInterval,
-    setJumpForwardInterval,
-    setSmartRewindEnabled
-} from '@/lib/appSettings';
-import { logger } from '@/lib/logger';
-import { configureTrackPlayer } from '@/lib/trackPlayerConfig';
-import type { SliceCreator } from '@/types/store';
+  getBackgroundServiceReconnectionEnabled,
+  getJumpBackwardInterval,
+  getJumpForwardInterval,
+  getSmartRewindEnabled,
+  setBackgroundServiceReconnectionEnabled,
+  setJumpBackwardInterval,
+  setJumpForwardInterval,
+  setSmartRewindEnabled,
+} from "@/lib/appSettings";
+import { logger } from "@/lib/logger";
+import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
+import type { SliceCreator } from "@/types/store";
 
 // Create cached sublogger for this slice
-const log = logger.forTag('SettingsSlice');
+const log = logger.forTag("SettingsSlice");
 
 /**
  * Settings slice state interface - scoped under 'settings' to avoid conflicts
  */
 export interface SettingsSliceState {
-    settings: {
-        /** Jump forward interval in seconds */
-        jumpForwardInterval: number;
-        /** Jump backward interval in seconds */
-        jumpBackwardInterval: number;
-        /** Whether smart rewind on resume is enabled */
-        smartRewindEnabled: boolean;
-        /** Whether background service auto-reconnection is enabled */
-        backgroundServiceReconnection: boolean;
-        /** Whether the slice has been initialized */
-        initialized: boolean;
-        /** Whether settings are currently being loaded */
-        isLoading: boolean;
-    };
+  settings: {
+    /** Jump forward interval in seconds */
+    jumpForwardInterval: number;
+    /** Jump backward interval in seconds */
+    jumpBackwardInterval: number;
+    /** Whether smart rewind on resume is enabled */
+    smartRewindEnabled: boolean;
+    /** Whether background service auto-reconnection is enabled */
+    backgroundServiceReconnection: boolean;
+    /** Whether the slice has been initialized */
+    initialized: boolean;
+    /** Whether settings are currently being loaded */
+    isLoading: boolean;
+  };
 }
 
 /**
  * Settings slice actions interface
  */
 export interface SettingsSliceActions {
-    // Public methods
-    /** Initialize the slice by loading settings from storage */
-    initializeSettings: () => Promise<void>;
-    /** Update jump forward interval */
-    updateJumpForwardInterval: (seconds: number) => Promise<void>;
-    /** Update jump backward interval */
-    updateJumpBackwardInterval: (seconds: number) => Promise<void>;
-    /** Toggle smart rewind on resume */
-    updateSmartRewindEnabled: (enabled: boolean) => Promise<void>;
-    /** Toggle background service reconnection */
-    updateBackgroundServiceReconnection: (enabled: boolean) => Promise<void>;
-    /** Reset the slice to initial state */
-    resetSettings: () => void;
+  // Public methods
+  /** Initialize the slice by loading settings from storage */
+  initializeSettings: () => Promise<void>;
+  /** Update jump forward interval */
+  updateJumpForwardInterval: (seconds: number) => Promise<void>;
+  /** Update jump backward interval */
+  updateJumpBackwardInterval: (seconds: number) => Promise<void>;
+  /** Toggle smart rewind on resume */
+  updateSmartRewindEnabled: (enabled: boolean) => Promise<void>;
+  /** Toggle background service reconnection */
+  updateBackgroundServiceReconnection: (enabled: boolean) => Promise<void>;
+  /** Reset the slice to initial state */
+  resetSettings: () => void;
 }
 
 /**
  * Combined settings slice interface
  */
-export interface SettingsSlice extends SettingsSliceState, SettingsSliceActions { }
+export interface SettingsSlice extends SettingsSliceState, SettingsSliceActions {}
 
 /**
  * Default settings values
  */
 const DEFAULT_SETTINGS = {
-    jumpForwardInterval: 30,
-    jumpBackwardInterval: 15,
-    smartRewindEnabled: true,
-    backgroundServiceReconnection: true,
+  jumpForwardInterval: 30,
+  jumpBackwardInterval: 15,
+  smartRewindEnabled: true,
+  backgroundServiceReconnection: true,
 };
 
 /**
  * Initial state
  */
 const initialState: SettingsSliceState = {
-    settings: {
-        ...DEFAULT_SETTINGS,
-        initialized: false,
-        isLoading: false,
-    },
+  settings: {
+    ...DEFAULT_SETTINGS,
+    initialized: false,
+    isLoading: false,
+  },
 };
 
 /**
  * Create the settings slice
  */
 export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
-    // Initial state
-    ...initialState,
+  // Initial state
+  ...initialState,
 
-    /**
-     * Initialize the slice by loading settings from storage
-     */
-    initializeSettings: async () => {
-        const state = get();
+  /**
+   * Initialize the slice by loading settings from storage
+   */
+  initializeSettings: async () => {
+    const state = get();
 
-        if (state.settings.initialized) {
-            log.debug('Settings already initialized, skipping');
-            return;
-        }
+    if (state.settings.initialized) {
+      log.debug("Settings already initialized, skipping");
+      return;
+    }
 
-        log.info('Initializing settings slice...');
+    log.info("Initializing settings slice...");
 
-        set((state: SettingsSlice) => ({
-            ...state,
-            settings: {
-                ...state.settings,
-                isLoading: true,
-            },
-        }));
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        isLoading: true,
+      },
+    }));
 
-        try {
-            // Load all settings from storage in parallel
-            const [
-                jumpForward,
-                jumpBackward,
-                smartRewind,
-                backgroundReconnection,
-            ] = await Promise.all([
-                getJumpForwardInterval(),
-                getJumpBackwardInterval(),
-                getSmartRewindEnabled(),
-                getBackgroundServiceReconnectionEnabled(),
-            ]);
+    try {
+      // Load all settings from storage in parallel
+      const [jumpForward, jumpBackward, smartRewind, backgroundReconnection] = await Promise.all([
+        getJumpForwardInterval(),
+        getJumpBackwardInterval(),
+        getSmartRewindEnabled(),
+        getBackgroundServiceReconnectionEnabled(),
+      ]);
 
-            set((state: SettingsSlice) => ({
-                ...state,
-                settings: {
-                    jumpForwardInterval: jumpForward,
-                    jumpBackwardInterval: jumpBackward,
-                    smartRewindEnabled: smartRewind,
-                    backgroundServiceReconnection: backgroundReconnection,
-                    initialized: true,
-                    isLoading: false,
-                },
-            }));
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          jumpForwardInterval: jumpForward,
+          jumpBackwardInterval: jumpBackward,
+          smartRewindEnabled: smartRewind,
+          backgroundServiceReconnection: backgroundReconnection,
+          initialized: true,
+          isLoading: false,
+        },
+      }));
 
-            log.info(`Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, backgroundReconnection=${backgroundReconnection}`);
-        } catch (error) {
-            log.error('Failed to load settings', error as Error);
+      log.info(
+        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, backgroundReconnection=${backgroundReconnection}`
+      );
+    } catch (error) {
+      log.error("Failed to load settings", error as Error);
 
-            // Use defaults on error
-            set((state: SettingsSlice) => ({
-                ...state,
-                settings: {
-                    ...DEFAULT_SETTINGS,
-                    initialized: true,
-                    isLoading: false,
-                },
-            }));
-        }
-    },
+      // Use defaults on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          initialized: true,
+          isLoading: false,
+        },
+      }));
+    }
+  },
 
-    /**
-     * Update jump forward interval
-     */
-    updateJumpForwardInterval: async (seconds: number) => {
-        log.info(`Updating jump forward interval to ${seconds}s`);
+  /**
+   * Update jump forward interval
+   */
+  updateJumpForwardInterval: async (seconds: number) => {
+    log.info(`Updating jump forward interval to ${seconds}s`);
 
-        // Optimistic update
-        set((state: SettingsSlice) => ({
-            ...state,
-            settings: {
-                ...state.settings,
-                jumpForwardInterval: seconds,
-            },
-        }));
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.jumpForwardInterval;
 
-        try {
-            // Persist to storage
-            await setJumpForwardInterval(seconds);
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        jumpForwardInterval: seconds,
+      },
+    }));
 
-            // Reconfigure TrackPlayer with new interval
-            await configureTrackPlayer();
+    try {
+      // Persist to storage
+      await setJumpForwardInterval(seconds);
 
-            log.info(`Jump forward interval updated to ${seconds}s`);
-        } catch (error) {
-            log.error('Failed to update jump forward interval', error as Error);
+      // Reconfigure TrackPlayer with new interval
+      await configureTrackPlayer();
 
-            // Revert on error
-            const previousValue = get().settings.jumpForwardInterval;
-            set((state: SettingsSlice) => ({
-                ...state,
-                settings: {
-                    ...state.settings,
-                    jumpForwardInterval: previousValue,
-                },
-            }));
+      log.info(`Jump forward interval updated to ${seconds}s`);
+    } catch (error) {
+      log.error("Failed to update jump forward interval", error as Error);
 
-            throw error;
-        }
-    },
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          jumpForwardInterval: previousValue,
+        },
+      }));
 
-    /**
-     * Update jump backward interval
-     */
-    updateJumpBackwardInterval: async (seconds: number) => {
-        log.info(`Updating jump backward interval to ${seconds}s`);
+      throw error;
+    }
+  },
 
-        // Optimistic update
-        set((state: SettingsSlice) => ({
-            ...state,
-            settings: {
-                ...state.settings,
-                jumpBackwardInterval: seconds,
-            },
-        }));
+  /**
+   * Update jump backward interval
+   */
+  updateJumpBackwardInterval: async (seconds: number) => {
+    log.info(`Updating jump backward interval to ${seconds}s`);
 
-        try {
-            // Persist to storage
-            await setJumpBackwardInterval(seconds);
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.jumpBackwardInterval;
 
-            // Reconfigure TrackPlayer with new interval
-            await configureTrackPlayer();
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        jumpBackwardInterval: seconds,
+      },
+    }));
 
-            log.info(`Jump backward interval updated to ${seconds}s`);
-        } catch (error) {
-            log.error('Failed to update jump backward interval', error as Error);
+    try {
+      // Persist to storage
+      await setJumpBackwardInterval(seconds);
 
-            // Revert on error
-            const previousValue = get().settings.jumpBackwardInterval;
-            set((state: SettingsSlice) => ({
-                ...state,
-                settings: {
-                    ...state.settings,
-                    jumpBackwardInterval: previousValue,
-                },
-            }));
+      // Reconfigure TrackPlayer with new interval
+      await configureTrackPlayer();
 
-            throw error;
-        }
-    },
+      log.info(`Jump backward interval updated to ${seconds}s`);
+    } catch (error) {
+      log.error("Failed to update jump backward interval", error as Error);
 
-    /**
-     * Toggle smart rewind on resume
-     */
-    updateSmartRewindEnabled: async (enabled: boolean) => {
-        log.info(`${enabled ? 'Enabling' : 'Disabling'} smart rewind`);
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          jumpBackwardInterval: previousValue,
+        },
+      }));
 
-        // Optimistic update
-        set((state: SettingsSlice) => ({
-            ...state,
-            settings: {
-                ...state.settings,
-                smartRewindEnabled: enabled,
-            },
-        }));
+      throw error;
+    }
+  },
 
-        try {
-            // Persist to storage
-            await setSmartRewindEnabled(enabled);
+  /**
+   * Toggle smart rewind on resume
+   */
+  updateSmartRewindEnabled: async (enabled: boolean) => {
+    log.info(`${enabled ? "Enabling" : "Disabling"} smart rewind`);
 
-            log.info(`Smart rewind ${enabled ? 'enabled' : 'disabled'}`);
-        } catch (error) {
-            log.error('Failed to update smart rewind setting', error as Error);
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.smartRewindEnabled;
 
-            // Revert on error
-            const previousValue = get().settings.smartRewindEnabled;
-            set((state: SettingsSlice) => ({
-                ...state,
-                settings: {
-                    ...state.settings,
-                    smartRewindEnabled: previousValue,
-                },
-            }));
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        smartRewindEnabled: enabled,
+      },
+    }));
 
-            throw error;
-        }
-    },
+    try {
+      // Persist to storage
+      await setSmartRewindEnabled(enabled);
 
-    /**
-     * Toggle background service reconnection
-     */
-    updateBackgroundServiceReconnection: async (enabled: boolean) => {
-        log.info(`${enabled ? 'Enabling' : 'Disabling'} background service reconnection`);
+      log.info(`Smart rewind ${enabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update smart rewind setting", error as Error);
 
-        // Optimistic update
-        set((state: SettingsSlice) => ({
-            ...state,
-            settings: {
-                ...state.settings,
-                backgroundServiceReconnection: enabled,
-            },
-        }));
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          smartRewindEnabled: previousValue,
+        },
+      }));
 
-        try {
-            // Persist to storage
-            await setBackgroundServiceReconnectionEnabled(enabled);
+      throw error;
+    }
+  },
 
-            log.info(`Background service reconnection ${enabled ? 'enabled' : 'disabled'}`);
-        } catch (error) {
-            log.error('Failed to update background service reconnection setting', error as Error);
+  /**
+   * Toggle background service reconnection
+   */
+  updateBackgroundServiceReconnection: async (enabled: boolean) => {
+    log.info(`${enabled ? "Enabling" : "Disabling"} background service reconnection`);
 
-            // Revert on error
-            const previousValue = get().settings.backgroundServiceReconnection;
-            set((state: SettingsSlice) => ({
-                ...state,
-                settings: {
-                    ...state.settings,
-                    backgroundServiceReconnection: previousValue,
-                },
-            }));
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.backgroundServiceReconnection;
 
-            throw error;
-        }
-    },
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        backgroundServiceReconnection: enabled,
+      },
+    }));
 
-    /**
-     * Reset the slice to initial state
-     */
-    resetSettings: () => {
-        log.info('Resetting settings slice');
-        set((state: SettingsSlice) => ({
-            ...state,
-            settings: initialState.settings,
-        }));
-    },
+    try {
+      // Persist to storage
+      await setBackgroundServiceReconnectionEnabled(enabled);
+
+      log.info(`Background service reconnection ${enabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update background service reconnection setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          backgroundServiceReconnection: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Reset the slice to initial state
+   */
+  resetSettings: () => {
+    log.info("Resetting settings slice");
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        initialized: false,
+        isLoading: false,
+      },
+    }));
+  },
 });

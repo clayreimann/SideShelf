@@ -138,15 +138,15 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
 
-    const store = get();
     const restored: string[] = [];
     const notFound: string[] = [];
 
     // Restore from AsyncStorage first
-    if (!store.player.currentTrack) {
+    const currentState = get();
+    if (!currentState.player.currentTrack) {
       const track = await getAsyncItem(ASYNC_KEYS.currentTrack);
       if (track) {
-        store._setCurrentTrack(track);
+        get()._setCurrentTrack(track);
         restored.push(`currentTrack`);
       } else {
         notFound.push(`currentTrack`);
@@ -155,7 +155,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     const playbackRate = await getAsyncItem(ASYNC_KEYS.playbackRate);
     if (playbackRate !== null && playbackRate !== undefined) {
-      store._setPlaybackRate(playbackRate);
+      get()._setPlaybackRate(playbackRate);
       restored.push(`playbackRate=${playbackRate}`);
     } else {
       notFound.push(`playbackRate`);
@@ -163,7 +163,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     const volume = await getAsyncItem(ASYNC_KEYS.volume);
     if (volume !== null && volume !== undefined) {
-      store._setVolume(volume);
+      get()._setVolume(volume);
       restored.push(`volume=${volume}`);
     } else {
       notFound.push(`volume`);
@@ -171,7 +171,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     const asyncStoragePosition = await getAsyncItem(ASYNC_KEYS.position);
     if (asyncStoragePosition !== null && asyncStoragePosition !== undefined) {
-      store.updatePosition(asyncStoragePosition);
+      get().updatePosition(asyncStoragePosition);
       restored.push(`position=${formatTime(asyncStoragePosition)}s`);
     } else {
       notFound.push(`position`);
@@ -179,7 +179,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     const isPlaying = await getAsyncItem(ASYNC_KEYS.isPlaying);
     if (isPlaying !== null && isPlaying !== undefined) {
-      store.updatePlayingState(isPlaying);
+      get().updatePlayingState(isPlaying);
       restored.push(`isPlaying=${isPlaying}`);
     } else {
       notFound.push(`isPlaying`);
@@ -187,7 +187,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     const currentPlaySessionId = await getAsyncItem(ASYNC_KEYS.currentPlaySessionId);
     if (currentPlaySessionId !== null && currentPlaySessionId !== undefined) {
-      store._setPlaySessionId(currentPlaySessionId);
+      get()._setPlaySessionId(currentPlaySessionId);
       restored.push(`currentPlaySessionId`);
     } else {
       notFound.push(`currentPlaySessionId`);
@@ -244,7 +244,9 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         if (!user?.id) {
           dbReconciliationSummary.push("skipped (user not found)");
         } else {
-          const libraryItemId = store.player.currentTrack?.libraryItemId;
+          // Get fresh state reference to access currentTrack
+          const freshState = get();
+          const libraryItemId = freshState.player.currentTrack?.libraryItemId;
           if (!libraryItemId) {
             dbReconciliationSummary.push("skipped (no currentTrack)");
           } else {
@@ -253,16 +255,21 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
             if (dbSession) {
               dbReconciliationSummary.push(`found session for ${libraryItemId}`);
 
+              // Get fresh state for position comparison
+              const stateBeforeUpdate = get();
+
               // Check if position should be updated from DB session
               // DB session position is authoritative
-              if (dbSession.currentTime !== store.player.position) {
-                const positionDiff = Math.abs(dbSession.currentTime - store.player.position);
+              if (dbSession.currentTime !== stateBeforeUpdate.player.position) {
+                const positionDiff = Math.abs(
+                  dbSession.currentTime - stateBeforeUpdate.player.position
+                );
                 if (positionDiff > 1) {
                   // Only update if difference is significant (>1s)
                   dbReconciliationSummary.push(
-                    `position updated: ${formatTime(store.player.position)}s -> ${formatTime(dbSession.currentTime)}s`
+                    `position updated: ${formatTime(stateBeforeUpdate.player.position)}s -> ${formatTime(dbSession.currentTime)}s`
                   );
-                  store.updatePosition(dbSession.currentTime);
+                  get().updatePosition(dbSession.currentTime);
                 } else {
                   dbReconciliationSummary.push(`position match (diff=${positionDiff}s)`);
                 }
@@ -271,7 +278,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
               }
 
               // Check if currentTrack should be updated from DB session
-              const currentTrackLibraryItemId = store.player.currentTrack?.libraryItemId;
+              const currentTrackLibraryItemId = freshState.player.currentTrack?.libraryItemId;
               if (
                 !currentTrackLibraryItemId ||
                 currentTrackLibraryItemId !== dbSession.libraryItemId
@@ -302,13 +309,14 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     // Try to apply position to TrackPlayer if possible
     // This is a best-effort attempt - if TrackPlayer isn't ready, it will fail silently
-    if (store.player.position > 0) {
+    const stateForTrackPlayer = get();
+    if (stateForTrackPlayer.player.position > 0) {
       try {
         const queue = await TrackPlayer.getQueue();
         if (queue.length > 0) {
-          await TrackPlayer.seekTo(store.player.position);
+          await TrackPlayer.seekTo(stateForTrackPlayer.player.position);
           log.info(
-            `Applied restored position to TrackPlayer: ${formatTime(store.player.position)}s`
+            `Applied restored position to TrackPlayer: ${formatTime(stateForTrackPlayer.player.position)}s`
           );
         }
       } catch (error) {
@@ -327,8 +335,9 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     }));
 
     // Now update the chapter with the correct position
-    if (store.player.currentTrack && store.player.position > 0) {
-      store._updateCurrentChapter(store.player.position);
+    const finalState = get();
+    if (finalState.player.currentTrack && finalState.player.position > 0) {
+      finalState._updateCurrentChapter(finalState.player.position);
     }
   },
   // Initial scoped state

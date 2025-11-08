@@ -103,7 +103,11 @@
   },
   "private": true,
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,json,md}": [
+    "*.{js,jsx,ts,tsx}": [
+      "prettier --write",
+      "jest --bail --findRelatedTests --passWithNoTests"
+    ],
+    "*.{json,md}": [
       "prettier --write"
     ]
   }

@@ -2,76 +2,81 @@
  * Tests for library slice
  */
 
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { create } from 'zustand';
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { create } from "zustand";
 import {
-    mockLibrariesResponse,
-    mockLibraryRow,
-    mockPodcastLibraryRow
-} from '../../../__tests__/fixtures';
-import { createTestDb, TestDatabase } from '../../../__tests__/utils/testDb';
-import { DEFAULT_SORT_CONFIG, STORAGE_KEYS } from '../../utils';
-import { createLibrarySlice, LibrarySlice } from '../librarySlice';
+  mockLibrariesResponse,
+  mockLibraryRow,
+  mockPodcastLibraryRow,
+} from "../../../__tests__/fixtures";
+import { createTestDb, TestDatabase } from "../../../__tests__/utils/testDb";
+import { DEFAULT_SORT_CONFIG, STORAGE_KEYS } from "../../utils";
+import { createLibrarySlice, LibrarySlice } from "../librarySlice";
 
 // Mock AsyncStorage
-jest.mock('@react-native-async-storage/async-storage', () => ({
+jest.mock("@react-native-async-storage/async-storage", () => ({
   getItem: jest.fn(),
   setItem: jest.fn(),
   removeItem: jest.fn(),
 }));
 
 // Mock API endpoints
-jest.mock('@/lib/api/endpoints', () => ({
+jest.mock("@/lib/api/endpoints", () => ({
   fetchLibraries: jest.fn(),
   fetchLibraryItems: jest.fn(),
+  fetchAllLibraryItems: jest.fn(),
 }));
 
 // Mock database helpers
-jest.mock('@/db/helpers/libraries', () => ({
+jest.mock("@/db/helpers/libraries", () => ({
   getAllLibraries: jest.fn(),
   getLibraryById: jest.fn(),
   marshalLibrariesFromResponse: jest.fn(),
   upsertLibraries: jest.fn(),
 }));
 
-jest.mock('@/db/helpers/libraryItems', () => ({
+jest.mock("@/db/helpers/libraryItems", () => ({
   getLibraryItemsForList: jest.fn(),
   marshalLibraryItemsFromResponse: jest.fn(),
   transformItemsToDisplayFormat: jest.fn(),
   upsertLibraryItems: jest.fn(),
 }));
 
-jest.mock('@/db/helpers/mediaMetadata', () => ({
+jest.mock("@/db/helpers/mediaMetadata", () => ({
   cacheCoversForLibraryItems: jest.fn(),
   upsertBooksMetadata: jest.fn(),
   upsertPodcastsMetadata: jest.fn(),
 }));
 
-describe('LibrarySlice', () => {
+describe("LibrarySlice", () => {
   let testDb: TestDatabase;
   let store: ReturnType<typeof create<LibrarySlice>>;
 
   // Get mocked functions for type safety
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
-  const { fetchLibraries, fetchLibraryItems } = require('@/lib/api/endpoints');
+  const {
+    fetchLibraries,
+    fetchLibraryItems,
+    fetchAllLibraryItems,
+  } = require("@/lib/api/endpoints");
   const {
     getAllLibraries,
     getLibraryById,
     marshalLibrariesFromResponse,
     upsertLibraries,
-  } = require('@/db/helpers/libraries');
+  } = require("@/db/helpers/libraries");
   const {
     getLibraryItemsForList,
     marshalLibraryItemsFromResponse,
     transformItemsToDisplayFormat,
     upsertLibraryItems,
-  } = require('@/db/helpers/libraryItems');
+  } = require("@/db/helpers/libraryItems");
   const {
     cacheCoversForLibraryItems,
     upsertBooksMetadata,
     upsertPodcastsMetadata,
-  } = require('@/db/helpers/mediaMetadata');
+  } = require("@/db/helpers/mediaMetadata");
 
   beforeEach(async () => {
     testDb = await createTestDb();
@@ -110,8 +115,8 @@ describe('LibrarySlice', () => {
     await testDb.cleanup();
   });
 
-  describe('Initial State', () => {
-    it('should have correct initial state', () => {
+  describe("Initial State", () => {
+    it("should have correct initial state", () => {
       const state = store.getState();
 
       expect(state.library).toEqual({
@@ -133,12 +138,12 @@ describe('LibrarySlice', () => {
     });
   });
 
-  describe('initializeLibrarySlice', () => {
-    it('should initialize slice when not already initialized', async () => {
+  describe("initializeLibrarySlice", () => {
+    it("should initialize slice when not already initialized", async () => {
       // Mock storage data
       mockedAsyncStorage.getItem
-        .mockResolvedValueOnce('lib-1') // selectedLibraryId
-        .mockResolvedValueOnce(JSON.stringify({ field: 'author', direction: 'asc' })); // sortConfig
+        .mockResolvedValueOnce("lib-1") // selectedLibraryId
+        .mockResolvedValueOnce(JSON.stringify({ field: "author", direction: "asc" })); // sortConfig
 
       // Mock database data
       getAllLibraries.mockResolvedValue([mockLibraryRow, mockPodcastLibraryRow]);
@@ -150,17 +155,17 @@ describe('LibrarySlice', () => {
       const state = store.getState();
       expect(state.library.initialized).toBe(true);
       expect(state.library.ready).toBe(true);
-      expect(state.library.selectedLibraryId).toBe('lib-1');
+      expect(state.library.selectedLibraryId).toBe("lib-1");
       expect(state.library.libraries).toEqual([mockLibraryRow, mockPodcastLibraryRow]);
-      expect(state.library.sortConfig).toEqual({ field: 'author', direction: 'asc' });
+      expect(state.library.sortConfig).toEqual({ field: "author", direction: "asc" });
       expect(state.library.loading.isInitializing).toBe(false);
     });
 
-    it('should not reinitialize if already initialized', async () => {
+    it("should not reinitialize if already initialized", async () => {
       // Set slice as already initialized
-      store.setState(state => ({
+      store.setState((state) => ({
         ...state,
-        library: { ...state.library, initialized: true }
+        library: { ...state.library, initialized: true },
       }));
 
       await store.getState().initializeLibrarySlice(true, true);
@@ -169,8 +174,8 @@ describe('LibrarySlice', () => {
       expect(mockedAsyncStorage.getItem).not.toHaveBeenCalled();
     });
 
-    it('should handle storage loading errors gracefully', async () => {
-      mockedAsyncStorage.getItem.mockRejectedValue(new Error('Storage error'));
+    it("should handle storage loading errors gracefully", async () => {
+      mockedAsyncStorage.getItem.mockRejectedValue(new Error("Storage error"));
 
       await store.getState().initializeLibrarySlice(true, true);
 
@@ -179,110 +184,122 @@ describe('LibrarySlice', () => {
       // Should still complete initialization despite storage error
     });
 
-    it('should set ready state based on API and DB status', async () => {
+    it("should set ready state based on API and DB status", async () => {
+      // Test case 1: DB only (not ready)
       await store.getState().initializeLibrarySlice(false, true);
       expect(store.getState().library.ready).toBe(false);
 
+      // Reset for next test
+      store.getState().resetLibrary();
+
+      // Test case 2: API only (not ready)
       await store.getState().initializeLibrarySlice(true, false);
       expect(store.getState().library.ready).toBe(false);
 
+      // Reset for next test
+      store.getState().resetLibrary();
+
+      // Test case 3: Both API and DB (ready)
       await store.getState().initializeLibrarySlice(true, true);
       expect(store.getState().library.ready).toBe(true);
     });
   });
 
-  describe('selectLibrary', () => {
+  describe("selectLibrary", () => {
     beforeEach(async () => {
       // Initialize the slice first
       getAllLibraries.mockResolvedValue([mockLibraryRow]);
       await store.getState().initializeLibrarySlice(true, true);
     });
 
-    it('should select library from cache when fetchFromApi is false', async () => {
+    it("should select library from cache when fetchFromApi is false", async () => {
       getLibraryById.mockResolvedValue(mockLibraryRow);
       getLibraryItemsForList.mockResolvedValue([]);
       transformItemsToDisplayFormat.mockReturnValue([]);
 
-      await store.getState().selectLibrary('lib-1', false);
+      await store.getState().selectLibrary("lib-1", false);
 
       const state = store.getState();
-      expect(state.library.selectedLibraryId).toBe('lib-1');
+      expect(state.library.selectedLibraryId).toBe("lib-1");
       expect(state.library.selectedLibrary).toEqual(mockLibraryRow);
-      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(STORAGE_KEYS.selectedLibraryId, 'lib-1');
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        STORAGE_KEYS.selectedLibraryId,
+        "lib-1"
+      );
       expect(fetchLibraryItems).not.toHaveBeenCalled();
     });
 
-    it('should fetch from API when fetchFromApi is true', async () => {
+    it("should fetch from API when fetchFromApi is true", async () => {
       getLibraryById.mockResolvedValue(mockLibraryRow);
       getLibraryItemsForList.mockResolvedValue([]);
       transformItemsToDisplayFormat.mockReturnValue([]);
-      fetchLibraryItems.mockResolvedValue({ results: [] });
+      fetchAllLibraryItems.mockResolvedValue([]);
 
-      await store.getState().selectLibrary('lib-1', true);
+      await store.getState().selectLibrary("lib-1", true);
 
-      expect(fetchLibraryItems).toHaveBeenCalledWith('lib-1');
+      expect(fetchAllLibraryItems).toHaveBeenCalledWith("lib-1");
     });
 
-    it('should not select library if not ready', async () => {
-      // Set slice as not ready
-      store.setState(state => ({
+    it("should not select library if not ready", async () => {
+      // Set slice as not ready and clear selected library
+      store.setState((state) => ({
         ...state,
-        library: { ...state.library, ready: false }
+        library: { ...state.library, ready: false, selectedLibraryId: null, selectedLibrary: null },
       }));
 
-      await store.getState().selectLibrary('lib-1');
+      await store.getState().selectLibrary("lib-1");
 
       const state = store.getState();
       expect(state.library.selectedLibraryId).toBeNull();
     });
 
-    it('should not reselect same library unless fetchFromApi is true', async () => {
+    it("should not reselect same library unless fetchFromApi is true", async () => {
       // Set library as already selected
-      store.setState(state => ({
+      store.setState((state) => ({
         ...state,
-        library: { ...state.library, selectedLibraryId: 'lib-1' }
+        library: { ...state.library, selectedLibraryId: "lib-1" },
       }));
 
-      await store.getState().selectLibrary('lib-1', false);
+      await store.getState().selectLibrary("lib-1", false);
 
       expect(getLibraryById).not.toHaveBeenCalled();
     });
   });
 
-  describe('refresh', () => {
+  describe("refresh", () => {
     beforeEach(async () => {
       getAllLibraries.mockResolvedValue([mockLibraryRow]);
       await store.getState().initializeLibrarySlice(true, true);
     });
 
-    it('should refresh libraries and items', async () => {
+    it("should refresh libraries and items", async () => {
       // Set a selected library
-      store.setState(state => ({
+      store.setState((state) => ({
         ...state,
-        library: { ...state.library, selectedLibraryId: 'lib-1', selectedLibrary: mockLibraryRow }
+        library: { ...state.library, selectedLibraryId: "lib-1", selectedLibrary: mockLibraryRow },
       }));
 
       marshalLibrariesFromResponse.mockReturnValue([mockLibraryRow]);
       getAllLibraries.mockResolvedValue([mockLibraryRow]);
-      fetchLibraryItems.mockResolvedValue({ results: [] });
+      fetchAllLibraryItems.mockResolvedValue([]);
 
       await store.getState().refresh();
 
       expect(fetchLibraries).toHaveBeenCalled();
-      expect(fetchLibraryItems).toHaveBeenCalledWith('lib-1');
+      expect(fetchAllLibraryItems).toHaveBeenCalledWith("lib-1");
     });
 
-    it('should not refresh items if no library is selected', async () => {
+    it("should not refresh items if no library is selected", async () => {
       await store.getState().refresh();
 
       expect(fetchLibraries).toHaveBeenCalled();
       expect(fetchLibraryItems).not.toHaveBeenCalled();
     });
 
-    it('should not refresh if not ready', async () => {
-      store.setState(state => ({
+    it("should not refresh if not ready", async () => {
+      store.setState((state) => ({
         ...state,
-        library: { ...state.library, ready: false }
+        library: { ...state.library, ready: false },
       }));
 
       await store.getState().refresh();
@@ -291,13 +308,13 @@ describe('LibrarySlice', () => {
     });
   });
 
-  describe('setSortConfig', () => {
+  describe("setSortConfig", () => {
     beforeEach(async () => {
       await store.getState().initializeLibrarySlice(true, true);
     });
 
-    it('should update sort config and persist to storage', async () => {
-      const newSortConfig = { field: 'author' as const, direction: 'asc' as const };
+    it("should update sort config and persist to storage", async () => {
+      const newSortConfig = { field: "author" as const, direction: "asc" as const };
 
       await store.getState().setSortConfig(newSortConfig);
 
@@ -309,9 +326,9 @@ describe('LibrarySlice', () => {
       );
     });
 
-    it('should handle storage errors gracefully', async () => {
-      mockedAsyncStorage.setItem.mockRejectedValue(new Error('Storage error'));
-      const newSortConfig = { field: 'author' as const, direction: 'asc' as const };
+    it("should handle storage errors gracefully", async () => {
+      mockedAsyncStorage.setItem.mockRejectedValue(new Error("Storage error"));
+      const newSortConfig = { field: "author" as const, direction: "asc" as const };
 
       await expect(store.getState().setSortConfig(newSortConfig)).resolves.not.toThrow();
 
@@ -320,18 +337,18 @@ describe('LibrarySlice', () => {
     });
   });
 
-  describe('resetLibrary', () => {
-    it('should reset library to initial state', async () => {
+  describe("resetLibrary", () => {
+    it("should reset library to initial state", async () => {
       // Modify the state first
-      store.setState(state => ({
+      store.setState((state) => ({
         ...state,
         library: {
           ...state.library,
-          selectedLibraryId: 'lib-1',
+          selectedLibraryId: "lib-1",
           libraries: [mockLibraryRow],
           initialized: true,
           ready: true,
-        }
+        },
       }));
 
       store.getState().resetLibrary();
@@ -344,34 +361,34 @@ describe('LibrarySlice', () => {
     });
   });
 
-  describe('Loading States', () => {
+  describe("Loading States", () => {
     beforeEach(async () => {
       getAllLibraries.mockResolvedValue([mockLibraryRow]);
       await store.getState().initializeLibrarySlice(true, true);
     });
 
-    it('should set loading states during library selection', async () => {
+    it("should set loading states during library selection", async () => {
       let loadingState: boolean | undefined;
 
-      // Mock to capture loading state
+      // Mock to capture loading state (use a different library ID to avoid early return)
       getLibraryById.mockImplementation(async () => {
         loadingState = store.getState().library.loading.isSelectingLibrary;
-        return mockLibraryRow;
+        return { ...mockLibraryRow, id: "lib-2" };
       });
 
-      await store.getState().selectLibrary('lib-1');
+      await store.getState().selectLibrary("lib-2");
 
       expect(loadingState).toBe(true);
       expect(store.getState().library.loading.isSelectingLibrary).toBe(false);
     });
 
-    it('should set loading states during refresh', async () => {
+    it("should set loading states during refresh", async () => {
       let librariesLoadingState: boolean | undefined;
       let itemsLoadingState: boolean | undefined;
 
-      store.setState(state => ({
+      store.setState((state) => ({
         ...state,
-        library: { ...state.library, selectedLibraryId: 'lib-1', selectedLibrary: mockLibraryRow }
+        library: { ...state.library, selectedLibraryId: "lib-1", selectedLibrary: mockLibraryRow },
       }));
 
       fetchLibraries.mockImplementation(async () => {
@@ -379,9 +396,9 @@ describe('LibrarySlice', () => {
         return mockLibrariesResponse;
       });
 
-      fetchLibraryItems.mockImplementation(async () => {
+      fetchAllLibraryItems.mockImplementation(async () => {
         itemsLoadingState = store.getState().library.loading.isLoadingItems;
-        return { results: [] };
+        return [];
       });
 
       await store.getState().refresh();
@@ -393,14 +410,14 @@ describe('LibrarySlice', () => {
     });
   });
 
-  describe('Error Handling', () => {
+  describe("Error Handling", () => {
     beforeEach(async () => {
       getAllLibraries.mockResolvedValue([mockLibraryRow]);
       await store.getState().initializeLibrarySlice(true, true);
     });
 
-    it('should handle API errors during refresh gracefully', async () => {
-      fetchLibraries.mockRejectedValue(new Error('API Error'));
+    it("should handle API errors during refresh gracefully", async () => {
+      fetchLibraries.mockRejectedValue(new Error("API Error"));
       getAllLibraries.mockResolvedValue([mockLibraryRow]); // Fallback to database
 
       await expect(store.getState().refresh()).resolves.not.toThrow();
@@ -410,10 +427,10 @@ describe('LibrarySlice', () => {
       expect(state.library.libraries).toEqual([mockLibraryRow]);
     });
 
-    it('should handle database errors during library selection', async () => {
-      getLibraryById.mockRejectedValue(new Error('Database Error'));
+    it("should handle database errors during library selection", async () => {
+      getLibraryById.mockRejectedValue(new Error("Database Error"));
 
-      await expect(store.getState().selectLibrary('lib-1')).resolves.not.toThrow();
+      await expect(store.getState().selectLibrary("lib-1")).resolves.not.toThrow();
 
       // Loading state should be reset even after error
       const state = store.getState();
@@ -421,27 +438,27 @@ describe('LibrarySlice', () => {
     });
   });
 
-  describe('Private Methods', () => {
+  describe("Private Methods", () => {
     beforeEach(async () => {
       await store.getState().initializeLibrarySlice(true, true);
     });
 
-    it('should load settings from storage correctly', async () => {
+    it("should load settings from storage correctly", async () => {
       mockedAsyncStorage.getItem
-        .mockResolvedValueOnce('lib-test') // selectedLibraryId
-        .mockResolvedValueOnce(JSON.stringify({ field: 'publishedYear', direction: 'desc' })); // sortConfig
+        .mockResolvedValueOnce("lib-test") // selectedLibraryId
+        .mockResolvedValueOnce(JSON.stringify({ field: "publishedYear", direction: "desc" })); // sortConfig
 
       await (store.getState() as any)._loadLibrarySettingsFromStorage();
 
       const state = store.getState();
-      expect(state.library.selectedLibraryId).toBe('lib-test');
-      expect(state.library.sortConfig).toEqual({ field: 'publishedYear', direction: 'desc' });
+      expect(state.library.selectedLibraryId).toBe("lib-test");
+      expect(state.library.sortConfig).toEqual({ field: "publishedYear", direction: "desc" });
     });
 
-    it('should handle malformed sort config in storage', async () => {
+    it("should handle malformed sort config in storage", async () => {
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce(null) // selectedLibraryId
-        .mockResolvedValueOnce('invalid json'); // sortConfig
+        .mockResolvedValueOnce("invalid json"); // sortConfig
 
       await (store.getState() as any)._loadLibrarySettingsFromStorage();
 
@@ -449,7 +466,7 @@ describe('LibrarySlice', () => {
       expect(state.library.sortConfig).toEqual(DEFAULT_SORT_CONFIG); // Should remain unchanged
     });
 
-    it('should set ready state correctly', () => {
+    it("should set ready state correctly", () => {
       const setReady = (store.getState() as any)._setLibraryReady;
 
       expect(setReady(true, true)).toBe(true);
