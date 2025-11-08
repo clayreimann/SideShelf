@@ -6,7 +6,7 @@
  * Combines functionality from SessionTrackingService and ProgressSyncService.
  */
 
-import { getLibraryItemById } from '@/db/helpers/libraryItems';
+import { getLibraryItemById } from "@/db/helpers/libraryItems";
 import {
   endListeningSession,
   endStaleListeningSession,
@@ -20,21 +20,32 @@ import {
   startListeningSession,
   updateServerSessionId,
   updateSessionListeningTime,
-  updateSessionProgress
-} from '@/db/helpers/localListeningSessions';
-import { getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
-import { getMediaProgressForLibraryItem, marshalMediaProgressFromApi, marshalMediaProgressFromAuthResponse, upsertMediaProgress } from '@/db/helpers/mediaProgress';
-import { getUserByUsername } from '@/db/helpers/users';
-import type { LibraryItemRow } from '@/db/schema/libraryItems';
-import { LocalListeningSessionRow } from '@/db/schema/localData';
-import { closeSession, createLocalSession, fetchMe, fetchMediaProgress, syncSession } from '@/lib/api/endpoints';
-import { formatTime } from '@/lib/helpers/formatters';
-import { logger } from '@/lib/logger';
-import { getStoredUsername } from '@/lib/secureStore';
+  updateSessionProgress,
+} from "@/db/helpers/localListeningSessions";
+import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
+import {
+  getMediaProgressForLibraryItem,
+  marshalMediaProgressFromApi,
+  marshalMediaProgressFromAuthResponse,
+  upsertMediaProgress,
+} from "@/db/helpers/mediaProgress";
+import { getUserByUsername } from "@/db/helpers/users";
+import type { LibraryItemRow } from "@/db/schema/libraryItems";
+import { LocalListeningSessionRow } from "@/db/schema/localData";
+import {
+  closeSession,
+  createLocalSession,
+  fetchMe,
+  fetchMediaProgress,
+  syncSession,
+} from "@/lib/api/endpoints";
+import { formatTime } from "@/lib/helpers/formatters";
+import { logger } from "@/lib/logger";
+import { getStoredUsername } from "@/lib/secureStore";
 import NetInfo from "@react-native-community/netinfo";
 
 // Create cached sublogger for this service
-const log = logger.forTag('ProgressService');
+const log = logger.forTag("ProgressService");
 
 /**
  * Session information for tracking playback progress
@@ -102,34 +113,38 @@ export class ProgressService {
     try {
       const username = await getStoredUsername();
       if (!username) {
-        log.info('No username found, skipping session rehydration');
+        log.info("No username found, skipping session rehydration");
         return;
       }
 
       const user = await getUserByUsername(username);
       if (!user?.id) {
-        log.info('User not found, skipping session rehydration');
+        log.info("User not found, skipping session rehydration");
         return;
       }
 
       // Get all active sessions for this user
       const activeSessions = await getAllActiveSessionsForUser(user.id);
       if (activeSessions.length === 0) {
-        log.info('No active sessions to rehydrate');
+        log.info("No active sessions to rehydrate");
         return;
       } else if (activeSessions.length > 1) {
-        const sessionIds = activeSessions.map(s => s.id).join(', ');
-        log.warn(`Multiple (${activeSessions.length}) active sessions found during rehydration: ${sessionIds}`);
+        const sessionIds = activeSessions.map((s) => s.id).join(", ");
+        log.warn(
+          `Multiple (${activeSessions.length}) active sessions found during rehydration: ${sessionIds}`
+        );
       }
 
       // Use the most recently updated session
-      const session = activeSessions.sort((a, b) =>
-        b.updatedAt.getTime() - a.updatedAt.getTime()
+      const session = activeSessions.sort(
+        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
       )[0];
 
       // If a specific library item ID was provided, verify it matches
       if (matchLibraryItemId && session.libraryItemId !== matchLibraryItemId) {
-        log.info(`Active session library item (${session.libraryItemId}) doesn't match TrackPlayer item (${matchLibraryItemId}), not rehydrating`);
+        log.info(
+          `Active session library item (${session.libraryItemId}) doesn't match TrackPlayer item (${matchLibraryItemId}), not rehydrating`
+        );
         return;
       }
 
@@ -146,18 +161,22 @@ export class ProgressService {
       const isStale = sessionAge > this.PAUSE_TIMEOUT;
 
       if (isStale) {
-        log.info(`Ending stale session ${session.id} for ${session.libraryItemId} immediately (${Math.round(sessionAge / 1000)}s old)`);
+        log.info(
+          `Ending stale session ${session.id} for ${session.libraryItemId} immediately (${Math.round(sessionAge / 1000)}s old)`
+        );
         // Sync before ending
         await this.syncSessionToServer(user.id, session.libraryItemId);
         await endStaleListeningSession(session.id, session.currentTime);
         return; // Don't rehydrate stale sessions
       }
 
-      log.info(`Found active session ${session.id} for ${session.libraryItemId} at position ${session.currentTime}`);
+      log.info(
+        `Found active session ${session.id} for ${session.libraryItemId} at position ${session.currentTime}`
+      );
       // Session exists in DB - no need to store in instance
-      log.info('Session rehydration complete');
+      log.info("Session rehydration complete");
     } catch (error) {
-      log.error('Failed to rehydrate active session:', error as Error);
+      log.error("Failed to rehydrate active session:", error as Error);
     }
   }
 
@@ -192,21 +211,24 @@ export class ProgressService {
       // Get user ID
       const user = await getUserByUsername(username);
       if (!user?.id) {
-        throw new Error('User not found');
+        throw new Error("User not found");
       }
 
       // Check for multiple active sessions for this item and clean up duplicates
-      const allActiveSessionsForItem = (await getAllActiveSessionsForUser(user.id))
-        .filter(s => s.libraryItemId === libraryItemId);
+      const allActiveSessionsForItem = (await getAllActiveSessionsForUser(user.id)).filter(
+        (s) => s.libraryItemId === libraryItemId
+      );
 
       let existingSession: LocalListeningSessionRow | null = null;
 
       if (allActiveSessionsForItem.length > 1) {
-        log.warn(`Found ${allActiveSessionsForItem.length} active sessions for item ${libraryItemId}, cleaning up duplicates`);
+        log.warn(
+          `Found ${allActiveSessionsForItem.length} active sessions for item ${libraryItemId}, cleaning up duplicates`
+        );
 
         // Sort by updatedAt DESC (most recent first)
-        const sortedSessions = allActiveSessionsForItem.sort((a, b) =>
-          b.updatedAt.getTime() - a.updatedAt.getTime()
+        const sortedSessions = allActiveSessionsForItem.sort(
+          (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
         );
 
         const bestSession = sortedSessions[0]; // Keep this one
@@ -214,13 +236,18 @@ export class ProgressService {
 
         for (const session of sessionsToEnd) {
           const hasInvalidProgress = session.currentTime < 5;
-          const isMuchOlder = (bestSession.updatedAt.getTime() - session.updatedAt.getTime()) > 10 * 60 * 1000; // 10 minutes
+          const isMuchOlder =
+            bestSession.updatedAt.getTime() - session.updatedAt.getTime() > 10 * 60 * 1000; // 10 minutes
 
           if (hasInvalidProgress || isMuchOlder) {
-            log.info(`Ending duplicate session ${session.id} (currentTime=${session.currentTime}, updatedAt=${session.updatedAt.toISOString()}) session=${session.id} item=${libraryItemId}`);
+            log.info(
+              `Ending duplicate session ${session.id} (currentTime=${session.currentTime}, updatedAt=${session.updatedAt.toISOString()}) session=${session.id} item=${libraryItemId}`
+            );
             await endListeningSession(session.id, session.currentTime);
           } else {
-            log.warn(`Multiple valid sessions found, keeping most recent (${bestSession.id}) session=${bestSession.id} item=${libraryItemId}`);
+            log.warn(
+              `Multiple valid sessions found, keeping most recent (${bestSession.id}) session=${bestSession.id} item=${libraryItemId}`
+            );
             // Still end the older one to avoid duplicates
             await endListeningSession(session.id, session.currentTime);
           }
@@ -234,7 +261,7 @@ export class ProgressService {
 
       let shouldEndExistingSession = false;
       let resumePosition = startTime;
-      let resumeSource: 'startArgument' | 'activeSession' | 'savedProgress' = 'startArgument';
+      let resumeSource: "startArgument" | "activeSession" | "savedProgress" = "startArgument";
 
       // Get saved progress to use as fallback
       const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
@@ -245,24 +272,26 @@ export class ProgressService {
         const isStale = sessionAge > 10 * 60 * 1000; // 10 minutes
 
         if (isStale) {
-          log.info('Found stale active session (>10 min), ending it');
+          log.info("Found stale active session (>10 min), ending it");
           shouldEndExistingSession = true;
         } else {
-          log.info('Found recent active session for same item, will resume');
+          log.info("Found recent active session for same item, will resume");
           shouldEndExistingSession = false;
           // Use active session's current time (most recent position)
           // But if currentTime is 0 or very small, fall back to saved progress
           if (existingSession.currentTime > 1) {
             resumePosition = existingSession.currentTime;
-            resumeSource = 'activeSession';
+            resumeSource = "activeSession";
             log.info(`Resuming from active session: ${resumePosition}`);
           } else if (savedProgress?.currentTime) {
             resumePosition = savedProgress.currentTime;
-            resumeSource = 'savedProgress';
-            log.info(`Resuming from saved progress (session currentTime was ${existingSession.currentTime}): ${resumePosition}`);
+            resumeSource = "savedProgress";
+            log.info(
+              `Resuming from saved progress (session currentTime was ${existingSession.currentTime}): ${resumePosition}`
+            );
           } else {
             resumePosition = existingSession.currentTime;
-            resumeSource = 'activeSession';
+            resumeSource = "activeSession";
             log.info(`Resuming from active session: ${resumePosition}`);
           }
         }
@@ -270,7 +299,7 @@ export class ProgressService {
         // Fall back to saved progress
         resumePosition = savedProgress?.currentTime || startTime;
         if (savedProgress?.currentTime) {
-          resumeSource = 'savedProgress';
+          resumeSource = "savedProgress";
           log.info(`Resuming from saved progress: ${resumePosition}`);
         }
       }
@@ -288,10 +317,7 @@ export class ProgressService {
       }
 
       // Log the resolved resume context before creating the session
-      const resumeParts = [
-        `position=${formatTime(resumePosition)}s`,
-        `source=${resumeSource}`
-      ];
+      const resumeParts = [`position=${formatTime(resumePosition)}s`, `source=${resumeSource}`];
       if (existingSession) {
         resumeParts.push(`dbCurrent=${formatTime(existingSession.currentTime)}s`);
         if (existingSession.startTime != null) {
@@ -301,7 +327,7 @@ export class ProgressService {
       } else if (savedProgress?.currentTime) {
         resumeParts.push(`savedProgress=${formatTime(savedProgress.currentTime)}s`);
       }
-      log.info(`Resolved resume position for ${libraryItemId}: ${resumeParts.join(' ')}`);
+      log.info(`Resolved resume position for ${libraryItemId}: ${resumeParts.join(" ")}`);
 
       // Start new session
       const sessionId = await startListeningSession(
@@ -327,9 +353,11 @@ export class ProgressService {
         await this.syncSessionToServer(user.id, libraryItemId);
       }
 
-      log.info(`Started session ${sessionId} for ${libraryItemId} at position ${resumePosition} session=${sessionId} item=${libraryItemId}`);
+      log.info(
+        `Started session ${sessionId} for ${libraryItemId} at position ${resumePosition} session=${sessionId} item=${libraryItemId}`
+      );
     } catch (error) {
-      log.error('Failed to start session:', error as Error);
+      log.error("Failed to start session:", error as Error);
       throw error;
     }
   }
@@ -358,10 +386,12 @@ export class ProgressService {
 
         log.info(`Ended session ${session.id} session=${session.id} item=${libraryItemId}`);
       } else {
-        log.info(`Session too short (${sessionDuration}s), not recording session=${session.id} item=${libraryItemId}`);
+        log.info(
+          `Session too short (${sessionDuration}s), not recording session=${session.id} item=${libraryItemId}`
+        );
       }
     } catch (error) {
-      log.error('Failed to end session:', error as Error);
+      log.error("Failed to end session:", error as Error);
     }
   }
 
@@ -370,7 +400,11 @@ export class ProgressService {
    * This is used when cleaning up sessions that were abandoned - the session
    * actually ended at its last update time, not at the current time
    */
-  private async endStaleSession(userId: string, libraryItemId: string, endTime?: number): Promise<void> {
+  private async endStaleSession(
+    userId: string,
+    libraryItemId: string,
+    endTime?: number
+  ): Promise<void> {
     try {
       const session = await getActiveSession(userId, libraryItemId);
       if (!session) {
@@ -393,7 +427,7 @@ export class ProgressService {
         log.info(`Stale session too short (${sessionDuration}s), not recording`);
       }
     } catch (error) {
-      log.error('Failed to end stale session:', error as Error);
+      log.error("Failed to end stale session:", error as Error);
     }
   }
 
@@ -416,7 +450,9 @@ export class ProgressService {
         // If playback is active but no session exists, we can't update progress
         // PlayerBackgroundService should handle creating a new session
         if (isPlaying) {
-          log.info(`updateProgress called with no session but playback is active - expecting PlayerBackgroundService to create session`);
+          log.info(
+            `updateProgress called with no session but playback is active - expecting PlayerBackgroundService to create session`
+          );
         }
         return;
       }
@@ -426,11 +462,15 @@ export class ProgressService {
       const isStale = sessionAge > this.PAUSE_TIMEOUT;
 
       if (isStale) {
-        log.info(`Handling stale session - ending old session and starting new one session=${session.id} item=${libraryItemId}`);
+        log.info(
+          `Handling stale session - ending old session and starting new one session=${session.id} item=${libraryItemId}`
+        );
 
         // End the stale session at its last known position (when it was last updated)
         const staleSessionEndTime = session.currentTime;
-        log.info(`Ending stale session at its last position: ${staleSessionEndTime}s (not current position: ${currentTime}s) session=${session.id} item=${libraryItemId}`);
+        log.info(
+          `Ending stale session at its last position: ${formatTime(staleSessionEndTime)}s (not current position: ${formatTime(currentTime)}s) session=${session.id} item=${libraryItemId}`
+        );
         await this.endStaleSession(userId, libraryItemId, staleSessionEndTime);
 
         // Get username for starting new session
@@ -446,10 +486,14 @@ export class ProgressService {
           // Use stale session's position if currentTime is 0 (likely TrackPlayer not restored yet)
           const startPosition = currentTime > 0 ? currentTime : staleSessionEndTime;
           if (currentTime === 0 && staleSessionEndTime > 0) {
-            log.info(`Using stale session position ${staleSessionEndTime}s instead of 0 for new session (TrackPlayer may not be restored yet) item=${libraryItemId}`);
+            log.info(
+              `Using stale session position ${formatTime(staleSessionEndTime)}s instead of 0 for new session (TrackPlayer may not be restored yet) item=${libraryItemId}`
+            );
           }
 
-          log.info(`Starting new session for ${libraryItemId} at position ${startPosition} session=${session.id} item=${libraryItemId}`);
+          log.info(
+            `Starting new session for ${libraryItemId} at position ${startPosition} session=${session.id} item=${libraryItemId}`
+          );
           await this.startSession(
             username,
             libraryItemId,
@@ -472,7 +516,8 @@ export class ProgressService {
       // Get last update time from session's updatedAt
       if (isPlaying && session.updatedAt) {
         const timeSinceLastUpdate = (now - session.updatedAt.getTime()) / 1000; // Convert to seconds
-        if (timeSinceLastUpdate >= 1 && timeSinceLastUpdate < 10) { // Only count reasonable intervals
+        if (timeSinceLastUpdate >= 1 && timeSinceLastUpdate < 10) {
+          // Only count reasonable intervals
           await updateSessionListeningTime(session.id, timeSinceLastUpdate);
         }
       }
@@ -485,30 +530,29 @@ export class ProgressService {
       // Prevent writing currentTime=0 for active sessions (likely indicates TrackPlayer not restored yet)
       // Use the session's existing position if incoming position is 0 and session has a valid position
       if (currentTime === 0 && session.currentTime > 0 && !session.endTime) {
-        log.warn(`Preventing write of currentTime=0 for active session (previous position was ${session.currentTime}s) - likely TrackPlayer not restored yet session=${session.id} item=${libraryItemId}`);
+        log.warn(
+          `Preventing write of currentTime=0 for active session (previous position was ${formatTime(session.currentTime)}s) - likely TrackPlayer not restored yet session=${session.id} item=${libraryItemId}`
+        );
         // Don't update with 0 - keep existing position
         return;
       }
 
       const diffFromStored = currentTime - session.currentTime;
       if (Math.abs(diffFromStored) >= 30) {
-        const direction = diffFromStored >= 0 ? 'forward' : 'backward';
+        const direction = diffFromStored >= 0 ? "forward" : "backward";
         log.info(
           `Detected ${direction} jump during progress update session=${session.id} item=${libraryItemId} stored=${formatTime(session.currentTime)}s incoming=${formatTime(currentTime)}s delta=${formatTime(Math.abs(diffFromStored))}s`
         );
       }
 
       // Update session progress in DB - this happens on EVERY progress update
-      await updateSessionProgress(
-        session.id,
-        currentTime,
-        playbackRate,
-        volume
-      );
+      await updateSessionProgress(session.id, currentTime, playbackRate, volume);
 
       // Diagnostic: log DB update every 10 seconds to verify updates are happening
       if (Math.floor(currentTime) % 10 === 0) {
-        log.debug(`DB session updated: position=${formatTime(currentTime)}s session=${session.id} item=${libraryItemId}`);
+        log.debug(
+          `DB session updated: position=${formatTime(currentTime)}s session=${session.id} item=${libraryItemId}`
+        );
       }
 
       if (isPlaying && wasPaused) {
@@ -517,10 +561,12 @@ export class ProgressService {
       } else if (!isPlaying && !wasPaused) {
         // Starting pause - immediate sync on pause
         await this.syncSessionToServer(userId, libraryItemId);
-        log.info(`Paused playback, synced to server position=${formatTime(session.currentTime)} session=${session.id} item=${libraryItemId}`);
+        log.info(
+          `Paused playback, synced to server position=${formatTime(session.currentTime)} session=${session.id} item=${libraryItemId}`
+        );
       }
     } catch (error) {
-      log.error('Failed to update progress:', error as Error);
+      log.error("Failed to update progress:", error as Error);
     }
   }
 
@@ -538,13 +584,13 @@ export class ProgressService {
         // Audio ducked (paused by system)
         // Immediate sync on duck
         await this.syncSessionToServer(userId, libraryItemId);
-        log.info('Audio ducked, synced to server');
+        log.info("Audio ducked, synced to server");
       } else {
         // Audio unducked (resumed by system)
-        log.info('Audio unducked');
+        log.info("Audio unducked");
       }
     } catch (error) {
-      log.error('Failed to handle duck event:', error as Error);
+      log.error("Failed to handle duck event:", error as Error);
     }
   }
 
@@ -568,7 +614,7 @@ export class ProgressService {
         isDownloaded: true, // All sessions are for downloaded media in this app
       };
     } catch (error) {
-      log.error('Failed to get current session:', error as Error);
+      log.error("Failed to get current session:", error as Error);
       return null;
     }
   }
@@ -579,32 +625,35 @@ export class ProgressService {
    * @param matchLibraryItemId - Optional library item ID to match against (e.g., from TrackPlayer)
    */
   async forceRehydrateSession(matchLibraryItemId?: string): Promise<void> {
-    log.info('Force rehydrating session from database');
+    log.info("Force rehydrating session from database");
     await this.rehydrateActiveSession(matchLibraryItemId);
   }
 
   /**
    * Check if a sync is needed based on network type and time
    */
-  async shouldSyncToServer(userId: string, libraryItemId: string): Promise<{ shouldSync: boolean; reason: string }> {
+  async shouldSyncToServer(
+    userId: string,
+    libraryItemId: string
+  ): Promise<{ shouldSync: boolean; reason: string }> {
     const session = await getActiveSession(userId, libraryItemId);
     if (!session) {
-      return { shouldSync: false, reason: 'No active session' };
+      return { shouldSync: false, reason: "No active session" };
     }
 
     // Check if session appears paused (no update in last 60 seconds)
     const timeSinceUpdate = Date.now() - session.updatedAt.getTime();
     const isPaused = timeSinceUpdate > 60000; // 60 seconds
     if (isPaused) {
-      return { shouldSync: false, reason: 'Playback is paused' };
+      return { shouldSync: false, reason: "Playback is paused" };
     }
 
     const netInfo = await NetInfo.fetch();
     if (!netInfo.isConnected) {
-      return { shouldSync: false, reason: 'No network connection' };
+      return { shouldSync: false, reason: "No network connection" };
     }
 
-    const isUnmetered = netInfo.type === 'wifi' || netInfo.type === 'ethernet';
+    const isUnmetered = netInfo.type === "wifi" || netInfo.type === "ethernet";
     const syncInterval = isUnmetered ? this.SYNC_INTERVAL_UNMETERED : this.SYNC_INTERVAL_METERED;
 
     // Use lastSyncTime for sync interval check (not updatedAt, which updates every second)
@@ -615,13 +664,13 @@ export class ProgressService {
     if (timeSinceLastSync < syncInterval) {
       return {
         shouldSync: false,
-        reason: `Too soon (${timeSinceLastSync}ms < ${syncInterval}ms)`
+        reason: `Too soon (${timeSinceLastSync}ms < ${syncInterval}ms)`,
       };
     }
 
     return {
       shouldSync: true,
-      reason: `Ready to sync (${timeSinceLastSync}ms >= ${syncInterval}ms on ${netInfo.type})`
+      reason: `Ready to sync (${timeSinceLastSync}ms >= ${syncInterval}ms on ${netInfo.type})`,
     };
   }
 
@@ -638,7 +687,7 @@ export class ProgressService {
       const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
       return savedProgress?.currentTime || 0;
     } catch (error) {
-      log.error('Failed to get resume position:', error as Error);
+      log.error("Failed to get resume position:", error as Error);
       return 0;
     }
   }
@@ -651,7 +700,7 @@ export class ProgressService {
       // Check network connectivity
       const netInfo = await NetInfo.fetch();
       if (!netInfo.isConnected) {
-        log.info('No network connection, skipping sync');
+        log.info("No network connection, skipping sync");
         return;
       }
 
@@ -665,19 +714,19 @@ export class ProgressService {
       // Load full session data from database
       const sessionData = await getListeningSession(session.id);
       if (!sessionData) {
-        log.error('Could not load session data for sync');
+        log.error("Could not load session data for sync");
         return;
       }
 
       // Use the existing syncSingleSession method
       await this.syncSingleSession(sessionData);
-
     } catch (error) {
       const session = await getActiveSession(userId, libraryItemId);
-      log.error(`Failed to sync session to server: ${(error as Error).message} session=${session?.id || 'none'} item=${libraryItemId}`);
+      log.error(
+        `Failed to sync session to server: ${(error as Error).message} session=${session?.id || "none"} item=${libraryItemId}`
+      );
     }
   }
-
 
   // Removed: startPauseTimeout and clearPauseTimeout
   // Pause timeout is now handled by checking session age in updateProgress and other methods
@@ -691,7 +740,6 @@ export class ProgressService {
     }, this.BACKGROUND_SYNC_INTERVAL);
   }
 
-
   /**
    * Sync a single session to the server
    */
@@ -704,7 +752,9 @@ export class ProgressService {
 
     // Defensive logging: warn if syncing currentTime=0 for an active session
     if (currentTime === 0 && !session.endTime) {
-      log.warn(`Syncing active session with currentTime=0 session=${session.id} item=${session.libraryItemId}`);
+      log.warn(
+        `Syncing active session with currentTime=0 session=${session.id} item=${session.libraryItemId}`
+      );
     }
 
     // Use the tracked timeListening field, which represents actual listening time
@@ -712,26 +762,29 @@ export class ProgressService {
 
     // Skip sessions that are too short
     if (timeListening < this.MIN_SESSION_DURATION) {
-      log.info(`Skipping short session ${session.id} (${timeListening}s) session=${session.id} item=${session.libraryItemId}`);
+      log.info(
+        `Skipping short session ${session.id} (${timeListening}s) session=${session.id} item=${session.libraryItemId}`
+      );
       await markSessionAsSynced(session.id);
       return;
     }
 
     const startTimeSeconds = session.startTime ?? 0;
     const deltaSinceStart = Math.max(session.currentTime - startTimeSeconds, 0);
-    const updatedAtIso = session.updatedAt?.toISOString() ?? 'unknown';
+    const updatedAtIso = session.updatedAt?.toISOString() ?? "unknown";
     log.info(
       `Syncing session session=${session.id} item=${session.libraryItemId} start=${formatTime(startTimeSeconds)}s progress=${formatTime(session.currentTime)}s deltaFromStart=${formatTime(deltaSinceStart)}s timeListening=${formatTime(timeListening)}s updatedAt=${updatedAtIso}`
     );
 
     // Determine whether we are tracking an open (streaming) session
-    let isStreamingSession =
-      !!session.serverSessionId && session.serverSessionId !== session.id;
+    let isStreamingSession = !!session.serverSessionId && session.serverSessionId !== session.id;
 
     // Get the library item to reference metadata when needed
     const libraryItem = await getLibraryItemById(session.libraryItemId);
     if (!libraryItem) {
-      log.warn(`Library item ${session.libraryItemId} no longer exists; marking session as synced session=${session.id} item=${session.libraryItemId}`);
+      log.warn(
+        `Library item ${session.libraryItemId} no longer exists; marking session as synced session=${session.id} item=${session.libraryItemId}`
+      );
       await markSessionAsSynced(session.id);
       return;
     }
@@ -768,9 +821,13 @@ export class ProgressService {
       try {
         const progressResponse = await fetchMediaProgress(session.libraryItemId);
         await upsertMediaProgress([marshalMediaProgressFromApi(progressResponse, session.userId)]);
-        log.info(`Fetched and updated progress after sync session=${session.id} item=${session.libraryItemId}`);
+        log.info(
+          `Fetched and updated progress after sync session=${session.id} item=${session.libraryItemId}`
+        );
       } catch (fetchError) {
-        log.warn(`Failed to fetch progress after sync: ${fetchError} session=${session.id} item=${session.libraryItemId}`);
+        log.warn(
+          `Failed to fetch progress after sync: ${fetchError} session=${session.id} item=${session.libraryItemId}`
+        );
         // Don't fail the entire sync if progress fetch fails
       }
 
@@ -782,9 +839,13 @@ export class ProgressService {
         try {
           const finalProgress = await fetchMediaProgress(session.libraryItemId);
           await upsertMediaProgress([marshalMediaProgressFromApi(finalProgress, session.userId)]);
-          log.info(`Fetched final progress after closing session session=${session.id} item=${session.libraryItemId}`);
+          log.info(
+            `Fetched final progress after closing session session=${session.id} item=${session.libraryItemId}`
+          );
         } catch (fetchError) {
-          log.warn(`Failed to fetch final progress: ${fetchError} session=${session.id} item=${session.libraryItemId}`);
+          log.warn(
+            `Failed to fetch final progress: ${fetchError} session=${session.id} item=${session.libraryItemId}`
+          );
         }
       }
 
@@ -796,40 +857,46 @@ export class ProgressService {
         await resetSessionListeningTime(session.id);
       }
 
-    // Mark as synced
-    await markSessionAsSynced(session.id);
+      // Mark as synced
+      await markSessionAsSynced(session.id);
 
-    log.info(`Successfully synced session to server session=${session.id} item=${session.libraryItemId}`);
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message.toLowerCase() : '';
-
-    if (
-      allowSessionRecreate &&
-      session.serverSessionId &&
-      session.serverSessionId !== session.id &&
-      error instanceof Error &&
-      errorMessage.includes('not found')
-    ) {
-      log.warn(
-        `Server session ${session.serverSessionId} missing for ${session.libraryItemId}; recreating session=${session.id} item=${session.libraryItemId}`
+      log.info(
+        `Successfully synced session to server session=${session.id} item=${session.libraryItemId}`
       );
-      await updateServerSessionId(session.id, null);
-      session.serverSessionId = null;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message.toLowerCase() : "";
 
-      await this.syncSingleSession(session, false);
-      return;
+      if (
+        allowSessionRecreate &&
+        session.serverSessionId &&
+        session.serverSessionId !== session.id &&
+        error instanceof Error &&
+        errorMessage.includes("not found")
+      ) {
+        log.warn(
+          `Server session ${session.serverSessionId} missing for ${session.libraryItemId}; recreating session=${session.id} item=${session.libraryItemId}`
+        );
+        await updateServerSessionId(session.id, null);
+        session.serverSessionId = null;
+
+        await this.syncSingleSession(session, false);
+        return;
+      }
+
+      // Handle sync failure - record in database
+      log.error(
+        `Failed to sync session: ${(error as Error).message} session=${session.id} item=${session.libraryItemId}`
+      );
+
+      // Record the sync failure in database
+      await recordSyncFailure(
+        session.id,
+        error instanceof Error ? error.message : "Unknown sync error"
+      );
+
+      throw error;
     }
-
-    // Handle sync failure - record in database
-    log.error(`Failed to sync session: ${(error as Error).message} session=${session.id} item=${session.libraryItemId}`);
-
-    // Record the sync failure in database
-    await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown sync error');
-
-    throw error;
   }
-}
 
   /**
    * Sync all unsynced sessions to the server
@@ -854,11 +921,14 @@ export class ProgressService {
           await this.syncSingleSession(session);
         } catch (error) {
           log.error(`Failed to sync session ${session.id}:`, error as Error);
-          await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown error');
+          await recordSyncFailure(
+            session.id,
+            error instanceof Error ? error.message : "Unknown error"
+          );
         }
       }
     } catch (error) {
-      log.error('Failed to sync sessions:', error as Error);
+      log.error("Failed to sync sessions:", error as Error);
     }
   }
 
@@ -874,10 +944,13 @@ export class ProgressService {
         await this.syncSingleSession(session);
       } catch (error) {
         log.error(`Failed to force sync session ${session.id}:`, error as Error);
-        await recordSyncFailure(session.id, error instanceof Error ? error.message : 'Unknown error');
+        await recordSyncFailure(
+          session.id,
+          error instanceof Error ? error.message : "Unknown error"
+        );
+      }
     }
   }
-}
 
   private async syncDownloadedSession(
     session: LocalListeningSessionRow,
@@ -886,7 +959,7 @@ export class ProgressService {
     timeListening: number
   ): Promise<string | null> {
     const episodeId =
-      libraryItem.mediaType === 'podcast' && session.mediaId !== libraryItem.id
+      libraryItem.mediaType === "podcast" && session.mediaId !== libraryItem.id
         ? session.mediaId
         : undefined;
 
@@ -897,24 +970,26 @@ export class ProgressService {
     }
 
     try {
-    const { id } = await createLocalSession({
-      sessionId: session.id,
-      userId: session.userId,
-      libraryId: libraryItem.libraryId,
-      libraryItemId: session.libraryItemId,
-      episodeId,
-      startTime: session.startTime,
-      currentTime,
-      timeListening,
-      duration: duration,
-      startedAt: session.sessionStart?.getTime(),
-      updatedAt: session.updatedAt?.getTime(),
-    });
+      const { id } = await createLocalSession({
+        sessionId: session.id,
+        userId: session.userId,
+        libraryId: libraryItem.libraryId,
+        libraryItemId: session.libraryItemId,
+        episodeId,
+        startTime: session.startTime,
+        currentTime,
+        timeListening,
+        duration: duration,
+        startedAt: session.sessionStart?.getTime(),
+        updatedAt: session.updatedAt?.getTime(),
+      });
 
       return id;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Media item not found')) {
-        log.info(`Library item not found on server, marking session as synced session=${session.id} item=${session.libraryItemId}`);
+      if (error instanceof Error && error.message.includes("Media item not found")) {
+        log.info(
+          `Library item not found on server, marking session as synced session=${session.id} item=${session.libraryItemId}`
+        );
         await markSessionAsSynced(session.id);
         return null;
       }
@@ -929,7 +1004,7 @@ export class ProgressService {
    */
   async fetchServerProgress(): Promise<void> {
     try {
-      log.info('Fetching latest progress from server');
+      log.info("Fetching latest progress from server");
 
       // Fetch latest user data including progress
       const meResponse = await fetchMe();
@@ -940,11 +1015,10 @@ export class ProgressService {
         await upsertMediaProgress(progressData);
         log.info(`Synced ${progressData.length} progress entries from server`);
       } else {
-        log.info('No progress data to sync from server');
+        log.info("No progress data to sync from server");
       }
-
     } catch (error) {
-      log.error('Failed to fetch server progress:', error as Error);
+      log.error("Failed to fetch server progress:", error as Error);
       throw error;
     }
   }

@@ -5,28 +5,25 @@
  * This can be imported by both PlayerService and settingsSlice without cycles.
  */
 
-import { getJumpBackwardInterval, getJumpForwardInterval } from '@/lib/appSettings';
-import { logger } from '@/lib/logger';
-import TrackPlayer, {
-  AppKilledPlaybackBehavior,
-  Capability,
-} from 'react-native-track-player';
+import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettings";
+import { logger } from "@/lib/logger";
+import TrackPlayer, { AppKilledPlaybackBehavior, Capability } from "react-native-track-player";
 
-const log = logger.forTag('TrackPlayerConfig');
+const log = logger.forTag("TrackPlayerConfig");
 
 /**
  * Configure TrackPlayer with current settings
  */
 export async function configureTrackPlayer(): Promise<void> {
-  log.info("Configuring TrackPlayer options");
-
   // Load jump intervals from settings
   const [forwardInterval, backwardInterval] = await Promise.all([
     getJumpForwardInterval(),
     getJumpBackwardInterval(),
   ]);
 
-  log.info(`Configuring jump intervals: forward=${forwardInterval}s, backward=${backwardInterval}s`);
+  log.debug(
+    `Configuring TrackPlayer options: jumpforward=${forwardInterval}s jumpbackward=${backwardInterval}s`
+  );
 
   await TrackPlayer.updateOptions({
     android: {

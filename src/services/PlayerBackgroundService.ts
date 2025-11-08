@@ -38,9 +38,7 @@ function describeRuntimeContext(): string {
   const parts: string[] = [];
   parts.push(`uuid=${MODULE_INSTANCE_UUID}`);
   parts.push(typeof globalThis.window === "undefined" ? "no-window" : "window");
-  parts.push(
-    typeof globalThis.document === "undefined" ? "no-document" : "document"
-  );
+  parts.push(typeof globalThis.document === "undefined" ? "no-document" : "document");
   try {
     const state = AppState.currentState;
     parts.push(`AppState=${state ?? "unknown"}`);
@@ -69,7 +67,9 @@ declare global {
  */
 async function handleRemotePlay(): Promise<void> {
   const progress = await TrackPlayer.getProgress();
-  log.debug(`RemotePlay received progress=${formatTime(progress.position)} (${describeRuntimeContext()})`);
+  log.debug(
+    `RemotePlay received progress=${formatTime(progress.position)} (${describeRuntimeContext()})`
+  );
   await TrackPlayer.play();
 }
 
@@ -84,7 +84,10 @@ async function handleRemotePause(): Promise<void> {
 /**
  * Helper to get userId and libraryItemId from playerSlice
  */
-async function getUserIdAndLibraryItemId(): Promise<{ userId: string; libraryItemId: string } | null> {
+async function getUserIdAndLibraryItemId(): Promise<{
+  userId: string;
+  libraryItemId: string;
+} | null> {
   const store = useAppStore.getState();
   const libraryItemId = store.player.currentTrack?.libraryItemId;
   if (!libraryItemId) {
@@ -124,12 +127,8 @@ async function handleRemoteStop(): Promise<void> {
 /**
  * Handle remote jump forward command
  */
-async function handleRemoteJumpForward(
-  event: RemoteJumpForwardEvent
-): Promise<void> {
-  log.debug(
-    `RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`
-  );
+async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<void> {
+  log.debug(`RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`);
   const progress = await TrackPlayer.getProgress();
   const newPosition = progress.position + event.interval;
   await TrackPlayer.seekTo(newPosition);
@@ -156,24 +155,25 @@ async function handleRemoteJumpForward(
 
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
-        log.info(`Jump forward: position=${newPosition.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`);
+        log.info(
+          `Jump forward: position=${newPosition.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`
+        );
       }
     }
   } catch (error) {
     const ids = await getUserIdAndLibraryItemId();
-    log.error(`Jump forward progress update error: ${(error as Error).message} item=${ids?.libraryItemId || 'unknown'}`, error as Error);
+    log.error(
+      `Jump forward progress update error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
+      error as Error
+    );
   }
 }
 
 /**
  * Handle remote jump backward command
  */
-async function handleRemoteJumpBackward(
-  event: RemoteJumpBackwardEvent
-): Promise<void> {
-  log.debug(
-    `RemoteJumpBackward received interval=${event.interval} (${describeRuntimeContext()})`
-  );
+async function handleRemoteJumpBackward(event: RemoteJumpBackwardEvent): Promise<void> {
+  log.debug(`RemoteJumpBackward received interval=${event.interval} (${describeRuntimeContext()})`);
   const progress = await TrackPlayer.getProgress();
   const newPosition = Math.max(0, progress.position - event.interval);
   await TrackPlayer.seekTo(newPosition);
@@ -200,12 +200,17 @@ async function handleRemoteJumpBackward(
 
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
-        log.info(`Jump backward: position=${newPosition.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`);
+        log.info(
+          `Jump backward: position=${newPosition.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`
+        );
       }
     }
   } catch (error) {
     const ids = await getUserIdAndLibraryItemId();
-    log.error(`Jump backward progress update error: ${(error as Error).message} item=${ids?.libraryItemId || 'unknown'}`, error as Error);
+    log.error(
+      `Jump backward progress update error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
+      error as Error
+    );
   }
 }
 
@@ -229,9 +234,7 @@ async function handleRemotePrevious(): Promise<void> {
  * Handle remote seek command
  */
 async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
-  log.debug(
-    `RemoteSeek received position=${event.position} (${describeRuntimeContext()})`
-  );
+  log.debug(`RemoteSeek received position=${event.position} (${describeRuntimeContext()})`);
   await TrackPlayer.seekTo(event.position);
 
   // Update progress immediately after seek
@@ -258,12 +261,17 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
 
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
-        log.info(`Seek: position=${formatTime(event.position)}s session=${session.sessionId} item=${ids.libraryItemId}`);
+        log.info(
+          `Seek: position=${formatTime(event.position)}s session=${session.sessionId} item=${ids.libraryItemId}`
+        );
       }
     }
   } catch (error) {
     const ids = await getUserIdAndLibraryItemId();
-    log.error(`Seek progress update error: ${(error as Error).message} item=${ids?.libraryItemId || 'unknown'}`, error as Error);
+    log.error(
+      `Seek progress update error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
+      error as Error
+    );
   }
 }
 
@@ -290,21 +298,24 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
 
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
-        log.info(`Audio duck: permanent=${event.permanent} paused=${event.paused} session=${session.sessionId} item=${ids.libraryItemId}`);
+        log.info(
+          `Audio duck: permanent=${event.permanent} paused=${event.paused} session=${session.sessionId} item=${ids.libraryItemId}`
+        );
       }
     }
   } catch (error) {
     const ids = await getUserIdAndLibraryItemId();
-    log.error(`Duck event error: ${(error as Error).message} item=${ids?.libraryItemId || 'unknown'}`, error as Error);
+    log.error(
+      `Duck event error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
+      error as Error
+    );
   }
 }
 
 /**
  * Handle playback state changes (playing, paused, stopped, etc.)
  */
-async function handlePlaybackStateChanged(
-  event: PlaybackStateEvent
-): Promise<void> {
+async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<void> {
   try {
     // Clear loading state when playback actually starts
     if (event.state === State.Playing) {
@@ -336,12 +347,17 @@ async function handlePlaybackStateChanged(
 
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
-        log.info(`Playback state changed: state=${event.state} progress=${progress.position} uuid=${MODULE_INSTANCE_UUID} session=${session.sessionId} item=${ids.libraryItemId}`);
+        log.info(
+          `Playback state changed: state=${event.state} progress=${formatTime(progress.position)} uuid=${MODULE_INSTANCE_UUID} session=${session.sessionId} item=${ids.libraryItemId}`
+        );
       }
     }
   } catch (error) {
     const ids = await getUserIdAndLibraryItemId();
-    log.error(`Playback state change error: ${(error as Error).message} item=${ids?.libraryItemId || 'unknown'}`, error as Error);
+    log.error(
+      `Playback state change error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
+      error as Error
+    );
   }
 }
 
@@ -349,9 +365,7 @@ async function handlePlaybackStateChanged(
  * Handle playback progress updates (fired every second during playback)
  * This is where we check if periodic sync to server is needed
  */
-async function handlePlaybackProgressUpdated(
-  event: PlaybackProgressUpdatedEvent
-): Promise<void> {
+async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent): Promise<void> {
   try {
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
@@ -363,7 +377,9 @@ async function handlePlaybackProgressUpdated(
 
       if (Math.floor(event.position) % 5 === 0) {
         const { id, title } = store.player.currentChapter?.chapter || { id: null, title: null };
-        log.info(`Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} uuid=${MODULE_INSTANCE_UUID} session=${session?.sessionId || 'none'} item=${ids.libraryItemId} chapter=${JSON.stringify({id, title})}`);
+        log.info(
+          `Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} uuid=${MODULE_INSTANCE_UUID} session=${session?.sessionId || "none"} item=${ids.libraryItemId} chapter=${JSON.stringify({ id, title })}`
+        );
       }
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
@@ -398,13 +414,15 @@ async function handlePlaybackProgressUpdated(
       const currentChapter = store.player.currentChapter;
       if (previousChapter?.chapter.id !== currentChapter?.chapter.id && currentChapter) {
         // Chapter changed - update now playing metadata immediately (non-gated)
-        log.info(`Chapter changed from ${previousChapter?.chapter.id || 'none'} to ${currentChapter.chapter.id}, updating now playing metadata`);
+        log.info(
+          `Chapter changed from ${previousChapter?.chapter.id || "none"} to ${currentChapter.chapter.id}, updating now playing metadata`
+        );
         await store.updateNowPlayingMetadata();
       }
 
       // Periodic now playing metadata updates (gated by setting)
       // Throttle to every 2 seconds to avoid excessive updates
-      const { getPeriodicNowPlayingUpdatesEnabled } = await import('@/lib/appSettings');
+      const { getPeriodicNowPlayingUpdatesEnabled } = await import("@/lib/appSettings");
       const periodicUpdatesEnabled = await getPeriodicNowPlayingUpdatesEnabled();
       if (periodicUpdatesEnabled && Math.floor(event.position) % 2 === 0) {
         await store.updateNowPlayingMetadata();
@@ -414,12 +432,16 @@ async function handlePlaybackProgressUpdated(
       const syncCheck = await progressService.shouldSyncToServer(ids.userId, ids.libraryItemId);
       if (syncCheck.shouldSync) {
         const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
-        log.info(`Syncing to server: ${syncCheck.reason} appState=${AppState.currentState} session=${session?.sessionId || 'none'} item=${ids.libraryItemId}`);
+        log.info(
+          `Syncing to server: ${syncCheck.reason} appState=${AppState.currentState} session=${session?.sessionId || "none"} item=${ids.libraryItemId}`
+        );
         await progressService.syncSessionToServer(ids.userId, ids.libraryItemId);
       }
     } else if (currentTrack) {
       // No session - try to rehydrate from database if TrackPlayer has a track loaded
-      log.info(`No session, attempting rehydration: position=${formatTime(event.position)}s appState=${AppState.currentState} item=${currentTrack.libraryItemId}`);
+      log.info(
+        `No session, attempting rehydration: position=${formatTime(event.position)}s appState=${AppState.currentState} item=${currentTrack.libraryItemId}`
+      );
       const state = await TrackPlayer.getPlaybackState();
       const isPlaying = state.state === State.Playing;
 
@@ -429,9 +451,14 @@ async function handlePlaybackProgressUpdated(
       // Try to get session after rehydration
       const rehydratedIds = await getUserIdAndLibraryItemId();
       if (rehydratedIds) {
-        const session = await progressService.getCurrentSession(rehydratedIds.userId, rehydratedIds.libraryItemId);
+        const session = await progressService.getCurrentSession(
+          rehydratedIds.userId,
+          rehydratedIds.libraryItemId
+        );
         if (session) {
-          log.info(`Session rehydrated successfully, updating progress session=${session.sessionId} item=${rehydratedIds.libraryItemId}`);
+          log.info(
+            `Session rehydrated successfully, updating progress session=${session.sessionId} item=${rehydratedIds.libraryItemId}`
+          );
           const playbackRate = await TrackPlayer.getRate();
           const volume = await TrackPlayer.getVolume();
 
@@ -446,13 +473,18 @@ async function handlePlaybackProgressUpdated(
           );
 
           // Sync store position from rehydrated session (DB is source of truth)
-          const updatedSession = await progressService.getCurrentSession(rehydratedIds.userId, rehydratedIds.libraryItemId);
+          const updatedSession = await progressService.getCurrentSession(
+            rehydratedIds.userId,
+            rehydratedIds.libraryItemId
+          );
           if (updatedSession) {
             store.updatePosition(updatedSession.currentTime);
           }
         } else if (isPlaying) {
           // Rehydration failed but playback is active - start a new session
-          log.info(`Rehydration failed but playback is active, starting new session item=${currentTrack.libraryItemId}`);
+          log.info(
+            `Rehydration failed but playback is active, starting new session item=${currentTrack.libraryItemId}`
+          );
           const username = await getStoredUsername();
           if (username) {
             const playbackRate = await TrackPlayer.getRate();
@@ -485,22 +517,31 @@ async function handlePlaybackProgressUpdated(
                 );
 
                 // Sync store position from new session
-                const newSession = await progressService.getCurrentSession(newIds.userId, newIds.libraryItemId);
+                const newSession = await progressService.getCurrentSession(
+                  newIds.userId,
+                  newIds.libraryItemId
+                );
                 if (newSession) {
                   store.updatePosition(newSession.currentTime);
                 }
               }
             } catch (error) {
-              log.error(`Failed to start new session after stale session cleared: ${(error as Error).message} item=${currentTrack.libraryItemId}`);
+              log.error(
+                `Failed to start new session after stale session cleared: ${(error as Error).message} item=${currentTrack.libraryItemId}`
+              );
               // Fallback: update store from TrackPlayer position
               store.updatePosition(event.position);
             }
           } else {
-            log.warn(`No username available, cannot start new session item=${currentTrack.libraryItemId}`);
+            log.warn(
+              `No username available, cannot start new session item=${currentTrack.libraryItemId}`
+            );
             store.updatePosition(event.position);
           }
         } else {
-          log.warn(`Failed to rehydrate session, and playback is not active item=${currentTrack.libraryItemId}`);
+          log.warn(
+            `Failed to rehydrate session, and playback is not active item=${currentTrack.libraryItemId}`
+          );
           // Fallback: update store from TrackPlayer position if no session
           store.updatePosition(event.position);
         }
@@ -517,7 +558,10 @@ async function handlePlaybackProgressUpdated(
     const ids = await getUserIdAndLibraryItemId();
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
-    log.error(`Progress update error: ${(error as Error).message} item=${ids?.libraryItemId || currentTrack?.libraryItemId || 'unknown'}`, error as Error);
+    log.error(
+      `Progress update error: ${(error as Error).message} item=${ids?.libraryItemId || currentTrack?.libraryItemId || "unknown"}`,
+      error as Error
+    );
   }
 }
 
@@ -531,10 +575,7 @@ async function handleActiveTrackChanged(
   try {
     // Avoid processing duplicate events
     const currentActiveTrack = await TrackPlayer.getActiveTrack();
-    if (
-      !currentActiveTrack ||
-      currentActiveTrack.id === lastActiveTrackId.value
-    ) {
+    if (!currentActiveTrack || currentActiveTrack.id === lastActiveTrackId.value) {
       return;
     }
 
@@ -545,10 +586,14 @@ async function handleActiveTrackChanged(
     const currentTrack = store.player.currentTrack;
     const username = await getStoredUsername();
 
-    log.info(`Active track changed: ${event.track?.title || "unknown"} item=${currentTrack?.libraryItemId || 'unknown'}`);
+    log.info(
+      `Active track changed: ${event.track?.title || "unknown"} item=${currentTrack?.libraryItemId || "unknown"}`
+    );
 
     if (currentTrack && username) {
-      log.info(`Starting session for track: ${currentTrack.title} item=${currentTrack.libraryItemId}`);
+      log.info(
+        `Starting session for track: ${currentTrack.title} item=${currentTrack.libraryItemId}`
+      );
       // Start session tracking
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
@@ -567,8 +612,13 @@ async function handleActiveTrackChanged(
       }
 
       // Validate position - if it's implausibly small, prefer store position
-      if (startPosition < MIN_PLAUSIBLE_POSITION && store.player.position >= MIN_PLAUSIBLE_POSITION) {
-        log.warn(`TrackPlayer position ${formatTime(startPosition)}s is implausibly small, using store position ${formatTime(store.player.position)}s`);
+      if (
+        startPosition < MIN_PLAUSIBLE_POSITION &&
+        store.player.position >= MIN_PLAUSIBLE_POSITION
+      ) {
+        log.warn(
+          `TrackPlayer position ${formatTime(startPosition)}s is implausibly small, using store position ${formatTime(store.player.position)}s`
+        );
         startPosition = store.player.position;
       }
 
@@ -592,7 +642,10 @@ async function handleActiveTrackChanged(
   } catch (error) {
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
-    log.error(`Active track change error: ${(error as Error).message} item=${currentTrack?.libraryItemId || 'unknown'}`, error as Error);
+    log.error(
+      `Active track change error: ${(error as Error).message} item=${currentTrack?.libraryItemId || "unknown"}`,
+      error as Error
+    );
   }
 }
 
@@ -604,14 +657,16 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
     const ids = await getUserIdAndLibraryItemId();
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
-    const itemId = ids?.libraryItemId || currentTrack?.libraryItemId || 'unknown';
+    const itemId = ids?.libraryItemId || currentTrack?.libraryItemId || "unknown";
 
     log.error(`Playback error: ${event.code} - ${event.message} item=${itemId}`);
 
     // End current session on critical playback errors
     if (ids) {
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
-      log.info(`Ending session due to playback error session=${session?.sessionId || 'none'} item=${ids.libraryItemId}`);
+      log.info(
+        `Ending session due to playback error session=${session?.sessionId || "none"} item=${ids.libraryItemId}`
+      );
       await progressService.endCurrentSession(ids.userId, ids.libraryItemId);
     }
 
@@ -621,7 +676,10 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
     const ids = await getUserIdAndLibraryItemId();
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
-    log.error(`Error handling playback error: ${(error as Error).message} item=${ids?.libraryItemId || currentTrack?.libraryItemId || 'unknown'}`, error as Error);
+    log.error(
+      `Error handling playback error: ${(error as Error).message} item=${ids?.libraryItemId || currentTrack?.libraryItemId || "unknown"}`,
+      error as Error
+    );
   }
 }
 
@@ -656,14 +714,22 @@ function setupEventListeners(): Array<() => void> {
   log.info("Setting up event listeners");
   // Diagnostic: log event listener setup
   const eventTypes = [
-    'RemotePlay', 'RemotePause', 'RemoteStop', 'RemoteNext', 'RemotePrevious',
-    'RemoteSeek', 'RemoteDuck', 'RemoteJumpForward', 'RemoteJumpBackward',
-    'PlaybackState', 'PlaybackProgressUpdated', 'PlaybackActiveTrackChanged', 'PlaybackError'
+    "RemotePlay",
+    "RemotePause",
+    "RemoteStop",
+    "RemoteNext",
+    "RemotePrevious",
+    "RemoteSeek",
+    "RemoteDuck",
+    "RemoteJumpForward",
+    "RemoteJumpBackward",
+    "PlaybackState",
+    "PlaybackProgressUpdated",
+    "PlaybackActiveTrackChanged",
+    "PlaybackError",
   ];
   log.debug(
-    `Setting up listeners for events: ${eventTypes.join(
-      ", "
-    )} (${describeRuntimeContext()})`
+    `Setting up listeners for events: ${eventTypes.join(", ")} (${describeRuntimeContext()})`
   );
 
   // Use object to store lastActiveTrackId so it can be mutated in the handler
@@ -672,63 +738,36 @@ function setupEventListeners(): Array<() => void> {
   const subscriptions: Array<() => void> = [];
 
   // Register remote control event handlers
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePlay, handleRemotePlay).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemotePause, handleRemotePause).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteStop, handleRemoteStop).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteNext, handleRemoteNext).remove);
   subscriptions.push(
-    TrackPlayer.addEventListener(Event.RemotePlay, handleRemotePlay).remove
+    TrackPlayer.addEventListener(Event.RemotePrevious, handleRemotePrevious).remove
+  );
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteSeek, handleRemoteSeek).remove);
+  subscriptions.push(TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck).remove);
+  subscriptions.push(
+    TrackPlayer.addEventListener(Event.RemoteJumpForward, handleRemoteJumpForward).remove
   );
   subscriptions.push(
-    TrackPlayer.addEventListener(Event.RemotePause, handleRemotePause).remove
-  );
-  subscriptions.push(
-    TrackPlayer.addEventListener(Event.RemoteStop, handleRemoteStop).remove
-  );
-  subscriptions.push(
-    TrackPlayer.addEventListener(Event.RemoteNext, handleRemoteNext).remove
-  );
-  subscriptions.push(
-    TrackPlayer.addEventListener(Event.RemotePrevious, handleRemotePrevious)
-      .remove
-  );
-  subscriptions.push(
-    TrackPlayer.addEventListener(Event.RemoteSeek, handleRemoteSeek).remove
-  );
-  subscriptions.push(
-    TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck).remove
-  );
-  subscriptions.push(
-    TrackPlayer.addEventListener(
-      Event.RemoteJumpForward,
-      handleRemoteJumpForward
-    ).remove
-  );
-  subscriptions.push(
-    TrackPlayer.addEventListener(
-      Event.RemoteJumpBackward,
-      handleRemoteJumpBackward
-    ).remove
+    TrackPlayer.addEventListener(Event.RemoteJumpBackward, handleRemoteJumpBackward).remove
   );
 
   // Register playback event handlers
   subscriptions.push(
-    TrackPlayer.addEventListener(
-      Event.PlaybackState,
-      handlePlaybackStateChanged
-    ).remove
+    TrackPlayer.addEventListener(Event.PlaybackState, handlePlaybackStateChanged).remove
   );
   subscriptions.push(
-    TrackPlayer.addEventListener(
-      Event.PlaybackProgressUpdated,
-      handlePlaybackProgressUpdated
-    ).remove
+    TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, handlePlaybackProgressUpdated)
+      .remove
   );
   subscriptions.push(
     TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) =>
       handleActiveTrackChanged(event, lastActiveTrackId)
     ).remove
   );
-  subscriptions.push(
-    TrackPlayer.addEventListener(Event.PlaybackError, handlePlaybackError)
-      .remove
-  );
+  subscriptions.push(TrackPlayer.addEventListener(Event.PlaybackError, handlePlaybackError).remove);
 
   return subscriptions;
 }
@@ -783,17 +822,13 @@ async function trackPlayerBackgroundService(): Promise<void> {
 
     // If called within 1 second, skip (duplicate call)
     if (timeSinceInit < 1000) {
-      log.debug(
-        `Already initialized ${timeSinceInit}ms ago, skipping duplicate setup`
-      );
+      log.debug(`Already initialized ${timeSinceInit}ms ago, skipping duplicate setup`);
       return;
     }
 
     // If it's been longer, this likely means the JS context was recreated
     log.warn(
-      `Re-initializing after ${Math.round(
-        timeSinceInit / 1000
-      )}s - possible JS context recreation`
+      `Re-initializing after ${Math.round(timeSinceInit / 1000)}s - possible JS context recreation`
     );
     cleanupEventListeners();
   } else {

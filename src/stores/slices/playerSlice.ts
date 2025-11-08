@@ -8,18 +8,18 @@
  * - Loading states
  */
 
-import { getUserByUsername } from '@/db/helpers/users';
-import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from '@/lib/asyncStore';
-import { formatTime } from '@/lib/helpers/formatters';
-import { logger } from '@/lib/logger';
-import { getStoredUsername } from '@/lib/secureStore';
-import { configureTrackPlayer } from '@/lib/trackPlayerConfig';
-import { progressService } from '@/services/ProgressService';
-import type { CurrentChapter, PlayerTrack } from '@/types/player';
-import type { SliceCreator } from '@/types/store';
-import TrackPlayer from 'react-native-track-player';
+import { getUserByUsername } from "@/db/helpers/users";
+import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
+import { formatTime } from "@/lib/helpers/formatters";
+import { logger } from "@/lib/logger";
+import { getStoredUsername } from "@/lib/secureStore";
+import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
+import { progressService } from "@/services/ProgressService";
+import type { CurrentChapter, PlayerTrack } from "@/types/player";
+import type { SliceCreator } from "@/types/store";
+import TrackPlayer from "react-native-track-player";
 
-const log = logger.forTag('PlayerSlice');
+const log = logger.forTag("PlayerSlice");
 
 /**
  * Player slice state interface - scoped under 'player' to avoid conflicts
@@ -108,7 +108,6 @@ export interface PlayerSlice extends PlayerSliceState, PlayerSliceActions {}
  */
 export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
   restorePersistedState: async () => {
-
     const store = get();
     const restored: string[] = [];
     const notFound: string[] = [];
@@ -165,7 +164,9 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     }
 
     // Log consolidated summary
-    log.info(`State restoration from AsyncStorage: restored=[${restored.join(', ')}], notFound=[${notFound.join(', ')}]`);
+    log.info(
+      `State restoration from AsyncStorage: restored=[${restored.join(", ")}], notFound=[${notFound.join(", ")}]`
+    );
 
     // Reconcile with ProgressService database (source of truth)
     let dbReconciliationSummary: string[] = [];
@@ -173,15 +174,15 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       // Need userId and libraryItemId to get session - skip if not available
       const username = await getStoredUsername();
       if (!username) {
-        dbReconciliationSummary.push('skipped (no username)');
+        dbReconciliationSummary.push("skipped (no username)");
       } else {
         const user = await getUserByUsername(username);
         if (!user?.id) {
-          dbReconciliationSummary.push('skipped (user not found)');
+          dbReconciliationSummary.push("skipped (user not found)");
         } else {
           const libraryItemId = store.player.currentTrack?.libraryItemId;
           if (!libraryItemId) {
-            dbReconciliationSummary.push('skipped (no currentTrack)');
+            dbReconciliationSummary.push("skipped (no currentTrack)");
           } else {
             const dbSession = await progressService.getCurrentSession(user.id, libraryItemId);
 
@@ -192,8 +193,11 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
               // DB session position is authoritative
               if (dbSession.currentTime !== store.player.position) {
                 const positionDiff = Math.abs(dbSession.currentTime - store.player.position);
-                if (positionDiff > 1) { // Only update if difference is significant (>1s)
-                  dbReconciliationSummary.push(`position updated: ${formatTime(store.player.position)}s -> ${formatTime(dbSession.currentTime)}s`);
+                if (positionDiff > 1) {
+                  // Only update if difference is significant (>1s)
+                  dbReconciliationSummary.push(
+                    `position updated: ${formatTime(store.player.position)}s -> ${formatTime(dbSession.currentTime)}s`
+                  );
                   store.updatePosition(dbSession.currentTime);
                 } else {
                   dbReconciliationSummary.push(`position match (diff=${positionDiff}s)`);
@@ -204,27 +208,32 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
               // Check if currentTrack should be updated from DB session
               const currentTrackLibraryItemId = store.player.currentTrack?.libraryItemId;
-              if (!currentTrackLibraryItemId || currentTrackLibraryItemId !== dbSession.libraryItemId) {
-                dbReconciliationSummary.push(`track mismatch: AsyncStorage=${currentTrackLibraryItemId || 'none'}, DB=${dbSession.libraryItemId}`);
+              if (
+                !currentTrackLibraryItemId ||
+                currentTrackLibraryItemId !== dbSession.libraryItemId
+              ) {
+                dbReconciliationSummary.push(
+                  `track mismatch: AsyncStorage=${currentTrackLibraryItemId || "none"}, DB=${dbSession.libraryItemId}`
+                );
                 // Note: We can't fully restore PlayerTrack here without loading metadata/files
                 // The track will be restored by PlayerService.restorePlayerServiceFromSession() or playTrack()
               } else {
                 dbReconciliationSummary.push(`track match`);
               }
             } else {
-              dbReconciliationSummary.push('no active session found');
+              dbReconciliationSummary.push("no active session found");
             }
           }
         }
       }
     } catch (error) {
       dbReconciliationSummary.push(`error: ${(error as Error).message}`);
-      log.error('Failed to reconcile with ProgressService', error as Error);
+      log.error("Failed to reconcile with ProgressService", error as Error);
       // Continue with AsyncStorage values if reconciliation fails
     }
 
     if (dbReconciliationSummary.length > 0) {
-      log.info(`DB reconciliation: ${dbReconciliationSummary.join(', ')}`);
+      log.info(`DB reconciliation: ${dbReconciliationSummary.join(", ")}`);
     }
 
     // Try to apply position to TrackPlayer if possible
@@ -234,11 +243,13 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         const queue = await TrackPlayer.getQueue();
         if (queue.length > 0) {
           await TrackPlayer.seekTo(store.player.position);
-          log.info(`Applied restored position to TrackPlayer: ${formatTime(store.player.position)}s`);
+          log.info(
+            `Applied restored position to TrackPlayer: ${formatTime(store.player.position)}s`
+          );
         }
       } catch (error) {
         // Ignore errors - TrackPlayer might not be ready yet
-        log.info('Could not apply position to TrackPlayer (player may not be ready)');
+        log.info("Could not apply position to TrackPlayer (player may not be ready)");
       }
     }
   },
@@ -262,7 +273,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   // Actions
   initializePlayerSlice: async () => {
-    log.info('Initializing player slice');
+    log.info("Initializing player slice");
     set((state: PlayerSlice) => ({
       ...state,
       player: {
@@ -369,9 +380,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     // Keep prior chapter if position still within its bounds
     const chapterStillValid =
-      previousChapter &&
-      position >= previousChapter.start &&
-      position < previousChapter.end
+      previousChapter && position >= previousChapter.start && position < previousChapter.end
         ? previousChapter
         : undefined;
 
@@ -382,9 +391,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     if (!resolvedChapter) {
       // Clamp to closest chapter when outside known ranges
       resolvedChapter =
-        position >= chapters[chapters.length - 1].end
-          ? chapters[chapters.length - 1]
-          : chapters[0];
+        position >= chapters[chapters.length - 1].end ? chapters[chapters.length - 1] : chapters[0];
     }
 
     const hasChapterChanged = previousChapter?.id !== resolvedChapter.id;
@@ -474,11 +481,11 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       const state = get();
       const { currentTrack, currentChapter } = state.player;
       if (!currentTrack || !currentChapter) {
-        log.debug('Skipping now playing metadata update - missing track or chapter');
+        log.debug("Skipping now playing metadata update - missing track or chapter");
         return;
       }
 
-      log.info(
+      log.debug(
         `Updating now playing metadata for track=${currentTrack.libraryItemId} chapter=${currentChapter.chapter.id}`
       );
 
@@ -493,7 +500,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       // Get the active track index to update its metadata
       const activeTrackIndex = await TrackPlayer.getActiveTrackIndex();
       if (activeTrackIndex === undefined || activeTrackIndex === null || activeTrackIndex < 0) {
-        log.warn('Cannot update now playing metadata - no active track index');
+        log.warn("Cannot update now playing metadata - no active track index");
         return;
       }
 
@@ -512,11 +519,13 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       });
 
       // Double check that we don't lose the trackplayer controls on the lock screen
-      await configureTrackPlayer()
+      await configureTrackPlayer();
 
-      log.debug(`Updated now playing: chapter="${chapterTitle}" elapsed=${formatTime(chapterElapsedTime)}/${formatTime(chapterDuration)}`);
+      log.debug(
+        `Updated now playing: chapter="${chapterTitle}" elapsed=${formatTime(chapterElapsedTime)}/${formatTime(chapterDuration)}`
+      );
     } catch (error) {
-      log.error('Failed to update now playing metadata:', error as Error);
+      log.error("Failed to update now playing metadata:", error as Error);
     }
   },
 });
