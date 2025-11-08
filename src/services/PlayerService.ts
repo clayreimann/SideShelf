@@ -19,8 +19,8 @@ import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { getApiConfig } from "@/lib/api/api";
 import { startPlaySession } from "@/lib/api/endpoints";
-import { calculateSmartRewindTime, getSmartRewindEnabled } from "@/lib/appSettings";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
+import { applySmartRewind } from "@/lib/smartRewind";
 import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
 import { formatTime } from "@/lib/helpers/formatters";
@@ -417,12 +417,8 @@ export class PlayerService {
     try {
       const store = useAppStore.getState();
 
-      // Check if smart rewind is enabled and apply it
-      const smartRewindEnabled = await getSmartRewindEnabled();
-
-      if (smartRewindEnabled) {
-        await this.smartRewind();
-      }
+      // Apply smart rewind (checks enabled setting internally)
+      await applySmartRewind();
 
       // Clear pause time since we're resuming
       store._setLastPauseTime(null);
@@ -692,85 +688,6 @@ export class PlayerService {
       authoritativePosition,
       asyncStoragePosition,
     };
-  }
-
-  /**
-   * Smart rewind
-   */
-  async smartRewind(): Promise<void> {
-    const store = useAppStore.getState();
-    let lastPlayedTime: number | null = null;
-
-    // First, try to use the in-memory pause time from playerSlice
-    if (store.player.lastPauseTime) {
-      lastPlayedTime = store.player.lastPauseTime;
-      log.info(
-        `Using current session pause time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
-      );
-    } else if (store.player.currentTrack?.libraryItemId) {
-      // Cold boot scenario - check the database for last played time
-      try {
-        const username = await getStoredUsername();
-        if (!username) {
-          return;
-        }
-
-        const user = await getUserByUsername(username);
-        if (user?.id) {
-          const activeSession = await getActiveSession(
-            user.id,
-            store.player.currentTrack.libraryItemId
-          );
-          const savedProgress = await getMediaProgressForLibraryItem(
-            store.player.currentTrack.libraryItemId,
-            user.id
-          );
-
-          // Use whichever was updated most recently
-          if (activeSession && savedProgress?.lastUpdate) {
-            const sessionTime = activeSession.updatedAt.getTime();
-            const progressTime = savedProgress.lastUpdate.getTime();
-
-            if (sessionTime > progressTime) {
-              lastPlayedTime = sessionTime;
-              log.info(
-                `Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
-              );
-            } else {
-              lastPlayedTime = progressTime;
-              log.info(
-                `Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
-              );
-            }
-          } else if (activeSession) {
-            lastPlayedTime = activeSession.updatedAt.getTime();
-            log.info(
-              `Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
-            );
-          } else if (savedProgress?.lastUpdate) {
-            lastPlayedTime = savedProgress.lastUpdate.getTime();
-            log.info(
-              `Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
-            );
-          }
-        }
-      } catch (error) {
-        log.error("Failed to get last played time from database for smart rewind", error as Error);
-      }
-    }
-
-    // Apply smart rewind if we have a last played time
-    if (lastPlayedTime) {
-      const rewindSeconds = calculateSmartRewindTime(lastPlayedTime);
-      if (rewindSeconds > 0) {
-        const currentPosition = await TrackPlayer.getProgress();
-        const newPosition = Math.max(0, currentPosition.position - rewindSeconds);
-        log.info(
-          `Smart rewind: jumping back ${rewindSeconds}s (from ${formatTime(currentPosition.position)} to ${formatTime(newPosition)})`
-        );
-        await TrackPlayer.seekTo(newPosition);
-      }
-    }
   }
 
   /**

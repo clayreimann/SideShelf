@@ -10,6 +10,7 @@ import { getUserByUsername } from "@/db/helpers/users";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
+import { applySmartRewind } from "@/lib/smartRewind";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
 import { AppState } from "react-native";
@@ -70,6 +71,14 @@ async function handleRemotePlay(): Promise<void> {
   log.debug(
     `RemotePlay received progress=${formatTime(progress.position)} (${describeRuntimeContext()})`
   );
+
+  // Apply smart rewind (checks enabled setting internally)
+  await applySmartRewind();
+
+  // Clear pause time since we're resuming
+  const store = useAppStore.getState();
+  store._setLastPauseTime(null);
+
   await TrackPlayer.play();
 }
 
@@ -78,6 +87,10 @@ async function handleRemotePlay(): Promise<void> {
  */
 async function handleRemotePause(): Promise<void> {
   log.debug(`RemotePause received (${describeRuntimeContext()})`);
+  const store = useAppStore.getState();
+  const pauseTime = Date.now();
+  store._setLastPauseTime(pauseTime);
+  log.info(`Pausing playback at ${new Date(pauseTime).toISOString()}`);
   await TrackPlayer.pause();
 }
 
@@ -285,13 +298,27 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
   try {
     const ids = await getUserIdAndLibraryItemId();
     if (ids) {
+      const store = useAppStore.getState();
+
       if (event.permanent) {
+        const pauseTime = Date.now();
+        store._setLastPauseTime(pauseTime);
+        log.info(`Pausing playback (permanent duck) at ${new Date(pauseTime).toISOString()}`);
         await TrackPlayer.pause();
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else if (event.paused) {
+        const pauseTime = Date.now();
+        store._setLastPauseTime(pauseTime);
+        log.info(`Pausing playback (duck) at ${new Date(pauseTime).toISOString()}`);
         await TrackPlayer.pause();
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else {
+        // Resuming from duck - apply smart rewind (checks enabled setting internally)
+        await applySmartRewind();
+
+        // Clear pause time since we're resuming
+        store._setLastPauseTime(null);
+
         await TrackPlayer.play();
         await progressService.handleDuck(ids.userId, ids.libraryItemId, false);
       }
