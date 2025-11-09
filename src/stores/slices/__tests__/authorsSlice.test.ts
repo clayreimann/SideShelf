@@ -79,7 +79,7 @@ describe("AuthorsSlice", () => {
     mockedAsyncStorage.setItem.mockResolvedValue();
     getAllAuthors.mockResolvedValue([]);
     transformAuthorsToDisplayFormat.mockReturnValue([]);
-    cacheAuthorImageIfMissing.mockResolvedValue({ uri: null, fromCache: false });
+    cacheAuthorImageIfMissing.mockResolvedValue({ uri: "", wasDownloaded: false });
   });
 
   afterEach(() => {
@@ -237,7 +237,7 @@ describe("AuthorsSlice", () => {
       transformAuthorsToDisplayFormat.mockReturnValue(mockDisplayAuthors);
       cacheAuthorImageIfMissing.mockResolvedValue({
         uri: "file:///cached-image.jpg",
-        fromCache: false,
+        wasDownloaded: true,
       });
 
       await store.getState().refetchAuthors();
@@ -264,7 +264,7 @@ describe("AuthorsSlice", () => {
       transformAuthorsToDisplayFormat.mockReturnValue(mockDisplayAuthors);
       cacheAuthorImageIfMissing.mockResolvedValue({
         uri: "file:///cached-image.jpg",
-        fromCache: false,
+        wasDownloaded: true,
       });
 
       await store.getState().refetchAuthors();
@@ -280,6 +280,29 @@ describe("AuthorsSlice", () => {
       cacheAuthorImageIfMissing.mockRejectedValue(new Error("Image cache error"));
 
       await expect(store.getState().refetchAuthors()).resolves.not.toThrow();
+    });
+
+    it("should not set cachedImageUri when image download fails (offline scenario)", async () => {
+      getAllAuthors.mockResolvedValue(mockAuthors);
+      // Create fresh mock data without cached images
+      const freshDisplayAuthors = mockDisplayAuthors.map((author) => ({
+        ...author,
+        cachedImageUri: null,
+      }));
+      transformAuthorsToDisplayFormat.mockReturnValue(freshDisplayAuthors);
+      // Simulate offline failure - empty URI returned
+      cacheAuthorImageIfMissing.mockResolvedValue({
+        uri: "",
+        wasDownloaded: false,
+      });
+
+      await store.getState().refetchAuthors();
+
+      const state = store.getState();
+      // cachedImageUri should remain null when download fails
+      state.authors.items.forEach((author) => {
+        expect(author.cachedImageUri).toBeNull();
+      });
     });
 
     it("should return empty array when not ready", async () => {

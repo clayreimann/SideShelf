@@ -8,12 +8,13 @@
  * - Control buttons (pause, resume, cancel)
  */
 
-import { ProgressBar } from '@/components/ui';
-import { formatBytes, formatSpeed, formatTimeRemainingInDownload } from '@/lib/helpers/formatters';
-import { useThemedStyles } from '@/lib/theme';
-import { DownloadProgress as DownloadProgressType } from '@/services/DownloadService';
-import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { ProgressBar } from "@/components/ui";
+import { translate } from "@/i18n";
+import { formatBytes, formatSpeed, formatTimeRemainingInDownload } from "@/lib/helpers/formatters";
+import { useThemedStyles } from "@/lib/theme";
+import { DownloadProgress as DownloadProgressType } from "@/services/DownloadService";
+import React from "react";
+import { Text, TouchableOpacity, View } from "react-native";
 
 interface DownloadProgressProps {
   downloadProgress: DownloadProgressType | null;
@@ -37,47 +38,47 @@ export default function DownloadProgressView({
     return (
       <View
         style={{
-          backgroundColor: isDark ? '#333' : '#f5f5f5',
+          backgroundColor: isDark ? "#333" : "#f5f5f5",
           borderRadius: 8,
           padding: 12,
         }}
       >
-        <Text
-          style={[
-            styles.text,
-            { fontSize: 14, marginBottom: 8, textAlign: 'center' },
-          ]}
-        >
-          Preparing download...
+        <Text style={[styles.text, { fontSize: 14, marginBottom: 8, textAlign: "center" }]}>
+          {translate("download.status.preparing")}
         </Text>
       </View>
     );
   }
 
   const isSingleFile = (downloadProgress.totalFiles || 0) === 1;
-  const isDownloading = downloadProgress.status === 'downloading';
+  const isDownloading = downloadProgress.status === "downloading";
   const showFileProgress = isDownloading && !isSingleFile && downloadProgress.currentFile;
 
   // Determine status text
-  let statusText = 'Preparing download...';
+  let statusText = translate("download.status.preparing");
   if (downloadProgress) {
     switch (downloadProgress.status) {
-      case 'downloading':
+      case "downloading":
         statusText = isSingleFile
-          ? `Downloading: ${downloadProgress.currentFile || ''}`
-          : `Downloading file ${downloadProgress.downloadedFiles || 0} of ${downloadProgress.totalFiles || 0}`;
+          ? translate("download.status.downloading", {
+              filename: downloadProgress.currentFile || "",
+            })
+          : translate("download.status.downloadingFile", {
+              current: downloadProgress.downloadedFiles || 0,
+              total: downloadProgress.totalFiles || 0,
+            });
         break;
-      case 'completed':
-        statusText = 'Download Complete!';
+      case "completed":
+        statusText = translate("download.status.complete");
         break;
-      case 'cancelled':
-        statusText = 'Download Cancelled';
+      case "cancelled":
+        statusText = translate("download.status.cancelled");
         break;
-      case 'error':
-        statusText = 'Download Error';
+      case "error":
+        statusText = translate("download.status.error");
         break;
-      case 'paused':
-        statusText = 'Download Paused';
+      case "paused":
+        statusText = translate("download.status.paused");
         break;
     }
   }
@@ -85,17 +86,12 @@ export default function DownloadProgressView({
   return (
     <View
       style={{
-        backgroundColor: isDark ? '#333' : '#f5f5f5',
+        backgroundColor: isDark ? "#333" : "#f5f5f5",
         borderRadius: 8,
         padding: 12,
       }}
     >
-      <Text
-        style={[
-          styles.text,
-          { fontSize: 14, marginBottom: 8, textAlign: 'center' },
-        ]}
-      >
+      <Text style={[styles.text, { fontSize: 14, marginBottom: 8, textAlign: "center" }]}>
         {statusText}
       </Text>
 
@@ -104,13 +100,13 @@ export default function DownloadProgressView({
         <ProgressBar
           progress={downloadProgress.totalProgress || 0}
           variant="large"
-          progressColor={
-            downloadProgress.status === 'error' ? '#FF3B30' : '#007AFF'
-          }
+          progressColor={downloadProgress.status === "error" ? "#FF3B30" : "#007AFF"}
           customPercentageText={
             isSingleFile
               ? `${Math.round((downloadProgress.totalProgress || 0) * 100)}%`
-              : `Overall Progress: ${Math.round((downloadProgress.totalProgress || 0) * 100)}%`
+              : translate("download.progress.overall", {
+                  percent: Math.round((downloadProgress.totalProgress || 0) * 100),
+                })
           }
           showPercentage={true}
         />
@@ -123,9 +119,9 @@ export default function DownloadProgressView({
             progress={downloadProgress.fileProgress || 0}
             variant="medium"
             progressColor="#34C759"
-            customPercentageText={`Current File: ${Math.round(
-              (downloadProgress.fileProgress || 0) * 100
-            )}%`}
+            customPercentageText={translate("download.progress.currentFile", {
+              percent: Math.round((downloadProgress.fileProgress || 0) * 100),
+            })}
             showPercentage={true}
           />
         </View>
@@ -134,53 +130,34 @@ export default function DownloadProgressView({
       {/* Download Stats */}
       <View
         style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
+          flexDirection: "row",
+          justifyContent: "space-between",
           marginBottom: 8,
         }}
       >
         <View style={{ flex: 1 }}>
           {!isSingleFile && (
-            <Text
-              style={[
-                styles.text,
-                { fontSize: 11, opacity: 0.7, textAlign: 'left' },
-              ]}
-            >
-              Files: {downloadProgress.downloadedFiles || 0}/
-              {downloadProgress.totalFiles || 0}
+            <Text style={[styles.text, { fontSize: 11, opacity: 0.7, textAlign: "left" }]}>
+              {translate("download.info.files")}
+              {downloadProgress.downloadedFiles || 0}/{downloadProgress.totalFiles || 0}
             </Text>
           )}
-          <Text
-            style={[
-              styles.text,
-              { fontSize: 11, opacity: 0.7, textAlign: 'left' },
-            ]}
-          >
-            Size: {formatBytes(downloadProgress.bytesDownloaded || 0)}/
+          <Text style={[styles.text, { fontSize: 11, opacity: 0.7, textAlign: "left" }]}>
+            {translate("download.info.size")}
+            {formatBytes(downloadProgress.bytesDownloaded || 0)}/
             {formatBytes(downloadProgress.totalBytes || 0)}
           </Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text
-            style={[
-              styles.text,
-              { fontSize: 11, opacity: 0.7, textAlign: 'right' },
-            ]}
-          >
-            Speed: {formatSpeed(downloadProgress.downloadSpeed || 0)}
+          <Text style={[styles.text, { fontSize: 11, opacity: 0.7, textAlign: "right" }]}>
+            {translate("download.info.speed")}
+            {formatSpeed(downloadProgress.downloadSpeed || 0)}
           </Text>
           {(downloadProgress.downloadSpeed || 0) > 0 && (
-            <Text
-              style={[
-                styles.text,
-                { fontSize: 11, opacity: 0.7, textAlign: 'right' },
-              ]}
-            >
-              ETA:{' '}
+            <Text style={[styles.text, { fontSize: 11, opacity: 0.7, textAlign: "right" }]}>
+              {translate("download.info.eta")}{" "}
               {formatTimeRemainingInDownload(
-                (downloadProgress.totalBytes || 0) -
-                  (downloadProgress.bytesDownloaded || 0),
+                (downloadProgress.totalBytes || 0) - (downloadProgress.bytesDownloaded || 0),
                 downloadProgress.downloadSpeed || 0,
                 3, // minSamplesForEta
                 downloadProgress.speedSampleCount || 0
@@ -193,8 +170,8 @@ export default function DownloadProgressView({
       {/* Download Control Buttons */}
       <View
         style={{
-          flexDirection: 'row',
-          justifyContent: 'center',
+          flexDirection: "row",
+          justifyContent: "center",
           gap: 8,
           marginTop: 8,
         }}
@@ -202,7 +179,7 @@ export default function DownloadProgressView({
         {downloadProgress.canPause && (
           <TouchableOpacity
             style={{
-              backgroundColor: '#FF9500',
+              backgroundColor: "#FF9500",
               borderRadius: 6,
               paddingVertical: 8,
               paddingHorizontal: 16,
@@ -211,12 +188,12 @@ export default function DownloadProgressView({
           >
             <Text
               style={{
-                color: 'white',
+                color: "white",
                 fontSize: 12,
-                fontWeight: '600',
+                fontWeight: "600",
               }}
             >
-              ⏸️ Pause
+              {translate("download.button.pause")}
             </Text>
           </TouchableOpacity>
         )}
@@ -224,7 +201,7 @@ export default function DownloadProgressView({
         {downloadProgress.canResume && (
           <TouchableOpacity
             style={{
-              backgroundColor: '#34C759',
+              backgroundColor: "#34C759",
               borderRadius: 6,
               paddingVertical: 8,
               paddingHorizontal: 16,
@@ -233,21 +210,20 @@ export default function DownloadProgressView({
           >
             <Text
               style={{
-                color: 'white',
+                color: "white",
                 fontSize: 12,
-                fontWeight: '600',
+                fontWeight: "600",
               }}
             >
-              ▶️ Resume
+              {translate("download.button.resume")}
             </Text>
           </TouchableOpacity>
         )}
 
-        {(downloadProgress.status === 'downloading' ||
-          downloadProgress.status === 'paused') && (
+        {(downloadProgress.status === "downloading" || downloadProgress.status === "paused") && (
           <TouchableOpacity
             style={{
-              backgroundColor: '#FF3B30',
+              backgroundColor: "#FF3B30",
               borderRadius: 6,
               paddingVertical: 8,
               paddingHorizontal: 16,
@@ -256,12 +232,12 @@ export default function DownloadProgressView({
           >
             <Text
               style={{
-                color: 'white',
+                color: "white",
                 fontSize: 12,
-                fontWeight: '600',
+                fontWeight: "600",
               }}
             >
-              ❌ Cancel
+              {translate("download.button.cancel")}
             </Text>
           </TouchableOpacity>
         )}

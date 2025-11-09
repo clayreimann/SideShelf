@@ -4,13 +4,14 @@
  * User preferences and app settings
  */
 
-import Toggle from '@/components/ui/Toggle';
-import { useThemedStyles } from '@/lib/theme';
-import { useLibrary, useSettings } from '@/stores';
-import { MenuView } from '@react-native-menu/menu';
-import { Stack } from 'expo-router';
-import { useCallback } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import Toggle from "@/components/ui/Toggle";
+import { translate } from "@/i18n";
+import { useThemedStyles } from "@/lib/theme";
+import { useLibrary, useSettings } from "@/stores";
+import { MenuView } from "@react-native-menu/menu";
+import { Stack } from "expo-router";
+import { useCallback } from "react";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 const INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90];
 
@@ -30,56 +31,75 @@ export default function SettingsScreen() {
   const { libraries, selectedLibrary, selectLibrary } = useLibrary();
 
   // Helper colors
-  const textSecondary = isDark ? '#999999' : '#666666';
-  const primaryColor = isDark ? '#4A9EFF' : '#007AFF';
-  const cardBackground = isDark ? '#2C2C2E' : '#E5E5EA';
+  const textSecondary = isDark ? "#999999" : "#666666";
+  const primaryColor = isDark ? "#4A9EFF" : "#007AFF";
+  const cardBackground = isDark ? "#2C2C2E" : "#E5E5EA";
 
   // Toggle background service reconnection
-  const toggleBackgroundServiceReconnection = useCallback(async (value: boolean) => {
-    try {
-      await updateBackgroundServiceReconnection(value);
-    } catch (error) {
-      console.error('Failed to update background service reconnection', error);
-      Alert.alert('Error', 'Failed to save setting');
-    }
-  }, [updateBackgroundServiceReconnection]);
+  const toggleBackgroundServiceReconnection = useCallback(
+    async (value: boolean) => {
+      try {
+        await updateBackgroundServiceReconnection(value);
+      } catch (error) {
+        console.error("Failed to update background service reconnection", error);
+        Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
+      }
+    },
+    [updateBackgroundServiceReconnection]
+  );
 
   // Update jump forward interval
-  const handleJumpForwardChange = useCallback(async (seconds: number) => {
-    try {
-      await updateJumpForwardInterval(seconds);
-    } catch (error) {
-      console.error('Failed to update jump forward interval', error);
-      Alert.alert('Error', 'Failed to save setting');
-    }
-  }, [updateJumpForwardInterval]);
+  const handleJumpForwardChange = useCallback(
+    async (seconds: number) => {
+      try {
+        await updateJumpForwardInterval(seconds);
+      } catch (error) {
+        console.error("Failed to update jump forward interval", error);
+        Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
+      }
+    },
+    [updateJumpForwardInterval]
+  );
 
   // Update jump backward interval
-  const handleJumpBackwardChange = useCallback(async (seconds: number) => {
-    try {
-      await updateJumpBackwardInterval(seconds);
-    } catch (error) {
-      console.error('Failed to update jump backward interval', error);
-      Alert.alert('Error', 'Failed to save setting');
-    }
-  }, [updateJumpBackwardInterval]);
+  const handleJumpBackwardChange = useCallback(
+    async (seconds: number) => {
+      try {
+        await updateJumpBackwardInterval(seconds);
+      } catch (error) {
+        console.error("Failed to update jump backward interval", error);
+        Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
+      }
+    },
+    [updateJumpBackwardInterval]
+  );
 
   // Toggle smart rewind
-  const toggleSmartRewind = useCallback(async (value: boolean) => {
-    try {
-      await updateSmartRewindEnabled(value);
-    } catch (error) {
-      console.error('Failed to update smart rewind setting', error);
-      Alert.alert('Error', 'Failed to save setting');
-    }
-  }, [updateSmartRewindEnabled]);
+  const toggleSmartRewind = useCallback(
+    async (value: boolean) => {
+      try {
+        await updateSmartRewindEnabled(value);
+      } catch (error) {
+        console.error("Failed to update smart rewind setting", error);
+        Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
+      }
+    },
+    [updateSmartRewindEnabled]
+  );
 
   if (isLoading) {
     return (
       <>
-        <Stack.Screen options={{ title: 'Settings' }} />
-        <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ color: textSecondary }}>Loading settings...</Text>
+        <Stack.Screen options={{ title: translate("settings.title") }} />
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.background,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: textSecondary }}>{translate("settings.loading")}</Text>
         </View>
       </>
     );
@@ -87,20 +107,35 @@ export default function SettingsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Settings' }} />
+      <Stack.Screen options={{ title: translate("settings.title") }} />
 
       <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
         {/* Library Selection Section */}
         {libraries.length > 0 && (
           <View style={{ padding: 16 }}>
-            <Text style={{ fontSize: 13, fontWeight: '600', color: textSecondary, marginBottom: 12, textTransform: 'uppercase' }}>
-              Library Selection
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: "600",
+                color: textSecondary,
+                marginBottom: 12,
+                textTransform: "uppercase",
+              }}
+            >
+              {translate("settings.sections.librarySelection")}
             </Text>
             <View style={{ marginBottom: 8 }}>
-              <Text style={{ fontSize: 15, color: colors.textPrimary, fontWeight: '500', marginBottom: 8 }}>
-                Current Library
+              <Text
+                style={{
+                  fontSize: 15,
+                  color: colors.textPrimary,
+                  fontWeight: "500",
+                  marginBottom: 8,
+                }}
+              >
+                {translate("settings.currentLibrary")}
               </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {libraries.map((library) => (
                   <Pressable
                     key={library.id}
@@ -110,11 +145,26 @@ export default function SettingsScreen() {
                       paddingHorizontal: 16,
                       borderRadius: 8,
                       borderWidth: 1,
-                      borderColor: selectedLibrary?.id === library.id ? primaryColor : isDark ? '#3A3A3C' : '#C7C7CC',
-                      backgroundColor: selectedLibrary?.id === library.id ? primaryColor : isDark ? '#1C1C1E' : '#FFFFFF',
+                      borderColor:
+                        selectedLibrary?.id === library.id
+                          ? primaryColor
+                          : isDark
+                            ? "#3A3A3C"
+                            : "#C7C7CC",
+                      backgroundColor:
+                        selectedLibrary?.id === library.id
+                          ? primaryColor
+                          : isDark
+                            ? "#1C1C1E"
+                            : "#FFFFFF",
                     }}
                   >
-                    <Text style={{ color: selectedLibrary?.id === library.id ? '#FFFFFF' : colors.textPrimary, fontWeight: '600' }}>
+                    <Text
+                      style={{
+                        color: selectedLibrary?.id === library.id ? "#FFFFFF" : colors.textPrimary,
+                        fontWeight: "600",
+                      }}
+                    >
                       {library.name}
                     </Text>
                   </Pressable>
@@ -126,14 +176,36 @@ export default function SettingsScreen() {
 
         {/* Playback Controls Section */}
         <View style={{ padding: 16 }}>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: textSecondary, marginBottom: 12, textTransform: 'uppercase' }}>
-            Playback Controls
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "600",
+              color: textSecondary,
+              marginBottom: 12,
+              textTransform: "uppercase",
+            }}
+          >
+            {translate("settings.sections.playbackControls")}
           </Text>
 
           {/* Jump Forward Interval */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Text style={{ fontSize: 15, color: colors.textPrimary, fontWeight: '500', marginBottom: 8 }}>
-              Jump Forward Interval
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 15,
+                color: colors.textPrimary,
+                fontWeight: "500",
+                marginBottom: 8,
+              }}
+            >
+              {translate("settings.jumpForwardInterval")}
             </Text>
             <MenuView
               onPressAction={({ nativeEvent }) => {
@@ -142,11 +214,11 @@ export default function SettingsScreen() {
               actions={INTERVAL_OPTIONS.map((seconds) => ({
                 id: seconds.toString(),
                 title: `${seconds}s`,
-                state: jumpForwardInterval === seconds ? 'on' : 'off',
+                state: jumpForwardInterval === seconds ? "on" : "off",
               }))}
             >
               <Pressable>
-                <Text style={{ color: colors.link, fontSize: 15, textDecorationLine: 'underline' }}>
+                <Text style={{ color: colors.link, fontSize: 15, textDecorationLine: "underline" }}>
                   {jumpForwardInterval}s
                 </Text>
               </Pressable>
@@ -154,9 +226,23 @@ export default function SettingsScreen() {
           </View>
 
           {/* Jump Backward Interval */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Text style={{ fontSize: 15, color: colors.textPrimary, fontWeight: '500', marginBottom: 8 }}>
-              Jump Backward Interval
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 15,
+                color: colors.textPrimary,
+                fontWeight: "500",
+                marginBottom: 8,
+              }}
+            >
+              {translate("settings.jumpBackwardInterval")}
             </Text>
             <MenuView
               onPressAction={({ nativeEvent }) => {
@@ -165,11 +251,11 @@ export default function SettingsScreen() {
               actions={INTERVAL_OPTIONS.map((seconds) => ({
                 id: seconds.toString(),
                 title: `${seconds}s`,
-                state: jumpBackwardInterval === seconds ? 'on' : 'off',
+                state: jumpBackwardInterval === seconds ? "on" : "off",
               }))}
             >
               <Pressable>
-                <Text style={{ color: colors.link, fontSize: 15, textDecorationLine: 'underline' }}>
+                <Text style={{ color: colors.link, fontSize: 15, textDecorationLine: "underline" }}>
                   {jumpBackwardInterval}s
                 </Text>
               </Pressable>
@@ -177,20 +263,29 @@ export default function SettingsScreen() {
           </View>
 
           {/* Smart Rewind Toggle */}
-          <View style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingVertical: 14,
-            backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-            borderRadius: 10,
-          }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingVertical: 14,
+              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+              borderRadius: 10,
+            }}
+          >
             <View style={{ flex: 1, marginRight: 12 }}>
-              <Text style={{ fontSize: 15, color: colors.textPrimary, fontWeight: '500', marginBottom: 4 }}>
-                Smart Rewind on Resume
+              <Text
+                style={{
+                  fontSize: 15,
+                  color: colors.textPrimary,
+                  fontWeight: "500",
+                  marginBottom: 4,
+                }}
+              >
+                {translate("settings.smartRewind")}
               </Text>
               <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
-                Automatically rewind a few seconds when resuming playback after a pause. The rewind time increases based on how long playback was paused (3s to 30s).
+                {translate("settings.smartRewindDescription")}
               </Text>
             </View>
             <Toggle value={smartRewindEnabled} onValueChange={toggleSmartRewind} />
@@ -199,28 +294,48 @@ export default function SettingsScreen() {
 
         {/* Advanced Settings Section */}
         <View style={{ padding: 16, marginTop: 8 }}>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: textSecondary, marginBottom: 12, textTransform: 'uppercase' }}>
-            Advanced
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "600",
+              color: textSecondary,
+              marginBottom: 12,
+              textTransform: "uppercase",
+            }}
+          >
+            {translate("settings.sections.advanced")}
           </Text>
 
           {/* Background Service Reconnection Toggle */}
-          <View style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingVertical: 14,
-            backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-            borderRadius: 10,
-          }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingVertical: 14,
+              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+              borderRadius: 10,
+            }}
+          >
             <View style={{ flex: 1, marginRight: 12 }}>
-              <Text style={{ fontSize: 15, color: colors.textPrimary, fontWeight: '500', marginBottom: 4 }}>
-                Auto-reconnect Background Service
+              <Text
+                style={{
+                  fontSize: 15,
+                  color: colors.textPrimary,
+                  fontWeight: "500",
+                  marginBottom: 4,
+                }}
+              >
+                {translate("settings.autoReconnect")}
               </Text>
               <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
-                Automatically reconnect the audio player background service when the app returns from background or after context recreation. Disable if experiencing issues with playback.
+                {translate("settings.autoReconnectDescription")}
               </Text>
             </View>
-            <Toggle value={backgroundServiceReconnection} onValueChange={toggleBackgroundServiceReconnection} />
+            <Toggle
+              value={backgroundServiceReconnection}
+              onValueChange={toggleBackgroundServiceReconnection}
+            />
           </View>
         </View>
       </ScrollView>

@@ -1,41 +1,46 @@
-import { clearAudioFileDownloadStatus, markAudioFileAsDownloaded } from '@/db/helpers/audioFiles';
-import { getAudioFilesWithDownloadInfo } from '@/db/helpers/combinedQueries';
-import { getMediaMetadataByLibraryItemId } from '@/db/helpers/mediaMetadata';
-import { cacheCoverIfMissing } from '@/lib/covers';
+import { clearAudioFileDownloadStatus, markAudioFileAsDownloaded } from "@/db/helpers/audioFiles";
+import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
+import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
+import { cacheCoverIfMissing } from "@/lib/covers";
 import {
   calculateSmoothedSpeed,
   clearDebounceTimer,
   createSpeedTracker,
-  DEFAULT_DOWNLOAD_CONFIG
-} from '@/lib/downloads/speedTracker';
+  DEFAULT_DOWNLOAD_CONFIG,
+} from "@/lib/downloads/speedTracker";
 import {
   constructDownloadUrl,
   downloadFileExists,
   ensureDownloadsDirectory,
   getDownloadPath,
   getDownloadsDirectory,
-  verifyFileExists
-} from '@/lib/fileSystem';
-import { logger } from '@/lib/logger';
+  verifyFileExists,
+} from "@/lib/fileSystem";
+import { logger } from "@/lib/logger";
 import type {
   DownloadConfig,
   DownloadInfo,
   DownloadProgress,
   DownloadProgressCallback,
   DownloadSpeedTracker,
-  DownloadTaskInfo
-} from '@/types/services';
-import RNBackgroundDownloader, { DownloadTask } from '@kesha-antonov/react-native-background-downloader';
+  DownloadTaskInfo,
+} from "@/types/services";
+import RNBackgroundDownloader, {
+  DownloadTask,
+} from "@kesha-antonov/react-native-background-downloader";
 
 // Create cached sublogger for this service
-const log = logger.forTag('DownloadService');
+const log = logger.forTag("DownloadService");
 
 // Re-export types for backward compatibility
 export type {
-  DownloadConfig, DownloadInfo, DownloadProgress, DownloadProgressCallback,
-  DownloadSpeedTracker, DownloadTaskInfo
+  DownloadConfig,
+  DownloadInfo,
+  DownloadProgress,
+  DownloadProgressCallback,
+  DownloadSpeedTracker,
+  DownloadTaskInfo,
 };
-
 
 export class DownloadService {
   private static instance: DownloadService;
@@ -67,20 +72,20 @@ export class DownloadService {
         isLogsEnabled: false,
       });
 
-      log.info('Checking for existing background downloads...');
+      log.info("Checking for existing background downloads...");
       const existingTasks = await RNBackgroundDownloader.checkForExistingDownloads();
 
       if (existingTasks.length > 0) {
         log.info(`Found ${existingTasks.length} existing background downloads`);
         await this.restoreExistingDownloads(existingTasks);
       } else {
-        log.info('No existing background downloads found');
+        log.info("No existing background downloads found");
       }
 
       this.isInitialized = true;
-      log.info('Initialized successfully');
+      log.info("Initialized successfully");
     } catch (error) {
-      log.error('Error during initialization:', error as Error);
+      log.error("Error during initialization:", error as Error);
       throw error;
     }
   }
@@ -88,7 +93,10 @@ export class DownloadService {
   /**
    * Subscribe to progress updates for a download
    */
-  public subscribeToProgress(libraryItemId: string, callback: DownloadProgressCallback): () => void {
+  public subscribeToProgress(
+    libraryItemId: string,
+    callback: DownloadProgressCallback
+  ): () => void {
     const downloadInfo = this.activeDownloads.get(libraryItemId);
     if (downloadInfo) {
       downloadInfo.progressCallbacks.add(callback);
@@ -129,7 +137,10 @@ export class DownloadService {
   /**
    * Rewire progress callbacks - useful when rebuilding views
    */
-  public rewireProgressCallbacks(libraryItemId: string, newCallback: DownloadProgressCallback): () => void {
+  public rewireProgressCallbacks(
+    libraryItemId: string,
+    newCallback: DownloadProgressCallback
+  ): () => void {
     const downloadInfo = this.activeDownloads.get(libraryItemId);
     if (downloadInfo) {
       // Clear existing callbacks and add the new one
@@ -156,7 +167,7 @@ export class DownloadService {
 
     // Check if already downloading
     if (this.isDownloadActive(libraryItemId)) {
-      throw new Error('Download already in progress for this item');
+      throw new Error("Download already in progress for this item");
     }
 
     log.info(`Starting download for library item ${libraryItemId}`);
@@ -165,12 +176,12 @@ export class DownloadService {
       // Get metadata and audio files
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) {
-        throw new Error('Library item metadata not found');
+        throw new Error("Library item metadata not found");
       }
 
       const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       if (audioFiles.length === 0) {
-        throw new Error('No audio files found for this library item');
+        throw new Error("No audio files found for this library item");
       }
 
       const totalFiles = audioFiles.length;
@@ -195,7 +206,7 @@ export class DownloadService {
         currentFile: string,
         fileBytesDownloaded: number,
         fileTotalBytes: number,
-        overrideStatus?: DownloadProgress['status']
+        overrideStatus?: DownloadProgress["status"]
       ) => {
         this.updateProgress(
           libraryItemId,
@@ -209,6 +220,9 @@ export class DownloadService {
           overrideStatus
         );
       };
+
+      // Send initial progress update to immediately show download has started
+      updateProgress("", 0, 0, "downloading");
 
       await cacheCoverIfMissing(libraryItemId);
 
@@ -243,30 +257,43 @@ export class DownloadService {
           // Set up completion handlers
           return new Promise<void>((resolve, reject) => {
             task.done((data) => {
-              log.info(`*** TASK COMPLETION HANDLER CALLED *** ${audioFile.filename}: ${data.bytesDownloaded} bytes`);
+              log.info(
+                `*** TASK COMPLETION HANDLER CALLED *** ${audioFile.filename}: ${data.bytesDownloaded} bytes`
+              );
               const downloadPath = getDownloadPath(libraryItemId, audioFile.filename);
-              markAudioFileAsDownloaded(audioFile.id, downloadPath).then(() => {
-                log.info(`File marked as downloaded, updating progress`);
-                downloadedFiles++;
-                totalBytesDownloaded += data.bytesDownloaded;
-                updateProgress(audioFile.filename, data.bytesDownloaded, data.bytesTotal, 'completed');
-                log.info(`Progress updated, resolving promise`);
-                resolve();
-              }).catch(reject);
+              markAudioFileAsDownloaded(audioFile.id, downloadPath)
+                .then(() => {
+                  log.info(`File marked as downloaded, updating progress`);
+                  downloadedFiles++;
+                  totalBytesDownloaded += data.bytesDownloaded;
+                  updateProgress(
+                    audioFile.filename,
+                    data.bytesDownloaded,
+                    data.bytesTotal,
+                    "completed"
+                  );
+                  log.info(`Progress updated, resolving promise`);
+                  resolve();
+                })
+                .catch(reject);
             });
 
             task.error((error) => {
               log.error(`Error downloading ${audioFile.filename}:`, error as Error);
-              const errorMessage = typeof error === 'object' && error && 'error' in error
-                ? String(error.error)
-                : String(error);
+              const errorMessage =
+                typeof error === "object" && error && "error" in error
+                  ? String(error.error)
+                  : String(error);
               reject(new Error(`Failed to download ${audioFile.filename}: ${errorMessage}`));
             });
           });
         } catch (error) {
-          if (error instanceof Error && error.message === 'File already exists') {
+          if (error instanceof Error && error.message === "File already exists") {
             // File already downloaded, mark as complete
-            await markAudioFileAsDownloaded(audioFile.id, getDownloadPath(libraryItemId, audioFile.filename));
+            await markAudioFileAsDownloaded(
+              audioFile.id,
+              getDownloadPath(libraryItemId, audioFile.filename)
+            );
             downloadedFiles++;
             totalBytesDownloaded += audioFile.size || 0;
             return;
@@ -279,7 +306,7 @@ export class DownloadService {
       await Promise.all(downloadPromises);
 
       // Download completed
-      updateProgress('', 0, 0, 'completed');
+      updateProgress("", 0, 0, "completed");
       this.cleanupDownload(libraryItemId);
 
       log.info(`Completed all downloads for library item ${libraryItemId}`);
@@ -296,7 +323,7 @@ export class DownloadService {
   public pauseDownload(libraryItemId: string): void {
     const downloadInfo = this.activeDownloads.get(libraryItemId);
     if (downloadInfo && !downloadInfo.isPaused) {
-      downloadInfo.tasks.forEach(taskInfo => {
+      downloadInfo.tasks.forEach((taskInfo) => {
         taskInfo.task.pause();
       });
       downloadInfo.isPaused = true;
@@ -313,7 +340,7 @@ export class DownloadService {
   public resumeDownload(libraryItemId: string): void {
     const downloadInfo = this.activeDownloads.get(libraryItemId);
     if (downloadInfo && downloadInfo.isPaused) {
-      downloadInfo.tasks.forEach(taskInfo => {
+      downloadInfo.tasks.forEach((taskInfo) => {
         taskInfo.task.resume();
       });
       downloadInfo.isPaused = false;
@@ -334,7 +361,7 @@ export class DownloadService {
       clearDebounceTimer(downloadInfo.speedTracker);
 
       // Stop all tasks for this library item
-      downloadInfo.tasks.forEach(taskInfo => {
+      downloadInfo.tasks.forEach((taskInfo) => {
         taskInfo.task.stop();
       });
       this.activeDownloads.delete(libraryItemId);
@@ -385,7 +412,7 @@ export class DownloadService {
       });
 
       const downloadResults = await Promise.all(downloadCheckPromises);
-      const isDownloaded = downloadResults.every(result => result);
+      const isDownloaded = downloadResults.every((result) => result);
 
       log.info(`Checking if library item is downloaded for ${libraryItemId}: ${isDownloaded}`);
       return isDownloaded;
@@ -398,14 +425,16 @@ export class DownloadService {
   /**
    * Get download progress for a library item
    */
-  public async getDownloadProgress(libraryItemId: string): Promise<{ downloaded: number; total: number; progress: number }> {
+  public async getDownloadProgress(
+    libraryItemId: string
+  ): Promise<{ downloaded: number; total: number; progress: number }> {
     try {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) return { downloaded: 0, total: 0, progress: 0 };
 
       const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       const total = audioFiles.length;
-      const downloaded = audioFiles.filter(file => file.downloadInfo?.isDownloaded).length;
+      const downloaded = audioFiles.filter((file) => file.downloadInfo?.isDownloaded).length;
       const progress = total > 0 ? downloaded / total : 0;
 
       return { downloaded, total, progress };
@@ -456,7 +485,7 @@ export class DownloadService {
 
       const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       return audioFiles
-        .filter(file => file.downloadInfo?.isDownloaded)
+        .filter((file) => file.downloadInfo?.isDownloaded)
         .reduce((total, file) => total + (file.size || 0), 0);
     } catch (error) {
       log.error(`Error calculating download size for ${libraryItemId}:`, error as Error);
@@ -485,7 +514,7 @@ export class DownloadService {
         // For now, let the download overwrite it
       } else {
         log.info(`File already exists: ${audioFile.filename}`);
-        throw new Error('File already exists');
+        throw new Error("File already exists");
       }
     }
 
@@ -497,28 +526,33 @@ export class DownloadService {
       url: downloadUrl,
       destination: destPath,
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
       metadata: {
         libraryItemId,
         audioFileId: audioFile.id,
         filename: audioFile.filename,
-      }
-    }).begin((data) => {
-      log.info('Download begin:', data);
-    }).progress(data => {
-      log.info('Download progress:', data);
-      const progressPercent = data.bytesDownloaded / data.bytesTotal;
+      },
+    })
+      .begin((data) => {
+        log.info("Download begin:", data);
+      })
+      .progress((data) => {
+        log.info("Download progress:", data);
+        const progressPercent = data.bytesDownloaded / data.bytesTotal;
 
-      if (progressPercent >= 0.95) {
-        log.info(`*** NEAR COMPLETION *** ${data.bytesDownloaded}/${data.bytesTotal} (${(progressPercent*100).toFixed(2)}%) - ${data.bytesTotal - data.bytesDownloaded} bytes remaining`);
-
-      }
-    }).done((data) => {
-      log.info(`*** DOWNLOAD DONE EVENT FIRED *** ${audioFile.filename}:`, data);
-    }).error((data) => {
-      log.info(`*** DOWNLOAD ERROR EVENT FIRED ***:`, data);
-    });
+        if (progressPercent >= 0.95) {
+          log.info(
+            `*** NEAR COMPLETION *** ${data.bytesDownloaded}/${data.bytesTotal} (${(progressPercent * 100).toFixed(2)}%) - ${data.bytesTotal - data.bytesDownloaded} bytes remaining`
+          );
+        }
+      })
+      .done((data) => {
+        log.info(`*** DOWNLOAD DONE EVENT FIRED *** ${audioFile.filename}:`, data);
+      })
+      .error((data) => {
+        log.info(`*** DOWNLOAD ERROR EVENT FIRED ***:`, data);
+      });
 
     const taskInfo: DownloadTaskInfo = {
       task,
@@ -529,7 +563,7 @@ export class DownloadService {
 
     // Set up progress callback
     task.progress((data) => {
-      log.info('Download progress:', data);
+      log.info("Download progress:", data);
       onProgress?.(taskInfo, data.bytesDownloaded, data.bytesTotal);
     });
 
@@ -545,7 +579,7 @@ export class DownloadService {
     downloadedFiles: number,
     totalBytesDownloaded: number,
     totalBytes: number,
-    overrideStatus?: DownloadProgress['status']
+    overrideStatus?: DownloadProgress["status"]
   ): void {
     const downloadInfo = this.activeDownloads.get(libraryItemId);
     if (!downloadInfo) return;
@@ -553,11 +587,11 @@ export class DownloadService {
     downloadInfo.downloadedBytes = totalBytesDownloaded;
 
     // Determine actual status based on download state
-    let actualStatus: DownloadProgress['status'];
+    let actualStatus: DownloadProgress["status"];
     if (overrideStatus) {
       actualStatus = overrideStatus;
     } else {
-      actualStatus = downloadInfo.isPaused ? 'paused' : 'downloading';
+      actualStatus = downloadInfo.isPaused ? "paused" : "downloading";
     }
 
     // Calculate smoothed download speed
@@ -584,8 +618,8 @@ export class DownloadService {
       downloadSpeed: smoothedSpeed,
       speedSampleCount: downloadInfo.speedTracker.sampleCount,
       status: actualStatus,
-      canPause: actualStatus === 'downloading',
-      canResume: actualStatus === 'paused',
+      canPause: actualStatus === "downloading",
+      canResume: actualStatus === "paused",
     };
 
     // Store the last progress update for reference
@@ -595,7 +629,7 @@ export class DownloadService {
     clearDebounceTimer(downloadInfo.speedTracker);
 
     // For completed/error states, update immediately
-    if (actualStatus === 'completed' || actualStatus === 'error' || actualStatus === 'cancelled') {
+    if (actualStatus === "completed" || actualStatus === "error" || actualStatus === "cancelled") {
       this.notifyProgressCallbacks(downloadInfo, progressUpdate);
       return;
     }
@@ -608,7 +642,7 @@ export class DownloadService {
     }
 
     // For paused state, update immediately to show pause status
-    if (actualStatus === 'paused') {
+    if (actualStatus === "paused") {
       this.notifyProgressCallbacks(downloadInfo, progressUpdate);
       return;
     }
@@ -620,11 +654,11 @@ export class DownloadService {
   }
 
   private notifyProgressCallbacks(downloadInfo: DownloadInfo, progress: DownloadProgress): void {
-    downloadInfo.progressCallbacks.forEach(callback => {
+    downloadInfo.progressCallbacks.forEach((callback) => {
       try {
         callback(progress);
       } catch (error) {
-        log.error('Error in progress callback:', error as Error);
+        log.error("Error in progress callback:", error as Error);
       }
     });
   }
@@ -640,7 +674,7 @@ export class DownloadService {
       // Update the status and control flags based on current state
       const updatedProgress: DownloadProgress = {
         ...lastUpdate,
-        status: downloadInfo.isPaused ? 'paused' : 'downloading',
+        status: downloadInfo.isPaused ? "paused" : "downloading",
         canPause: !downloadInfo.isPaused,
         canResume: downloadInfo.isPaused,
       };
@@ -652,15 +686,18 @@ export class DownloadService {
       log.warn(`No previous progress update found for ${libraryItemId}, creating fallback`);
 
       const currentTotalBytes = downloadInfo.downloadedBytes;
-      const actualStatus: DownloadProgress['status'] = downloadInfo.isPaused ? 'paused' : 'downloading';
+      const actualStatus: DownloadProgress["status"] = downloadInfo.isPaused
+        ? "paused"
+        : "downloading";
 
       const progressUpdate: DownloadProgress = {
         libraryItemId,
         totalFiles: downloadInfo.tasks.length + 1, // +1 for cover
         downloadedFiles: 0, // We don't have accurate count without previous update
-        currentFile: 'Unknown',
+        currentFile: "Unknown",
         fileProgress: 0,
-        totalProgress: downloadInfo.totalBytes > 0 ? currentTotalBytes / downloadInfo.totalBytes : 0,
+        totalProgress:
+          downloadInfo.totalBytes > 0 ? currentTotalBytes / downloadInfo.totalBytes : 0,
         bytesDownloaded: currentTotalBytes,
         totalBytes: downloadInfo.totalBytes,
         fileBytesDownloaded: 0,
@@ -668,8 +705,8 @@ export class DownloadService {
         downloadSpeed: downloadInfo.speedTracker.smoothedSpeed,
         speedSampleCount: downloadInfo.speedTracker.sampleCount,
         status: actualStatus,
-        canPause: actualStatus === 'downloading',
-        canResume: actualStatus === 'paused',
+        canPause: actualStatus === "downloading",
+        canResume: actualStatus === "paused",
       };
 
       this.notifyProgressCallbacks(downloadInfo, progressUpdate);
@@ -703,7 +740,9 @@ export class DownloadService {
         if (metadata) {
           const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
           totalExpectedFiles = audioFiles.length;
-          log.info(`ApiLibrary item ${libraryItemId} has ${audioFiles.length} audio files in database, ${tasks.length} active tasks`);
+          log.info(
+            `ApiLibrary item ${libraryItemId} has ${audioFiles.length} audio files in database, ${tasks.length} active tasks`
+          );
         }
       } catch (error) {
         log.error(`Error getting audio files for ${libraryItemId}:`, error as Error);
@@ -728,14 +767,18 @@ export class DownloadService {
         });
 
         taskInfo.task.done((data: any) => {
-          log.info(`*** TASK DONE EVENT FIRED *** ${taskInfo.filename}: ${data.bytesDownloaded} bytes`);
+          log.info(
+            `*** TASK DONE EVENT FIRED *** ${taskInfo.filename}: ${data.bytesDownloaded} bytes`
+          );
           const downloadPath = getDownloadPath(libraryItemId, taskInfo.filename);
-          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPath).then(() => {
-            log.info(`File marked as downloaded, calling handleTaskCompletion`);
-            this.handleTaskCompletion(libraryItemId, taskInfo, data.bytesDownloaded);
-          }).catch((error: any) => {
-            log.error(`Error marking file as downloaded:`, error);
-          });
+          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPath)
+            .then(() => {
+              log.info(`File marked as downloaded, calling handleTaskCompletion`);
+              this.handleTaskCompletion(libraryItemId, taskInfo, data.bytesDownloaded);
+            })
+            .catch((error: any) => {
+              log.error(`Error marking file as downloaded:`, error);
+            });
         });
 
         taskInfo.task.error((error: any) => {
@@ -759,7 +802,7 @@ export class DownloadService {
     log.info(`Task completed: ${taskInfo.filename} (${bytesDownloaded} bytes)`);
 
     // Check if all tasks are completed
-    const allTasksCompleted = downloadInfo.tasks.every(task => task.task.state === 'DONE');
+    const allTasksCompleted = downloadInfo.tasks.every((task) => task.task.state === "DONE");
 
     if (allTasksCompleted) {
       log.info(`All tasks completed for library item ${libraryItemId}`);
@@ -768,7 +811,7 @@ export class DownloadService {
       const totalBytes = downloadInfo.tasks.reduce((sum, task) => sum + (task.size || 0), 0);
       const finalProgress: DownloadProgress = {
         libraryItemId,
-        status: 'completed',
+        status: "completed",
         totalProgress: 1.0,
         fileProgress: 1.0,
         currentFile: taskInfo.filename,
@@ -812,7 +855,9 @@ export class DownloadService {
     let totalBytesDownloaded = 0;
     let totalBytes = 0;
 
-    log.info(`Calculating progress for ${libraryItemId}, ${totalFiles} expected files, ${downloadInfo.tasks.length} active tasks`);
+    log.info(
+      `Calculating progress for ${libraryItemId}, ${totalFiles} expected files, ${downloadInfo.tasks.length} active tasks`
+    );
 
     // First, check how many files are already downloaded in the database
     let alreadyDownloadedFiles = 0;
@@ -820,7 +865,9 @@ export class DownloadService {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (metadata) {
         const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-        alreadyDownloadedFiles = audioFiles.filter(file => file.downloadInfo?.isDownloaded).length;
+        alreadyDownloadedFiles = audioFiles.filter(
+          (file) => file.downloadInfo?.isDownloaded
+        ).length;
         log.info(`${alreadyDownloadedFiles} files already marked as downloaded in database`);
 
         // Calculate total bytes from all audio files
@@ -828,7 +875,7 @@ export class DownloadService {
 
         // Add bytes from already downloaded files
         const downloadedFileBytes = audioFiles
-          .filter(file => file.downloadInfo?.isDownloaded)
+          .filter((file) => file.downloadInfo?.isDownloaded)
           .reduce((sum, file) => sum + (file.size || 0), 0);
         totalBytesDownloaded += downloadedFileBytes;
         log.info(`Added ${downloadedFileBytes} bytes from already downloaded files`);
@@ -847,7 +894,7 @@ export class DownloadService {
         totalBytes += task.size;
       }
 
-      if (task.task.state === 'DONE') {
+      if (task.task.state === "DONE") {
         // Only count if not already counted in database
         const isAlreadyCounted = alreadyDownloadedFiles > 0; // Simplified check
         if (!isAlreadyCounted) {
@@ -865,7 +912,9 @@ export class DownloadService {
       }
     }
 
-    log.info(`Progress calculation: ${downloadedFiles}/${totalFiles} files, ${totalBytesDownloaded}/${totalBytes} bytes`);
+    log.info(
+      `Progress calculation: ${downloadedFiles}/${totalFiles} files, ${totalBytesDownloaded}/${totalBytes} bytes`
+    );
 
     this.updateProgress(
       libraryItemId,
@@ -896,7 +945,7 @@ export class DownloadService {
         libraryItemId,
         totalFiles: 0,
         downloadedFiles: 0,
-        currentFile: '',
+        currentFile: "",
         fileProgress: 0,
         totalProgress: 0,
         bytesDownloaded: 0,
@@ -905,7 +954,7 @@ export class DownloadService {
         fileTotalBytes: 0,
         downloadSpeed: 0,
         speedSampleCount: 0,
-        status: 'error',
+        status: "error",
         error: String(error),
         canPause: false,
         canResume: false,

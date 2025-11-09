@@ -1,12 +1,12 @@
-import { db } from '@/db/client';
-import { setLocalCoverCached } from '@/db/helpers/localData';
-import { libraryItems } from '@/db/schema/libraryItems';
-import { apiFetch } from '@/lib/api/api';
-import { fetchLibraryItemCoverHead } from '@/lib/api/endpoints';
-import { eq } from 'drizzle-orm';
-import { Directory, File, Paths } from 'expo-file-system';
+import { db } from "@/db/client";
+import { setLocalCoverCached } from "@/db/helpers/localData";
+import { libraryItems } from "@/db/schema/libraryItems";
+import { apiFetch } from "@/lib/api/api";
+import { fetchLibraryItemCoverHead } from "@/lib/api/endpoints";
+import { eq } from "drizzle-orm";
+import { Directory, File, Paths } from "expo-file-system";
 
-const coversDirectory = new Directory(Paths.cache, 'covers');
+const coversDirectory = new Directory(Paths.cache, "covers");
 
 export function getCoversDirectory(): Directory {
   coversDirectory.create({ intermediates: true, idempotent: true });
@@ -26,7 +26,9 @@ async function ensureCoversDirectory(): Promise<void> {
   } catch {}
 }
 
-export async function cacheCoverIfMissing(libraryItemId: string): Promise<{ uri: string; wasDownloaded: boolean }> {
+export async function cacheCoverIfMissing(
+  libraryItemId: string
+): Promise<{ uri: string; wasDownloaded: boolean }> {
   const dir = getCoversDirectory();
   const destFile = new File(dir, libraryItemId);
 
@@ -37,22 +39,23 @@ export async function cacheCoverIfMissing(libraryItemId: string): Promise<{ uri:
 
   try {
     const res = await fetchLibraryItemCoverHead(libraryItemId);
-    if (!res.ok) return { uri: destFile.uri, wasDownloaded: false };
+    if (!res.ok) return { uri: "", wasDownloaded: false };
 
     const url = res.url;
-    if (!url) return { uri: destFile.uri, wasDownloaded: false };
+    if (!url) return { uri: "", wasDownloaded: false };
 
     // Use apiFetch for the actual image download to ensure proper authentication
     const response = await apiFetch(url);
-    if (!response.ok) return { uri: destFile.uri, wasDownloaded: false };
+    if (!response.ok) return { uri: "", wasDownloaded: false };
 
-    const bytes = await response.bytes();
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
     destFile.write(bytes);
     console.log(`[covers] Downloaded cover for ${libraryItemId}`);
     return { uri: destFile.uri, wasDownloaded: true };
   } catch (error) {
     console.error(`[covers] Failed to download cover for ${libraryItemId}:`, error);
-    return { uri: destFile.uri, wasDownloaded: false };
+    return { uri: "", wasDownloaded: false };
   }
 }
 
@@ -89,10 +92,10 @@ export async function clearAllCoverCache(): Promise<void> {
     const dir = getCoversDirectory();
     if (dir.exists) {
       await dir.delete();
-      console.log('[covers] Cleared all cover cache');
+      console.log("[covers] Cleared all cover cache");
     }
   } catch (error) {
-    console.error('[covers] Failed to clear cover cache:', error);
+    console.error("[covers] Failed to clear cover cache:", error);
   }
 }
 

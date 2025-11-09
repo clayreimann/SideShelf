@@ -7,11 +7,16 @@
  * - Automatic updates when logs are written
  */
 
-import { getErrorCount, getErrorCountSince, getWarningCount, getWarningCountSince } from '@/lib/logger';
-import type { SliceCreator } from '@/types/store';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getErrorCount,
+  getErrorCountSince,
+  getWarningCount,
+  getWarningCountSince,
+} from "@/lib/logger";
+import type { SliceCreator } from "@/types/store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const ERRORS_ACKNOWLEDGED_TIMESTAMP_KEY = '@logger/errors_acknowledged_timestamp';
+const ERRORS_ACKNOWLEDGED_TIMESTAMP_KEY = "@logger/errors_acknowledged_timestamp";
 
 // Create logger slice
 export interface LoggerSliceState {
@@ -80,7 +85,7 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
           },
         }));
       } catch (error) {
-        console.error('[LoggerSlice] Failed to update error counts:', error);
+        console.error("[LoggerSlice] Failed to update error counts:", error);
       }
     },
 
@@ -97,9 +102,9 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
             errorsAcknowledgedTimestamp: timestamp,
           },
         }));
-        await get().updateErrorCounts();
+        await get().logger.updateErrorCounts();
       } catch (error) {
-        console.error('[LoggerSlice] Failed to acknowledge errors:', error);
+        console.error("[LoggerSlice] Failed to acknowledge errors:", error);
       }
     },
 
@@ -116,7 +121,7 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
           },
         }));
       } catch (error) {
-        console.error('[LoggerSlice] Failed to reset error acknowledgment:', error);
+        console.error("[LoggerSlice] Failed to reset error acknowledgment:", error);
       }
     },
 
@@ -128,7 +133,9 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
 
       try {
         // Load error acknowledgment timestamp
-        const acknowledgedTimestampStr = await AsyncStorage.getItem(ERRORS_ACKNOWLEDGED_TIMESTAMP_KEY);
+        const acknowledgedTimestampStr = await AsyncStorage.getItem(
+          ERRORS_ACKNOWLEDGED_TIMESTAMP_KEY
+        );
         let errorsAcknowledgedTimestamp: number | null = null;
         if (acknowledgedTimestampStr) {
           const parsed = parseInt(acknowledgedTimestampStr, 10);
@@ -164,7 +171,7 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
           },
         }));
       } catch (error) {
-        console.error('[LoggerSlice] Failed to initialize:', error);
+        console.error("[LoggerSlice] Failed to initialize:", error);
         set((state: LoggerSliceState) => ({
           logger: {
             ...state.logger,

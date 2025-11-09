@@ -1,11 +1,12 @@
-import { useFloatingPlayerPadding } from '@/hooks/useFloatingPlayerPadding';
-import { spacing } from '@/lib/styles';
-import { useThemedStyles } from '@/lib/theme';
-import { useAuth } from '@/providers/AuthProvider';
-import { useUserProfile } from '@/stores';
-import { Stack } from 'expo-router';
-import { useMemo } from 'react';
-import { SectionList, StyleSheet, Text, View } from 'react-native';
+import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
+import { translate } from "@/i18n";
+import { spacing } from "@/lib/styles";
+import { useThemedStyles } from "@/lib/theme";
+import { useAuth } from "@/providers/AuthProvider";
+import { useUserProfile } from "@/stores";
+import { Stack } from "expo-router";
+import { useMemo } from "react";
+import { SectionList, StyleSheet, Text, View } from "react-native";
 
 type Section = {
   title: string;
@@ -18,28 +19,55 @@ export default function AboutMeScreen() {
   const { deviceInfo } = useUserProfile();
   const floatingPlayerPadding = useFloatingPlayerPadding();
 
-  const sections = useMemo<Section[]>(() => [
-    {
-      title: 'Account',
-      data: [
-        { label: 'User', value: username || undefined },
-        { label: 'Server', value: serverUrl || undefined },
-      ],
-    },
-    {
-      title: 'Device Info',
-      data: [
-        { label: 'Device', value: deviceInfo?.deviceName ?? 'N/A' },
-        { label: 'OS', value: `${deviceInfo?.osName ?? 'Unknown'} ${deviceInfo?.osVersion ?? 'v?.?'}` },
-        { label: 'Type', value: deviceInfo?.deviceType ?? 'N/A' },
-        { label: 'Manufacturer', value: deviceInfo?.manufacturer ?? 'N/A' },
-        { label: 'Model', value: deviceInfo?.model ?? 'N/A' },
-        { label: 'SDK Version', value: String(deviceInfo?.sdkVersion ?? 'N/A') },
-        { label: 'Client', value: `${deviceInfo?.clientName ?? 'Unknown'} ${deviceInfo?.clientVersion ?? 'v?.?'}` },
-        { label: 'Device ID', value: deviceInfo?.deviceId ?? 'N/A' },
-      ],
-    },
-  ], [username, serverUrl, deviceInfo]);
+  const sections = useMemo<Section[]>(
+    () => [
+      {
+        title: translate("aboutMe.sections.account"),
+        data: [
+          { label: translate("aboutMe.account.user"), value: username || undefined },
+          { label: translate("aboutMe.account.server"), value: serverUrl || undefined },
+        ],
+      },
+      {
+        title: translate("aboutMe.sections.deviceInfo"),
+        data: [
+          {
+            label: translate("aboutMe.device.device"),
+            value: deviceInfo?.deviceName ?? translate("aboutMe.device.notAvailable"),
+          },
+          {
+            label: translate("aboutMe.device.os"),
+            value: `${deviceInfo?.osName ?? translate("aboutMe.device.osUnknown")} ${deviceInfo?.osVersion ?? translate("aboutMe.device.osVersion")}`,
+          },
+          {
+            label: translate("aboutMe.device.type"),
+            value: deviceInfo?.deviceType ?? translate("aboutMe.device.notAvailable"),
+          },
+          {
+            label: translate("aboutMe.device.manufacturer"),
+            value: deviceInfo?.manufacturer ?? translate("aboutMe.device.notAvailable"),
+          },
+          {
+            label: translate("aboutMe.device.model"),
+            value: deviceInfo?.model ?? translate("aboutMe.device.notAvailable"),
+          },
+          {
+            label: translate("aboutMe.device.sdkVersion"),
+            value: String(deviceInfo?.sdkVersion ?? translate("aboutMe.device.notAvailable")),
+          },
+          {
+            label: translate("aboutMe.device.client"),
+            value: `${deviceInfo?.clientName ?? translate("aboutMe.device.osUnknown")} ${deviceInfo?.clientVersion ?? translate("aboutMe.device.osVersion")}`,
+          },
+          {
+            label: translate("aboutMe.device.deviceId"),
+            value: deviceInfo?.deviceId ?? translate("aboutMe.device.notAvailable"),
+          },
+        ],
+      },
+    ],
+    [username, serverUrl, deviceInfo]
+  );
 
   return (
     <>
@@ -53,13 +81,15 @@ export default function AboutMeScreen() {
         )}
         renderItem={({ item }) => (
           <View style={styles.listItem}>
-            <Text style={styles.text}>{item.label}: {item.value}</Text>
+            <Text style={styles.text}>
+              {item.label}: {item.value}
+            </Text>
           </View>
         )}
         contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
         stickySectionHeadersEnabled={false}
       />
-      <Stack.Screen options={{ title: 'About Me' }} />
+      <Stack.Screen options={{ title: translate("aboutMe.title") }} />
     </>
   );
 }
@@ -71,7 +101,7 @@ const componentStyles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   sectionHeaderText: {
-    fontWeight: 'bold',
+    fontWeight: "bold",
     fontSize: 18,
   },
 });

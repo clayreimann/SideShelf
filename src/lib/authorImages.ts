@@ -1,8 +1,8 @@
-import { apiFetch } from '@/lib/api/api';
-import { fetchAuthorImageHead } from '@/lib/api/endpoints';
-import { Directory, File, Paths } from 'expo-file-system';
+import { apiFetch } from "@/lib/api/api";
+import { fetchAuthorImageHead } from "@/lib/api/endpoints";
+import { Directory, File, Paths } from "expo-file-system";
 
-const authorImagesDirectory = new Directory(Paths.cache, 'author_images');
+const authorImagesDirectory = new Directory(Paths.cache, "author_images");
 
 export function getAuthorImagesDirectory(): Directory {
   authorImagesDirectory.create({ intermediates: true, idempotent: true });
@@ -22,7 +22,9 @@ async function ensureAuthorImagesDirectory(): Promise<void> {
   } catch {}
 }
 
-export async function cacheAuthorImageIfMissing(authorId: string): Promise<{ uri: string; wasDownloaded: boolean }> {
+export async function cacheAuthorImageIfMissing(
+  authorId: string
+): Promise<{ uri: string; wasDownloaded: boolean }> {
   const dir = getAuthorImagesDirectory();
   const destFile = new File(dir, authorId);
 
@@ -34,22 +36,24 @@ export async function cacheAuthorImageIfMissing(authorId: string): Promise<{ uri
 
   try {
     const res = await fetchAuthorImageHead(authorId);
-    if (!res.ok) return { uri: '', wasDownloaded: false };
+    if (!res.ok) return { uri: "", wasDownloaded: false };
 
     const url = res.url;
-    if (!url) return { uri: destFile.uri, wasDownloaded: false };
+    if (!url) return { uri: "", wasDownloaded: false };
 
     // Use apiFetch for the actual image download to ensure proper authentication
     const response = await apiFetch(url);
-    if (!response.ok) return { uri: destFile.uri, wasDownloaded: false };
 
-    const bytes = await response.bytes();
+    if (!response.ok) return { uri: "", wasDownloaded: false };
+
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
     destFile.write(bytes);
     console.log(`[authorImages] Downloaded author image for ${authorId}`);
     return { uri: destFile.uri, wasDownloaded: true };
   } catch (error) {
     console.error(`[authorImages] Failed to download author image for ${authorId}:`, error);
-    return { uri: destFile.uri, wasDownloaded: false };
+    return { uri: "", wasDownloaded: false };
   }
 }
 
@@ -66,10 +70,10 @@ export function isAuthorImageCached(authorId: string): boolean {
  * Get author initials from name (first letter of first and last name)
  */
 export function getAuthorInitials(name: string): string {
-  if (!name) return '?';
+  if (!name) return "?";
 
   const parts = name.trim().split(/\s+/);
-  if (parts.length === 0) return '?';
+  if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0][0].toUpperCase();
 
   const first = parts[0][0].toUpperCase();

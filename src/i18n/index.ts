@@ -1,8 +1,10 @@
 import { getLocales } from "expo-localization";
 import { en } from "./locales/en";
+import { es } from "./locales/es";
 
 const translations = {
   en,
+  es,
 };
 
 type LocaleCode = keyof typeof translations;
@@ -25,9 +27,7 @@ function resolveLocale(): string {
 
     if (locale.languageCode) {
       if (locale.regionCode) {
-        candidates.push(
-          `${locale.languageCode.toLowerCase()}-${locale.regionCode.toUpperCase()}`
-        );
+        candidates.push(`${locale.languageCode.toLowerCase()}-${locale.regionCode.toUpperCase()}`);
       }
       candidates.push(locale.languageCode.toLowerCase());
     }
@@ -69,10 +69,7 @@ function getDictionary(locale: string): TranslationDictionary {
   return translations[FALLBACK_LOCALE];
 }
 
-function applyReplacements(
-  template: string,
-  replacements?: TranslationReplacements
-): string {
+function applyReplacements(template: string, replacements?: TranslationReplacements): string {
   if (!replacements) {
     return template;
   }
@@ -83,15 +80,11 @@ function applyReplacements(
   });
 }
 
-export function translate(
-  key: TranslationKey,
-  replacements?: TranslationReplacements
-): string {
+export function translate(key: TranslationKey, replacements?: TranslationReplacements): string {
   const locale = resolveLocale();
   const dictionary = getDictionary(locale);
   const fallbackDictionary = translations[FALLBACK_LOCALE];
-  const template =
-    (dictionary[key] ?? fallbackDictionary[key] ?? key) as string;
+  const template = (dictionary[key] ?? fallbackDictionary[key] ?? key) as string;
 
   return applyReplacements(template, replacements);
 }

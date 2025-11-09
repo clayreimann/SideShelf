@@ -5,6 +5,7 @@
  * - 0.5x, 0.75x, 1.0x (normal), 1.25x, 1.5x, 1.75x, 2.0x, 2.5x, 3.0x
  */
 
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer } from "@/stores/appStore";
@@ -29,14 +30,14 @@ export default function PlaybackSpeedControl() {
   return (
     <View style={{ alignItems: "center" }}>
       <MenuView
-        title="Playback Speed"
+        title={translate("player.playbackSpeed.title")}
         onPressAction={({ nativeEvent }) => {
           const rate = parseFloat(nativeEvent.event);
           handleRateChange(rate);
         }}
         actions={PLAYBACK_SPEEDS.map((rate) => ({
           id: rate.toString(),
-          title: `${rate}x`,
+          title: translate("player.playbackSpeed.rate", { rate }),
           state: playbackRate === rate ? "on" : "off",
         }))}
       >
@@ -50,7 +51,9 @@ export default function PlaybackSpeedControl() {
             backgroundColor: "rgba(128, 128, 128, 0.2)",
           }}
         >
-          <Text style={[styles.text, { fontSize: 14, fontWeight: "600" }]}>{playbackRate}x</Text>
+          <Text style={[styles.text, { fontSize: 14, fontWeight: "600" }]}>
+            {translate("player.playbackSpeed.rate", { rate: playbackRate })}
+          </Text>
         </View>
       </MenuView>
     </View>

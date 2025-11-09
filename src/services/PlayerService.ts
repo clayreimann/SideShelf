@@ -20,12 +20,12 @@ import { getUserByUsername } from "@/db/helpers/users";
 import { getApiConfig } from "@/lib/api/api";
 import { startPlaySession } from "@/lib/api/endpoints";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
-import { applySmartRewind } from "@/lib/smartRewind";
 import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
+import { applySmartRewind } from "@/lib/smartRewind";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
@@ -1045,7 +1045,7 @@ export class PlayerService {
         }
         if (!positionMatches) {
           diagLog.info(
-            `From store position: ${store.player.position}, from TrackPlayer position: ${progress.position}`
+            `From store position: ${formatTime(store.player.position)}, from TrackPlayer position: ${formatTime(progress.position)}`
           );
         }
         if (!playingMatches) {

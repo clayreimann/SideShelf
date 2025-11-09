@@ -1,28 +1,29 @@
-import { db } from '@/db/client';
+import { db } from "@/db/client";
 import {
-    clearAllLocalCovers,
-    getAllDownloadedAudioFiles,
-    getAllDownloadedLibraryFiles,
-    getAllLocalCovers,
-} from '@/db/helpers/localData';
-import { audioFiles } from '@/db/schema/audioFiles';
-import { libraryFiles } from '@/db/schema/libraryFiles';
-import { mediaMetadata } from '@/db/schema/mediaMetadata';
-import { useFloatingPlayerPadding } from '@/hooks/useFloatingPlayerPadding';
-import { clearAllCoverCache } from '@/lib/covers';
-import { formatBytes } from '@/lib/helpers/formatters';
-import { useThemedStyles } from '@/lib/theme';
-import { useAuth } from '@/providers/AuthProvider';
-import { useDb } from '@/providers/DbProvider';
-import { type StorageEntry, useLibrary, useStatistics } from '@/stores';
-import { inArray } from 'drizzle-orm';
-import * as Clipboard from 'expo-clipboard';
-import { Directory, File, Paths } from 'expo-file-system';
-import { Stack } from 'expo-router';
-import { defaultDatabaseDirectory } from 'expo-sqlite';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, SectionList, Text, View } from 'react-native';
-import TrackPlayer, { State, Track } from 'react-native-track-player';
+  clearAllLocalCovers,
+  getAllDownloadedAudioFiles,
+  getAllDownloadedLibraryFiles,
+  getAllLocalCovers,
+} from "@/db/helpers/localData";
+import { audioFiles } from "@/db/schema/audioFiles";
+import { libraryFiles } from "@/db/schema/libraryFiles";
+import { mediaMetadata } from "@/db/schema/mediaMetadata";
+import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
+import { translate } from "@/i18n";
+import { clearAllCoverCache } from "@/lib/covers";
+import { formatBytes } from "@/lib/helpers/formatters";
+import { useThemedStyles } from "@/lib/theme";
+import { useAuth } from "@/providers/AuthProvider";
+import { useDb } from "@/providers/DbProvider";
+import { type StorageEntry, useLibrary, useStatistics } from "@/stores";
+import { inArray } from "drizzle-orm";
+import * as Clipboard from "expo-clipboard";
+import { Directory, File, Paths } from "expo-file-system";
+import { Stack } from "expo-router";
+import { defaultDatabaseDirectory } from "expo-sqlite";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, SectionList, Text, View } from "react-native";
+import TrackPlayer, { State, Track } from "react-native-track-player";
 
 type Section = {
   title: string;
@@ -62,7 +63,7 @@ function collectFileStats(paths: string[]): StorageBucketStats {
           size: acc.size + (file.size ?? 0),
         };
       } catch (error) {
-        console.warn('[Advanced] Failed to inspect file:', error);
+        console.warn("[Advanced] Failed to inspect file:", error);
         return acc;
       }
     },
@@ -75,12 +76,13 @@ function getSQLiteDirectory(): Directory {
     return new Directory(defaultDatabaseDirectory);
   }
 
-  return new Directory(Paths.document, 'SQLite');
+  return new Directory(Paths.document, "SQLite");
 }
 
 function formatFileCount(count: number): string {
+  // Translation keys not needed here as this is formatted data
   if (count === 1) {
-    return '1 file';
+    return "1 file";
   }
 
   return `${count} files`;
@@ -88,12 +90,12 @@ function formatFileCount(count: number): string {
 
 function normalizeTitle(value: string | null | undefined): string {
   if (!value) {
-    return 'Unknown item';
+    return translate("advanced.trackPlayer.unknownItem");
   }
 
   const trimmed = value.trim();
   if (!trimmed) {
-    return 'Unknown item';
+    return translate("advanced.trackPlayer.unknownItem");
   }
 
   return trimmed;
@@ -102,23 +104,23 @@ function normalizeTitle(value: string | null | undefined): string {
 function getStateLabel(state: State): string {
   switch (state) {
     case State.None:
-      return 'None';
+      return translate("advanced.trackPlayer.states.none");
     case State.Ready:
-      return 'Ready';
+      return translate("advanced.trackPlayer.states.ready");
     case State.Playing:
-      return 'Playing';
+      return translate("advanced.trackPlayer.states.playing");
     case State.Paused:
-      return 'Paused';
+      return translate("advanced.trackPlayer.states.paused");
     case State.Stopped:
-      return 'Stopped';
+      return translate("advanced.trackPlayer.states.stopped");
     case State.Buffering:
-      return 'Buffering';
+      return translate("advanced.trackPlayer.states.buffering");
     case State.Connecting:
-      return 'Connecting';
+      return translate("advanced.trackPlayer.states.connecting");
     case State.Error:
-      return 'Error';
+      return translate("advanced.trackPlayer.states.error");
     default:
-      return 'Unknown';
+      return translate("advanced.trackPlayer.states.unknown");
   }
 }
 
@@ -128,9 +130,9 @@ function formatDuration(seconds: number): string {
   const secs = Math.floor(seconds % 60);
 
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   }
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
 export default function AdvancedScreen() {
@@ -138,7 +140,11 @@ export default function AdvancedScreen() {
   const { accessToken, logout } = useAuth();
   const { refresh, selectedLibrary, libraries } = useLibrary();
   const { resetDatabase } = useDb();
-  const { counts, refreshStatistics, refreshStorageStats: updateStorageStatsInStore } = useStatistics();
+  const {
+    counts,
+    refreshStatistics,
+    refreshStorageStats: updateStorageStatsInStore,
+  } = useStatistics();
   const floatingPlayerPadding = useFloatingPlayerPadding();
 
   const [storageEntries, setStorageEntries] = useState<StorageEntry[]>([]);
@@ -154,7 +160,7 @@ export default function AdvancedScreen() {
     rate: number;
     volume: number;
   }>({
-    state: 'Unknown',
+    state: "Unknown",
     queueLength: 0,
     currentTrackIndex: null,
     currentTrack: null,
@@ -169,7 +175,7 @@ export default function AdvancedScreen() {
     try {
       await refreshStatistics();
     } catch (error) {
-      console.error('Failed to fetch counts:', error);
+      console.error("Failed to fetch counts:", error);
     }
   }, [refreshStatistics]);
 
@@ -184,7 +190,8 @@ export default function AdvancedScreen() {
         TrackPlayer.getActiveTrackIndex(),
       ]);
 
-      const currentTrack = activeTrackIndex !== undefined && activeTrackIndex >= 0 ? queue[activeTrackIndex] : null;
+      const currentTrack =
+        activeTrackIndex !== undefined && activeTrackIndex >= 0 ? queue[activeTrackIndex] : null;
 
       setTrackPlayerState({
         state: getStateLabel(state.state),
@@ -198,9 +205,9 @@ export default function AdvancedScreen() {
         volume,
       });
     } catch (error) {
-      console.error('Failed to refresh TrackPlayer state:', error);
+      console.error("Failed to refresh TrackPlayer state:", error);
       setTrackPlayerState({
-        state: 'Error',
+        state: "Error",
         queueLength: 0,
         currentTrackIndex: null,
         currentTrack: null,
@@ -222,8 +229,8 @@ export default function AdvancedScreen() {
       ]);
 
       const sqliteDirectory = getSQLiteDirectory();
-      const metadataDbFile = new File(sqliteDirectory, 'abs2.sqlite');
-      const logDbFile = new File(sqliteDirectory, 'logs.sqlite');
+      const metadataDbFile = new File(sqliteDirectory, "abs2.sqlite");
+      const logDbFile = new File(sqliteDirectory, "logs.sqlite");
       const covers = collectFileStats(coverRows.map((row) => row.localCoverUrl));
 
       const metadataStats: StorageBucketStats = metadataDbFile.exists
@@ -254,7 +261,7 @@ export default function AdvancedScreen() {
         new Set(
           audioFileInfos
             .map((info) => info.mediaId)
-            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+            .filter((id): id is string => typeof id === "string" && id.length > 0)
         )
       );
 
@@ -273,7 +280,10 @@ export default function AdvancedScreen() {
       const metadataByMediaId = new Map<string, { libraryItemId: string; title: string | null }>();
       const libraryTitleById = new Map<string, string>();
 
-      const ensureLibraryItemTitle = (libraryItemId: string, fallbackTitle?: string | null): string => {
+      const ensureLibraryItemTitle = (
+        libraryItemId: string,
+        fallbackTitle?: string | null
+      ): string => {
         const existing = libraryTitleById.get(libraryItemId);
         if (existing) {
           return existing;
@@ -305,7 +315,7 @@ export default function AdvancedScreen() {
             .map((info) => info.libraryItemId)
             .filter(
               (libraryItemId): libraryItemId is string =>
-                typeof libraryItemId === 'string' &&
+                typeof libraryItemId === "string" &&
                 libraryItemId.length > 0 &&
                 !libraryTitleById.has(libraryItemId)
             )
@@ -327,7 +337,9 @@ export default function AdvancedScreen() {
       }
 
       const audioFileInfoMap = new Map(audioFileInfos.map((info) => [info.id, info.mediaId]));
-      const libraryFileInfoMap = new Map(libraryFileInfos.map((info) => [info.id, info.libraryItemId]));
+      const libraryFileInfoMap = new Map(
+        libraryFileInfos.map((info) => [info.id, info.libraryItemId])
+      );
 
       const addDownloadToGroup = (libraryItemId: string, title: string, path: string) => {
         if (!libraryItemId || !path) {
@@ -372,20 +384,20 @@ export default function AdvancedScreen() {
 
       const entries: StorageEntry[] = [
         {
-          id: 'metadata-db',
-          title: 'Metadata database',
+          id: "metadata-db",
+          title: translate("advanced.storage.metadataDb"),
           count: metadataStats.count,
           size: metadataStats.size,
         },
         {
-          id: 'log-db',
-          title: 'Log database',
+          id: "log-db",
+          title: translate("advanced.storage.logDb"),
           count: logStats.count,
           size: logStats.size,
         },
         {
-          id: 'cover-cache',
-          title: 'Cover cache',
+          id: "cover-cache",
+          title: translate("advanced.storage.coverCache"),
           count: covers.count,
           size: covers.size,
         },
@@ -405,15 +417,17 @@ export default function AdvancedScreen() {
         .sort((a, b) => a.title.localeCompare(b.title));
 
       // Calculate total storage
-      const totalSize = entries.reduce((sum, entry) => sum + entry.size, 0) +
-                       downloadEntries.reduce((sum, entry) => sum + entry.size, 0);
-      const totalCount = entries.reduce((sum, entry) => sum + entry.count, 0) +
-                        downloadEntries.reduce((sum, entry) => sum + entry.count, 0);
+      const totalSize =
+        entries.reduce((sum, entry) => sum + entry.size, 0) +
+        downloadEntries.reduce((sum, entry) => sum + entry.size, 0);
+      const totalCount =
+        entries.reduce((sum, entry) => sum + entry.count, 0) +
+        downloadEntries.reduce((sum, entry) => sum + entry.count, 0);
 
       // Add total entry at the beginning
       const totalEntry: StorageEntry = {
-        id: 'total',
-        title: 'Total storage used',
+        id: "total",
+        title: translate("advanced.storage.totalUsed"),
         count: totalCount,
         size: totalSize,
       };
@@ -426,7 +440,7 @@ export default function AdvancedScreen() {
       // Update storage stats in the store
       updateStorageStatsInStore(allEntries);
     } catch (error) {
-      console.error('Failed to refresh storage stats:', error);
+      console.error("Failed to refresh storage stats:", error);
       setStorageEntries([]);
     }
   }, [updateStorageStatsInStore]);
@@ -439,9 +453,9 @@ export default function AdvancedScreen() {
     try {
       await clearAllCoverCache();
       await clearAllLocalCovers();
-      console.log('Cover cache and database imageUrls cleared successfully');
+      console.log("Cover cache and database imageUrls cleared successfully");
     } catch (error) {
-      console.error('Failed to clear cover cache:', error);
+      console.error("Failed to clear cover cache:", error);
     }
     await refreshStorageStats();
   }, [refreshStorageStats]);
@@ -454,69 +468,146 @@ export default function AdvancedScreen() {
 
   const sections = useMemo<Section[]>(() => {
     const librarySection: Section = {
-      title: 'Library Stats',
+      title: translate("advanced.sections.libraryStats"),
       data: [
-        { label: `Libraries found: ${libraries.length}`, onPress: disabledOnPress, disabled: true },
-        { label: `Selected library: ${selectedLibrary?.name ?? 'None'}`, onPress: disabledOnPress, disabled: true },
-        { label: `Authors: ${counts.authors}`, onPress: disabledOnPress, disabled: true },
-        { label: `Genres: ${counts.genres}`, onPress: disabledOnPress, disabled: true },
-        { label: `Languages: ${counts.languages}`, onPress: disabledOnPress, disabled: true },
-        { label: `Narrators: ${counts.narrators}`, onPress: disabledOnPress, disabled: true },
-        { label: `Series: ${counts.series}`, onPress: disabledOnPress, disabled: true },
-        { label: `Tags: ${counts.tags}`, onPress: disabledOnPress, disabled: true },
+        {
+          label: translate("advanced.stats.librariesFound", { count: libraries.length }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: translate("advanced.stats.selectedLibrary", {
+            name: selectedLibrary?.name ?? translate("advanced.stats.selectedLibraryNone"),
+          }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: translate("advanced.stats.authors", { count: counts.authors }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: translate("advanced.stats.genres", { count: counts.genres }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: translate("advanced.stats.languages", { count: counts.languages }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: translate("advanced.stats.narrators", { count: counts.narrators }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: translate("advanced.stats.series", { count: counts.series }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: translate("advanced.stats.tags", { count: counts.tags }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
       ],
     };
 
     const storageSection: Section = {
-      title: 'Storage',
+      title: translate("advanced.sections.storage"),
       data: [
         {
-          label: 'storage-header',
+          label: "storage-header",
           onPress: disabledOnPress,
           disabled: true,
-          columns: ['Storage item', 'Files', 'Size'],
+          columns: [
+            translate("advanced.storage.tableHeaders.item"),
+            translate("advanced.storage.tableHeaders.files"),
+            translate("advanced.storage.tableHeaders.size"),
+          ],
           isHeader: true,
         },
         ...storageEntries.map((entry) => ({
           label: entry.id,
           onPress: disabledOnPress,
           disabled: true,
-          columns: [entry.title, formatFileCount(entry.count), formatBytes(entry.size)] as [string, string, string],
+          columns: [entry.title, formatFileCount(entry.count), formatBytes(entry.size)] as [
+            string,
+            string,
+            string,
+          ],
         })),
       ],
     };
 
     const hasTrack = trackPlayerState.currentTrack !== null;
     const trackPlayerSection: Section = {
-      title: 'Track Player',
+      title: translate("advanced.sections.trackPlayer"),
       data: [
-        { label: `State: ${trackPlayerState.state}`, onPress: disabledOnPress, disabled: true },
-        { label: `Queue length: ${trackPlayerState.queueLength}`, onPress: disabledOnPress, disabled: true },
         {
-          label: `Current track: ${trackPlayerState.currentTrackIndex !== null ? `#${trackPlayerState.currentTrackIndex}` : 'None'}`,
+          label: translate("advanced.trackPlayer.state", { state: trackPlayerState.state }),
           onPress: disabledOnPress,
           disabled: true,
         },
         {
-          label: `Track: ${trackPlayerState.currentTrack?.title ?? 'None'}` + (hasTrack ? ` (${trackPlayerState.currentTrack?.id ?? 'None'})` : ''),
+          label: translate("advanced.trackPlayer.queueLength", {
+            length: trackPlayerState.queueLength,
+          }),
           onPress: disabledOnPress,
           disabled: true,
         },
         {
-          label: `Position: ${formatDuration(trackPlayerState.position)} / ${formatDuration(trackPlayerState.duration)} (${formatDuration(trackPlayerState.buffered)} buffered)`,
+          label:
+            translate("advanced.trackPlayer.currentTrack") +
+            (trackPlayerState.currentTrackIndex !== null
+              ? translate("advanced.trackPlayer.trackIndex", {
+                  index: trackPlayerState.currentTrackIndex,
+                })
+              : translate("advanced.trackPlayer.trackNone")),
           onPress: disabledOnPress,
           disabled: true,
         },
-        { label: `Playback rate: ${trackPlayerState.rate.toFixed(2)}x`, onPress: disabledOnPress, disabled: true },
-        { label: `Volume: ${(trackPlayerState.volume * 100).toFixed(0)}%`, onPress: disabledOnPress, disabled: true },
+        {
+          label:
+            translate("advanced.trackPlayer.track") +
+            (trackPlayerState.currentTrack?.title ?? translate("advanced.trackPlayer.trackNone")) +
+            (hasTrack
+              ? ` (${trackPlayerState.currentTrack?.id ?? translate("advanced.trackPlayer.trackNone")})`
+              : ""),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label:
+            translate("advanced.trackPlayer.position") +
+            `${formatDuration(trackPlayerState.position)} / ${formatDuration(trackPlayerState.duration)} (${formatDuration(trackPlayerState.buffered)}${translate("advanced.trackPlayer.buffered")})`,
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: translate("advanced.trackPlayer.playbackRate", {
+            rate: trackPlayerState.rate.toFixed(2),
+          }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+        {
+          label: translate("advanced.trackPlayer.volume", {
+            volume: (trackPlayerState.volume * 100).toFixed(0),
+          }),
+          onPress: disabledOnPress,
+          disabled: true,
+        },
       ],
     };
 
     const actionsSection: Section = {
-      title: 'Actions',
+      title: translate("advanced.sections.actions"),
       data: [
         {
-          label: 'Copy access token to clipboard',
+          label: translate("advanced.actions.copyAccessToken"),
           onPress: async () => {
             if (accessToken) {
               await Clipboard.setStringAsync(accessToken);
@@ -525,22 +616,22 @@ export default function AdvancedScreen() {
           disabled: !accessToken,
         },
         {
-          label: 'Refresh libraries and items',
+          label: translate("advanced.actions.refreshLibraries"),
           onPress: refresh,
           disabled: false,
         },
         {
-          label: 'Refresh all stats',
+          label: translate("advanced.actions.refreshStats"),
           onPress: handleRefreshAll,
           disabled: false,
         },
         {
-          label: 'Clear cover cache',
+          label: translate("advanced.actions.clearCoverCache"),
           onPress: clearCoverCache,
           disabled: false,
         },
         {
-          label: 'Reset app',
+          label: translate("advanced.actions.resetApp"),
           onPress: async () => {
             resetDatabase();
             await clearCoverCache();
@@ -573,7 +664,7 @@ export default function AdvancedScreen() {
         keyExtractor={(item, index) => item.label + index}
         renderSectionHeader={({ section: { title } }) => (
           <View style={{ marginBottom: 12, marginTop: 20, paddingHorizontal: 16 }}>
-            <Text style={{ ...styles.text, fontWeight: 'bold', fontSize: 18 }}>{title}</Text>
+            <Text style={{ ...styles.text, fontWeight: "bold", fontSize: 18 }}>{title}</Text>
           </View>
         )}
         renderItem={({ item }: { item: ActionItem }) => {
@@ -583,26 +674,20 @@ export default function AdvancedScreen() {
                 style={[
                   styles.listItem,
                   {
-                    flexDirection: 'row',
-                    alignItems: 'center',
+                    flexDirection: "row",
+                    alignItems: "center",
                     gap: 12,
                   },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.text,
-                    { flex: 1 },
-                    item.isHeader && { fontWeight: '600' },
-                  ]}
-                >
+                <Text style={[styles.text, { flex: 1 }, item.isHeader && { fontWeight: "600" }]}>
                   {item.columns[0]}
                 </Text>
                 <Text
                   style={[
                     styles.text,
-                    { width: 90, textAlign: 'right' },
-                    item.isHeader && { fontWeight: '600' },
+                    { width: 90, textAlign: "right" },
+                    item.isHeader && { fontWeight: "600" },
                   ]}
                 >
                   {item.columns[1]}
@@ -610,8 +695,8 @@ export default function AdvancedScreen() {
                 <Text
                   style={[
                     styles.text,
-                    { width: 110, textAlign: 'right' },
-                    item.isHeader && { fontWeight: '600' },
+                    { width: 110, textAlign: "right" },
+                    item.isHeader && { fontWeight: "600" },
                   ]}
                 >
                   {item.columns[2]}
@@ -629,10 +714,10 @@ export default function AdvancedScreen() {
           );
         }}
         contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
-        indicatorStyle={isDark ? 'white' : 'black'}
+        indicatorStyle={isDark ? "white" : "black"}
         stickySectionHeadersEnabled={false}
       />
-      <Stack.Screen options={{ title: 'Advanced' }} />
+      <Stack.Screen options={{ title: translate("advanced.title") }} />
     </>
   );
 }

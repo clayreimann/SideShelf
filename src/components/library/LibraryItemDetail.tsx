@@ -2,20 +2,24 @@ import { AuthorIcon, DownloadButton, NarratorIcon, SeriesIcon } from "@/componen
 import ChapterList from "@/components/library/LibraryItemDetail/ChapterList";
 import DownloadProgressView from "@/components/library/LibraryItemDetail/DownloadProgressView";
 import { CollapsibleSection, ProgressBar } from "@/components/ui";
+import { getMediaAuthors, getMediaSeries } from "@/db/helpers/mediaJoins";
 import { getMediaProgressForLibraryItem, upsertMediaProgress } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
+import { translate } from "@/i18n";
 import { updateMediaProgress } from "@/lib/api/endpoints";
 import { getCoverUri } from "@/lib/covers";
-import { borderRadius, commonStyles, spacing } from "@/lib/styles";
+import { navigateToAuthor, navigateToSeries } from "@/lib/navigation";
+import { spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
 import { useDownloads, useLibraryItemDetails, usePlayer } from "@/stores";
-import { Stack } from "expo-router";
-import React, { useCallback, useEffect, useMemo } from "react";
+import { MenuView } from "@react-native-menu/menu";
+import { Stack, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,6 +30,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import RenderHtml from "react-native-render-html";
 import CoverImage from "../ui/CoverImange";
 
@@ -41,12 +46,25 @@ function formatTime(seconds: number): string {
   const secs = Math.floor(seconds % 60);
 
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs
-      .toString()
-      .padStart(2, "0")}`;
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   } else {
     return `${minutes}:${secs.toString().padStart(2, "0")}`;
   }
+}
+
+// Helper function to format duration in seconds to readable format (e.g., "12h 30m")
+function formatDuration(seconds: number | null | undefined): string {
+  if (!seconds) return "";
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  } else if (minutes > 0) {
+    return `${minutes}m`;
+  }
+  return "";
 }
 
 function Separator() {
@@ -70,23 +88,30 @@ const HTMLTagsStyles = {
   p: { marginBottom: 12, lineHeight: 24 },
   div: { marginBottom: 8 },
   br: { marginBottom: 8 },
-  b: { fontWeight: 'bold' as const },
-  strong: { fontWeight: 'bold' as const },
-  i: { fontStyle: 'italic' as const },
+  b: { fontWeight: "bold" as const },
+  strong: { fontWeight: "bold" as const },
+  i: { fontStyle: "italic" as const },
 };
 
-export default function LibraryItemDetail({
-  itemId,
-  onTitleChange,
-}: LibraryItemDetailProps) {
+export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItemDetailProps) {
   const { styles, colors, isDark } = useThemedStyles();
   const { width } = useWindowDimensions();
   const { username, serverUrl, accessToken } = useAuth();
-  const { position, isPlaying, isLoadingTrack } = usePlayer();
+  const { currentTrack, position, isPlaying, isLoadingTrack } = usePlayer();
   const floatingPlayerPadding = useFloatingPlayerPadding();
+  const router = useRouter();
+
+  // State for author and series IDs
+  const [authorId, setAuthorId] = useState<string | null>(null);
+  const [seriesId, setSeriesId] = useState<string | null>(null);
 
   // Get store hooks
-  const { fetchItemDetails, getCachedItem, updateItemProgress, loading: itemLoading } = useLibraryItemDetails();
+  const {
+    fetchItemDetails,
+    getCachedItem,
+    updateItemProgress,
+    loading: itemLoading,
+  } = useLibraryItemDetails();
   const { activeDownloads, isItemDownloaded, startDownload, deleteDownload } = useDownloads();
 
   // Get cached item data or null
@@ -109,14 +134,8 @@ export default function LibraryItemDetail({
   const isDownloading = !!downloadProgress;
   const isDownloaded = isItemDownloaded(itemId);
 
-  const htmlSource = useMemo(
-    () => ({ html: metadata?.description ?? "" }),
-    [metadata]
-  );
-  const baseStyle = useMemo(
-    () => ({ color: colors.textPrimary, fontSize: 16 }),
-    [colors]
-  );
+  const htmlSource = useMemo(() => ({ html: metadata?.description ?? "" }), [metadata]);
+  const baseStyle = useMemo(() => ({ color: colors.textPrimary, fontSize: 16 }), [colors]);
 
   // Fetch item details from store
   useEffect(() => {
@@ -134,12 +153,12 @@ export default function LibraryItemDetail({
         // Notify parent of title change for header
         const currentData = getCachedItem(itemId);
         if (currentData?.metadata) {
-          const title = currentData.metadata.title || "Unknown Title";
+          const title = currentData.metadata.title || translate("libraryItem.unknownTitle");
           onTitleChange?.(title);
         }
       } catch (error) {
         console.error("[LibraryItemDetail] Error fetching item details:", error);
-        onTitleChange?.("Item not found");
+        onTitleChange?.(translate("libraryItem.itemNotFound"));
       }
     };
 
@@ -149,10 +168,39 @@ export default function LibraryItemDetail({
   // Update title when metadata changes
   useEffect(() => {
     if (metadata) {
-      const title = metadata.title || "Unknown Title";
+      const title = metadata.title || translate("libraryItem.unknownTitle");
       onTitleChange?.(title);
     }
   }, [metadata, onTitleChange]);
+
+  // Fetch author and series IDs for navigation
+  useEffect(() => {
+    const fetchRelationIds = async () => {
+      if (!metadata?.id) {
+        setAuthorId(null);
+        setSeriesId(null);
+        return;
+      }
+
+      try {
+        // Fetch authors and series in parallel
+        const [authors, series] = await Promise.all([
+          getMediaAuthors(metadata.id),
+          getMediaSeries(metadata.id),
+        ]);
+
+        // Use first author and series for navigation
+        setAuthorId(authors[0]?.authorId || null);
+        setSeriesId(series[0] || null);
+      } catch (error) {
+        console.error("[LibraryItemDetail] Error fetching author/series IDs:", error);
+        setAuthorId(null);
+        setSeriesId(null);
+      }
+    };
+
+    fetchRelationIds();
+  }, [metadata?.id]);
 
   // User progress fetching effect - update store with latest progress
   useEffect(() => {
@@ -166,20 +214,14 @@ export default function LibraryItemDetail({
         // Get the local progress data
         const user = await getUserByUsername(username);
         if (user?.id) {
-          const progressData = await getMediaProgressForLibraryItem(
-            item.id,
-            user.id
-          );
+          const progressData = await getMediaProgressForLibraryItem(item.id, user.id);
           // Update progress in store (will trigger re-render via store subscription)
           if (progressData) {
             updateItemProgress(itemId, progressData);
           }
         }
       } catch (error) {
-        console.error(
-          "[LibraryItemDetail] Error fetching user progress:",
-          error
-        );
+        console.error("[LibraryItemDetail] Error fetching user progress:", error);
       }
     };
 
@@ -208,8 +250,9 @@ export default function LibraryItemDetail({
     // Only show progress if:
     // 1. Item is finished, OR
     // 2. There's actual progress (currentTime > 0 or progress > 0)
-    const hasProgress = (computedProgress.currentTime && computedProgress.currentTime > 0) ||
-                        (computedProgress.progress && computedProgress.progress > 0);
+    const hasProgress =
+      (computedProgress.currentTime && computedProgress.currentTime > 0) ||
+      (computedProgress.progress && computedProgress.progress > 0);
 
     if (computedProgress.isFinished || hasProgress) {
       return computedProgress;
@@ -224,7 +267,7 @@ export default function LibraryItemDetail({
     try {
       const user = await getUserByUsername(username);
       if (!user?.id) {
-        Alert.alert("Error", "User not found");
+        Alert.alert(translate("common.error"), translate("libraryItem.alerts.userNotFound"));
         return;
       }
 
@@ -238,7 +281,7 @@ export default function LibraryItemDetail({
         libraryItemId: item.id,
         episodeId: effectiveProgress.episodeId || null,
         duration: effectiveProgress.duration || null,
-        progress: newIsFinished ? 1.0 : (effectiveProgress.progress || 0),
+        progress: newIsFinished ? 1.0 : effectiveProgress.progress || 0,
         currentTime: effectiveProgress.currentTime || null,
         isFinished: newIsFinished,
         hideFromContinueListening: effectiveProgress.hideFromContinueListening || null,
@@ -273,7 +316,7 @@ export default function LibraryItemDetail({
       await progressService.fetchServerProgress();
     } catch (error) {
       console.error("[LibraryItemDetail] Failed to toggle finished status:", error);
-      Alert.alert("Error", "Failed to update finished status. Please try again.");
+      Alert.alert(translate("common.error"), translate("libraryItem.alerts.finishedStatusFailed"));
     }
   }, [item, username, effectiveProgress, itemId, updateItemProgress]);
 
@@ -289,9 +332,9 @@ export default function LibraryItemDetail({
     } catch (error) {
       console.error("[LibraryItemDetail] Download failed:", error);
       Alert.alert(
-        "Download Failed",
-        `Failed to download library item: ${error}`,
-        [{ text: "OK" }]
+        translate("common.error"),
+        translate("libraryItem.alerts.downloadFailed", { error: String(error) }),
+        [{ text: translate("common.ok") }]
       );
     }
   }, [item, serverUrl, accessToken, isDownloading, startDownload]);
@@ -300,25 +343,22 @@ export default function LibraryItemDetail({
     if (!item) return;
 
     Alert.alert(
-      "Delete Download",
-      "Are you sure you want to delete the downloaded files? This will free up storage space.",
+      translate("libraryItem.alerts.deleteDownload.title"),
+      translate("libraryItem.alerts.deleteDownload.message"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: translate("common.cancel"), style: "cancel" },
         {
-          text: "Delete",
+          text: translate("common.delete"),
           style: "destructive",
           onPress: async () => {
             try {
               await deleteDownload(item.id);
             } catch (error) {
-              console.error(
-                "[LibraryItemDetail] Delete download failed:",
-                error
-              );
+              console.error("[LibraryItemDetail] Delete download failed:", error);
               Alert.alert(
-                "Delete Failed",
-                `Failed to delete downloaded files: ${error}`,
-                [{ text: "OK" }]
+                translate("common.error"),
+                translate("libraryItem.alerts.deleteFailed", { error: String(error) }),
+                [{ text: translate("common.ok") }]
               );
             }
           },
@@ -351,7 +391,10 @@ export default function LibraryItemDetail({
   // Play handler
   const handlePlay = useCallback(async () => {
     if (!item) {
-      Alert.alert("Cannot Play", "Item not found.");
+      Alert.alert(
+        translate("libraryItem.alerts.cannotPlay"),
+        translate("libraryItem.alerts.itemNotFound")
+      );
       return;
     }
 
@@ -368,20 +411,78 @@ export default function LibraryItemDetail({
       }
     } catch (error) {
       console.error("[LibraryItemDetail] Failed to play track:", error);
-      Alert.alert("Playback Failed", `Failed to start playback: ${error}`, [
-        { text: "OK" },
-      ]);
+      Alert.alert(
+        translate("common.error"),
+        translate("libraryItem.alerts.playbackFailed", { error: String(error) }),
+        [{ text: translate("common.ok") }]
+      );
     }
   }, [item, currentTrack]);
 
+  // Menu handler
+  const handleMenuAction = useCallback(
+    (actionId: string) => {
+      switch (actionId) {
+        case "download":
+          handleDownload();
+          break;
+        case "delete":
+          handleDeleteDownload();
+          break;
+        case "mark-finished":
+          handleToggleFinished();
+          break;
+        default:
+          break;
+      }
+    },
+    [handleDownload, handleDeleteDownload, handleToggleFinished]
+  );
+
+  // Build menu actions based on current state
+  const menuActions = useMemo(() => {
+    const actions = [];
+
+    // Download/Delete action
+    if (isDownloaded) {
+      actions.push({
+        id: "delete",
+        title: translate("libraryItem.actions.deleteDownload"),
+        attributes: { destructive: true },
+        image: "trash",
+        imageColor: "#FF3B30",
+      });
+    } else if (!isDownloading) {
+      actions.push({
+        id: "download",
+        title: translate("libraryItem.actions.download"),
+        image: "arrow.down.circle",
+      });
+    }
+
+    // Mark as Finished/Unfinished action
+    if (effectiveProgress) {
+      if (effectiveProgress.isFinished) {
+        actions.push({
+          id: "mark-finished",
+          title: translate("libraryItem.actions.markUnfinished"),
+          image: "arrow.uturn.backward.circle",
+        });
+      } else {
+        actions.push({
+          id: "mark-finished",
+          title: translate("libraryItem.actions.markFinished"),
+          image: "checkmark.circle",
+        });
+      }
+    }
+
+    return actions;
+  }, [isDownloaded, isDownloading, effectiveProgress]);
+
   if (loading) {
     return (
-      <View
-        style={[
-          styles.container,
-          { justifyContent: "center", alignItems: "center" },
-        ]}
-      >
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
         <ActivityIndicator size="large" />
       </View>
     );
@@ -390,16 +491,16 @@ export default function LibraryItemDetail({
   if (!item) {
     return (
       <View style={styles.container}>
-        <Text style={styles.text}>Item not found.</Text>
+        <Text style={styles.text}>{translate("libraryItem.itemNotFound")}</Text>
       </View>
     );
   }
 
   // Prefer metadata fields, fallback to item fields
-  const title = metadata?.title || "Unknown Title";
+  const title = metadata?.title || translate("libraryItem.unknownTitle");
   const coverUri = metadata?.imageUrl || (item ? getCoverUri(item.id) : null);
   const description = metadata?.description || "";
-  const author = metadata?.authorName || metadata?.author || "Unknown Author";
+  const author = metadata?.authorName || metadata?.author || translate("libraryItem.unknownAuthor");
   const narrator = metadata?.narratorName || null;
   const series = metadata?.seriesName || null;
   const imageSize = width * 0.6;
@@ -407,14 +508,8 @@ export default function LibraryItemDetail({
   return (
     <>
       <ScrollView
-        style={[
-          componentStyles.scrollView,
-          { backgroundColor: styles.container.backgroundColor },
-        ]}
-        contentContainerStyle={[
-          componentStyles.scrollViewContent,
-          floatingPlayerPadding,
-        ]}
+        style={[componentStyles.scrollView, { backgroundColor: styles.container.backgroundColor }]}
+        contentContainerStyle={[componentStyles.scrollViewContent, floatingPlayerPadding]}
       >
         <View style={{ alignItems: "center", marginBottom: 16 }}>
           <View
@@ -460,20 +555,33 @@ export default function LibraryItemDetail({
               alignItems: "center",
             }}
           >
-            <View
+            <TouchableOpacity
               style={{
                 flexDirection: "row",
                 alignItems: "center",
                 flexShrink: 1,
               }}
+              onPress={() => {
+                if (authorId) {
+                  navigateToAuthor(router, authorId);
+                }
+              }}
+              disabled={!authorId}
             >
               <AuthorIcon style={{ marginRight: 8 }} />
               <Text
-                style={[styles.text, { textAlign: "center", flexShrink: 1 }]}
+                style={[
+                  styles.text,
+                  {
+                    textAlign: "center",
+                    flexShrink: 1,
+                    textDecorationLine: authorId ? "underline" : "none",
+                  },
+                ]}
               >
                 {author}
               </Text>
-            </View>
+            </TouchableOpacity>
             {narrator ? (
               <>
                 <Separator />
@@ -485,12 +593,7 @@ export default function LibraryItemDetail({
                   }}
                 >
                   <NarratorIcon style={{ marginRight: 8 }} />
-                  <Text
-                    style={[
-                      styles.text,
-                      { textAlign: "center", flexShrink: 1 },
-                    ]}
-                  >
+                  <Text style={[styles.text, { textAlign: "center", flexShrink: 1 }]}>
                     {narrator}
                   </Text>
                 </View>
@@ -498,12 +601,18 @@ export default function LibraryItemDetail({
             ) : null}
           </View>
           {series ? (
-            <View
+            <TouchableOpacity
               style={{
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
               }}
+              onPress={() => {
+                if (seriesId) {
+                  navigateToSeries(router, seriesId);
+                }
+              }}
+              disabled={!seriesId}
             >
               <SeriesIcon />
               <Text
@@ -514,13 +623,48 @@ export default function LibraryItemDetail({
                     marginBottom: 4,
                     marginLeft: 4,
                     textAlign: "center",
+                    textDecorationLine: seriesId ? "underline" : "none",
                   },
                 ]}
               >
                 {series}
               </Text>
-            </View>
+            </TouchableOpacity>
           ) : null}
+          {/* Duration, Year, and Download Status */}
+          {(metadata?.duration || metadata?.publishedYear || isDownloaded) && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 4,
+                flexWrap: "wrap",
+              }}
+            >
+              {metadata?.duration && (
+                <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
+                  {formatDuration(metadata.duration)}
+                </Text>
+              )}
+              {metadata?.publishedYear && (
+                <>
+                  {metadata?.duration && <Separator />}
+                  <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
+                    {metadata.publishedYear}
+                  </Text>
+                </>
+              )}
+              {isDownloaded && (
+                <>
+                  {(metadata?.duration || metadata?.publishedYear) && <Separator />}
+                  <Text style={[styles.text, { fontSize: 14, color: "#34C759" }]}>
+                    {translate("libraryItem.downloaded")}
+                  </Text>
+                </>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Progress display */}
@@ -541,32 +685,6 @@ export default function LibraryItemDetail({
                 duration={effectiveProgress.duration || undefined}
                 showPercentage={true}
               />
-              {/* Mark as Finished Button */}
-              <TouchableOpacity
-                onPress={handleToggleFinished}
-                style={{
-                  marginTop: 12,
-                  paddingVertical: 8,
-                  paddingHorizontal: 16,
-                  borderRadius: 6,
-                  backgroundColor: effectiveProgress.isFinished
-                    ? (isDark ? "#444" : "#e0e0e0")
-                    : (isDark ? "#34C759" : "#28a745"),
-                  alignItems: "center",
-                }}
-              >
-                <Text
-                  style={{
-                    color: effectiveProgress.isFinished
-                      ? (isDark ? "#999" : "#666")
-                      : "white",
-                    fontSize: 14,
-                    fontWeight: "600",
-                  }}
-                >
-                  {effectiveProgress.isFinished ? "Mark as Unfinished" : "Mark as Finished"}
-                </Text>
-              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -605,10 +723,10 @@ export default function LibraryItemDetail({
                 }}
               >
                 {isLoadingTrack
-                  ? "Loading..."
+                  ? translate("common.loading")
                   : currentTrack?.libraryItemId === item?.id && isPlaying
-                  ? "Pause"
-                  : "Play"}
+                    ? translate("common.pause")
+                    : translate("common.play")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -634,9 +752,7 @@ export default function LibraryItemDetail({
                   margin: 2,
                 }}
               >
-                <Text style={{ fontSize: 12, color: isDark ? "#ccc" : "#333" }}>
-                  {g}
-                </Text>
+                <Text style={{ fontSize: 12, color: isDark ? "#ccc" : "#333" }}>{g}</Text>
               </View>
             ))}
           </View>
@@ -661,16 +777,14 @@ export default function LibraryItemDetail({
                   margin: 2,
                 }}
               >
-                <Text style={{ fontSize: 12, color: isDark ? "#ccc" : "#333" }}>
-                  {t}
-                </Text>
+                <Text style={{ fontSize: 12, color: isDark ? "#ccc" : "#333" }}>{t}</Text>
               </View>
             ))}
           </View>
         )}
         {/* Collapsible Description */}
         {description && (
-          <CollapsibleSection title="Description" defaultExpanded={true}>
+          <CollapsibleSection title={translate("libraryItem.description")} defaultExpanded={true}>
             <RenderHtml
               contentWidth={width - 64}
               source={htmlSource}
@@ -706,12 +820,9 @@ export default function LibraryItemDetail({
                 >
                   {file.filename}
                 </Text>
-                <View
-                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
-                >
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                   <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
-                    Duration:{" "}
-                    {file.duration ? formatTime(file.duration) : "Unknown"}
+                    Duration: {file.duration ? formatTime(file.duration) : "Unknown"}
                   </Text>
                   {file.size && (
                     <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
@@ -719,9 +830,7 @@ export default function LibraryItemDetail({
                     </Text>
                   )}
                   {file.downloadInfo?.isDownloaded && (
-                    <Text
-                      style={[styles.text, { fontSize: 12, color: "#007AFF" }]}
-                    >
+                    <Text style={[styles.text, { fontSize: 12, color: "#007AFF" }]}>
                       ⬇ Downloaded
                     </Text>
                   )}
@@ -735,11 +844,17 @@ export default function LibraryItemDetail({
       <Stack.Screen
         options={{
           headerRight: () => (
-            <DownloadButton
-              isDownloaded={isDownloaded}
-              onPress={isDownloaded ? handleDeleteDownload : handleDownload}
-              disabled={!serverUrl || !accessToken || isDownloading}
-            />
+            <MenuView
+              title="Options"
+              onPressAction={({ nativeEvent }) => {
+                handleMenuAction(nativeEvent.event);
+              }}
+              actions={menuActions}
+            >
+              <View style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
+                <Ionicons name="ellipsis-horizontal" size={24} color={colors.textPrimary} />
+              </View>
+            </MenuView>
           ),
         }}
       />

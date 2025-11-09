@@ -11,6 +11,7 @@
  * during background playback.
  */
 
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAppStore } from "@/stores/appStore";
 import { MenuView } from "@react-native-menu/menu";
@@ -73,12 +74,15 @@ export default function SleepTimerControl() {
 
   const getDisplayText = useCallback(() => {
     if (!sleepTimer.type || remainingTime === null) {
-      return "Off";
+      return translate("player.sleepTimer.off");
     }
 
     if (sleepTimer.type === "chapter") {
-      const target = sleepTimer.chapterTarget === "current" ? "Chapter" : "Next Chapter";
-      return `${target} (${formatTime(remainingTime)})`;
+      const target =
+        sleepTimer.chapterTarget === "current"
+          ? translate("player.sleepTimer.chapter")
+          : translate("player.sleepTimer.nextChapter");
+      return translate("player.sleepTimer.remaining", { target, time: formatTime(remainingTime) });
     }
 
     return formatTime(remainingTime);
@@ -91,19 +95,19 @@ export default function SleepTimerControl() {
       [
         ...TIME_OPTIONS.map((minutes) => ({
           id: minutes.toString(),
-          title: `${minutes} minutes`,
+          title: translate("player.sleepTimer.minutes", { minutes }),
         })),
         {
           id: "end-of-chapter",
-          title: "End of Current Chapter",
+          title: translate("player.sleepTimer.endOfChapter"),
         },
         {
           id: "end-of-next-chapter",
-          title: "End of Next Chapter",
+          title: translate("player.sleepTimer.endOfNextChapter"),
         },
         {
           id: "off",
-          title: "Turn Off",
+          title: translate("player.sleepTimer.turnOff"),
           attributes: { destructive: true },
         },
       ].reverse(),
@@ -113,7 +117,7 @@ export default function SleepTimerControl() {
   return (
     <View style={{ alignItems: "center" }}>
       <MenuView
-        title="Sleep Timer"
+        title={translate("player.sleepTimer.title")}
         onPressAction={({ nativeEvent }) => {
           handleMenuAction(nativeEvent.event);
         }}

@@ -1,12 +1,13 @@
-import { HeaderControls, SortMenu } from '@/components/ui';
-import { SeriesListRow } from '@/db/helpers/series';
-import { useThemedStyles } from '@/lib/theme';
-import { SeriesSortField, useSeries } from '@/stores';
-import { useFocusEffect } from '@react-navigation/native';
-import { Stack, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from 'react-native';
-import CoverImage from '@/components/ui/CoverImange';
+import { HeaderControls, SortMenu } from "@/components/ui";
+import { SeriesListRow } from "@/db/helpers/series";
+import { translate } from "@/i18n";
+import { useThemedStyles } from "@/lib/theme";
+import { SeriesSortField, useSeries } from "@/stores";
+import { useFocusEffect } from "@react-navigation/native";
+import { Stack, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
+import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native";
+import CoverImage from "@/components/ui/CoverImange";
 
 export default function SeriesScreen() {
   const { styles, isDark, colors } = useThemedStyles();
@@ -23,71 +24,94 @@ export default function SeriesScreen() {
     }, [ready, items.length, isInitializing, refetchSeries])
   );
 
-  const controls = useCallback(() => (
-    <HeaderControls
-      isDark={isDark}
-      onSort={() => setShowSortMenu(true)}
-      showViewToggle={false}
-    />
-  ), [isDark]);
+  const controls = useCallback(
+    () => (
+      <HeaderControls isDark={isDark} onSort={() => setShowSortMenu(true)} showViewToggle={false} />
+    ),
+    [isDark]
+  );
 
   // Series sort options
   const seriesSortOptions = [
-    { field: 'name' as SeriesSortField, label: 'Name' },
-    { field: 'bookCount' as SeriesSortField, label: 'Series Length' },
-    { field: 'addedAt' as SeriesSortField, label: 'Date Added' },
-    { field: 'updatedAt' as SeriesSortField, label: 'Last Updated' },
+    { field: "name" as SeriesSortField, label: translate("series.sortOptions.name") },
+    { field: "bookCount" as SeriesSortField, label: translate("series.sortOptions.length") },
+    { field: "addedAt" as SeriesSortField, label: translate("series.sortOptions.dateAdded") },
+    { field: "updatedAt" as SeriesSortField, label: translate("series.sortOptions.lastUpdated") },
   ];
 
-  const renderSeries = React.useCallback(({ item }: { item: SeriesListRow }) => {
-    const bookCountLabel = item.bookCount === 1 ? '1 book' : `${item.bookCount} books`;
-    return (
-      <TouchableOpacity
-        onPress={() => router.push(`/series/${item.id}`)}
-        style={{
-          flexDirection: 'row',
-          padding: 16,
-          borderBottomWidth: 1,
-          borderBottomColor: styles.text.color + '20',
-          alignItems: 'center',
-        }}
-        accessibilityRole="button"
-        accessibilityHint={`View books in ${item.name}`}
-      >
-        {item.firstBookCoverUrl && (
-          <View style={{ width: 56, height: 84, borderRadius: 6, overflow: 'hidden', marginRight: 12, backgroundColor: colors.coverBackground }}>
-            <CoverImage uri={item.firstBookCoverUrl} title={item.name} fontSize={10} />
+  const renderSeries = React.useCallback(
+    ({ item }: { item: SeriesListRow }) => {
+      const bookCountLabel =
+        item.bookCount === 1
+          ? translate("series.bookCount.one")
+          : translate("series.bookCount.other", { count: item.bookCount });
+      return (
+        <TouchableOpacity
+          onPress={() => router.push(`/series/${item.id}`)}
+          style={{
+            flexDirection: "row",
+            padding: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: styles.text.color + "20",
+            alignItems: "center",
+          }}
+          accessibilityRole="button"
+          accessibilityHint={`View books in ${item.name}`}
+        >
+          {item.firstBookCoverUrl && (
+            <View
+              style={{
+                width: 56,
+                height: 84,
+                borderRadius: 6,
+                overflow: "hidden",
+                marginRight: 12,
+                backgroundColor: colors.coverBackground,
+              }}
+            >
+              <CoverImage uri={item.firstBookCoverUrl} title={item.name} fontSize={10} />
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.text, { fontSize: 16, fontWeight: "600" }]}>{item.name}</Text>
+            <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginTop: 4 }]}>
+              {bookCountLabel}
+            </Text>
+            {item.description && (
+              <Text
+                style={[styles.text, { fontSize: 14, opacity: 0.7, marginTop: 4 }]}
+                numberOfLines={2}
+              >
+                {item.description}
+              </Text>
+            )}
+            {item.updatedAt && (
+              <Text style={[styles.text, { fontSize: 12, opacity: 0.5, marginTop: 4 }]}>
+                {translate("series.updated", {
+                  date: new Date(item.updatedAt).toLocaleDateString(),
+                })}
+              </Text>
+            )}
           </View>
-        )}
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.text, { fontSize: 16, fontWeight: '600' }]}>
-            {item.name}
-          </Text>
-          <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginTop: 4 }]}>
-            {bookCountLabel}
-          </Text>
-          {item.description && (
-            <Text style={[styles.text, { fontSize: 14, opacity: 0.7, marginTop: 4 }]} numberOfLines={2}>
-              {item.description}
-            </Text>
-          )}
-          {item.updatedAt && (
-            <Text style={[styles.text, { fontSize: 12, opacity: 0.5, marginTop: 4 }]}>
-              Updated: {new Date(item.updatedAt).toLocaleDateString()}
-            </Text>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
-  }, [router, styles.text, colors.coverBackground]);
+        </TouchableOpacity>
+      );
+    },
+    [router, styles.text, colors.coverBackground]
+  );
 
   if (!ready || (isInitializing && items.length === 0)) {
     return (
       <>
-        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
           <ActivityIndicator size="large" />
-          <Text style={[styles.text, { marginTop: 16 }]}>Loading series...</Text>
-          <Stack.Screen options={{ title: 'Series', headerTitle: 'Series', headerRight: controls }} />
+          <Text style={[styles.text, { marginTop: 16 }]}>{translate("series.loading")}</Text>
+          <Stack.Screen
+            options={{
+              title: translate("series.title"),
+              headerTitle: translate("series.title"),
+              headerRight: controls,
+            }}
+          />
         </View>
       </>
     );
@@ -96,12 +120,18 @@ export default function SeriesScreen() {
   if (items.length === 0) {
     return (
       <>
-        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-          <Text style={styles.text}>No series found</Text>
+        <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+          <Text style={styles.text}>{translate("series.empty")}</Text>
           <Text style={[styles.text, { fontSize: 12, marginTop: 8, opacity: 0.7 }]}>
-            Series will appear here once you have books that are part of a series
+            {translate("series.emptyState")}
           </Text>
-          <Stack.Screen options={{ title: 'Series', headerTitle: 'Series', headerRight: controls }} />
+          <Stack.Screen
+            options={{
+              title: translate("series.title"),
+              headerTitle: translate("series.title"),
+              headerRight: controls,
+            }}
+          />
         </View>
       </>
     );
@@ -124,7 +154,13 @@ export default function SeriesScreen() {
           sortOptions={seriesSortOptions}
           isDark={isDark}
         />
-        <Stack.Screen options={{ title: 'Series', headerTitle: 'Series', headerRight: controls }} />
+        <Stack.Screen
+          options={{
+            title: translate("series.title"),
+            headerTitle: translate("series.title"),
+            headerRight: controls,
+          }}
+        />
       </View>
     </>
   );

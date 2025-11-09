@@ -5,13 +5,8 @@
  * allowing users to filter by level, search, export, and clear logs.
  */
 
-import {
-  getAllLogs,
-  getAllTags,
-  getLogsByLevel,
-  logger,
-  type LogRow,
-} from "@/lib/logger";
+import { getAllLogs, getAllTags, getLogsByLevel, logger, type LogRow } from "@/lib/logger";
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAppStore } from "@/stores/appStore";
 import { Ionicons } from "@expo/vector-icons";
@@ -134,9 +129,7 @@ const LogItem: React.FC<LogItemProps> = React.memo(({ item, colors, isDark }) =>
   return (
     <View style={[localStyles.logItem, { borderBottomColor: colors.borderColor }]}>
       <View style={localStyles.logHeader}>
-        <Text style={[localStyles.logTag, { color: colors.textPrimary }]}>
-          {item.tag}
-        </Text>
+        <Text style={[localStyles.logTag, { color: colors.textPrimary }]}>{item.tag}</Text>
         <View style={[localStyles.logLevelBadge, { backgroundColor: levelColor + "20" }]}>
           <Text style={[localStyles.logLevelText, { color: levelColor }]}>
             {item.level.toUpperCase()}
@@ -185,35 +178,33 @@ const FilterButton: React.FC<FilterButtonProps> = React.memo(
 
 FilterButton.displayName = "FilterButton";
 
-const TagButton: React.FC<TagButtonProps> = React.memo(
-  ({ tag, isVisible, onPress, colors }) => {
-    return (
-      <Pressable
-        onPress={onPress}
+const TagButton: React.FC<TagButtonProps> = React.memo(({ tag, isVisible, onPress, colors }) => {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        localStyles.tagButton,
+        {
+          backgroundColor: isVisible ? colors.primaryColor : colors.cardBackground,
+          opacity: isVisible ? 1 : 0.5,
+        },
+      ]}
+    >
+      <Text
         style={[
-          localStyles.tagButton,
+          localStyles.tagButtonText,
           {
-            backgroundColor: isVisible ? colors.primaryColor : colors.cardBackground,
-            opacity: isVisible ? 1 : 0.5,
+            fontWeight: isVisible ? "600" : "400",
+            color: isVisible ? "#FFFFFF" : colors.textPrimary,
           },
         ]}
       >
-        <Text
-          style={[
-            localStyles.tagButtonText,
-            {
-              fontWeight: isVisible ? "600" : "400",
-              color: isVisible ? "#FFFFFF" : colors.textPrimary,
-            },
-          ]}
-        >
-          {isVisible ? "✓ " : ""}
-          {tag}
-        </Text>
-      </Pressable>
-    );
-  }
-);
+        {isVisible ? "✓ " : ""}
+        {tag}
+      </Text>
+    </Pressable>
+  );
+});
 
 TagButton.displayName = "TagButton";
 
@@ -228,7 +219,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
             style={[localStyles.actionButton, { backgroundColor: colors.cardBackground }]}
           >
             <Text style={[localStyles.actionButtonText, { color: colors.textPrimary }]}>
-              Refresh
+              {translate("logs.actions.refresh")}
             </Text>
           </Pressable>
 
@@ -241,7 +232,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
             ]}
           >
             <Text style={[localStyles.actionButtonText, { color: colors.textPrimary }]}>
-              Earlier
+              {translate("logs.actions.earlier")}
             </Text>
           </Pressable>
 
@@ -249,7 +240,9 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
             onPress={onClear}
             style={[localStyles.actionButton, { backgroundColor: colors.dangerColor }]}
           >
-            <Text style={[localStyles.actionButtonText, { color: "#FFFFFF" }]}>Clear</Text>
+            <Text style={[localStyles.actionButtonText, { color: "#FFFFFF" }]}>
+              {translate("logs.actions.clear")}
+            </Text>
           </Pressable>
         </View>
 
@@ -263,7 +256,9 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
               { backgroundColor: colors.primaryColor },
             ]}
           >
-            <Text style={[localStyles.actionButtonText, { color: "#FFFFFF" }]}>Copy</Text>
+            <Text style={[localStyles.actionButtonText, { color: "#FFFFFF" }]}>
+              {translate("logs.actions.copy")}
+            </Text>
           </Pressable>
 
           <Pressable
@@ -271,7 +266,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
             style={[localStyles.actionButton, { backgroundColor: colors.primaryColor }]}
           >
             <Text style={[localStyles.actionButtonText, { color: "#FFFFFF" }]}>
-              Share File
+              {translate("logs.actions.shareFile")}
             </Text>
           </Pressable>
         </View>
@@ -341,7 +336,7 @@ export default function LogsScreen() {
       setLogs(loadedLogs);
     } catch (error) {
       log.error("Failed to load logs", error as Error);
-      Alert.alert("Error", "Failed to load logs");
+      Alert.alert(translate("common.error"), translate("logs.alerts.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -386,27 +381,31 @@ export default function LogsScreen() {
 
   // Handlers
   const handleClearLogs = useCallback(() => {
-    Alert.alert("Clear All Logs", "Are you sure you want to clear all logs?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Clear",
-        style: "destructive",
-        onPress: () => {
-          try {
-            logger.clearLogs();
-            setLogs([]);
-            // Reset error acknowledgment when logs are cleared
-            useAppStore.getState().logger.resetErrorAcknowledgment();
-            // Update counts after clearing
-            useAppStore.getState().logger.updateErrorCounts();
-            Alert.alert("Success", "All logs cleared");
-          } catch (error) {
-            log.error("Failed to clear logs", error as Error);
-            Alert.alert("Error", "Failed to clear logs");
-          }
+    Alert.alert(
+      translate("logs.alerts.clearConfirm.title"),
+      translate("logs.alerts.clearConfirm.message"),
+      [
+        { text: translate("common.cancel"), style: "cancel" },
+        {
+          text: translate("logs.actions.clear"),
+          style: "destructive",
+          onPress: () => {
+            try {
+              logger.clearLogs();
+              setLogs([]);
+              // Reset error acknowledgment when logs are cleared
+              useAppStore.getState().logger.resetErrorAcknowledgment();
+              // Update counts after clearing
+              useAppStore.getState().logger.updateErrorCounts();
+              Alert.alert(translate("common.success"), translate("logs.alerts.clearSuccess"));
+            } catch (error) {
+              log.error("Failed to clear logs", error as Error);
+              Alert.alert(translate("common.error"), translate("logs.alerts.clearFailed"));
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   }, []);
 
   const handleExportToClipboard = useCallback(() => {
@@ -424,10 +423,10 @@ export default function LogsScreen() {
         .join("\n");
 
       Clipboard.setStringAsync(exportText);
-      Alert.alert("Success", "Logs copied to clipboard");
+      Alert.alert(translate("common.success"), translate("logs.alerts.copySuccess"));
     } catch (error) {
       log.error("Failed to export logs to clipboard", error as Error);
-      Alert.alert("Error", "Failed to export logs to clipboard");
+      Alert.alert(translate("common.error"), translate("logs.alerts.copyFailed"));
     }
   }, [filteredLogs]);
 
@@ -455,14 +454,14 @@ export default function LogsScreen() {
       if (isAvailable) {
         await Sharing.shareAsync(file.uri, {
           mimeType: "text/plain",
-          dialogTitle: "Export Logs",
+          dialogTitle: translate("logs.actions.shareFile"),
         });
       } else {
-        Alert.alert("Error", "Sharing is not available on this device");
+        Alert.alert(translate("common.error"), translate("logs.alerts.shareNotAvailable"));
       }
     } catch (error) {
       log.error("Failed to export logs to file", error as Error);
-      Alert.alert("Error", "Failed to export logs to file");
+      Alert.alert(translate("common.error"), translate("logs.alerts.shareFailed"));
     }
   }, [filteredLogs]);
 
@@ -485,9 +484,7 @@ export default function LogsScreen() {
   }, []);
 
   const renderLogItem = useCallback(
-    ({ item }: { item: LogRow }) => (
-      <LogItem item={item} colors={themeColors} isDark={isDark} />
-    ),
+    ({ item }: { item: LogRow }) => <LogItem item={item} colors={themeColors} isDark={isDark} />,
     [themeColors, isDark]
   );
 
@@ -497,7 +494,7 @@ export default function LogsScreen() {
     <>
       <Stack.Screen
         options={{
-          title: "Logs",
+          title: translate("logs.title"),
           headerRight: () => (
             <Pressable
               onPress={() => router.push("/more/logger-settings")}
@@ -512,10 +509,7 @@ export default function LogsScreen() {
       <View style={[localStyles.container, { backgroundColor: colors.background }]}>
         {/* Search and filter controls */}
         <View
-          style={[
-            localStyles.controlsContainer,
-            { borderBottomColor: themeColors.borderColor },
-          ]}
+          style={[localStyles.controlsContainer, { borderBottomColor: themeColors.borderColor }]}
         >
           {/* Search input */}
           <TextInput
@@ -526,7 +520,7 @@ export default function LogsScreen() {
                 color: colors.textPrimary,
               },
             ]}
-            placeholder="Search logs..."
+            placeholder={translate("logs.searchPlaceholder")}
             placeholderTextColor={themeColors.textSecondary}
             value={searchText}
             onChangeText={setSearchText}
@@ -540,35 +534,35 @@ export default function LogsScreen() {
           >
             <FilterButton
               level="all"
-              label="All"
+              label={translate("logs.filters.all")}
               isSelected={selectedLevel === "all"}
               onPress={() => setSelectedLevel("all")}
               colors={themeColors}
             />
             <FilterButton
               level="debug"
-              label="Debug"
+              label={translate("logs.filters.debug")}
               isSelected={selectedLevel === "debug"}
               onPress={() => setSelectedLevel("debug")}
               colors={themeColors}
             />
             <FilterButton
               level="info"
-              label="Info"
+              label={translate("logs.filters.info")}
               isSelected={selectedLevel === "info"}
               onPress={() => setSelectedLevel("info")}
               colors={themeColors}
             />
             <FilterButton
               level="warn"
-              label="Warn"
+              label={translate("logs.filters.warn")}
               isSelected={selectedLevel === "warn"}
               onPress={() => setSelectedLevel("warn")}
               colors={themeColors}
             />
             <FilterButton
               level="error"
-              label="Error"
+              label={translate("logs.filters.error")}
               isSelected={selectedLevel === "error"}
               onPress={() => setSelectedLevel("error")}
               colors={themeColors}
@@ -581,8 +575,9 @@ export default function LogsScreen() {
             style={localStyles.tagFilterToggle}
           >
             <Text style={[localStyles.tagFilterTitle, { color: colors.textPrimary }]}>
-              Filter by Tag
-              {hiddenTagCount > 0 && ` (${hiddenTagCount} hidden)`}
+              {translate("logs.filterByTag")}
+              {hiddenTagCount > 0 &&
+                ` (${translate("logs.hiddenTags", { count: hiddenTagCount })})`}
             </Text>
             <Text style={[localStyles.tagFilterArrow, { color: themeColors.primaryColor }]}>
               {showTagFilter ? "▼" : "▶"}
@@ -624,9 +619,11 @@ export default function LogsScreen() {
         {/* Logs count */}
         <View style={[localStyles.logsCount, { backgroundColor: themeColors.inputBackground }]}>
           <Text style={[localStyles.logsCountText, { color: themeColors.textSecondary }]}>
-            {filteredLogs.length} {filteredLogs.length === 1 ? "log" : "logs"}
-            {searchText.trim() && ` (filtered from ${logs.length})`}
-            {hiddenTagCount > 0 && ` · ${hiddenTagCount} tags hidden`}
+            {filteredLogs.length === 1
+              ? translate("logs.count", { count: filteredLogs.length })
+              : translate("logs.countPlural", { count: filteredLogs.length })}
+            {searchText.trim() && ` ${translate("logs.filteredFrom", { total: logs.length })}`}
+            {hiddenTagCount > 0 && ` · ${translate("logs.hiddenTags", { count: hiddenTagCount })}`}
           </Text>
         </View>
 
@@ -642,7 +639,7 @@ export default function LogsScreen() {
           ListEmptyComponent={
             <View style={localStyles.emptyContainer}>
               <Text style={[localStyles.emptyText, { color: themeColors.textSecondary }]}>
-                No logs found
+                {translate("logs.empty")}
               </Text>
             </View>
           }
