@@ -325,7 +325,10 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       }
     }
 
-    // Clear the restoration flag and update chapter with final position
+    // Clear the restoration flag
+    // NOTE: We don't update the chapter here because the TrackPlayer queue may not be ready yet.
+    // The chapter will be correctly updated by PlayerService.reloadTrackPlayerQueue() when the
+    // queue is rebuilt, or by PlayerBackgroundService.handlePlaybackProgressUpdated() during playback.
     set((state: PlayerSlice) => ({
       ...state,
       player: {
@@ -333,12 +336,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         isRestoringState: false,
       },
     }));
-
-    // Now update the chapter with the correct position
-    const finalState = get();
-    if (finalState.player.currentTrack && finalState.player.position > 0) {
-      finalState._updateCurrentChapter(finalState.player.position);
-    }
   },
   // Initial scoped state
   player: {
