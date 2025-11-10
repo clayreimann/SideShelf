@@ -32,11 +32,8 @@ export default function HomeScreen() {
   const { username, isAuthenticated } = useAuth();
   const floatingPlayerPadding = useFloatingPlayerPadding();
   const { continueListening, downloaded, listenAgain, isLoadingHome, refreshHome } = useHome();
-  const { settings, updateHomeLayout } = useSettings();
+  const { homeLayout, updateHomeLayout } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Get layout preference from settings
-  const homeLayout = settings.homeLayout;
 
   // Toggle between list and cover layout
   const toggleLayout = useCallback(() => {

@@ -793,37 +793,47 @@ export function useLibraryItemDetails() {
  * ```
  */
 export function useSettings() {
-  const settings = useAppStore((state) => state.settings);
+  const jumpForwardInterval = useAppStore((state) => state.settings.jumpForwardInterval);
+  const jumpBackwardInterval = useAppStore((state) => state.settings.jumpBackwardInterval);
+  const smartRewindEnabled = useAppStore((state) => state.settings.smartRewindEnabled);
+  const homeLayout = useAppStore((state) => state.settings.homeLayout);
+  const initialized = useAppStore((state) => state.settings.initialized);
+  const isLoading = useAppStore((state) => state.settings.isLoading);
 
   // Actions
   const initializeSettings = useAppStore((state) => state.initializeSettings);
   const updateJumpForwardInterval = useAppStore((state) => state.updateJumpForwardInterval);
   const updateJumpBackwardInterval = useAppStore((state) => state.updateJumpBackwardInterval);
   const updateSmartRewindEnabled = useAppStore((state) => state.updateSmartRewindEnabled);
-  const updateBackgroundServiceReconnection = useAppStore(
-    (state) => state.updateBackgroundServiceReconnection
-  );
   const updateHomeLayout = useAppStore((state) => state.updateHomeLayout);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
     () => ({
-      settings,
+      jumpForwardInterval,
+      jumpBackwardInterval,
+      smartRewindEnabled,
+      homeLayout,
+      initialized,
+      isLoading,
       initializeSettings,
       updateJumpForwardInterval,
       updateJumpBackwardInterval,
       updateSmartRewindEnabled,
-      updateBackgroundServiceReconnection,
       updateHomeLayout,
       resetSettings,
     }),
     [
-      settings,
+      jumpForwardInterval,
+      jumpBackwardInterval,
+      smartRewindEnabled,
+      homeLayout,
+      initialized,
+      isLoading,
       initializeSettings,
       updateJumpForwardInterval,
       updateJumpBackwardInterval,
       updateSmartRewindEnabled,
-      updateBackgroundServiceReconnection,
       updateHomeLayout,
       resetSettings,
     ]

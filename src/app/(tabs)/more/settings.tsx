@@ -21,32 +21,16 @@ export default function SettingsScreen() {
     jumpForwardInterval,
     jumpBackwardInterval,
     smartRewindEnabled,
-    backgroundServiceReconnection,
     isLoading,
     updateJumpForwardInterval,
     updateJumpBackwardInterval,
     updateSmartRewindEnabled,
-    updateBackgroundServiceReconnection,
   } = useSettings();
   const { libraries, selectedLibrary, selectLibrary } = useLibrary();
 
   // Helper colors
   const textSecondary = isDark ? "#999999" : "#666666";
   const primaryColor = isDark ? "#4A9EFF" : "#007AFF";
-  const cardBackground = isDark ? "#2C2C2E" : "#E5E5EA";
-
-  // Toggle background service reconnection
-  const toggleBackgroundServiceReconnection = useCallback(
-    async (value: boolean) => {
-      try {
-        await updateBackgroundServiceReconnection(value);
-      } catch (error) {
-        console.error("Failed to update background service reconnection", error);
-        Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
-      }
-    },
-    [updateBackgroundServiceReconnection]
-  );
 
   // Update jump forward interval
   const handleJumpForwardChange = useCallback(
@@ -289,53 +273,6 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Toggle value={smartRewindEnabled} onValueChange={toggleSmartRewind} />
-          </View>
-        </View>
-
-        {/* Advanced Settings Section */}
-        <View style={{ padding: 16, marginTop: 8 }}>
-          <Text
-            style={{
-              fontSize: 13,
-              fontWeight: "600",
-              color: textSecondary,
-              marginBottom: 12,
-              textTransform: "uppercase",
-            }}
-          >
-            {translate("settings.sections.advanced")}
-          </Text>
-
-          {/* Background Service Reconnection Toggle */}
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              paddingVertical: 14,
-              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
-              borderRadius: 10,
-            }}
-          >
-            <View style={{ flex: 1, marginRight: 12 }}>
-              <Text
-                style={{
-                  fontSize: 15,
-                  color: colors.textPrimary,
-                  fontWeight: "500",
-                  marginBottom: 4,
-                }}
-              >
-                {translate("settings.autoReconnect")}
-              </Text>
-              <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
-                {translate("settings.autoReconnectDescription")}
-              </Text>
-            </View>
-            <Toggle
-              value={backgroundServiceReconnection}
-              onValueChange={toggleBackgroundServiceReconnection}
-            />
           </View>
         </View>
       </ScrollView>

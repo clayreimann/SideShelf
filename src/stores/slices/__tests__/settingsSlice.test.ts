@@ -11,12 +11,10 @@ jest.mock("@/lib/appSettings", () => ({
   getJumpForwardInterval: jest.fn(),
   getJumpBackwardInterval: jest.fn(),
   getSmartRewindEnabled: jest.fn(),
-  getBackgroundServiceReconnectionEnabled: jest.fn(),
   getHomeLayout: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
-  setBackgroundServiceReconnectionEnabled: jest.fn(),
   setHomeLayout: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
@@ -35,12 +33,10 @@ describe("SettingsSlice", () => {
     getJumpForwardInterval,
     getJumpBackwardInterval,
     getSmartRewindEnabled,
-    getBackgroundServiceReconnectionEnabled,
     getHomeLayout,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
-    setBackgroundServiceReconnectionEnabled,
     setHomeLayout,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
@@ -58,12 +54,10 @@ describe("SettingsSlice", () => {
     getJumpForwardInterval.mockResolvedValue(30);
     getJumpBackwardInterval.mockResolvedValue(15);
     getSmartRewindEnabled.mockResolvedValue(true);
-    getBackgroundServiceReconnectionEnabled.mockResolvedValue(true);
     getHomeLayout.mockResolvedValue("list");
     setJumpForwardInterval.mockResolvedValue();
     setJumpBackwardInterval.mockResolvedValue();
     setSmartRewindEnabled.mockResolvedValue();
-    setBackgroundServiceReconnectionEnabled.mockResolvedValue();
     setHomeLayout.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
@@ -80,7 +74,6 @@ describe("SettingsSlice", () => {
         jumpForwardInterval: 30,
         jumpBackwardInterval: 15,
         smartRewindEnabled: true,
-        backgroundServiceReconnection: true,
         homeLayout: "list",
         initialized: false,
         isLoading: false,
@@ -93,7 +86,6 @@ describe("SettingsSlice", () => {
       getJumpForwardInterval.mockResolvedValue(45);
       getJumpBackwardInterval.mockResolvedValue(10);
       getSmartRewindEnabled.mockResolvedValue(false);
-      getBackgroundServiceReconnectionEnabled.mockResolvedValue(false);
       getHomeLayout.mockResolvedValue("cover");
 
       await store.getState().initializeSettings();
@@ -102,7 +94,6 @@ describe("SettingsSlice", () => {
       expect(state.settings.jumpForwardInterval).toBe(45);
       expect(state.settings.jumpBackwardInterval).toBe(10);
       expect(state.settings.smartRewindEnabled).toBe(false);
-      expect(state.settings.backgroundServiceReconnection).toBe(false);
       expect(state.settings.homeLayout).toBe("cover");
       expect(state.settings.initialized).toBe(true);
       expect(state.settings.isLoading).toBe(false);
@@ -133,7 +124,6 @@ describe("SettingsSlice", () => {
       expect(getJumpForwardInterval).not.toHaveBeenCalled();
       expect(getJumpBackwardInterval).not.toHaveBeenCalled();
       expect(getSmartRewindEnabled).not.toHaveBeenCalled();
-      expect(getBackgroundServiceReconnectionEnabled).not.toHaveBeenCalled();
       expect(getHomeLayout).not.toHaveBeenCalled();
     });
 
@@ -146,7 +136,6 @@ describe("SettingsSlice", () => {
       expect(state.settings.jumpForwardInterval).toBe(30);
       expect(state.settings.jumpBackwardInterval).toBe(15);
       expect(state.settings.smartRewindEnabled).toBe(true);
-      expect(state.settings.backgroundServiceReconnection).toBe(true);
       expect(state.settings.homeLayout).toBe("list");
       expect(state.settings.initialized).toBe(true);
       expect(state.settings.isLoading).toBe(false);
@@ -163,13 +152,12 @@ describe("SettingsSlice", () => {
       getJumpForwardInterval.mockImplementation(mockImplementation);
       getJumpBackwardInterval.mockImplementation(mockImplementation);
       getSmartRewindEnabled.mockImplementation(mockImplementation);
-      getBackgroundServiceReconnectionEnabled.mockImplementation(mockImplementation);
       getHomeLayout.mockImplementation(mockImplementation);
 
       await store.getState().initializeSettings();
 
       // All promises should have been created (parallel loading)
-      expect(loadPromises.length).toBe(5);
+      expect(loadPromises.length).toBe(4);
     });
   });
 
@@ -282,41 +270,6 @@ describe("SettingsSlice", () => {
     });
   });
 
-  describe("updateBackgroundServiceReconnection", () => {
-    it("should enable background service reconnection and persist to storage", async () => {
-      // First disable it properly
-      await store.getState().updateBackgroundServiceReconnection(false);
-
-      await store.getState().updateBackgroundServiceReconnection(true);
-
-      const state = store.getState();
-      expect(state.settings.backgroundServiceReconnection).toBe(true);
-      expect(setBackgroundServiceReconnectionEnabled).toHaveBeenCalledWith(true);
-    });
-
-    it("should disable background service reconnection and persist to storage", async () => {
-      await store.getState().updateBackgroundServiceReconnection(false);
-
-      const state = store.getState();
-      expect(state.settings.backgroundServiceReconnection).toBe(false);
-      expect(setBackgroundServiceReconnectionEnabled).toHaveBeenCalledWith(false);
-    });
-
-    it("should revert on storage error", async () => {
-      // Ensure we start with the default value
-      expect(store.getState().settings.backgroundServiceReconnection).toBe(true);
-
-      setBackgroundServiceReconnectionEnabled.mockRejectedValue(new Error("Storage error"));
-
-      await expect(store.getState().updateBackgroundServiceReconnection(false)).rejects.toThrow(
-        "Storage error"
-      );
-
-      const state = store.getState();
-      expect(state.settings.backgroundServiceReconnection).toBe(true); // Reverted to previous value
-    });
-  });
-
   describe("updateHomeLayout", () => {
     it("should update home layout to cover and persist to storage", async () => {
       await store.getState().updateHomeLayout("cover");
@@ -369,7 +322,6 @@ describe("SettingsSlice", () => {
       await store.getState().updateJumpForwardInterval(60);
       await store.getState().updateJumpBackwardInterval(5);
       await store.getState().updateSmartRewindEnabled(false);
-      await store.getState().updateBackgroundServiceReconnection(false);
       await store.getState().initializeSettings();
 
       // Reset
@@ -379,7 +331,6 @@ describe("SettingsSlice", () => {
       expect(state.settings.jumpForwardInterval).toBe(30);
       expect(state.settings.jumpBackwardInterval).toBe(15);
       expect(state.settings.smartRewindEnabled).toBe(true);
-      expect(state.settings.backgroundServiceReconnection).toBe(true);
       expect(state.settings.homeLayout).toBe("list");
       expect(state.settings.initialized).toBe(false);
       expect(state.settings.isLoading).toBe(false);
