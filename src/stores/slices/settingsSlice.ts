@@ -10,10 +10,12 @@
 
 import {
   getBackgroundServiceReconnectionEnabled,
+  getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
   getSmartRewindEnabled,
   setBackgroundServiceReconnectionEnabled,
+  setHomeLayout,
   setJumpBackwardInterval,
   setJumpForwardInterval,
   setSmartRewindEnabled,
@@ -38,6 +40,8 @@ export interface SettingsSliceState {
     smartRewindEnabled: boolean;
     /** Whether background service auto-reconnection is enabled */
     backgroundServiceReconnection: boolean;
+    /** Home screen layout preference */
+    homeLayout: "list" | "cover";
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -60,6 +64,8 @@ export interface SettingsSliceActions {
   updateSmartRewindEnabled: (enabled: boolean) => Promise<void>;
   /** Toggle background service reconnection */
   updateBackgroundServiceReconnection: (enabled: boolean) => Promise<void>;
+  /** Update home screen layout preference */
+  updateHomeLayout: (layout: "list" | "cover") => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -77,6 +83,7 @@ const DEFAULT_SETTINGS = {
   jumpBackwardInterval: 15,
   smartRewindEnabled: true,
   backgroundServiceReconnection: true,
+  homeLayout: "list" as const,
 };
 
 /**
@@ -120,12 +127,14 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
 
     try {
       // Load all settings from storage in parallel
-      const [jumpForward, jumpBackward, smartRewind, backgroundReconnection] = await Promise.all([
-        getJumpForwardInterval(),
-        getJumpBackwardInterval(),
-        getSmartRewindEnabled(),
-        getBackgroundServiceReconnectionEnabled(),
-      ]);
+      const [jumpForward, jumpBackward, smartRewind, backgroundReconnection, homeLayout] =
+        await Promise.all([
+          getJumpForwardInterval(),
+          getJumpBackwardInterval(),
+          getSmartRewindEnabled(),
+          getBackgroundServiceReconnectionEnabled(),
+          getHomeLayout(),
+        ]);
 
       set((state: SettingsSlice) => ({
         ...state,
@@ -134,13 +143,14 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           jumpBackwardInterval: jumpBackward,
           smartRewindEnabled: smartRewind,
           backgroundServiceReconnection: backgroundReconnection,
+          homeLayout: homeLayout,
           initialized: true,
           isLoading: false,
         },
       }));
 
       log.info(
-        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, backgroundReconnection=${backgroundReconnection}`
+        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, backgroundReconnection=${backgroundReconnection}, homeLayout=${homeLayout}`
       );
     } catch (error) {
       log.error("Failed to load settings", error as Error);
@@ -312,6 +322,45 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           backgroundServiceReconnection: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update home screen layout preference
+   */
+  updateHomeLayout: async (layout: "list" | "cover") => {
+    log.info(`Updating home layout to ${layout}`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.homeLayout;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        homeLayout: layout,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setHomeLayout(layout);
+
+      log.info(`Home layout updated to ${layout}`);
+    } catch (error) {
+      log.error("Failed to update home layout setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          homeLayout: previousValue,
         },
       }));
 

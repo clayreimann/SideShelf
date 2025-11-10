@@ -4,14 +4,15 @@
  * Manages user preferences and app settings stored in AsyncStorage.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const SETTINGS_KEYS = {
-  enableBackgroundServiceReconnection: '@app/enableBackgroundServiceReconnection',
-  jumpForwardInterval: '@app/jumpForwardInterval',
-  jumpBackwardInterval: '@app/jumpBackwardInterval',
-  enableSmartRewind: '@app/enableSmartRewind',
-  enablePeriodicNowPlayingUpdates: '@app/enablePeriodicNowPlayingUpdates',
+  enableBackgroundServiceReconnection: "@app/enableBackgroundServiceReconnection",
+  jumpForwardInterval: "@app/jumpForwardInterval",
+  jumpBackwardInterval: "@app/jumpBackwardInterval",
+  enableSmartRewind: "@app/enableSmartRewind",
+  enablePeriodicNowPlayingUpdates: "@app/enablePeriodicNowPlayingUpdates",
+  homeLayout: "@app/homeLayout",
 } as const;
 
 // Default values
@@ -19,6 +20,7 @@ const DEFAULT_JUMP_FORWARD_INTERVAL = 30;
 const DEFAULT_JUMP_BACKWARD_INTERVAL = 15;
 const DEFAULT_SMART_REWIND_ENABLED = true;
 const DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED = true;
+const DEFAULT_HOME_LAYOUT = "list" as const;
 
 /**
  * Get whether background service auto-reconnection is enabled
@@ -28,9 +30,9 @@ export async function getBackgroundServiceReconnectionEnabled(): Promise<boolean
   try {
     const value = await AsyncStorage.getItem(SETTINGS_KEYS.enableBackgroundServiceReconnection);
     // Default to true if not set
-    return value === null ? true : value === 'true';
+    return value === null ? true : value === "true";
   } catch (error) {
-    console.error('[AppSettings] Failed to get background service reconnection setting:', error);
+    console.error("[AppSettings] Failed to get background service reconnection setting:", error);
     return true; // Default to enabled on error
   }
 }
@@ -42,10 +44,10 @@ export async function setBackgroundServiceReconnectionEnabled(enabled: boolean):
   try {
     await AsyncStorage.setItem(
       SETTINGS_KEYS.enableBackgroundServiceReconnection,
-      enabled ? 'true' : 'false'
+      enabled ? "true" : "false"
     );
   } catch (error) {
-    console.error('[AppSettings] Failed to save background service reconnection setting:', error);
+    console.error("[AppSettings] Failed to save background service reconnection setting:", error);
     throw error;
   }
 }
@@ -61,7 +63,7 @@ export async function getJumpForwardInterval(): Promise<number> {
     const parsed = parseInt(value, 10);
     return isNaN(parsed) ? DEFAULT_JUMP_FORWARD_INTERVAL : parsed;
   } catch (error) {
-    console.error('[AppSettings] Failed to get jump forward interval:', error);
+    console.error("[AppSettings] Failed to get jump forward interval:", error);
     return DEFAULT_JUMP_FORWARD_INTERVAL;
   }
 }
@@ -73,7 +75,7 @@ export async function setJumpForwardInterval(seconds: number): Promise<void> {
   try {
     await AsyncStorage.setItem(SETTINGS_KEYS.jumpForwardInterval, seconds.toString());
   } catch (error) {
-    console.error('[AppSettings] Failed to save jump forward interval:', error);
+    console.error("[AppSettings] Failed to save jump forward interval:", error);
     throw error;
   }
 }
@@ -89,7 +91,7 @@ export async function getJumpBackwardInterval(): Promise<number> {
     const parsed = parseInt(value, 10);
     return isNaN(parsed) ? DEFAULT_JUMP_BACKWARD_INTERVAL : parsed;
   } catch (error) {
-    console.error('[AppSettings] Failed to get jump backward interval:', error);
+    console.error("[AppSettings] Failed to get jump backward interval:", error);
     return DEFAULT_JUMP_BACKWARD_INTERVAL;
   }
 }
@@ -101,7 +103,7 @@ export async function setJumpBackwardInterval(seconds: number): Promise<void> {
   try {
     await AsyncStorage.setItem(SETTINGS_KEYS.jumpBackwardInterval, seconds.toString());
   } catch (error) {
-    console.error('[AppSettings] Failed to save jump backward interval:', error);
+    console.error("[AppSettings] Failed to save jump backward interval:", error);
     throw error;
   }
 }
@@ -113,9 +115,9 @@ export async function setJumpBackwardInterval(seconds: number): Promise<void> {
 export async function getSmartRewindEnabled(): Promise<boolean> {
   try {
     const value = await AsyncStorage.getItem(SETTINGS_KEYS.enableSmartRewind);
-    return value === null ? DEFAULT_SMART_REWIND_ENABLED : value === 'true';
+    return value === null ? DEFAULT_SMART_REWIND_ENABLED : value === "true";
   } catch (error) {
-    console.error('[AppSettings] Failed to get smart rewind setting:', error);
+    console.error("[AppSettings] Failed to get smart rewind setting:", error);
     return DEFAULT_SMART_REWIND_ENABLED;
   }
 }
@@ -125,9 +127,9 @@ export async function getSmartRewindEnabled(): Promise<boolean> {
  */
 export async function setSmartRewindEnabled(enabled: boolean): Promise<void> {
   try {
-    await AsyncStorage.setItem(SETTINGS_KEYS.enableSmartRewind, enabled ? 'true' : 'false');
+    await AsyncStorage.setItem(SETTINGS_KEYS.enableSmartRewind, enabled ? "true" : "false");
   } catch (error) {
-    console.error('[AppSettings] Failed to save smart rewind setting:', error);
+    console.error("[AppSettings] Failed to save smart rewind setting:", error);
     throw error;
   }
 }
@@ -139,9 +141,9 @@ export async function setSmartRewindEnabled(enabled: boolean): Promise<void> {
 export async function getPeriodicNowPlayingUpdatesEnabled(): Promise<boolean> {
   try {
     const value = await AsyncStorage.getItem(SETTINGS_KEYS.enablePeriodicNowPlayingUpdates);
-    return value === null ? DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED : value === 'true';
+    return value === null ? DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED : value === "true";
   } catch (error) {
-    console.error('[AppSettings] Failed to get periodic now playing updates setting:', error);
+    console.error("[AppSettings] Failed to get periodic now playing updates setting:", error);
     return DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED;
   }
 }
@@ -151,9 +153,38 @@ export async function getPeriodicNowPlayingUpdatesEnabled(): Promise<boolean> {
  */
 export async function setPeriodicNowPlayingUpdatesEnabled(enabled: boolean): Promise<void> {
   try {
-    await AsyncStorage.setItem(SETTINGS_KEYS.enablePeriodicNowPlayingUpdates, enabled ? 'true' : 'false');
+    await AsyncStorage.setItem(
+      SETTINGS_KEYS.enablePeriodicNowPlayingUpdates,
+      enabled ? "true" : "false"
+    );
   } catch (error) {
-    console.error('[AppSettings] Failed to save periodic now playing updates setting:', error);
+    console.error("[AppSettings] Failed to save periodic now playing updates setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get home screen layout preference
+ * Default: 'list' (vertical list layout)
+ */
+export async function getHomeLayout(): Promise<"list" | "cover"> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.homeLayout);
+    return value === "cover" ? "cover" : DEFAULT_HOME_LAYOUT;
+  } catch (error) {
+    console.error("[AppSettings] Failed to get home layout setting:", error);
+    return DEFAULT_HOME_LAYOUT;
+  }
+}
+
+/**
+ * Set home screen layout preference
+ */
+export async function setHomeLayout(layout: "list" | "cover"): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.homeLayout, layout);
+  } catch (error) {
+    console.error("[AppSettings] Failed to save home layout setting:", error);
     throw error;
   }
 }

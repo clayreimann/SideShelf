@@ -12,10 +12,12 @@ jest.mock("@/lib/appSettings", () => ({
   getJumpBackwardInterval: jest.fn(),
   getSmartRewindEnabled: jest.fn(),
   getBackgroundServiceReconnectionEnabled: jest.fn(),
+  getHomeLayout: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
   setBackgroundServiceReconnectionEnabled: jest.fn(),
+  setHomeLayout: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
 }));
@@ -34,10 +36,12 @@ describe("SettingsSlice", () => {
     getJumpBackwardInterval,
     getSmartRewindEnabled,
     getBackgroundServiceReconnectionEnabled,
+    getHomeLayout,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
     setBackgroundServiceReconnectionEnabled,
+    setHomeLayout,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
 
@@ -55,10 +59,12 @@ describe("SettingsSlice", () => {
     getJumpBackwardInterval.mockResolvedValue(15);
     getSmartRewindEnabled.mockResolvedValue(true);
     getBackgroundServiceReconnectionEnabled.mockResolvedValue(true);
+    getHomeLayout.mockResolvedValue("list");
     setJumpForwardInterval.mockResolvedValue();
     setJumpBackwardInterval.mockResolvedValue();
     setSmartRewindEnabled.mockResolvedValue();
     setBackgroundServiceReconnectionEnabled.mockResolvedValue();
+    setHomeLayout.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
 
@@ -75,6 +81,7 @@ describe("SettingsSlice", () => {
         jumpBackwardInterval: 15,
         smartRewindEnabled: true,
         backgroundServiceReconnection: true,
+        homeLayout: "list",
         initialized: false,
         isLoading: false,
       });
@@ -87,6 +94,7 @@ describe("SettingsSlice", () => {
       getJumpBackwardInterval.mockResolvedValue(10);
       getSmartRewindEnabled.mockResolvedValue(false);
       getBackgroundServiceReconnectionEnabled.mockResolvedValue(false);
+      getHomeLayout.mockResolvedValue("cover");
 
       await store.getState().initializeSettings();
 
@@ -95,6 +103,7 @@ describe("SettingsSlice", () => {
       expect(state.settings.jumpBackwardInterval).toBe(10);
       expect(state.settings.smartRewindEnabled).toBe(false);
       expect(state.settings.backgroundServiceReconnection).toBe(false);
+      expect(state.settings.homeLayout).toBe("cover");
       expect(state.settings.initialized).toBe(true);
       expect(state.settings.isLoading).toBe(false);
     });
@@ -125,6 +134,7 @@ describe("SettingsSlice", () => {
       expect(getJumpBackwardInterval).not.toHaveBeenCalled();
       expect(getSmartRewindEnabled).not.toHaveBeenCalled();
       expect(getBackgroundServiceReconnectionEnabled).not.toHaveBeenCalled();
+      expect(getHomeLayout).not.toHaveBeenCalled();
     });
 
     it("should use defaults on error and still mark as initialized", async () => {
@@ -137,6 +147,7 @@ describe("SettingsSlice", () => {
       expect(state.settings.jumpBackwardInterval).toBe(15);
       expect(state.settings.smartRewindEnabled).toBe(true);
       expect(state.settings.backgroundServiceReconnection).toBe(true);
+      expect(state.settings.homeLayout).toBe("list");
       expect(state.settings.initialized).toBe(true);
       expect(state.settings.isLoading).toBe(false);
     });
@@ -153,11 +164,12 @@ describe("SettingsSlice", () => {
       getJumpBackwardInterval.mockImplementation(mockImplementation);
       getSmartRewindEnabled.mockImplementation(mockImplementation);
       getBackgroundServiceReconnectionEnabled.mockImplementation(mockImplementation);
+      getHomeLayout.mockImplementation(mockImplementation);
 
       await store.getState().initializeSettings();
 
       // All promises should have been created (parallel loading)
-      expect(loadPromises.length).toBe(4);
+      expect(loadPromises.length).toBe(5);
     });
   });
 
@@ -305,6 +317,52 @@ describe("SettingsSlice", () => {
     });
   });
 
+  describe("updateHomeLayout", () => {
+    it("should update home layout to cover and persist to storage", async () => {
+      await store.getState().updateHomeLayout("cover");
+
+      const state = store.getState();
+      expect(state.settings.homeLayout).toBe("cover");
+      expect(setHomeLayout).toHaveBeenCalledWith("cover");
+    });
+
+    it("should update home layout to list and persist to storage", async () => {
+      // First set to cover
+      await store.getState().updateHomeLayout("cover");
+
+      await store.getState().updateHomeLayout("list");
+
+      const state = store.getState();
+      expect(state.settings.homeLayout).toBe("list");
+      expect(setHomeLayout).toHaveBeenCalledWith("list");
+    });
+
+    it("should revert on storage error", async () => {
+      // Ensure we start with the default value
+      expect(store.getState().settings.homeLayout).toBe("list");
+
+      setHomeLayout.mockRejectedValue(new Error("Storage error"));
+
+      await expect(store.getState().updateHomeLayout("cover")).rejects.toThrow("Storage error");
+
+      const state = store.getState();
+      expect(state.settings.homeLayout).toBe("list"); // Reverted to previous value
+    });
+
+    it("should handle toggling between layouts", async () => {
+      await store.getState().updateHomeLayout("cover");
+      expect(store.getState().settings.homeLayout).toBe("cover");
+
+      await store.getState().updateHomeLayout("list");
+      expect(store.getState().settings.homeLayout).toBe("list");
+
+      await store.getState().updateHomeLayout("cover");
+      expect(store.getState().settings.homeLayout).toBe("cover");
+
+      expect(setHomeLayout).toHaveBeenCalledTimes(3);
+    });
+  });
+
   describe("resetSettings", () => {
     it("should reset all settings to defaults", async () => {
       // First change some settings
@@ -322,6 +380,7 @@ describe("SettingsSlice", () => {
       expect(state.settings.jumpBackwardInterval).toBe(15);
       expect(state.settings.smartRewindEnabled).toBe(true);
       expect(state.settings.backgroundServiceReconnection).toBe(true);
+      expect(state.settings.homeLayout).toBe("list");
       expect(state.settings.initialized).toBe(false);
       expect(state.settings.isLoading).toBe(false);
     });
