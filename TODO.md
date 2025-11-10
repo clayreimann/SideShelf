@@ -3,6 +3,7 @@
 ## 🚨 **CRITICAL PRE-LAUNCH ITEMS** (Priority 0)
 
 ### Legal & Compliance
+
 - [ ] **Create Privacy Policy** - REQUIRED for App Store/Play Store
   - [ ] Document what data is collected (server URLs, usernames, playback progress)
   - [ ] Explain how data is stored locally vs on user's server
@@ -18,6 +19,7 @@
   - [ ] Add app version display
 
 ### Internationalization (i18n)
+
 - [ ] **Implement i18n system** (like the existing audiobookshelf-app)
   - [ ] Add i18n library (e.g., react-i18next or similar)
   - [ ] Create string resource files structure
@@ -31,6 +33,7 @@
   - [ ] Update all button labels, placeholders, and messages
 
 ### App Store Requirements
+
 - [ ] **Prepare App Store Screenshots** (required for both stores)
   - [ ] iPhone 6.7" display (required for iOS)
   - [ ] iPhone 5.5" display (required for iOS)
@@ -53,6 +56,7 @@
   - [ ] Update repository URL if needed
 
 ### Production Configuration
+
 - [ ] **Remove/Minimize Console Logging** (379 console.log statements found!)
   - [ ] Create production logging utility that conditionally logs
   - [ ] Replace console.log with proper logger in services
@@ -81,6 +85,7 @@
   - [ ] Add Google Play metadata (Android)
 
 ### Testing & Quality Assurance
+
 - [ ] **Comprehensive Testing**
   - [ ] Test on physical iOS device (not just simulator)
   - [ ] Test on physical Android device (not just emulator)
@@ -106,6 +111,7 @@
   - [ ] Test error handling thoroughly
 
 ### Documentation & Support
+
 - [ ] **Update README.md**
   - [ ] Add screenshots/demo
   - [ ] Clarify installation instructions
@@ -126,6 +132,7 @@
   - [ ] Create issue templates
 
 ### Code Quality & Security
+
 - [ ] **Security Audit**
   - [ ] Review token storage (currently using SecureStore - good!)
   - [ ] Ensure sensitive data isn't logged
@@ -147,6 +154,7 @@
   - [ ] Add JSDoc to public APIs
 
 ### Build & Release Preparation
+
 - [ ] **Configure Production Builds**
   - [ ] Test production iOS build
   - [ ] Test production Android build
@@ -178,21 +186,24 @@
 - [x] Downloaded files should only store paths relative to app bundle and we should resolve absolute file paths at runtime
 - [x] Conditionally use native tabs for ios 26+
 - [x] Sessions for downloaded media are not being correctly created, streaming progress works fine, but progress from local items appears to create the session but subsequent syncs fail
-- [ ] Fetch currently playing/most recent item status from TrackPlayer
-- [ ] PlayerService should be the single entrypoint to play/pause tracks.
-  - [ ] PlayerService updates store state for accurate tracking
-  - [ ] PlayerService stores/remembers the last played item so that the floating player can be
+- [x] Fetch currently playing/most recent item status from TrackPlayer
+- [x] PlayerService should be the single entrypoint to play/pause tracks.
+  - [x] PlayerService updates store state for accurate tracking
+  - [x] PlayerService stores/remembers the last played item so that the floating player can be
         populated on start (for downloaded media)
-  - [ ] ProgressService should not close the current session if the new session is for the same
+  - [x] ProgressService should not close the current session if the new session is for the same
         item (unless timeout expired)
-  - [ ] ProgressService should check on startup for dangling sessions (crash or memory pressure quit) and close them
-- [ ] PlayerService.PlayerTrack should take the resume position
-- [ ] PlayerService should update the track metadata with new chapter information
+  - [x] ProgressService should check on startup for dangling sessions (crash or memory pressure quit) and close them
+- [x] PlayerService.PlayerTrack should take the resume position
+- [x] PlayerService should update the track metadata with new chapter information
 - [ ] Add background task service library to end sessions after 10 minutes of inactivity
 
 ### Misc/Bugs
 
-- [ ] When the mini-player is shown add padding to the bottom of views so that you can scroll all the way to the bottom
+- [ ] Refactor the new cover home screen to use a section list
+- [ ] Download All button in series
+- [ ] Download next item in series when X time left
+- [x] When the mini-player is shown add padding to the bottom of views so that you can scroll all the way to the bottom
 - [ ] New login initialization still doesn't work well,
   - [ ] home screen isn't refreshed after log in
   - [ ] no library is selected by default
@@ -213,7 +224,6 @@
 ### Playback Tracking & Sync
 
 - [ ] **Playback Tracking Store Implementation**
-
   - [x] Create centralized progress tracking store
   - [x] Implement local progress persistence with resume functionality
   - [x] Add periodic server sync during playback
@@ -221,7 +231,6 @@
   - [ ] Display listening sessions on item details screen (split sessions if paused >15min)
 
   #### Playback Tracking Store Implementation
-
   - [x] Database Schema Updates:
     - [x] Enhance existing localListeningSessions table
     - [x] Add playbackProgress table for real-time tracking
@@ -266,16 +275,18 @@
 - [x] Full screen player
 - [x] Stream content from server
 - [ ] Embed Player UI in item details screen (and dismiss the floating player on this screen)
-- [ ] Extract common player UI components for reuse
-- [ ] Setup background hooks to sync media progress to server
+- [x] Extract common player UI components for reuse
+- [x] Setup background hooks to sync media progress to server
 
 ### Player Enhancements
 
 - [ ] Auto-download setting when streaming playback starts
-- [ ] Track playing events (start, pause, sync progress, sync failed)
+- [ ] Record playing events (start, pause, sync progress, sync failed)
   - [ ] Show player events on item details screen
-- [ ] Show duration of book on item details
+- [x] Show duration of book on item details
 - [ ] Advanced playback controls (sleep timer, bookmarking)
+  - [x] Sleep timer
+  - [ ] Bookmarking
 
 ## 📚 Library Management
 
@@ -294,16 +305,16 @@
 - [x] Sorting options (title, author, date added, progress)
 - [ ] Collapse series options
 - [x] Rows vs grid view toggle
-- [ ] Advanced filtering and search
+- [x] Advanced filtering and search
 
 ### Content Organization
 
-- [ ] **Series Tab**
-  - [ ] Fetch series and render books
-  - [ ] Include progress information for accurate series tracking
-- [ ] **Authors Tab**
-  - [ ] Fetch author metadata from server
-  - [ ] Link books to authors accurately
+- [x] **Series Tab**
+  - [x] Fetch series and render books
+  - [ ] Show which items in a series have been played
+- [x] **Authors Tab**
+  - [x] Fetch author metadata from server
+  - [x] Link books to authors accurately
 - [ ] **Narrators Tab**
   - [ ] Fetch narrator metadata and render narrators
 
@@ -314,7 +325,7 @@
 - [x] Book download with progress tracking
 - [x] Debounce/smooth download rate and ETA calculations
 - [x] Review and simplify/refactor download.ts
-- [ ] Review and simplify/refactor libraryItemDetail.tsx
+- [x] Review and simplify/refactor libraryItemDetail.tsx
 - [ ] Fix background downloader library (new architecture)
   - [ ] Expo plugin to modify app delegate for URL completion
 - [x] Fix download cancellation not clearing progress UI
@@ -349,20 +360,19 @@
 
 - [ ] Implement proper error boundaries
 - [ ] Add loading states and skeleton screens
-- [ ] Optimize image loading and caching
+- [x] Optimize image loading and caching
 - [x] Implement proper offline support
 - [ ] Show indicator when offline
 - [ ] Add accessibility features
   - [ ] Ensure screen reader navigation works
-  - [ ] Test VoiceOver (iOS) and TalkBack (Android)
+  - [x] Test VoiceOver (iOS) and TalkBack (Android)
   - [ ] Add proper accessibility labels
-  - [ ] Ensure proper contrast ratios
 
 ## 🔧 Infrastructure
 
 ### Background Services
 
-- [ ] Background sync service
+- [x] Background sync service
 - [ ] Notification management
 - [ ] Background download management
 - [ ] Periodic cleanup tasks
@@ -380,7 +390,6 @@
 ### Android
 
 - [ ] Android Auto integration
-- [ ] Notification controls (already partially implemented in audiobookshelf-app)
 - [ ] Background service optimization
 - [ ] Material Design compliance
 
@@ -396,7 +405,7 @@
 ### Code Quality
 
 - [ ] Comprehensive error handling
-- [ ] Logging and monitoring
+- [x] Logging and monitoring
 - [ ] Code documentation
 - [ ] Performance profiling
 
@@ -414,38 +423,14 @@
 
 ---
 
-## 📋 Implementation Plans
-
-### Playback Tracking Store Plan
-
-1. **Database Schema Updates**
-
-   - Enhance existing `localListeningSessions` table
-   - Add `playbackProgress` table for real-time tracking
-   - Create indexes for performance
-
-2. **Service Architecture**
-
-   - Create `PlaybackTrackingService` singleton
-   - Implement progress persistence and retrieval
-   - Add periodic sync with server
-   - Handle offline/online state transitions
-
-3. **Integration Points**
-   - Hook into `PlayerService` for progress updates
-   - Connect with `SessionTrackingService` for session management
-   - Integrate with existing progress sync mechanisms
-
 ### WebSocket Integration Plan
 
 1. **Connection Management**
-
    - Implement `WebSocketService` with authentication
    - Add connection state management and reconnection logic
    - Handle network state changes
 
 2. **Event Handling**
-
    - Parse and handle `user_item_progress_updated` events
    - Support all official ABS event types
    - Update local progress store based on events
@@ -459,13 +444,11 @@
 ### Podcast Support Plan
 
 1. **UI Components**
-
    - Create podcast-specific layouts and components
    - Implement episode list and detail views
    - Add subscription management interface
 
 2. **Playback Features**
-
    - Podcast-specific playback controls
    - Skip silence and intro/outro detection
    - Variable playback speed with presets
@@ -479,6 +462,6 @@
 
 ---
 
-_Last updated: October 24, 2025_
+_Last updated: November 9, 2025_
 _Critical pre-launch items: ~40 items_
 _Total items: ~150+ items across all priorities_

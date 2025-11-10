@@ -337,8 +337,8 @@ export class PlayerService {
       }
 
       if (resumeInfo.position > 0) {
-        await TrackPlayer.seekTo(resumeInfo.position);
         store.updatePosition(resumeInfo.position);
+        await TrackPlayer.seekTo(resumeInfo.position);
         log.info(
           `Resuming playback from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
         );
@@ -357,6 +357,8 @@ export class PlayerService {
         await TrackPlayer.setVolume(currentVolume);
         log.info(`Applied volume from store: ${currentVolume}`);
       }
+
+      await applySmartRewind();
 
       // Start playback - background service will handle session tracking
       await TrackPlayer.play();
@@ -538,8 +540,8 @@ export class PlayerService {
         );
 
         // Clear isRestoringState and update chapter with correct position
-        updatedStore.setIsRestoringState?.(false);
         updatedStore._updateCurrentChapter(resumeInfo.position);
+        updatedStore.setIsRestoringState?.(false);
       } else {
         // Clear isRestoringState even when starting from beginning
         const updatedStore = useAppStore.getState();

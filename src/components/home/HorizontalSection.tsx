@@ -25,7 +25,7 @@ export default function HorizontalSection({
   }
 
   return (
-    <View style={{ marginBottom: 24 }}>
+    <View style={{ width: "100%", marginBottom: 24 }}>
       {/* Section Title */}
       <Text
         style={[

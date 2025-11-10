@@ -111,7 +111,10 @@ export async function applySmartRewind(): Promise<void> {
       log.info(
         `Smart rewind: jumping back ${rewindSeconds}s (from ${formatTime(currentPosition.position)} to ${formatTime(newPosition)})`
       );
+      useAppStore.getState().updatePosition(newPosition);
       await TrackPlayer.seekTo(newPosition);
     }
+  } else {
+    log.info("No last played time available, skipping smart rewind");
   }
 }
