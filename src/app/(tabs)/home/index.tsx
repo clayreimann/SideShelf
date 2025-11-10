@@ -1,4 +1,4 @@
-import HorizontalSection from "@/components/home/HorizontalSection";
+import CoverItem from "@/components/home/CoverItem";
 import Item from "@/components/home/Item";
 import type { HomeScreenItem } from "@/db/helpers/homeScreen";
 import { getUserByUsername } from "@/db/helpers/users";
@@ -14,9 +14,9 @@ import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Pressable,
   RefreshControl,
-  ScrollView,
   SectionList,
   Text,
   View,
@@ -25,6 +25,7 @@ import {
 interface HomeSection {
   title: string;
   data: HomeScreenItem[];
+  showProgress?: boolean;
 }
 
 export default function HomeScreen() {
@@ -44,33 +45,39 @@ export default function HomeScreen() {
     updateHomeLayout(newLayout);
   }, [homeLayout, updateHomeLayout]);
 
-  // Build sections array from home store data (for list layout)
+  // Build sections array from home store data
+  // For list layout: limit to 3 items per section
+  // For cover layout: show all items with horizontal scrolling
   const sections = useMemo<HomeSection[]>(() => {
     const newSections: HomeSection[] = [];
+    const isCoverLayout = homeLayout === "cover";
 
     if (continueListening.length > 0) {
       newSections.push({
         title: translate("home.sections.continueListening"),
-        data: continueListening.slice(0, 3),
+        data: isCoverLayout ? continueListening : continueListening.slice(0, 3),
+        showProgress: true,
       });
     }
 
     if (downloaded.length > 0) {
       newSections.push({
         title: translate("home.sections.downloaded"),
-        data: downloaded.slice(0, 3),
+        data: isCoverLayout ? downloaded : downloaded.slice(0, 3),
+        showProgress: false,
       });
     }
 
     if (listenAgain.length > 0) {
       newSections.push({
         title: translate("home.sections.listenAgain"),
-        data: listenAgain.slice(0, 3),
+        data: isCoverLayout ? listenAgain : listenAgain.slice(0, 3),
+        showProgress: false,
       });
     }
 
     return newSections;
-  }, [continueListening, downloaded, listenAgain]);
+  }, [continueListening, downloaded, listenAgain, homeLayout]);
 
   // Refresh home data when screen comes into focus
   useFocusEffect(
@@ -143,6 +150,20 @@ export default function HomeScreen() {
     </View>
   );
 
+  // Render horizontal scrolling section for cover layout
+  const renderCoverSection = ({ section }: { section: HomeSection }) => (
+    <FlatList
+      data={section.data}
+      renderItem={({ item }) => <CoverItem item={item} showProgress={section.showProgress} />}
+      keyExtractor={(item) => item.id}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{
+        paddingHorizontal: 16,
+      }}
+    />
+  );
+
   // Header right control for layout toggle
   const headerRight = useCallback(() => {
     const buttonStyle = {
@@ -203,14 +224,16 @@ export default function HomeScreen() {
     );
   }
 
-  // Render cover layout with horizontal scrolling sections
+  // Render cover layout with horizontal scrolling sections using SectionList
   if (homeLayout === "cover") {
     return (
       <>
-        <ScrollView
-          style={{ width: "100%" }}
+        <SectionList
+          sections={sections}
+          renderItem={renderCoverSection}
+          renderSectionHeader={renderSectionHeader}
+          keyExtractor={(item, index) => `section-${index}`}
           contentContainerStyle={[
-            styles.flatListContainer,
             { paddingTop: 16, paddingBottom: 16 },
             floatingPlayerPadding,
           ]}
@@ -222,29 +245,8 @@ export default function HomeScreen() {
               tintColor={colors.link}
             />
           }
-        >
-          {continueListening.length > 0 && (
-            <HorizontalSection
-              title={translate("home.sections.continueListening")}
-              data={continueListening}
-              showProgress={true}
-            />
-          )}
-          {downloaded.length > 0 && (
-            <HorizontalSection
-              title={translate("home.sections.downloaded")}
-              data={downloaded}
-              showProgress={false}
-            />
-          )}
-          {listenAgain.length > 0 && (
-            <HorizontalSection
-              title={translate("home.sections.listenAgain")}
-              data={listenAgain}
-              showProgress={false}
-            />
-          )}
-        </ScrollView>
+          stickySectionHeadersEnabled={false}
+        />
         <Stack.Screen options={{ headerRight }} />
       </>
     );
