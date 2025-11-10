@@ -1012,7 +1012,7 @@ export class PlayerService {
   /**
    * Verify that TrackPlayer state matches store state
    */
-  async verifyConnection(): Promise<boolean> {
+  async verifyTrackPlayerConsistency(): Promise<boolean> {
     try {
       const store = useAppStore.getState();
       const [state, currentTrack, progress] = await Promise.all([

@@ -193,7 +193,7 @@ export interface MockSettingsSlice {
     jumpForwardInterval: number;
     jumpBackwardInterval: number;
     smartRewindEnabled: boolean;
-    backgroundServiceReconnection: boolean;
+    homeLayout: "list" | "cover";
     initialized: boolean;
     isLoading: boolean;
   };
@@ -201,7 +201,7 @@ export interface MockSettingsSlice {
   updateJumpForwardInterval: jest.Mock;
   updateJumpBackwardInterval: jest.Mock;
   updateSmartRewindEnabled: jest.Mock;
-  updateBackgroundServiceReconnection: jest.Mock;
+  updateHomeLayout: jest.Mock;
   resetSettings: jest.Mock;
 }
 
@@ -219,7 +219,7 @@ export function createMockSettingsSlice(options: MockSettingsSliceOptions = {}):
       jumpForwardInterval: 30,
       jumpBackwardInterval: 15,
       smartRewindEnabled: true,
-      backgroundServiceReconnection: true,
+      homeLayout: "list",
       initialized: false,
       isLoading: false,
       ...state,
@@ -228,7 +228,7 @@ export function createMockSettingsSlice(options: MockSettingsSliceOptions = {}):
     updateJumpForwardInterval: jest.fn(),
     updateJumpBackwardInterval: jest.fn(),
     updateSmartRewindEnabled: jest.fn(),
-    updateBackgroundServiceReconnection: jest.fn(),
+    updateHomeLayout: jest.fn(),
     resetSettings: jest.fn(),
     ...methods,
   };

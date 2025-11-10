@@ -1,5 +1,4 @@
 import { initializeApp } from "@/index";
-import { getBackgroundServiceReconnectionEnabled } from "@/lib/appSettings";
 import { formatTimeRemaining } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
@@ -9,11 +8,7 @@ import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
-import {
-  FontAwesome6,
-  MaterialCommunityIcons,
-  Octicons,
-} from "@expo/vector-icons";
+import { FontAwesome6, MaterialCommunityIcons, Octicons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -22,8 +17,8 @@ import { AppState, AppStateStatus, Linking, View } from "react-native";
 import TrackPlayer, { State } from "react-native-track-player";
 
 // Create cached sublogger for this component
-const log = logger.forTag('RootLayout');
-const diagLog = logger.forDiagnostics('RootLayout');
+const log = logger.forTag("RootLayout");
+const diagLog = logger.forDiagnostics("RootLayout");
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -32,9 +27,9 @@ export default function RootLayout() {
   const router = useRouter();
   // Diagnostic: log mount/unmount and AppState transitions
   useEffect(() => {
-    diagLog.info('RootLayout mounted');
+    diagLog.info("RootLayout mounted");
     return () => {
-      diagLog.info('RootLayout unmounted');
+      diagLog.info("RootLayout unmounted");
     };
   }, []);
   const { colors, header } = useThemedStyles();
@@ -72,7 +67,6 @@ export default function RootLayout() {
   const lastBackgroundTime = useRef<number>(0);
   const playerInitTimestamp = useRef<number>(0);
   useEffect(() => {
-
     // Store the player init timestamp on mount
     playerInitTimestamp.current = playerService.getInitializationTimestamp();
 
@@ -88,7 +82,9 @@ export default function RootLayout() {
         const timeInBackground = Date.now() - lastBackgroundTime.current;
         const wasLongBackground = timeInBackground > 30000; // 30 seconds
 
-        log.info(`App moved to foreground (was backgrounded for ${(timeInBackground / 1000).toFixed(2)}s)`);
+        log.info(
+          `App moved to foreground (was backgrounded for ${(timeInBackground / 1000).toFixed(2)}s)`
+        );
 
         // Check TrackPlayer directly to see if it's currently playing
         let trackPlayerIsPlaying = false;
@@ -100,7 +96,9 @@ export default function RootLayout() {
         }
 
         if (trackPlayerIsPlaying) {
-          log.info("TrackPlayer is currently playing, syncing state FROM TrackPlayer and skipping restoration");
+          log.info(
+            "TrackPlayer is currently playing, syncing state FROM TrackPlayer and skipping restoration"
+          );
 
           // Sync state FROM TrackPlayer to store (don't update TrackPlayer)
           try {
@@ -136,27 +134,23 @@ export default function RootLayout() {
         }
 
         if (wasLongBackground || contextRecreated) {
-          log.info(`App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, verifying player connection`);
-
-          // Check if background service reconnection is enabled
-          const reconnectionEnabled = await getBackgroundServiceReconnectionEnabled();
-          diagLog.info(`Background service reconnection enabled: ${reconnectionEnabled}`);
+          log.info(
+            `App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, verifying player connection`
+          );
 
           // Verify connection between TrackPlayer and store
           // Restore current track from AsyncStore if missing
           await useAppStore.getState().restorePersistedState();
-          const isConnected = await playerService.verifyConnection();
-          log.info(`Player service connection status: ${isConnected ? "connected" : "disconnected"}`);
+          const isConsistent = await playerService.verifyTrackPlayerConsistency();
+          log.info(`Player service isConsistent=${isConsistent}`);
 
           // Reconcile TrackPlayer state to ensure sync
           await playerService.reconcileTrackPlayerState();
 
-          if (reconnectionEnabled && (!isConnected || contextRecreated)) {
-            log.warn("Connection mismatch or context recreated, reconnecting background service");
-            await playerService.reconnectBackgroundService();
-          } else if (!reconnectionEnabled && (!isConnected || contextRecreated)) {
-            log.info("Background service reconnection is disabled, skipping reconnection");
-          }
+          // if (!isConnected || contextRecreated) {
+          //   log.warn("Connection mismatch or context recreated, reconnecting background service");
+          //   await playerService.reconnectBackgroundService();
+          // }
         }
 
         log.info("Triggering progress refetch on app foreground");
@@ -167,10 +161,7 @@ export default function RootLayout() {
       }
     };
 
-    const subscription = AppState.addEventListener(
-      "change",
-      handleAppStateChange
-    );
+    const subscription = AppState.addEventListener("change", handleAppStateChange);
 
     return () => {
       subscription?.remove();
@@ -186,7 +177,7 @@ export default function RootLayout() {
     const handleDeepLink = async (url: string) => {
       try {
         // Check if this is a logger configuration URL
-        if (!url.includes('://logger')) {
+        if (!url.includes("://logger")) {
           return;
         }
 
@@ -218,8 +209,8 @@ export default function RootLayout() {
 
         // Set log levels
         for (const [tag, level] of Object.entries(tagLevels)) {
-          const logLevel = level.toLowerCase() as 'debug' | 'info' | 'warn' | 'error';
-          if (['debug', 'info', 'warn', 'error'].includes(logLevel)) {
+          const logLevel = level.toLowerCase() as "debug" | "info" | "warn" | "error";
+          if (["debug", "info", "warn", "error"].includes(logLevel)) {
             await logger.setTagLevel(tag, logLevel);
             log.info(`Set log level for tag "${tag}" to ${logLevel}`);
             configApplied = true;
@@ -228,7 +219,7 @@ export default function RootLayout() {
 
         // Set enabled/disabled state
         for (const [tag, enabledValue] of Object.entries(tagEnabled)) {
-          const isEnabled = enabledValue.toLowerCase() !== 'false';
+          const isEnabled = enabledValue.toLowerCase() !== "false";
           if (isEnabled) {
             logger.enableTag(tag);
             log.info(`Enabled tag "${tag}"`);
@@ -241,13 +232,13 @@ export default function RootLayout() {
 
         if (configApplied) {
           // Navigate to logger settings screen
-          router.push('/more/logger-settings');
-          log.info('Logger configuration applied, navigating to logger settings');
+          router.push("/more/logger-settings");
+          log.info("Logger configuration applied, navigating to logger settings");
         } else {
-          log.warn('No valid logger configuration found in deep link');
+          log.warn("No valid logger configuration found in deep link");
         }
       } catch (error) {
-        log.error('Failed to process logger deep link', error as Error);
+        log.error("Failed to process logger deep link", error as Error);
       }
     };
 
@@ -259,7 +250,7 @@ export default function RootLayout() {
     });
 
     // Listen for deep links while app is running
-    const subscription = Linking.addEventListener('url', (event) => {
+    const subscription = Linking.addEventListener("url", (event) => {
       handleDeepLink(event.url);
     });
 

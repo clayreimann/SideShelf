@@ -7,7 +7,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const SETTINGS_KEYS = {
-  enableBackgroundServiceReconnection: "@app/enableBackgroundServiceReconnection",
   jumpForwardInterval: "@app/jumpForwardInterval",
   jumpBackwardInterval: "@app/jumpBackwardInterval",
   enableSmartRewind: "@app/enableSmartRewind",
@@ -21,36 +20,6 @@ const DEFAULT_JUMP_BACKWARD_INTERVAL = 15;
 const DEFAULT_SMART_REWIND_ENABLED = true;
 const DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED = true;
 const DEFAULT_HOME_LAYOUT = "list" as const;
-
-/**
- * Get whether background service auto-reconnection is enabled
- * Default: true (enabled)
- */
-export async function getBackgroundServiceReconnectionEnabled(): Promise<boolean> {
-  try {
-    const value = await AsyncStorage.getItem(SETTINGS_KEYS.enableBackgroundServiceReconnection);
-    // Default to true if not set
-    return value === null ? true : value === "true";
-  } catch (error) {
-    console.error("[AppSettings] Failed to get background service reconnection setting:", error);
-    return true; // Default to enabled on error
-  }
-}
-
-/**
- * Set whether background service auto-reconnection is enabled
- */
-export async function setBackgroundServiceReconnectionEnabled(enabled: boolean): Promise<void> {
-  try {
-    await AsyncStorage.setItem(
-      SETTINGS_KEYS.enableBackgroundServiceReconnection,
-      enabled ? "true" : "false"
-    );
-  } catch (error) {
-    console.error("[AppSettings] Failed to save background service reconnection setting:", error);
-    throw error;
-  }
-}
 
 /**
  * Get jump forward interval in seconds

@@ -4,17 +4,14 @@
  * This slice manages app settings/preferences including:
  * - Jump forward/backward intervals
  * - Smart rewind on resume
- * - Background service reconnection
  * - Automatic persistence to storage
  */
 
 import {
-  getBackgroundServiceReconnectionEnabled,
   getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
   getSmartRewindEnabled,
-  setBackgroundServiceReconnectionEnabled,
   setHomeLayout,
   setJumpBackwardInterval,
   setJumpForwardInterval,
@@ -38,8 +35,6 @@ export interface SettingsSliceState {
     jumpBackwardInterval: number;
     /** Whether smart rewind on resume is enabled */
     smartRewindEnabled: boolean;
-    /** Whether background service auto-reconnection is enabled */
-    backgroundServiceReconnection: boolean;
     /** Home screen layout preference */
     homeLayout: "list" | "cover";
     /** Whether the slice has been initialized */
@@ -62,8 +57,6 @@ export interface SettingsSliceActions {
   updateJumpBackwardInterval: (seconds: number) => Promise<void>;
   /** Toggle smart rewind on resume */
   updateSmartRewindEnabled: (enabled: boolean) => Promise<void>;
-  /** Toggle background service reconnection */
-  updateBackgroundServiceReconnection: (enabled: boolean) => Promise<void>;
   /** Update home screen layout preference */
   updateHomeLayout: (layout: "list" | "cover") => Promise<void>;
   /** Reset the slice to initial state */
@@ -82,7 +75,6 @@ const DEFAULT_SETTINGS = {
   jumpForwardInterval: 30,
   jumpBackwardInterval: 15,
   smartRewindEnabled: true,
-  backgroundServiceReconnection: true,
   homeLayout: "list" as const,
 };
 
@@ -127,14 +119,12 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
 
     try {
       // Load all settings from storage in parallel
-      const [jumpForward, jumpBackward, smartRewind, backgroundReconnection, homeLayout] =
-        await Promise.all([
-          getJumpForwardInterval(),
-          getJumpBackwardInterval(),
-          getSmartRewindEnabled(),
-          getBackgroundServiceReconnectionEnabled(),
-          getHomeLayout(),
-        ]);
+      const [jumpForward, jumpBackward, smartRewind, homeLayout] = await Promise.all([
+        getJumpForwardInterval(),
+        getJumpBackwardInterval(),
+        getSmartRewindEnabled(),
+        getHomeLayout(),
+      ]);
 
       set((state: SettingsSlice) => ({
         ...state,
@@ -142,7 +132,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           jumpForwardInterval: jumpForward,
           jumpBackwardInterval: jumpBackward,
           smartRewindEnabled: smartRewind,
-          backgroundServiceReconnection: backgroundReconnection,
           homeLayout: homeLayout,
           initialized: true,
           isLoading: false,
@@ -150,7 +139,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       }));
 
       log.info(
-        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, backgroundReconnection=${backgroundReconnection}, homeLayout=${homeLayout}`
+        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, homeLayout=${homeLayout}`
       );
     } catch (error) {
       log.error("Failed to load settings", error as Error);
@@ -283,45 +272,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           smartRewindEnabled: previousValue,
-        },
-      }));
-
-      throw error;
-    }
-  },
-
-  /**
-   * Toggle background service reconnection
-   */
-  updateBackgroundServiceReconnection: async (enabled: boolean) => {
-    log.info(`${enabled ? "Enabling" : "Disabling"} background service reconnection`);
-
-    // Capture previous value BEFORE optimistic update
-    const previousValue = get().settings.backgroundServiceReconnection;
-
-    // Optimistic update
-    set((state: SettingsSlice) => ({
-      ...state,
-      settings: {
-        ...state.settings,
-        backgroundServiceReconnection: enabled,
-      },
-    }));
-
-    try {
-      // Persist to storage
-      await setBackgroundServiceReconnectionEnabled(enabled);
-
-      log.info(`Background service reconnection ${enabled ? "enabled" : "disabled"}`);
-    } catch (error) {
-      log.error("Failed to update background service reconnection setting", error as Error);
-
-      // Revert on error
-      set((state: SettingsSlice) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          backgroundServiceReconnection: previousValue,
         },
       }));
 

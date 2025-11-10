@@ -594,7 +594,7 @@ describe("PlayerService", () => {
       });
       mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Playing });
 
-      const connected = await playerService.verifyConnection();
+      const connected = await playerService.verifyTrackPlayerConsistency();
 
       expect(connected).toBe(true);
     });
@@ -607,7 +607,7 @@ describe("PlayerService", () => {
         buffered: 0,
       });
 
-      const connected = await playerService.verifyConnection();
+      const connected = await playerService.verifyTrackPlayerConsistency();
 
       expect(connected).toBe(false);
     });
@@ -616,7 +616,7 @@ describe("PlayerService", () => {
       mockStore.player.isPlaying = true;
       mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Paused });
 
-      const connected = await playerService.verifyConnection();
+      const connected = await playerService.verifyTrackPlayerConsistency();
 
       expect(connected).toBe(false);
     });
@@ -624,7 +624,7 @@ describe("PlayerService", () => {
     it("should handle errors gracefully", async () => {
       mockedTrackPlayer.getPlaybackState.mockRejectedValue(new Error("TrackPlayer error"));
 
-      const connected = await playerService.verifyConnection();
+      const connected = await playerService.verifyTrackPlayerConsistency();
 
       expect(connected).toBe(false);
     });
