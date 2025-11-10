@@ -85,9 +85,7 @@ const TabBarIcon = ({ config, focused, color, size }: TabBarIconProps) => {
   if (isAndroid) {
     return (
       <Ionicons
-        name={
-          focused ? config.androidIcon.selected : config.androidIcon.default
-        }
+        name={focused ? config.androidIcon.selected : config.androidIcon.default}
         size={size ?? 24}
         color={color}
       />
@@ -102,9 +100,7 @@ const TabBarIcon = ({ config, focused, color, size }: TabBarIconProps) => {
         tintColor={color}
         fallback={
           <Ionicons
-            name={
-              focused ? config.androidIcon.selected : config.androidIcon.default
-            }
+            name={focused ? config.androidIcon.selected : config.androidIcon.default}
             size={size ?? 24}
             color={color}
           />
@@ -127,7 +123,8 @@ export default function TabLayout() {
   const { initialized, isAuthenticated, loginMessage } = useAuth();
   const { tabs, isDark } = useThemedStyles();
   const errorCount = useAppStore((state) => state.logger.errorCount);
-  const showErrorBadge = errorCount > 0;
+  const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
+  const showErrorBadge = errorCount > 0 && diagnosticsEnabled;
   useEffect(() => {
     if (initialized && !isAuthenticated) {
       router.push("/login");
@@ -138,9 +135,7 @@ export default function TabLayout() {
   }, []);
   useEffect(() => {
     if (loginMessage) {
-      console.log(
-        `[TabIndex] Redirecting to login due to loginMessage: ${loginMessage}`
-      );
+      console.log(`[TabIndex] Redirecting to login due to loginMessage: ${loginMessage}`);
       router.navigate("/login");
     }
   }, [loginMessage]);
@@ -180,12 +175,7 @@ export default function TabLayout() {
                     backgroundColor: tabs.badgeBackgroundColor,
                   },
                   tabBarIcon: ({ focused, color, size }) => (
-                    <TabBarIcon
-                      config={tab}
-                      focused={focused}
-                      color={color}
-                      size={size}
-                    />
+                    <TabBarIcon config={tab} focused={focused} color={color} size={size} />
                   ),
                 }}
               />
@@ -199,9 +189,7 @@ export default function TabLayout() {
   return (
     <View style={{ flex: 1 }}>
       <NativeTabs
-        blurEffect={
-          isDark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"
-        }
+        blurEffect={isDark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"}
         backgroundColor={tabs.backgroundColor}
         iconColor={tabs.iconColor}
         tintColor={tabs.selectedIconColor}
@@ -226,12 +214,10 @@ export default function TabLayout() {
                 labelStyle: { color: tabs.labelColor },
                 selectedLabelStyle: { color: tabs.selectedLabelColor },
                 backgroundColor: tabs.backgroundColor,
-                badgeValue: isMoreTab && showErrorBadge ? errorCount.toString() : '',
+                badgeValue: isMoreTab && showErrorBadge ? errorCount.toString() : "",
               }}
             >
-              <Label selectedStyle={{ color: tabs.selectedLabelColor }}>
-                {label}
-              </Label>
+              <Label selectedStyle={{ color: tabs.selectedLabelColor }}>{label}</Label>
               <Icon
                 sf={{
                   default: tab.sfSymbol.default,

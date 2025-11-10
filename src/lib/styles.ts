@@ -5,7 +5,7 @@
  * and promote consistency across the application.
  */
 
-import { StyleSheet } from 'react-native';
+import { StyleSheet } from "react-native";
 
 /**
  * Common spacing values
@@ -30,7 +30,7 @@ export const floatingPlayer = {
   /** Bottom offset above tab bar */
   bottomOffset: 100,
   /** Padding to add to scrollable lists when player is visible */
-  listPadding: 76,
+  listPadding: 84,
 } as const;
 
 /**
@@ -40,45 +40,45 @@ export const floatingPlayer = {
 export const commonStyles = StyleSheet.create({
   // Flex layouts
   flexRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   flexRowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   flexRowCenter: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
   },
   flexColumn: {
-    flexDirection: 'column',
+    flexDirection: "column",
   },
   flex1: {
     flex: 1,
   },
   flexWrap: {
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
   },
 
   // Alignment
   centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   alignCenter: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   justifyCenter: {
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   alignStart: {
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   alignEnd: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
 
   // Common spacing
@@ -119,13 +119,13 @@ export const commonStyles = StyleSheet.create({
 
   // Typography helpers
   textCenter: {
-    textAlign: 'center',
+    textAlign: "center",
   },
   textBold: {
-    fontWeight: '600',
+    fontWeight: "600",
   },
   textSemiBold: {
-    fontWeight: '500',
+    fontWeight: "500",
   },
 });
 
@@ -146,21 +146,21 @@ export const borderRadius = {
  */
 export const shadows = {
   small: {
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
   },
   medium: {
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 4,
   },
   large: {
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

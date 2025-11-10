@@ -10,6 +10,8 @@ import { Alert, FlatList, Pressable, Text, View } from "react-native";
 type ActionItem = {
   label: string;
   onPress?: () => void;
+  badge?: number;
+  styles?: { color?: string };
 };
 
 export default function MoreScreen() {
@@ -20,10 +22,13 @@ export default function MoreScreen() {
   const errorsAcknowledgedTimestamp = useAppStore(
     (state) => state.logger.errorsAcknowledgedTimestamp
   );
+  const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
   const [appVersion, setAppVersion] = useState<string>("");
 
   // Show badge if there are errors and they haven't been acknowledged (or new errors appeared since acknowledgment)
-  const showErrorBadge = errorCount > 0 && errorsAcknowledgedTimestamp === null;
+  // Badge only shows when diagnostics is enabled
+  const showErrorBadge =
+    errorCount > 0 && errorsAcknowledgedTimestamp === null && diagnosticsEnabled;
 
   useEffect(() => {
     // Load app version info
@@ -41,41 +46,61 @@ export default function MoreScreen() {
   }, []);
 
   const data = useMemo(() => {
-    return [
+    const items: ActionItem[] = [
       // { label: 'Collections', onPress: () => router.push('/more/collections') },
       { label: translate("more.aboutMe"), onPress: () => router.push("/more/me") },
       { label: translate("more.settings"), onPress: () => router.push("/more/settings") },
-      { label: translate("more.advanced"), onPress: () => router.push("/more/advanced") },
-      {
-        label: translate("more.logs"),
-        onPress: () => router.push("/more/logs"),
-        badge: showErrorBadge ? errorCount : undefined,
-      },
-      {
-        label: translate("more.logOut"),
-        styles: { color: "red" },
-        onPress: () => {
-          Alert.alert(
-            translate("more.logoutConfirm.title"),
-            translate("more.logoutConfirm.message"),
-            [
-              { text: translate("common.cancel"), style: "cancel" },
-              {
-                text: translate("more.logOut"),
-                style: "destructive",
-                onPress: () => {
-                  void (async () => {
-                    await logout();
-                    router.replace("/login");
-                  })();
-                },
-              },
-            ]
-          );
-        },
-      },
     ];
-  }, [router, logout, showErrorBadge, errorCount]);
+
+    // Conditionally add diagnostics screens
+    if (diagnosticsEnabled) {
+      items.push(
+        {
+          label: translate("more.libraryStats"),
+          onPress: () => router.push("/more/library-stats"),
+        },
+        { label: translate("more.storage"), onPress: () => router.push("/more/storage") },
+        { label: translate("more.trackPlayer"), onPress: () => router.push("/more/track-player") },
+        {
+          label: translate("more.logs"),
+          onPress: () => router.push("/more/logs"),
+          badge: showErrorBadge ? errorCount : undefined,
+        },
+        {
+          label: translate("more.loggerSettings"),
+          onPress: () => router.push("/more/logger-settings"),
+        },
+        { label: translate("more.actions"), onPress: () => router.push("/more/actions") }
+      );
+    }
+
+    // Add logout at the end
+    items.push({
+      label: translate("more.logOut"),
+      styles: { color: "red" },
+      onPress: () => {
+        Alert.alert(
+          translate("more.logoutConfirm.title"),
+          translate("more.logoutConfirm.message"),
+          [
+            { text: translate("common.cancel"), style: "cancel" },
+            {
+              text: translate("more.logOut"),
+              style: "destructive",
+              onPress: () => {
+                void (async () => {
+                  await logout();
+                  router.replace("/login");
+                })();
+              },
+            },
+          ]
+        );
+      },
+    });
+
+    return items;
+  }, [router, logout, showErrorBadge, errorCount, diagnosticsEnabled]);
   return (
     <>
       <FlatList

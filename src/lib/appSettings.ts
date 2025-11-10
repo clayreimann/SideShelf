@@ -12,6 +12,7 @@ const SETTINGS_KEYS = {
   enableSmartRewind: "@app/enableSmartRewind",
   enablePeriodicNowPlayingUpdates: "@app/enablePeriodicNowPlayingUpdates",
   homeLayout: "@app/homeLayout",
+  enableDiagnostics: "@app/enableDiagnostics",
 } as const;
 
 // Default values
@@ -20,6 +21,7 @@ const DEFAULT_JUMP_BACKWARD_INTERVAL = 15;
 const DEFAULT_SMART_REWIND_ENABLED = true;
 const DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED = true;
 const DEFAULT_HOME_LAYOUT = "list" as const;
+const DEFAULT_DIAGNOSTICS_ENABLED = false;
 
 /**
  * Get jump forward interval in seconds
@@ -154,6 +156,32 @@ export async function setHomeLayout(layout: "list" | "cover"): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.homeLayout, layout);
   } catch (error) {
     console.error("[AppSettings] Failed to save home layout setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get whether diagnostics mode is enabled
+ * Default: false (disabled)
+ */
+export async function getDiagnosticsEnabled(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.enableDiagnostics);
+    return value === null ? DEFAULT_DIAGNOSTICS_ENABLED : value === "true";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get diagnostics setting:", error);
+    return DEFAULT_DIAGNOSTICS_ENABLED;
+  }
+}
+
+/**
+ * Set whether diagnostics mode is enabled
+ */
+export async function setDiagnosticsEnabled(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.enableDiagnostics, enabled ? "true" : "false");
+  } catch (error) {
+    console.error("[AppSettings] Failed to save diagnostics setting:", error);
     throw error;
   }
 }

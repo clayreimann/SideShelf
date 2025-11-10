@@ -142,7 +142,12 @@ export const en = {
   "more.aboutMe": "About Me",
   "more.settings": "Settings",
   "more.advanced": "Advanced",
+  "more.libraryStats": "Library Stats",
+  "more.storage": "Storage",
+  "more.trackPlayer": "Track Player",
   "more.logs": "Logs",
+  "more.loggerSettings": "Logger Settings",
+  "more.actions": "Actions",
   "more.logOut": "Log out",
   "more.version": "Version {version}",
   "more.logoutConfirm.title": "Log out",
@@ -155,12 +160,16 @@ export const en = {
   "settings.sections.librarySelection": "Library Selection",
   "settings.sections.playbackControls": "Playback Controls",
   "settings.sections.advanced": "Advanced",
+  "settings.sections.developer": "Developer",
   "settings.currentLibrary": "Current Library",
   "settings.jumpForwardInterval": "Jump Forward Interval",
   "settings.jumpBackwardInterval": "Jump Backward Interval",
   "settings.smartRewind": "Smart Rewind on Resume",
   "settings.smartRewindDescription":
     "Automatically rewind a few seconds when resuming playback after a pause. The rewind time increases based on how long playback was paused (3s to 30s).",
+  "settings.diagnostics": "Enable Diagnostics",
+  "settings.diagnosticsDescription":
+    "Show diagnostic and debugging screens in the More tab. Includes logs, storage info, and track player state.",
   "settings.autoReconnect": "Auto-reconnect Background Service",
   "settings.autoReconnectDescription":
     "Automatically reconnect the audio player background service when the app returns from background or after context recreation. Disable if experiencing issues with playback.",
@@ -245,6 +254,12 @@ export const en = {
   "advanced.sections.storage": "Storage",
   "advanced.sections.trackPlayer": "Track Player",
   "advanced.sections.actions": "Actions",
+
+  // Diagnostic Screen Titles
+  "libraryStats.title": "Library Stats",
+  "storage.title": "Storage",
+  "trackPlayer.title": "Track Player",
+  "actions.title": "Actions",
   "advanced.stats.librariesFound": "Libraries found: {count}",
   "advanced.stats.selectedLibrary": "Selected library: {name}",
   "advanced.stats.selectedLibraryNone": "None",

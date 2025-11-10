@@ -797,6 +797,7 @@ export function useSettings() {
   const jumpBackwardInterval = useAppStore((state) => state.settings.jumpBackwardInterval);
   const smartRewindEnabled = useAppStore((state) => state.settings.smartRewindEnabled);
   const homeLayout = useAppStore((state) => state.settings.homeLayout);
+  const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -806,6 +807,7 @@ export function useSettings() {
   const updateJumpBackwardInterval = useAppStore((state) => state.updateJumpBackwardInterval);
   const updateSmartRewindEnabled = useAppStore((state) => state.updateSmartRewindEnabled);
   const updateHomeLayout = useAppStore((state) => state.updateHomeLayout);
+  const updateDiagnosticsEnabled = useAppStore((state) => state.updateDiagnosticsEnabled);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -814,6 +816,7 @@ export function useSettings() {
       jumpBackwardInterval,
       smartRewindEnabled,
       homeLayout,
+      diagnosticsEnabled,
       initialized,
       isLoading,
       initializeSettings,
@@ -821,6 +824,7 @@ export function useSettings() {
       updateJumpBackwardInterval,
       updateSmartRewindEnabled,
       updateHomeLayout,
+      updateDiagnosticsEnabled,
       resetSettings,
     }),
     [
@@ -828,6 +832,7 @@ export function useSettings() {
       jumpBackwardInterval,
       smartRewindEnabled,
       homeLayout,
+      diagnosticsEnabled,
       initialized,
       isLoading,
       initializeSettings,
@@ -835,6 +840,7 @@ export function useSettings() {
       updateJumpBackwardInterval,
       updateSmartRewindEnabled,
       updateHomeLayout,
+      updateDiagnosticsEnabled,
       resetSettings,
     ]
   );

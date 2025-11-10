@@ -12,10 +12,12 @@ jest.mock("@/lib/appSettings", () => ({
   getJumpBackwardInterval: jest.fn(),
   getSmartRewindEnabled: jest.fn(),
   getHomeLayout: jest.fn(),
+  getDiagnosticsEnabled: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
   setHomeLayout: jest.fn(),
+  setDiagnosticsEnabled: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
 }));
@@ -34,10 +36,12 @@ describe("SettingsSlice", () => {
     getJumpBackwardInterval,
     getSmartRewindEnabled,
     getHomeLayout,
+    getDiagnosticsEnabled,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
     setHomeLayout,
+    setDiagnosticsEnabled,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
 
@@ -55,10 +59,12 @@ describe("SettingsSlice", () => {
     getJumpBackwardInterval.mockResolvedValue(15);
     getSmartRewindEnabled.mockResolvedValue(true);
     getHomeLayout.mockResolvedValue("list");
+    getDiagnosticsEnabled.mockResolvedValue(false);
     setJumpForwardInterval.mockResolvedValue();
     setJumpBackwardInterval.mockResolvedValue();
     setSmartRewindEnabled.mockResolvedValue();
     setHomeLayout.mockResolvedValue();
+    setDiagnosticsEnabled.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
 
@@ -75,6 +81,7 @@ describe("SettingsSlice", () => {
         jumpBackwardInterval: 15,
         smartRewindEnabled: true,
         homeLayout: "list",
+        diagnosticsEnabled: false,
         initialized: false,
         isLoading: false,
       });
@@ -87,6 +94,7 @@ describe("SettingsSlice", () => {
       getJumpBackwardInterval.mockResolvedValue(10);
       getSmartRewindEnabled.mockResolvedValue(false);
       getHomeLayout.mockResolvedValue("cover");
+      getDiagnosticsEnabled.mockResolvedValue(true);
 
       await store.getState().initializeSettings();
 
@@ -95,6 +103,7 @@ describe("SettingsSlice", () => {
       expect(state.settings.jumpBackwardInterval).toBe(10);
       expect(state.settings.smartRewindEnabled).toBe(false);
       expect(state.settings.homeLayout).toBe("cover");
+      expect(state.settings.diagnosticsEnabled).toBe(true);
       expect(state.settings.initialized).toBe(true);
       expect(state.settings.isLoading).toBe(false);
     });
@@ -125,6 +134,7 @@ describe("SettingsSlice", () => {
       expect(getJumpBackwardInterval).not.toHaveBeenCalled();
       expect(getSmartRewindEnabled).not.toHaveBeenCalled();
       expect(getHomeLayout).not.toHaveBeenCalled();
+      expect(getDiagnosticsEnabled).not.toHaveBeenCalled();
     });
 
     it("should use defaults on error and still mark as initialized", async () => {
@@ -137,6 +147,7 @@ describe("SettingsSlice", () => {
       expect(state.settings.jumpBackwardInterval).toBe(15);
       expect(state.settings.smartRewindEnabled).toBe(true);
       expect(state.settings.homeLayout).toBe("list");
+      expect(state.settings.diagnosticsEnabled).toBe(false);
       expect(state.settings.initialized).toBe(true);
       expect(state.settings.isLoading).toBe(false);
     });
@@ -153,11 +164,12 @@ describe("SettingsSlice", () => {
       getJumpBackwardInterval.mockImplementation(mockImplementation);
       getSmartRewindEnabled.mockImplementation(mockImplementation);
       getHomeLayout.mockImplementation(mockImplementation);
+      getDiagnosticsEnabled.mockImplementation(mockImplementation);
 
       await store.getState().initializeSettings();
 
       // All promises should have been created (parallel loading)
-      expect(loadPromises.length).toBe(4);
+      expect(loadPromises.length).toBe(5);
     });
   });
 
@@ -316,12 +328,61 @@ describe("SettingsSlice", () => {
     });
   });
 
+  describe("updateDiagnosticsEnabled", () => {
+    it("should enable diagnostics and persist to storage", async () => {
+      // First disable it properly
+      await store.getState().updateDiagnosticsEnabled(false);
+
+      await store.getState().updateDiagnosticsEnabled(true);
+
+      const state = store.getState();
+      expect(state.settings.diagnosticsEnabled).toBe(true);
+      expect(setDiagnosticsEnabled).toHaveBeenCalledWith(true);
+    });
+
+    it("should disable diagnostics and persist to storage", async () => {
+      await store.getState().updateDiagnosticsEnabled(false);
+
+      const state = store.getState();
+      expect(state.settings.diagnosticsEnabled).toBe(false);
+      expect(setDiagnosticsEnabled).toHaveBeenCalledWith(false);
+    });
+
+    it("should revert on storage error", async () => {
+      // Ensure we start with the default value
+      expect(store.getState().settings.diagnosticsEnabled).toBe(false);
+
+      setDiagnosticsEnabled.mockRejectedValue(new Error("Storage error"));
+
+      await expect(store.getState().updateDiagnosticsEnabled(true)).rejects.toThrow(
+        "Storage error"
+      );
+
+      const state = store.getState();
+      expect(state.settings.diagnosticsEnabled).toBe(false); // Reverted to previous value
+    });
+
+    it("should handle toggling multiple times", async () => {
+      await store.getState().updateDiagnosticsEnabled(true);
+      expect(store.getState().settings.diagnosticsEnabled).toBe(true);
+
+      await store.getState().updateDiagnosticsEnabled(false);
+      expect(store.getState().settings.diagnosticsEnabled).toBe(false);
+
+      await store.getState().updateDiagnosticsEnabled(true);
+      expect(store.getState().settings.diagnosticsEnabled).toBe(true);
+
+      expect(setDiagnosticsEnabled).toHaveBeenCalledTimes(3);
+    });
+  });
+
   describe("resetSettings", () => {
     it("should reset all settings to defaults", async () => {
       // First change some settings
       await store.getState().updateJumpForwardInterval(60);
       await store.getState().updateJumpBackwardInterval(5);
       await store.getState().updateSmartRewindEnabled(false);
+      await store.getState().updateDiagnosticsEnabled(true);
       await store.getState().initializeSettings();
 
       // Reset
@@ -332,6 +393,7 @@ describe("SettingsSlice", () => {
       expect(state.settings.jumpBackwardInterval).toBe(15);
       expect(state.settings.smartRewindEnabled).toBe(true);
       expect(state.settings.homeLayout).toBe("list");
+      expect(state.settings.diagnosticsEnabled).toBe(false);
       expect(state.settings.initialized).toBe(false);
       expect(state.settings.isLoading).toBe(false);
     });
