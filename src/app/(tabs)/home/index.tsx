@@ -47,15 +47,18 @@ export default function HomeScreen() {
 
   // Build sections array from home store data
   // For list layout: limit to 3 items per section
-  // For cover layout: show all items with horizontal scrolling
+  // For cover layout: show all items with horizontal scrolling (up to 20 items per section for performance)
   const sections = useMemo<HomeSection[]>(() => {
     const newSections: HomeSection[] = [];
     const isCoverLayout = homeLayout === "cover";
+    const MAX_COVER_ITEMS = 20; // Reasonable limit for performance
 
     if (continueListening.length > 0) {
       newSections.push({
         title: translate("home.sections.continueListening"),
-        data: isCoverLayout ? continueListening : continueListening.slice(0, 3),
+        data: isCoverLayout
+          ? continueListening.slice(0, MAX_COVER_ITEMS)
+          : continueListening.slice(0, 3),
         showProgress: true,
       });
     }
@@ -63,7 +66,7 @@ export default function HomeScreen() {
     if (downloaded.length > 0) {
       newSections.push({
         title: translate("home.sections.downloaded"),
-        data: isCoverLayout ? downloaded : downloaded.slice(0, 3),
+        data: isCoverLayout ? downloaded.slice(0, MAX_COVER_ITEMS) : downloaded.slice(0, 3),
         showProgress: false,
       });
     }
@@ -71,7 +74,7 @@ export default function HomeScreen() {
     if (listenAgain.length > 0) {
       newSections.push({
         title: translate("home.sections.listenAgain"),
-        data: isCoverLayout ? listenAgain : listenAgain.slice(0, 3),
+        data: isCoverLayout ? listenAgain.slice(0, MAX_COVER_ITEMS) : listenAgain.slice(0, 3),
         showProgress: false,
       });
     }
@@ -150,21 +153,34 @@ export default function HomeScreen() {
     </View>
   );
 
+  // Memoize horizontal section container style
+  const horizontalContentContainerStyle = useMemo(
+    () => ({
+      paddingHorizontal: 16,
+    }),
+    []
+  );
+
   // Render horizontal scrolling section for cover layout
   const renderCoverSection = useCallback(
-    ({ section }: { section: HomeSection }) => (
-      <FlatList
-        data={section.data}
-        renderItem={({ item }) => <CoverItem item={item} showProgress={section.showProgress} />}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-        }}
-      />
-    ),
-    []
+    ({ section }: { section: HomeSection }) => {
+      try {
+        return (
+          <FlatList
+            data={section.data}
+            renderItem={({ item }) => <CoverItem item={item} showProgress={section.showProgress} />}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={horizontalContentContainerStyle}
+          />
+        );
+      } catch (error) {
+        console.error("[HomeScreen] Error rendering cover section:", error);
+        return null;
+      }
+    },
+    [horizontalContentContainerStyle]
   );
 
   // Header right control for layout toggle
@@ -235,7 +251,7 @@ export default function HomeScreen() {
           sections={sections}
           renderItem={renderCoverSection}
           renderSectionHeader={renderSectionHeader}
-          keyExtractor={(section) => section.title}
+          keyExtractor={(item: HomeScreenItem) => item.id}
           contentContainerStyle={[
             { paddingTop: 16, paddingBottom: 16 },
             floatingPlayerPadding,
