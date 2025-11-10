@@ -1,5 +1,6 @@
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { getPlayedChapters, getUpcomingChapters } from "@/db/helpers/chapters";
+import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
@@ -68,7 +69,7 @@ export default function ChapterList({
     return (
       <View>
         <Text style={[styles.text, { fontStyle: "italic", opacity: 0.7 }]}>
-          No chapters available.
+          {translate("chapters.empty")}
         </Text>
       </View>
     );
@@ -91,7 +92,7 @@ export default function ChapterList({
   };
 
   return (
-    <CollapsibleSection title={`Chapters (${chapters.length})`}>
+    <CollapsibleSection title={translate("libraryItem.chapters", { count: chapters.length })}>
       {/* Show expand button if there are played chapters hidden */}
       {playedChapters.length > 0 && !showPlayedChapters && (
         <TouchableOpacity
@@ -105,7 +106,9 @@ export default function ChapterList({
           }}
         >
           <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
-            Show {playedChapters.length} Played Chapter{playedChapters.length !== 1 ? 's' : ''}
+            {playedChapters.length === 1
+              ? translate("chapters.showPlayed", { count: playedChapters.length })
+              : translate("chapters.showPlayedPlural", { count: playedChapters.length })}
           </Text>
         </TouchableOpacity>
       )}
@@ -123,7 +126,7 @@ export default function ChapterList({
           }}
         >
           <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
-            Hide Played Chapters
+            {translate("chapters.hidePlayed")}
           </Text>
         </TouchableOpacity>
       )}

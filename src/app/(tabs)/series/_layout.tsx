@@ -1,3 +1,4 @@
+import { translate } from '@/i18n';
 import { useThemedStyles } from '@/lib/theme';
 import { Stack } from 'expo-router';
 
@@ -12,8 +13,8 @@ export default function SeriesLayout() {
       headerTitleStyle: { color: header.titleColor },
       headerShadowVisible: false,
     }}>
-      <Stack.Screen name="index" options={{ title: 'Series' }} />
-      <Stack.Screen name="[seriesId]/index" options={{ title: 'Series' }} />
+      <Stack.Screen name="index" options={{ title: translate('tabs.series') }} />
+      <Stack.Screen name="[seriesId]/index" options={{ title: translate('tabs.series') }} />
       <Stack.Screen name="[seriesId]/item/[itemId]" options={{ headerTitle: '', headerBackButtonDisplayMode: 'minimal' }} />
     </Stack>
   );

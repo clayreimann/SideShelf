@@ -1,3 +1,4 @@
+import { translate } from '@/i18n';
 import { useThemedStyles } from '@/lib/theme';
 import { Stack } from 'expo-router';
 
@@ -12,7 +13,7 @@ export default function AuthorsLayout() {
       headerTitleStyle: { color: header.titleColor },
       headerShadowVisible: false,
     }}>
-      <Stack.Screen name="index" options={{ title: 'Authors' }} />
+      <Stack.Screen name="index" options={{ title: translate('tabs.authors') }} />
     </Stack>
   );
 }
