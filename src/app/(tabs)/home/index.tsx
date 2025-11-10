@@ -151,17 +151,20 @@ export default function HomeScreen() {
   );
 
   // Render horizontal scrolling section for cover layout
-  const renderCoverSection = ({ section }: { section: HomeSection }) => (
-    <FlatList
-      data={section.data}
-      renderItem={({ item }) => <CoverItem item={item} showProgress={section.showProgress} />}
-      keyExtractor={(item) => item.id}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{
-        paddingHorizontal: 16,
-      }}
-    />
+  const renderCoverSection = useCallback(
+    ({ section }: { section: HomeSection }) => (
+      <FlatList
+        data={section.data}
+        renderItem={({ item }) => <CoverItem item={item} showProgress={section.showProgress} />}
+        keyExtractor={(item) => item.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+        }}
+      />
+    ),
+    []
   );
 
   // Header right control for layout toggle
@@ -232,7 +235,7 @@ export default function HomeScreen() {
           sections={sections}
           renderItem={renderCoverSection}
           renderSectionHeader={renderSectionHeader}
-          keyExtractor={(item, index) => `section-${index}`}
+          keyExtractor={(section) => section.title}
           contentContainerStyle={[
             { paddingTop: 16, paddingBottom: 16 },
             floatingPlayerPadding,
