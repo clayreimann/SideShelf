@@ -3,8 +3,6 @@
  *
  * This test simulates the full flow of background playback and state restoration
  * when the app returns to the foreground after the JS context is recreated.
- *
- * Related bug: docs/investigation/background-state-restoration-bug-analysis.md
  */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
@@ -14,8 +12,8 @@ import { create } from "zustand";
 import { ASYNC_KEYS } from "../lib/asyncStore";
 import { PlayerService } from "../services/PlayerService";
 import { progressService } from "../services/ProgressService";
-import type { PlayerTrack } from "../types/player";
 import { createPlayerSlice, PlayerSlice } from "../stores/slices/playerSlice";
+import type { PlayerTrack } from "../types/player";
 
 // Note: While setup.ts provides global mocks, we override them here for test-specific control
 // This pattern matches other test files in the codebase (e.g., playerSlice.test.ts)

@@ -720,7 +720,6 @@ describe("PlayerSlice", () => {
     it("should not update chapter during state restoration when TrackPlayer queue is empty", async () => {
       // This test prevents a regression where the UI would show a stale chapter during restoration
       // because the chapter was calculated before the TrackPlayer queue was rebuilt.
-      // See: docs/investigation/background-state-restoration-bug-analysis.md
 
       // Mock empty TrackPlayer queue (simulates JS context recreation)
       mockedTrackPlayer.getQueue.mockResolvedValue([]);

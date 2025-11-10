@@ -634,7 +634,6 @@ describe("PlayerService", () => {
     it("should detect position mismatch when queue is empty and report it", async () => {
       // This test prevents a regression where UI shows stale chapter during foreground restoration
       // because reconciliation couldn't fix the position when TrackPlayer queue was empty.
-      // See: docs/investigation/background-state-restoration-bug-analysis.md
 
       // Setup: currentTrack exists with position 2000, but TrackPlayer queue is empty
       const mockPlayerTrack = {
