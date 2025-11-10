@@ -629,4 +629,67 @@ describe("PlayerService", () => {
       expect(connected).toBe(false);
     });
   });
+
+  describe("reconcileTrackPlayerState", () => {
+    it("should detect position mismatch when queue is empty and report it", async () => {
+      // This test prevents a regression where UI shows stale chapter during foreground restoration
+      // because reconciliation couldn't fix the position when TrackPlayer queue was empty.
+
+      // Setup: currentTrack exists with position 2000, but TrackPlayer queue is empty
+      const mockPlayerTrack = {
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        title: "Test Book",
+        author: "Test Author",
+        coverUri: "file:///test-cover.jpg",
+        audioFiles: mockAudioFiles,
+        chapters: mockChapters,
+        duration: 3600,
+        isDownloaded: true,
+      };
+
+      mockStore.player.currentTrack = mockPlayerTrack;
+      mockStore.player.position = 2000; // Position in Chapter 2
+      mockStore.player.currentPlaySessionId = "session-1";
+      mockStore.player.isPlaying = false;
+
+      // Empty TrackPlayer queue (simulates JS context recreation)
+      mockedTrackPlayer.getQueue.mockResolvedValue([]);
+      mockedTrackPlayer.getProgress.mockResolvedValue({
+        position: 0,
+        duration: 0,
+        buffered: 0,
+      });
+      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.None });
+
+      // Mock database session with correct position
+      progressService.getCurrentSession.mockResolvedValue({
+        sessionId: "session-1",
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        currentTime: 2000,
+        duration: 3600,
+        startTime: 0,
+        isDownloaded: true,
+      });
+
+      const report = await playerService.reconcileTrackPlayerState();
+
+      // Should detect discrepancies but cannot fix because queue is empty
+      expect(report.discrepanciesFound).toBe(true);
+      expect(report.positionMismatch).toBe(true);
+
+      // Should report that queue needs rebuilding
+      expect(
+        report.actionsTaken.some(
+          (action: string) =>
+            action.includes("queue") &&
+            (action.includes("rebuild") || action.includes("be rebuilt"))
+        )
+      ).toBe(true);
+
+      // Position should NOT be changed (can't seek with empty queue)
+      expect(mockedTrackPlayer.seekTo).not.toHaveBeenCalled();
+    });
+  });
 });

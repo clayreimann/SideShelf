@@ -716,5 +716,34 @@ describe("PlayerSlice", () => {
 
       await expect(store.getState().restorePersistedState()).resolves.not.toThrow();
     });
+
+    it("should not update chapter during state restoration when TrackPlayer queue is empty", async () => {
+      // This test prevents a regression where the UI would show a stale chapter during restoration
+      // because the chapter was calculated before the TrackPlayer queue was rebuilt.
+
+      // Mock empty TrackPlayer queue (simulates JS context recreation)
+      mockedTrackPlayer.getQueue.mockResolvedValue([]);
+
+      // Mock AsyncStorage with track and position that should be in Chapter 2 (1800-3600s)
+      mockedAsyncStorage.getItem.mockImplementation((key: string) => {
+        switch (key) {
+          case ASYNC_KEYS.currentTrack:
+            return Promise.resolve(JSON.stringify(mockPlayerTrack));
+          case ASYNC_KEYS.position:
+            return Promise.resolve(JSON.stringify(2000)); // Position in Chapter 2
+          default:
+            return Promise.resolve(null);
+        }
+      });
+
+      await store.getState().restorePersistedState();
+
+      const state = store.getState();
+      // Chapter should NOT be updated during restoration when TrackPlayer queue is empty
+      // It will be correctly updated when the queue is rebuilt (e.g., when user presses play)
+      expect(state.player.currentChapter).toBeNull();
+      expect(state.player.currentTrack).toEqual(mockPlayerTrack);
+      expect(state.player.position).toBe(2000);
+    });
   });
 });
