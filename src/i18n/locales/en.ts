@@ -38,6 +38,10 @@ export const en = {
   "common.play": "Play",
   "common.pause": "Pause",
   "common.resume": "Resume",
+  "common.sort": "Sort",
+  "common.list": "List",
+  "common.grid": "Grid",
+  "common.cover": "Cover",
 
   // Library Screen
   "library.title": "Library",

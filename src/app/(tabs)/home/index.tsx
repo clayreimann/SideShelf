@@ -159,7 +159,7 @@ export default function HomeScreen() {
 
     return (
       <Pressable onPress={toggleLayout} style={buttonStyle}>
-        <Text style={textStyle}>{homeLayout === "list" ? "Cover" : "List"}</Text>
+        <Text style={textStyle}>{homeLayout === "list" ? translate("common.cover") : translate("common.list")}</Text>
       </Pressable>
     );
   }, [homeLayout, toggleLayout, isDark]);

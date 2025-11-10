@@ -1,3 +1,4 @@
+import { translate } from '@/i18n';
 import type { SortConfig, SortField } from '@/types/store';
 import { MenuAction, MenuView } from '@react-native-menu/menu';
 import React from 'react';
@@ -22,7 +23,7 @@ export default function HeaderControls({
   onToggleViewMode,
   onSort,
   showViewToggle = true,
-  sortLabel = 'Sort',
+  sortLabel,
   viewToggleLabel,
   sortConfig,
   sortMenuActions,
@@ -42,11 +43,12 @@ export default function HeaderControls({
   };
 
   const iconColor = isDark ? '#fff' : '#000';
-  const computedViewToggleLabel = viewToggleLabel || (viewMode === 'grid' ? 'List' : 'Grid');
+  const computedSortLabel = sortLabel || translate("common.sort");
+  const computedViewToggleLabel = viewToggleLabel || (viewMode === 'grid' ? translate("common.list") : translate("common.grid"));
 
   const sortButton = (
     <Pressable onPress={onSort} style={[buttonStyle, { marginRight: 0 }]}>
-      <Text style={textStyle}>{sortLabel}</Text>
+      <Text style={textStyle}>{computedSortLabel}</Text>
     </Pressable>
   );
 

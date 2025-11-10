@@ -804,7 +804,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
         {/* Collapsible Audio Files */}
         {audioFiles.length > 0 && (
-          <CollapsibleSection title={`Audio Files (${audioFiles.length})`}>
+          <CollapsibleSection title={translate("libraryItem.audioFiles", { count: audioFiles.length })}>
             {audioFiles.map((file, index) => (
               <View
                 key={file.id}
