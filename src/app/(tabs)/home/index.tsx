@@ -159,7 +159,9 @@ export default function HomeScreen() {
 
     return (
       <Pressable onPress={toggleLayout} style={buttonStyle}>
-        <Text style={textStyle}>{homeLayout === "list" ? translate("common.cover") : translate("common.list")}</Text>
+        <Text style={textStyle}>
+          {homeLayout === "list" ? translate("common.cover") : translate("common.list")}
+        </Text>
       </Pressable>
     );
   }, [homeLayout, toggleLayout, isDark]);
@@ -208,7 +210,7 @@ export default function HomeScreen() {
         <ScrollView
           style={{ width: "100%" }}
           contentContainerStyle={[
-            styles.container,
+            styles.flatListContainer,
             { paddingTop: 16, paddingBottom: 16 },
             floatingPlayerPadding,
           ]}
