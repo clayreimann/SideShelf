@@ -21,10 +21,12 @@ export default function SettingsScreen() {
     jumpForwardInterval,
     jumpBackwardInterval,
     smartRewindEnabled,
+    diagnosticsEnabled,
     isLoading,
     updateJumpForwardInterval,
     updateJumpBackwardInterval,
     updateSmartRewindEnabled,
+    updateDiagnosticsEnabled,
   } = useSettings();
   const { libraries, selectedLibrary, selectLibrary } = useLibrary();
 
@@ -69,6 +71,19 @@ export default function SettingsScreen() {
       }
     },
     [updateSmartRewindEnabled]
+  );
+
+  // Toggle diagnostics
+  const toggleDiagnostics = useCallback(
+    async (value: boolean) => {
+      try {
+        await updateDiagnosticsEnabled(value);
+      } catch (error) {
+        console.error("Failed to update diagnostics setting", error);
+        Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
+      }
+    },
+    [updateDiagnosticsEnabled]
   );
 
   if (isLoading) {
@@ -273,6 +288,50 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Toggle value={smartRewindEnabled} onValueChange={toggleSmartRewind} />
+          </View>
+        </View>
+
+        {/* Developer Section */}
+        <View style={{ padding: 16 }}>
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "600",
+              color: textSecondary,
+              marginBottom: 12,
+              textTransform: "uppercase",
+            }}
+          >
+            {translate("settings.sections.developer")}
+          </Text>
+
+          {/* Diagnostics Toggle */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingVertical: 14,
+              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+              borderRadius: 10,
+            }}
+          >
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  color: colors.textPrimary,
+                  fontWeight: "500",
+                  marginBottom: 4,
+                }}
+              >
+                {translate("settings.diagnostics")}
+              </Text>
+              <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
+                {translate("settings.diagnosticsDescription")}
+              </Text>
+            </View>
+            <Toggle value={diagnosticsEnabled} onValueChange={toggleDiagnostics} />
           </View>
         </View>
       </ScrollView>

@@ -144,7 +144,12 @@ export const es = {
   "more.aboutMe": "Acerca de mí",
   "more.settings": "Configuración",
   "more.advanced": "Avanzado",
+  "more.libraryStats": "Estadísticas de biblioteca",
+  "more.storage": "Almacenamiento",
+  "more.trackPlayer": "Reproductor de pistas",
   "more.logs": "Registros",
+  "more.loggerSettings": "Configuración de registros",
+  "more.actions": "Acciones",
   "more.logOut": "Cerrar sesión",
   "more.version": "Versión {version}",
   "more.logoutConfirm.title": "Cerrar sesión",
@@ -157,12 +162,16 @@ export const es = {
   "settings.sections.librarySelection": "Selección de biblioteca",
   "settings.sections.playbackControls": "Controles de reproducción",
   "settings.sections.advanced": "Avanzado",
+  "settings.sections.developer": "Desarrollador",
   "settings.currentLibrary": "Biblioteca actual",
   "settings.jumpForwardInterval": "Intervalo de avance rápido",
   "settings.jumpBackwardInterval": "Intervalo de retroceso",
   "settings.smartRewind": "Rebobinado inteligente al reanudar",
   "settings.smartRewindDescription":
     "Retrocede automáticamente unos segundos al reanudar la reproducción después de una pausa. El tiempo de retroceso aumenta según el tiempo que estuvo pausada la reproducción (3s a 30s).",
+  "settings.diagnostics": "Habilitar diagnósticos",
+  "settings.diagnosticsDescription":
+    "Mostrar pantallas de diagnóstico y depuración en la pestaña Más. Incluye registros, información de almacenamiento y estado del reproductor de pistas.",
   "settings.autoReconnect": "Reconexión automática del servicio en segundo plano",
   "settings.autoReconnectDescription":
     "Reconectar automáticamente el servicio del reproductor de audio en segundo plano cuando la aplicación vuelve del fondo o después de la recreación del contexto. Desactiva si experimentas problemas con la reproducción.",
@@ -250,6 +259,12 @@ export const es = {
   "advanced.sections.storage": "Almacenamiento",
   "advanced.sections.trackPlayer": "Reproductor de pistas",
   "advanced.sections.actions": "Acciones",
+
+  // Diagnostic Screen Titles
+  "libraryStats.title": "Estadísticas de biblioteca",
+  "storage.title": "Almacenamiento",
+  "trackPlayer.title": "Reproductor de pistas",
+  "actions.title": "Acciones",
   "advanced.stats.librariesFound": "Bibliotecas encontradas: {count}",
   "advanced.stats.selectedLibrary": "Biblioteca seleccionada: {name}",
   "advanced.stats.selectedLibraryNone": "Ninguna",

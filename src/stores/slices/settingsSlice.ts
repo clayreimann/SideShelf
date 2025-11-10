@@ -8,10 +8,12 @@
  */
 
 import {
+  getDiagnosticsEnabled,
   getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
   getSmartRewindEnabled,
+  setDiagnosticsEnabled,
   setHomeLayout,
   setJumpBackwardInterval,
   setJumpForwardInterval,
@@ -37,6 +39,8 @@ export interface SettingsSliceState {
     smartRewindEnabled: boolean;
     /** Home screen layout preference */
     homeLayout: "list" | "cover";
+    /** Whether diagnostics/developer mode is enabled */
+    diagnosticsEnabled: boolean;
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -59,6 +63,8 @@ export interface SettingsSliceActions {
   updateSmartRewindEnabled: (enabled: boolean) => Promise<void>;
   /** Update home screen layout preference */
   updateHomeLayout: (layout: "list" | "cover") => Promise<void>;
+  /** Toggle diagnostics/developer mode */
+  updateDiagnosticsEnabled: (enabled: boolean) => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -76,6 +82,7 @@ const DEFAULT_SETTINGS = {
   jumpBackwardInterval: 15,
   smartRewindEnabled: true,
   homeLayout: "list" as const,
+  diagnosticsEnabled: false,
 };
 
 /**
@@ -119,12 +126,14 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
 
     try {
       // Load all settings from storage in parallel
-      const [jumpForward, jumpBackward, smartRewind, homeLayout] = await Promise.all([
-        getJumpForwardInterval(),
-        getJumpBackwardInterval(),
-        getSmartRewindEnabled(),
-        getHomeLayout(),
-      ]);
+      const [jumpForward, jumpBackward, smartRewind, homeLayout, diagnosticsEnabled] =
+        await Promise.all([
+          getJumpForwardInterval(),
+          getJumpBackwardInterval(),
+          getSmartRewindEnabled(),
+          getHomeLayout(),
+          getDiagnosticsEnabled(),
+        ]);
 
       set((state: SettingsSlice) => ({
         ...state,
@@ -133,13 +142,14 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           jumpBackwardInterval: jumpBackward,
           smartRewindEnabled: smartRewind,
           homeLayout: homeLayout,
+          diagnosticsEnabled: diagnosticsEnabled,
           initialized: true,
           isLoading: false,
         },
       }));
 
       log.info(
-        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, homeLayout=${homeLayout}`
+        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, homeLayout=${homeLayout}, diagnostics=${diagnosticsEnabled}`
       );
     } catch (error) {
       log.error("Failed to load settings", error as Error);
@@ -311,6 +321,45 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           homeLayout: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Toggle diagnostics/developer mode
+   */
+  updateDiagnosticsEnabled: async (enabled: boolean) => {
+    log.info(`${enabled ? "Enabling" : "Disabling"} diagnostics mode`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.diagnosticsEnabled;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        diagnosticsEnabled: enabled,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setDiagnosticsEnabled(enabled);
+
+      log.info(`Diagnostics mode ${enabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update diagnostics setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          diagnosticsEnabled: previousValue,
         },
       }));
 
