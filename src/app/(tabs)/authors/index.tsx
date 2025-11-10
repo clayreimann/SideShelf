@@ -1,4 +1,5 @@
 import { HeaderControls, SortMenu } from "@/components/ui";
+import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { getAuthorInitials } from "@/lib/authorImages";
 import { useThemedStyles } from "@/lib/theme";
@@ -13,6 +14,7 @@ export default function AuthorsScreen() {
   const { items, isInitializing, ready, refetchAuthors, sortConfig, setSortConfig } = useAuthors();
   const [showSortMenu, setShowSortMenu] = useState(false);
   const router = useRouter();
+  const floatingPlayerPadding = useFloatingPlayerPadding();
 
   // Load authors when screen comes into focus
   useFocusEffect(
@@ -123,7 +125,8 @@ export default function AuthorsScreen() {
         data={items}
         renderItem={renderAuthor}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.flatListContainer}
+        style={styles.flatListContainer}
+        contentContainerStyle={floatingPlayerPadding}
       />
       <SortMenu
         visible={showSortMenu}

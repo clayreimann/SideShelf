@@ -17,6 +17,7 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   SectionList,
   Text,
   View,
@@ -49,13 +50,14 @@ export default function HomeScreen() {
     const newSections: HomeSection[] = [];
     const isCoverLayout = homeLayout === "cover";
     const MAX_COVER_ITEMS = 20; // Reasonable limit for performance
+    const MAX_LIST_ITEMS = 3;
 
     if (continueListening.length > 0) {
       newSections.push({
         title: translate("home.sections.continueListening"),
         data: isCoverLayout
           ? continueListening.slice(0, MAX_COVER_ITEMS)
-          : continueListening.slice(0, 3),
+          : continueListening.slice(0, MAX_LIST_ITEMS),
         showProgress: true,
       });
     }
@@ -63,7 +65,9 @@ export default function HomeScreen() {
     if (downloaded.length > 0) {
       newSections.push({
         title: translate("home.sections.downloaded"),
-        data: isCoverLayout ? downloaded.slice(0, MAX_COVER_ITEMS) : downloaded.slice(0, 3),
+        data: isCoverLayout
+          ? downloaded.slice(0, MAX_COVER_ITEMS)
+          : downloaded.slice(0, MAX_LIST_ITEMS),
         showProgress: false,
       });
     }
@@ -71,7 +75,9 @@ export default function HomeScreen() {
     if (listenAgain.length > 0) {
       newSections.push({
         title: translate("home.sections.listenAgain"),
-        data: isCoverLayout ? listenAgain.slice(0, MAX_COVER_ITEMS) : listenAgain.slice(0, 3),
+        data: isCoverLayout
+          ? listenAgain.slice(0, MAX_COVER_ITEMS)
+          : listenAgain.slice(0, MAX_LIST_ITEMS),
         showProgress: false,
       });
     }
@@ -244,16 +250,8 @@ export default function HomeScreen() {
   if (homeLayout === "cover") {
     return (
       <>
-        <SectionList
-          sections={sections}
-          renderItem={renderCoverSection}
-          renderSectionHeader={renderSectionHeader}
-          keyExtractor={(item: HomeScreenItem) => item.id}
-          contentContainerStyle={[
-            { paddingTop: 16, paddingBottom: 16 },
-            floatingPlayerPadding,
-          ]}
-          showsVerticalScrollIndicator={false}
+        <ScrollView
+          contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -261,8 +259,14 @@ export default function HomeScreen() {
               tintColor={colors.link}
             />
           }
-          stickySectionHeadersEnabled={false}
-        />
+        >
+          {sections.map((section) => (
+            <View key={section.title}>
+              {renderSectionHeader({ section })}
+              {renderCoverSection({ section })}
+            </View>
+          ))}
+        </ScrollView>
         <Stack.Screen options={{ headerRight }} />
       </>
     );

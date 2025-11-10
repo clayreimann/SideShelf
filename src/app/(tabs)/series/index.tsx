@@ -1,5 +1,7 @@
 import { HeaderControls, SortMenu } from "@/components/ui";
+import CoverImage from "@/components/ui/CoverImange";
 import { SeriesListRow } from "@/db/helpers/series";
+import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { SeriesSortField, useSeries } from "@/stores";
@@ -7,12 +9,12 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Stack, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native";
-import CoverImage from "@/components/ui/CoverImange";
 
 export default function SeriesScreen() {
   const { styles, isDark, colors } = useThemedStyles();
   const { items, isInitializing, ready, refetchSeries, sortConfig, setSortConfig } = useSeries();
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const floatingPlayerPadding = useFloatingPlayerPadding();
   const router = useRouter();
 
   // Load series when screen comes into focus
@@ -145,6 +147,7 @@ export default function SeriesScreen() {
           renderItem={renderSeries}
           keyExtractor={(item) => item.id}
           style={styles.flatListContainer}
+          contentContainerStyle={[floatingPlayerPadding]}
         />
         <SortMenu
           visible={showSortMenu}
