@@ -141,18 +141,16 @@ export default function RootLayout() {
           // Verify connection between TrackPlayer and store
           // Restore current track from AsyncStore if missing
           await useAppStore.getState().restorePersistedState();
-          const isConnected = await playerService.verifyConnection();
-          log.info(
-            `Player service connection status: ${isConnected ? "connected" : "disconnected"}`
-          );
+          const isConsistent = await playerService.verifyTrackPlayerConsistency();
+          log.info(`Player service isConsistent=${isConsistent}`);
 
           // Reconcile TrackPlayer state to ensure sync
           await playerService.reconcileTrackPlayerState();
 
-          if (!isConnected || contextRecreated) {
-            log.warn("Connection mismatch or context recreated, reconnecting background service");
-            await playerService.reconnectBackgroundService();
-          }
+          // if (!isConnected || contextRecreated) {
+          //   log.warn("Connection mismatch or context recreated, reconnecting background service");
+          //   await playerService.reconnectBackgroundService();
+          // }
         }
 
         log.info("Triggering progress refetch on app foreground");
