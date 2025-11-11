@@ -336,6 +336,7 @@ export class PlayerService {
         );
       }
 
+      // Seek to resume position first (if applicable)
       if (resumeInfo.position > 0) {
         store.updatePosition(resumeInfo.position);
         await TrackPlayer.seekTo(resumeInfo.position);
@@ -358,7 +359,8 @@ export class PlayerService {
         log.info(`Applied volume from store: ${currentVolume}`);
       }
 
-      await applySmartRewind();
+      // Apply smart rewind, passing the resume position to avoid race condition
+      await applySmartRewind(resumeInfo.position);
 
       // Start playback - background service will handle session tracking
       await TrackPlayer.play();
@@ -1256,13 +1258,64 @@ export class PlayerService {
   /**
    * Sync store state with TrackPlayer state
    */
+  /**
+   * Sync current position from database
+   * Useful when database position has been updated (e.g., from server sync)
+   */
+  async syncPositionFromDatabase(): Promise<void> {
+    try {
+      log.info("Syncing position from database");
+
+      const store = useAppStore.getState();
+      const currentTrack = store.player.currentTrack;
+
+      if (!currentTrack?.libraryItemId) {
+        log.warn("No current track, skipping position sync");
+        return;
+      }
+
+      // Get username to fetch user
+      const username = await getStoredUsername();
+      if (!username) {
+        log.warn("No username found, cannot sync position");
+        return;
+      }
+
+      // Get user from database
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        log.warn("User not found in database, cannot sync position");
+        return;
+      }
+
+      // Get the current session from database
+      const session = await progressService.getCurrentSession(user.id, currentTrack.libraryItemId);
+      if (!session) {
+        log.warn(`No active session found for ${currentTrack.libraryItemId}`);
+        return;
+      }
+
+      // Update store position
+      store.updatePosition(session.currentTime);
+
+      // Seek TrackPlayer to the new position
+      await TrackPlayer.seekTo(session.currentTime);
+
+      log.info(
+        `Position synced from database: ${formatTime(session.currentTime)}s for ${currentTrack.libraryItemId}`
+      );
+    } catch (error) {
+      log.error("Error syncing position from database", error as Error);
+      throw error;
+    }
+  }
+
   async syncStoreWithTrackPlayer(): Promise<void> {
     try {
       log.info("Syncing store with TrackPlayer");
 
       const store = useAppStore.getState();
-      const [state, currentTrack, progress] = await Promise.all([
-        TrackPlayer.getPlaybackState(),
+      const [currentTrack, progress] = await Promise.all([
         TrackPlayer.getActiveTrack(),
         TrackPlayer.getProgress(),
       ]);

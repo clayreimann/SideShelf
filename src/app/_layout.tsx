@@ -115,11 +115,19 @@ export default function RootLayout() {
             playerInitTimestamp.current = currentPlayerInitTimestamp;
           }
 
-          // Still fetch progress from server
+          // Still fetch progress from server and sync position
           log.info("Triggering progress refetch on app foreground");
-          progressService.fetchServerProgress().catch((error) => {
-            log.error("Failed to fetch server progress on app foreground", error as Error);
-          });
+          progressService
+            .fetchServerProgress()
+            .then(async () => {
+              // Sync position from database after fetching server progress
+              await playerService.syncPositionFromDatabase().catch((error) => {
+                log.error("Failed to sync position from database", error as Error);
+              });
+            })
+            .catch((error) => {
+              log.error("Failed to fetch server progress on app foreground", error as Error);
+            });
 
           return; // Skip all restoration operations that would update TrackPlayer
         }
@@ -155,9 +163,17 @@ export default function RootLayout() {
 
         log.info("Triggering progress refetch on app foreground");
         // Fetch latest progress from server when app becomes active
-        progressService.fetchServerProgress().catch((error) => {
-          log.error("Failed to fetch server progress on app foreground", error as Error);
-        });
+        progressService
+          .fetchServerProgress()
+          .then(async () => {
+            // Sync position from database after fetching server progress
+            await playerService.syncPositionFromDatabase().catch((error) => {
+              log.error("Failed to sync position from database", error as Error);
+            });
+          })
+          .catch((error) => {
+            log.error("Failed to fetch server progress on app foreground", error as Error);
+          });
       }
     };
 

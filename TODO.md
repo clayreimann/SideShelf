@@ -20,17 +20,17 @@
 
 ### Internationalization (i18n)
 
-- [ ] **Implement i18n system** (like the existing audiobookshelf-app)
-  - [ ] Add i18n library (e.g., react-i18next or similar)
-  - [ ] Create string resource files structure
-  - [ ] Extract ALL hardcoded strings from UI components
-  - [ ] Create en-us.json as base language
-  - [ ] Update login screen strings
-  - [ ] Update library detail screen strings
-  - [ ] Update player UI strings
-  - [ ] Update settings strings
-  - [ ] Update error messages
-  - [ ] Update all button labels, placeholders, and messages
+- [x] **Implement i18n system** (like the existing audiobookshelf-app)
+  - [x] Add i18n library (e.g., react-i18next or similar)
+  - [x] Create string resource files structure
+  - [x] Extract ALL hardcoded strings from UI components
+  - [x] Create en-us.json as base language
+  - [x] Update login screen strings
+  - [x] Update library detail screen strings
+  - [x] Update player UI strings
+  - [x] Update settings strings
+  - [x] Update error messages
+  - [x] Update all button labels, placeholders, and messages
 
 ### App Store Requirements
 
@@ -65,7 +65,7 @@
   - [ ] Or: Use babel-plugin-transform-remove-console for production builds
 - [ ] **Add Error Tracking/Crash Reporting**
   - [ ] Integrate Sentry or similar crash reporting
-  - [ ] Add error boundaries to catch React errors
+  - [ ] Add error boundaries to catch React errors → [#30](https://github.com/clayreimann/SideShelf/issues/30)
   - [ ] Configure proper source maps for stack traces
   - [ ] Test crash reporting in production mode
 - [ ] **Add Analytics (Optional but Recommended)**
@@ -196,30 +196,30 @@
   - [x] ProgressService should check on startup for dangling sessions (crash or memory pressure quit) and close them
 - [x] PlayerService.PlayerTrack should take the resume position
 - [x] PlayerService should update the track metadata with new chapter information
-- [ ] Add background task service library to end sessions after 10 minutes of inactivity
+- [ ] Add background task service library to end sessions after 10 minutes of inactivity → [#8](https://github.com/clayreimann/SideShelf/issues/8)
 
 ### Misc/Bugs
 
-- [ ] Refactor the new cover home screen to use a section list
-- [ ] Download All button in series
-- [ ] Download next item in series when X time left
+- [x] Refactor the new cover home screen to use a section list
+- [ ] Download All button in series → [#9](https://github.com/clayreimann/SideShelf/issues/9)
+- [ ] Download next item in series when X time left → [#10](https://github.com/clayreimann/SideShelf/issues/10)
 - [x] When the mini-player is shown add padding to the bottom of views so that you can scroll all the way to the bottom
-- [ ] New login initialization still doesn't work well,
+- [ ] New login initialization still doesn't work well → [#11](https://github.com/clayreimann/SideShelf/issues/11)
   - [ ] home screen isn't refreshed after log in
   - [ ] no library is selected by default
   - [ ] authors don't populate
   - [ ] series don't populate
-- [ ] Authors refresh UX is broken
-- [ ] Series refresh UX is broken
-- [ ] Long author/narrator strings just go off screen
-- [ ] Animate the description expand/collapse
+- [ ] Authors refresh UX is broken → [#12](https://github.com/clayreimann/SideShelf/issues/12)
+- [ ] Series refresh UX is broken → [#12](https://github.com/clayreimann/SideShelf/issues/12)
+- [ ] Long author/narrator strings just go off screen → [#13](https://github.com/clayreimann/SideShelf/issues/13)
+- [ ] Animate the description expand/collapse → [#14](https://github.com/clayreimann/SideShelf/issues/14)
   - [ ] Remove section header and just expand/collapse when tapping on text, show a snippet and fade the bottom out
-- [ ] In extracted buttons, use SFSymbols on ios and fallback to icons on android
+- [ ] In extracted buttons, use SFSymbols on ios and fallback to icons on android → [#15](https://github.com/clayreimann/SideShelf/issues/15)
   - [ ] Only wait for icon fonts loading on android
-- [ ] Mark cover as not available if file is missing
-- [ ] Add chapter jump feature
+- [ ] Mark cover as not available if file is missing → [#16](https://github.com/clayreimann/SideShelf/issues/16)
+- [x] Add chapter jump feature
 - [ ] Add listening stats page
-- [ ] Add library search
+- [ ] Add library search → [#17](https://github.com/clayreimann/SideShelf/issues/17)
 
 ### Playback Tracking & Sync
 
@@ -227,8 +227,8 @@
   - [x] Create centralized progress tracking store
   - [x] Implement local progress persistence with resume functionality
   - [x] Add periodic server sync during playback
-  - [ ] Handle offline/online sync conflicts
-  - [ ] Display listening sessions on item details screen (split sessions if paused >15min)
+  - [ ] Handle offline/online sync conflicts → [#18](https://github.com/clayreimann/SideShelf/issues/18)
+  - [ ] Display listening sessions on item details screen (split sessions if paused >15min) → [#19](https://github.com/clayreimann/SideShelf/issues/19)
 
   #### Playback Tracking Store Implementation
   - [x] Database Schema Updates:
@@ -240,7 +240,7 @@
     - [x] Implement progress persistence and retrieval
     - [x] Add periodic sync with server
     - [x] Handle offline/online state transitions
-    - [ ] Handle conflicts between local and server progress
+    - [ ] Handle conflicts between local and server progress → [#18](https://github.com/clayreimann/SideShelf/issues/18)
           **Integration Points:**
     - [x] Hook into existing PlayerService for progress updates
     - [x] Connect with SessionTrackingService for session management
@@ -248,7 +248,7 @@
 
 ### Real-time Updates
 
-- [ ] **WebSocket Integration**
+- [ ] **WebSocket Integration** → [#20](https://github.com/clayreimann/SideShelf/issues/20)
   - [ ] Implement WebSocket connection with authentication
     - [ ] Add connection state management and reconnection logic
     - [ ] Handle network state changes
@@ -258,7 +258,7 @@
 
 ### Podcast Support
 
-- [ ] **Full Podcast Implementation**
+- [ ] **Full Podcast Implementation** → [#21](https://github.com/clayreimann/SideShelf/issues/21)
   - [ ] Podcast-specific UI components and layouts
   - [ ] Episode management and subscription features
   - [ ] Podcast-specific playback controls (skip silence, variable speed)
@@ -274,19 +274,19 @@
 - [x] Small floating player
 - [x] Full screen player
 - [x] Stream content from server
-- [ ] Embed Player UI in item details screen (and dismiss the floating player on this screen)
+- [ ] Embed Player UI in item details screen (and dismiss the floating player on this screen) → [#22](https://github.com/clayreimann/SideShelf/issues/22)
 - [x] Extract common player UI components for reuse
 - [x] Setup background hooks to sync media progress to server
 
 ### Player Enhancements
 
-- [ ] Auto-download setting when streaming playback starts
-- [ ] Record playing events (start, pause, sync progress, sync failed)
+- [ ] Auto-download setting when streaming playback starts → [#21](https://github.com/clayreimann/SideShelf/issues/21)
+- [ ] Record playing events (start, pause, sync progress, sync failed) → [#23](https://github.com/clayreimann/SideShelf/issues/23)
   - [ ] Show player events on item details screen
 - [x] Show duration of book on item details
 - [ ] Advanced playback controls (sleep timer, bookmarking)
   - [x] Sleep timer
-  - [ ] Bookmarking
+  - [ ] Bookmarking → [#24](https://github.com/clayreimann/SideShelf/issues/24)
 
 ## 📚 Library Management
 
@@ -303,7 +303,7 @@
 
 - [x] Fetch and cache covers
 - [x] Sorting options (title, author, date added, progress)
-- [ ] Collapse series options
+- [ ] Collapse series options → [#25](https://github.com/clayreimann/SideShelf/issues/25)
 - [x] Rows vs grid view toggle
 - [x] Advanced filtering and search
 
@@ -311,11 +311,11 @@
 
 - [x] **Series Tab**
   - [x] Fetch series and render books
-  - [ ] Show which items in a series have been played
+  - [ ] Show which items in a series have been played → [#26](https://github.com/clayreimann/SideShelf/issues/26)
 - [x] **Authors Tab**
   - [x] Fetch author metadata from server
   - [x] Link books to authors accurately
-- [ ] **Narrators Tab**
+- [ ] **Narrators Tab** → [#27](https://github.com/clayreimann/SideShelf/issues/27)
   - [ ] Fetch narrator metadata and render narrators
 
 ## 📥 Download System
@@ -326,17 +326,17 @@
 - [x] Debounce/smooth download rate and ETA calculations
 - [x] Review and simplify/refactor download.ts
 - [x] Review and simplify/refactor libraryItemDetail.tsx
-- [ ] Fix background downloader library (new architecture)
+- [ ] Fix background downloader library (new architecture) → [#35](https://github.com/clayreimann/SideShelf/issues/35)
   - [ ] Expo plugin to modify app delegate for URL completion
 - [x] Fix download cancellation not clearing progress UI
 
 ### Download Enhancements
 
-- [ ] Show overall download progress in nav bar (circular progress bar)
-- [ ] Batch download management
-- [ ] Download queue prioritization
-- [ ] Storage management and cleanup
-- [ ] Download scheduling and automation
+- [ ] Show overall download progress in nav bar (circular progress bar) → [#28](https://github.com/clayreimann/SideShelf/issues/28)
+- [ ] Batch download management → [#29](https://github.com/clayreimann/SideShelf/issues/29)
+- [ ] Download queue prioritization → [#29](https://github.com/clayreimann/SideShelf/issues/29)
+- [ ] Storage management and cleanup → [#29](https://github.com/clayreimann/SideShelf/issues/29)
+- [ ] Download scheduling and automation → [#29](https://github.com/clayreimann/SideShelf/issues/29)
 
 ## 🛠️ Technical Improvements
 
@@ -354,16 +354,16 @@
 - [x] Store last login date
 - [x] Token refresh functionality
 - [ ] Enhanced security for token storage
-- [ ] Biometric authentication support
+- [ ] Biometric authentication support → [#36](https://github.com/clayreimann/SideShelf/issues/36)
 
 ### Performance & UX
 
-- [ ] Implement proper error boundaries
-- [ ] Add loading states and skeleton screens
+- [ ] Implement proper error boundaries → [#30](https://github.com/clayreimann/SideShelf/issues/30)
+- [ ] Add loading states and skeleton screens → [#31](https://github.com/clayreimann/SideShelf/issues/31)
 - [x] Optimize image loading and caching
 - [x] Implement proper offline support
-- [ ] Show indicator when offline
-- [ ] Add accessibility features
+- [ ] Show indicator when offline → [#32](https://github.com/clayreimann/SideShelf/issues/32)
+- [ ] Add accessibility features → [#33](https://github.com/clayreimann/SideShelf/issues/33)
   - [ ] Ensure screen reader navigation works
   - [x] Test VoiceOver (iOS) and TalkBack (Android)
   - [ ] Add proper accessibility labels
@@ -373,23 +373,23 @@
 ### Background Services
 
 - [x] Background sync service
-- [ ] Notification management
-- [ ] Background download management
-- [ ] Periodic cleanup tasks
+- [ ] Notification management → [#37](https://github.com/clayreimann/SideShelf/issues/37)
+- [ ] Background download management → [#29](https://github.com/clayreimann/SideShelf/issues/29)
+- [ ] Periodic cleanup tasks → [#38](https://github.com/clayreimann/SideShelf/issues/38)
 
 ## 📱 Platform Specific
 
 ### iOS
 
-- [ ] CarPlay integration
-- [ ] Home screen widgets
-- [ ] Siri shortcuts
+- [ ] CarPlay integration → [#39](https://github.com/clayreimann/SideShelf/issues/39)
+- [ ] Home screen widgets → [#41](https://github.com/clayreimann/SideShelf/issues/41)
+- [ ] Siri shortcuts → [#42](https://github.com/clayreimann/SideShelf/issues/42)
 - [ ] Background app refresh optimization
 - [ ] iOS-specific UI adaptations
 
 ### Android
 
-- [ ] Android Auto integration
+- [ ] Android Auto integration → [#40](https://github.com/clayreimann/SideShelf/issues/40)
 - [ ] Background service optimization
 - [ ] Material Design compliance
 
@@ -462,6 +462,7 @@
 
 ---
 
-_Last updated: November 9, 2025_
+_Last updated: November 10, 2025_
 _Critical pre-launch items: ~40 items_
 _Total items: ~150+ items across all priorities_
+_GitHub issues created: 35 code-related issues (#8-#42)_

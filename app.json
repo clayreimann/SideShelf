@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "jsEngine": "hermes",
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/splash-icon.jpeg",
       "resizeMode": "cover",
       "backgroundColor": "#000000"
     },
@@ -46,8 +46,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-icon.jpeg",
           "resizeMode": "cover",
+          "imageWidth": 2048,
           "backgroundColor": "#ffffff",
           "dark": {
             "backgroundColor": "#000000"

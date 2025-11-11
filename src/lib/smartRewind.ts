@@ -34,8 +34,11 @@ const log = logger.forTag("SmartRewind");
  * 1. In-memory pause time from current session (store.player.lastPauseTime)
  * 2. Active session update time from database
  * 3. Saved progress update time from database
+ *
+ * @param currentPosition Optional current position. If provided, uses this instead of reading from TrackPlayer.
+ *                        This prevents race conditions when TrackPlayer hasn't finished seeking yet.
  */
-export async function applySmartRewind(): Promise<void> {
+export async function applySmartRewind(currentPosition?: number): Promise<void> {
   // Check if smart rewind is enabled
   const smartRewindEnabled = await getSmartRewindEnabled();
   if (!smartRewindEnabled) {
@@ -106,10 +109,14 @@ export async function applySmartRewind(): Promise<void> {
   if (lastPlayedTime) {
     const rewindSeconds = calculateSmartRewindTime(lastPlayedTime);
     if (rewindSeconds > 0) {
-      const currentPosition = await TrackPlayer.getProgress();
-      const newPosition = Math.max(0, currentPosition.position - rewindSeconds);
+      // Use provided position or read from TrackPlayer
+      const position =
+        currentPosition !== undefined
+          ? currentPosition
+          : (await TrackPlayer.getProgress()).position;
+      const newPosition = Math.max(0, position - rewindSeconds);
       log.info(
-        `Smart rewind: jumping back ${rewindSeconds}s (from ${formatTime(currentPosition.position)} to ${formatTime(newPosition)})`
+        `Smart rewind: jumping back ${rewindSeconds}s (from ${formatTime(position)} to ${formatTime(newPosition)})`
       );
       useAppStore.getState().updatePosition(newPosition);
       await TrackPlayer.seekTo(newPosition);
