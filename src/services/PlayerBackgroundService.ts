@@ -73,7 +73,7 @@ async function handleRemotePlay(): Promise<void> {
   );
 
   // Apply smart rewind (checks enabled setting internally)
-  await applySmartRewind();
+  await applySmartRewind(progress.position);
 
   // Clear pause time since we're resuming
   const store = useAppStore.getState();

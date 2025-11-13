@@ -797,9 +797,6 @@ export class ProgressService {
     }
   }
 
-  // Removed: startPauseTimeout and clearPauseTimeout
-  // Pause timeout is now handled by checking session age in updateProgress and other methods
-
   /**
    * Start periodic sync of unsynced sessions (background sync)
    */
@@ -1088,6 +1085,51 @@ export class ProgressService {
       }
     } catch (error) {
       log.error("Failed to fetch server progress:", error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Force resync current position from server
+   * Useful when local position gets out of sync with server
+   */
+  async forceResyncPosition(userId: string, libraryItemId: string): Promise<void> {
+    try {
+      log.info(
+        `Forcing position resync from server userId=${userId} libraryItemId=${libraryItemId}`
+      );
+
+      // Fetch the specific item's progress from the server
+      const progressData = await fetchMediaProgress(libraryItemId);
+      if (!progressData) {
+        log.warn(`No progress data found on server for ${libraryItemId}`);
+        return;
+      }
+
+      // Marshal and upsert to database
+      const marshaled = marshalMediaProgressFromApi(progressData, userId);
+      await upsertMediaProgress([marshaled]);
+
+      // Get the current active session for this item
+      const session = await getActiveSession(userId, libraryItemId);
+      if (!session) {
+        log.info(`No active session found for ${libraryItemId}, position updated in database`);
+        return;
+      }
+
+      // Update the session's currentTime to match the server
+      await updateSessionProgress(
+        session.id,
+        progressData.currentTime,
+        session.playbackRate,
+        session.volume
+      );
+
+      log.info(
+        `Position resynced from server: ${formatTime(progressData.currentTime)}s session=${session.id} item=${libraryItemId}`
+      );
+    } catch (error) {
+      log.error("Failed to force resync position:", error as Error);
       throw error;
     }
   }

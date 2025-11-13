@@ -419,6 +419,42 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     }
   }, [item, currentTrack]);
 
+  // Force resync position handler
+  const handleForceResync = useCallback(async () => {
+    if (!item || !username) return;
+
+    try {
+      // Get user ID from database
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        Alert.alert(translate("common.error"), "User not found", [
+          { text: translate("common.ok") },
+        ]);
+        return;
+      }
+
+      // Force resync position from server
+      await progressService.forceResyncPosition(user.id, item.id);
+
+      // Refresh item details to show updated progress
+      await fetchItemDetails(item.id);
+
+      // If this is the currently playing item, update the player position
+      if (currentTrack?.libraryItemId === item.id) {
+        await playerService.syncPositionFromDatabase();
+      }
+
+      Alert.alert(translate("common.success"), "Position synced from server successfully", [
+        { text: translate("common.ok") },
+      ]);
+    } catch (error) {
+      console.error("[LibraryItemDetail] Force resync failed:", error);
+      Alert.alert(translate("common.error"), `Failed to resync position: ${String(error)}`, [
+        { text: translate("common.ok") },
+      ]);
+    }
+  }, [item, username, currentTrack, fetchItemDetails]);
+
   // Menu handler
   const handleMenuAction = useCallback(
     (actionId: string) => {
@@ -432,11 +468,14 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         case "mark-finished":
           handleToggleFinished();
           break;
+        case "force-resync":
+          handleForceResync();
+          break;
         default:
           break;
       }
     },
-    [handleDownload, handleDeleteDownload, handleToggleFinished]
+    [handleDownload, handleDeleteDownload, handleToggleFinished, handleForceResync]
   );
 
   // Build menu actions based on current state
@@ -477,8 +516,17 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       }
     }
 
+    // Force Resync Position action (only show if this item is currently playing or has progress)
+    if (effectiveProgress || currentTrack?.libraryItemId === itemId) {
+      actions.push({
+        id: "force-resync",
+        title: "Force Resync Position",
+        image: "arrow.clockwise.circle",
+      });
+    }
+
     return actions;
-  }, [isDownloaded, isDownloading, effectiveProgress]);
+  }, [isDownloaded, isDownloading, effectiveProgress, currentTrack, itemId]);
 
   if (loading) {
     return (
@@ -804,7 +852,9 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
         {/* Collapsible Audio Files */}
         {audioFiles.length > 0 && (
-          <CollapsibleSection title={translate("libraryItem.audioFiles", { count: audioFiles.length })}>
+          <CollapsibleSection
+            title={translate("libraryItem.audioFiles", { count: audioFiles.length })}
+          >
             {audioFiles.map((file, index) => (
               <View
                 key={file.id}
