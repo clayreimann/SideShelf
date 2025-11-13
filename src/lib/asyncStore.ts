@@ -33,3 +33,15 @@ export async function getItem(key: string): Promise<any> {
     return null;
   }
 }
+
+/**
+ * Clear all async storage
+ * Used when resetting the app
+ */
+export async function clearAllAsyncStorage(): Promise<void> {
+  console.log("[asyncStore] Clearing all async storage...");
+  const keysToDelete = Object.values(ASYNC_KEYS);
+
+  await Promise.all(keysToDelete.map((key) => AsyncStorage.removeItem(key)));
+  console.log("[asyncStore] Async storage cleared");
+}

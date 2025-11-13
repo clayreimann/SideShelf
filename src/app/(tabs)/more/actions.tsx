@@ -7,7 +7,9 @@
 import { clearAllLocalCovers } from "@/db/helpers/localData";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
+import { clearAllAsyncStorage } from "@/lib/asyncStore";
 import { clearAllCoverCache } from "@/lib/covers";
+import { clearAllSecureStorageExceptServerUrl } from "@/lib/secureStore";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { useDb } from "@/providers/DbProvider";
@@ -59,9 +61,18 @@ export default function ActionsScreen() {
         {
           label: translate("advanced.actions.resetApp"),
           onPress: async () => {
-            resetDatabase();
+            console.log("[actions] Starting app reset...");
+            // Clear all storage except server URL
+            await clearAllSecureStorageExceptServerUrl();
+            await clearAllAsyncStorage();
+            // Clear cover cache
             await clearCoverCache();
+            await clearAllLocalCovers();
+            // Reset database (deletes and recreates the DB file)
+            await resetDatabase();
+            // Logout (this will redirect to login screen)
             await logout();
+            console.log("[actions] App reset complete");
           },
           disabled: false,
         },
