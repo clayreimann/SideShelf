@@ -141,6 +141,11 @@ describe("PlayerSlice", () => {
           type: null,
           chapterTarget: null,
         },
+        undoPositionJump: {
+          expiresAt: null,
+          previousPosition: null,
+          previousSessionId: null,
+        },
       });
     });
   });

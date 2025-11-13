@@ -64,6 +64,15 @@ export interface PlayerSliceState {
       /** Chapter target: 'current' or 'next', only used when type is 'chapter' */
       chapterTarget: "current" | "next" | null;
     };
+    /** Undo position jump state */
+    undoPositionJump: {
+      /** Previous position to restore (seconds) */
+      previousPosition: number | null;
+      /** Session ID that was ended (if any) */
+      previousSessionId: string | null;
+      /** When the undo option expires (Unix timestamp ms) */
+      expiresAt: number | null;
+    };
   };
 }
 
@@ -117,6 +126,16 @@ export interface PlayerSliceActions {
   cancelSleepTimer: () => void;
   /** Get remaining sleep timer time in seconds, null if not active */
   getSleepTimerRemaining: () => number | null;
+  /** Set undo position jump state (for reconciliation) */
+  setUndoPositionJump: (
+    previousPosition: number,
+    previousSessionId: string | null,
+    expiresAt: number
+  ) => void;
+  /** Clear undo position jump state */
+  clearUndoPositionJump: () => void;
+  /** Check if undo is available and not expired */
+  canUndoPositionJump: () => boolean;
 }
 
 /**
@@ -358,6 +377,11 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       endTime: null,
       type: null,
       chapterTarget: null,
+    },
+    undoPositionJump: {
+      previousPosition: null,
+      previousSessionId: null,
+      expiresAt: null,
     },
   },
 
@@ -712,5 +736,53 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     }
 
     return null;
+  },
+
+  setUndoPositionJump: (
+    previousPosition: number,
+    previousSessionId: string | null,
+    expiresAt: number
+  ) => {
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        undoPositionJump: {
+          previousPosition,
+          previousSessionId,
+          expiresAt,
+        },
+      },
+    }));
+    log.info(
+      `Undo position jump set: previous=${formatTime(previousPosition)}s, expires in ${Math.round((expiresAt - Date.now()) / 1000)}s`
+    );
+  },
+
+  clearUndoPositionJump: () => {
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        undoPositionJump: {
+          previousPosition: null,
+          previousSessionId: null,
+          expiresAt: null,
+        },
+      },
+    }));
+    log.info("Undo position jump cleared");
+  },
+
+  canUndoPositionJump: () => {
+    const state = get() as PlayerSlice;
+    const { undoPositionJump } = state.player;
+
+    if (undoPositionJump.previousPosition === null || undoPositionJump.expiresAt === null) {
+      return false;
+    }
+
+    // Check if expired
+    return Date.now() < undoPositionJump.expiresAt;
   },
 });

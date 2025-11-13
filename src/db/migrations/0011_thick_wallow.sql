@@ -1,0 +1,23 @@
+CREATE TABLE `server_listening_sessions` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`library_item_id` text NOT NULL,
+	`library_id` text,
+	`episode_id` text,
+	`media_type` text,
+	`display_title` text,
+	`display_author` text,
+	`cover_path` text,
+	`duration` real,
+	`play_method` integer,
+	`media_player` text,
+	`start_time` real,
+	`current_time` real,
+	`time_listening` real,
+	`started_at` integer,
+	`updated_at` integer,
+	`day_of_week` text,
+	`date` text,
+	`fetched_at` integer NOT NULL,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
+);

@@ -1,6 +1,8 @@
+import { getUserByUsername } from "@/db/helpers/users";
 import { initializeApp } from "@/index";
 import { formatTimeRemaining } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { getStoredUsername } from "@/lib/secureStore";
 import { useThemedStyles } from "@/lib/theme";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { DbProvider } from "@/providers/DbProvider";
@@ -115,19 +117,54 @@ export default function RootLayout() {
             playerInitTimestamp.current = currentPlayerInitTimestamp;
           }
 
-          // Still fetch progress from server and sync position
-          log.info("Triggering progress refetch on app foreground");
-          progressService
-            .fetchServerProgress()
-            .then(async () => {
-              // Sync position from database after fetching server progress
-              await playerService.syncPositionFromDatabase().catch((error) => {
-                log.error("Failed to sync position from database", error as Error);
-              });
-            })
-            .catch((error) => {
-              log.error("Failed to fetch server progress on app foreground", error as Error);
-            });
+          // Fetch progress and perform reconciliation on foreground
+          log.info("Triggering progress refetch and reconciliation on app foreground");
+          (async () => {
+            try {
+              // Get current user and track
+              const username = await getStoredUsername();
+              const currentTrack = useAppStore.getState().player.currentTrack;
+
+              if (username && currentTrack) {
+                const user = await getUserByUsername(username);
+                if (user?.id) {
+                  // Perform reconciliation
+                  const reconciliationResult = await progressService.reconcileWithServerProgress(
+                    user.id,
+                    currentTrack.libraryItemId,
+                    useAppStore.getState().player.position
+                  );
+
+                  // Apply reconciliation result
+                  if (reconciliationResult.action === "use_server") {
+                    log.info(
+                      `Applying server position: ${reconciliationResult.newPosition}s (reason: ${reconciliationResult.reason})`
+                    );
+                    await playerService.seekTo(reconciliationResult.newPosition);
+
+                    // Set undo state if position jump is significant
+                    if (reconciliationResult.shouldShowUndo) {
+                      const expiresAt = Date.now() + 10000; // 10 seconds
+                      useAppStore
+                        .getState()
+                        .setUndoPositionJump(
+                          reconciliationResult.previousPosition,
+                          reconciliationResult.sessionEndedLocally || null,
+                          expiresAt
+                        );
+                      log.info("Position jump undo available for 10 seconds");
+                    }
+                  } else {
+                    log.info(
+                      `Reconciliation: ${reconciliationResult.action} (${reconciliationResult.reason})`
+                    );
+                  }
+                }
+              }
+            } catch (error) {
+              log.error("Failed to reconcile on app foreground", error as Error);
+            }
+          })();
 
           return; // Skip all restoration operations that would update TrackPlayer
         }

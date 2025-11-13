@@ -42,6 +42,8 @@ export const en = {
   "common.list": "List",
   "common.grid": "Grid",
   "common.cover": "Cover",
+  "common.undo": "Undo",
+  "common.dismiss": "Dismiss",
 
   // Library Screen
   "library.title": "Library",
@@ -314,4 +316,5 @@ export const en = {
   "player.sleepTimer.remaining": "{target} ({time})",
   "player.playbackSpeed.title": "Playback Speed",
   "player.playbackSpeed.rate": "{rate}x",
+  "player.position_jumped_to": "Position jumped from another device",
 } as const;

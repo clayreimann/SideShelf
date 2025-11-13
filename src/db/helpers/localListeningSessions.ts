@@ -257,6 +257,31 @@ export async function getAllActiveSessionsForUser(
 }
 
 /**
+ * Get listening sessions for a specific library item
+ * @param userId - User ID
+ * @param libraryItemId - Library item ID
+ * @param limit - Maximum number of sessions to return
+ * @returns Array of sessions sorted by updatedAt DESC
+ */
+export async function getListeningSessionsForItem(
+  userId: string,
+  libraryItemId: string,
+  limit: number = 50
+): Promise<LocalListeningSessionRow[]> {
+  return await db
+    .select()
+    .from(localListeningSessions)
+    .where(
+      and(
+        eq(localListeningSessions.userId, userId),
+        eq(localListeningSessions.libraryItemId, libraryItemId)
+      )
+    )
+    .orderBy(desc(localListeningSessions.updatedAt))
+    .limit(limit);
+}
+
+/**
  * Get all unsynced sessions
  */
 export async function getUnsyncedSessions(): Promise<LocalListeningSessionRow[]> {

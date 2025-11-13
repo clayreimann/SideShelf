@@ -62,6 +62,7 @@ interface ResumePositionInfo {
   source: ResumeSource;
   authoritativePosition: number | null;
   asyncStoragePosition: number | null;
+  reconciliationResult?: import("@/types/session").SessionReconciliationResult;
 }
 
 /**
@@ -585,6 +586,7 @@ export class PlayerService {
     let position = store.player.position;
     let source: ResumeSource = "store";
     let authoritativePosition: number | null = null;
+    let reconciliationResult: import("@/types/session").SessionReconciliationResult | undefined;
 
     const MIN_PLAUSIBLE_POSITION = 5; // seconds
     const LARGE_DIFF_THRESHOLD = 30; // seconds
@@ -600,6 +602,30 @@ export class PlayerService {
       if (username) {
         const user = await getUserByUsername(username);
         if (user?.id) {
+          // STEP 1: Perform multi-device session reconciliation
+          const currentPosition = asyncStoragePosition ?? store.player.position;
+          reconciliationResult = await progressService.reconcileWithServerProgress(
+            user.id,
+            libraryItemId,
+            currentPosition
+          );
+
+          // Apply reconciliation result
+          if (reconciliationResult.action === "use_server") {
+            position = reconciliationResult.newPosition;
+            source = "savedProgress"; // Server sessions update savedProgress
+            authoritativePosition = reconciliationResult.newPosition;
+            log.info(
+              `Reconciliation: using server position ${formatTime(position)}s (${reconciliationResult.reason})`
+            );
+          } else if (reconciliationResult.action === "use_local") {
+            // Continue with normal local logic below
+            log.info(`Reconciliation: preferring local session (${reconciliationResult.reason})`);
+          } else {
+            log.info(`Reconciliation: no conflict detected`);
+          }
+
+          // STEP 2: Continue with existing local session/progress logic
           const [activeSession, savedProgress] = await Promise.all([
             getActiveSession(user.id, libraryItemId),
             getMediaProgressForLibraryItem(libraryItemId, user.id),
@@ -691,6 +717,7 @@ export class PlayerService {
       source,
       authoritativePosition,
       asyncStoragePosition,
+      reconciliationResult,
     };
   }
 

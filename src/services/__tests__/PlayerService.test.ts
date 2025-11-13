@@ -107,6 +107,7 @@ jest.mock("@/services/ProgressService", () => ({
     getCurrentSession: jest.fn(),
     startSession: jest.fn(),
     updateProgress: jest.fn(),
+    reconcileWithServerProgress: jest.fn(),
   },
 }));
 
@@ -233,6 +234,13 @@ describe("PlayerService", () => {
     configureTrackPlayer.mockResolvedValue();
     useAppStore.getState.mockReturnValue(mockStore);
     progressService.getCurrentSession.mockResolvedValue(null);
+    progressService.reconcileWithServerProgress.mockResolvedValue({
+      action: "no_change",
+      previousPosition: 0,
+      newPosition: 0,
+      reason: "no_conflict",
+      shouldShowUndo: false,
+    });
     getActiveSession.mockResolvedValue(null);
     getMediaProgressForLibraryItem.mockResolvedValue(null);
     getAsyncItem.mockResolvedValue(null);

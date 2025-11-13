@@ -13,6 +13,7 @@ import {
   getActiveSession,
   getAllActiveSessionsForUser,
   getListeningSession,
+  getListeningSessionsForItem,
   getUnsyncedSessions,
   markSessionAsSynced,
   recordSyncFailure,
@@ -29,12 +30,20 @@ import {
   marshalMediaProgressFromAuthResponse,
   upsertMediaProgress,
 } from "@/db/helpers/mediaProgress";
+import {
+  getLastSessionFetchTime,
+  getMostRecentServerSession,
+  getServerSessionsForItem,
+  upsertServerSessions,
+} from "@/db/helpers/serverListeningSessions";
 import { getUserByUsername } from "@/db/helpers/users";
 import type { LibraryItemRow } from "@/db/schema/libraryItems";
 import { LocalListeningSessionRow } from "@/db/schema/localData";
+import type { SessionHistoryItem, SessionReconciliationResult } from "@/types/session";
 import {
   closeSession,
   createLocalSession,
+  fetchListeningSessions,
   fetchMe,
   fetchMediaProgress,
   syncSession,
@@ -1089,6 +1098,364 @@ export class ProgressService {
     } catch (error) {
       log.error("Failed to fetch server progress:", error as Error);
       throw error;
+    }
+  }
+
+  /**
+   * Force resync current position from server
+   * Useful when local position gets out of sync with server
+   */
+  async forceResyncPosition(userId: string, libraryItemId: string): Promise<void> {
+    try {
+      log.info(
+        `Forcing position resync from server userId=${userId} libraryItemId=${libraryItemId}`
+      );
+
+      // Fetch the specific item's progress from the server
+      const progressData = await fetchMediaProgress(libraryItemId);
+      if (!progressData) {
+        log.warn(`No progress data found on server for ${libraryItemId}`);
+        return;
+      }
+
+      // Marshal and upsert to database
+      const marshaled = marshalMediaProgressFromApi(progressData, userId);
+      await upsertMediaProgress([marshaled]);
+
+      // Get the current active session for this item
+      const session = await getActiveSession(userId, libraryItemId);
+      if (!session) {
+        log.info(`No active session found for ${libraryItemId}, position updated in database`);
+        return;
+      }
+
+      // Update the session's currentTime to match the server
+      await updateSessionProgress(
+        session.id,
+        progressData.currentTime,
+        session.playbackRate,
+        session.volume
+      );
+
+      log.info(
+        `Position resynced from server: ${formatTime(progressData.currentTime)}s session=${session.id} item=${libraryItemId}`
+      );
+    } catch (error) {
+      log.error("Failed to force resync position:", error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch and cache server listening sessions
+   *
+   * Fetches all listening sessions from the server and caches them locally.
+   * Implements debouncing to prevent excessive API calls (default: 5 minutes).
+   *
+   * @param userId - User ID to fetch sessions for
+   * @param minFetchInterval - Minimum time between fetches in milliseconds (default: 5 minutes)
+   * @returns Result object with success status, session count, and fetch timestamp
+   */
+  async fetchAndCacheServerSessions(
+    userId: string,
+    minFetchInterval: number = 5 * 60 * 1000 // 5 minutes default
+  ): Promise<{ success: boolean; sessionCount: number; fetchedAt: Date | null }> {
+    try {
+      // Check when sessions were last fetched (debounce)
+      const lastFetchTime = await getLastSessionFetchTime(userId);
+      if (lastFetchTime) {
+        const timeSinceLastFetch = Date.now() - lastFetchTime.getTime();
+        if (timeSinceLastFetch < minFetchInterval) {
+          log.info(
+            `Skipping session fetch - last fetch was ${Math.round(timeSinceLastFetch / 1000)}s ago (min interval: ${Math.round(minFetchInterval / 1000)}s)`
+          );
+          return { success: true, sessionCount: 0, fetchedAt: lastFetchTime };
+        }
+      }
+
+      // Check network connectivity
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected) {
+        log.warn("No network connection, skipping server session fetch");
+        return { success: false, sessionCount: 0, fetchedAt: lastFetchTime };
+      }
+
+      log.info("Fetching server listening sessions...");
+
+      // Fetch all pages of sessions
+      const allSessions: import("@/types/session").ApiListeningSession[] = [];
+      let page = 0;
+      const itemsPerPage = 100;
+      let hasMore = true;
+
+      while (hasMore) {
+        const response = await fetchListeningSessions(page, itemsPerPage);
+
+        // Handle servers that don't support the endpoint (returns empty response)
+        if (response.total === 0 && page === 0 && response.sessions.length === 0) {
+          log.info("Server does not support listening sessions endpoint");
+          return { success: true, sessionCount: 0, fetchedAt: new Date() };
+        }
+
+        allSessions.push(...response.sessions);
+
+        // Check if there are more pages
+        const totalPages = Math.ceil(response.total / itemsPerPage);
+        hasMore = page + 1 < totalPages;
+        page++;
+
+        log.info(`Fetched page ${page}/${totalPages} (${response.sessions.length} sessions)`);
+      }
+
+      // Cache sessions in local database
+      if (allSessions.length > 0) {
+        await upsertServerSessions(allSessions);
+        log.info(`Cached ${allSessions.length} server sessions`);
+      }
+
+      const fetchedAt = new Date();
+      return { success: true, sessionCount: allSessions.length, fetchedAt };
+    } catch (error) {
+      log.error("Failed to fetch and cache server sessions:", error as Error);
+      return { success: false, sessionCount: 0, fetchedAt: null };
+    }
+  }
+
+  /**
+   * Reconcile local session with server progress using timestamp-based comparison
+   *
+   * Compares the timestamps of local sessions and server sessions to determine
+   * which position should be used. Detects position jumps and provides undo capability.
+   *
+   * @param userId - User ID
+   * @param libraryItemId - Library item ID to reconcile
+   * @param currentPosition - Current playback position (optional, for jump detection)
+   * @returns Reconciliation result with action to take
+   */
+  async reconcileWithServerProgress(
+    userId: string,
+    libraryItemId: string,
+    currentPosition?: number
+  ): Promise<SessionReconciliationResult> {
+    try {
+      log.info(`Starting session reconciliation for ${libraryItemId}`);
+
+      // Fetch and cache server sessions (with debouncing)
+      await this.fetchAndCacheServerSessions(userId);
+
+      // Get the most recent server session for this item
+      const serverSession = await getMostRecentServerSession(libraryItemId, userId);
+
+      // Get the active local session for this item
+      const localSession = await getActiveSession(userId, libraryItemId);
+
+      // Get saved media progress (fallback)
+      const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, userId);
+
+      // Determine current position for jump detection
+      const currentPos =
+        currentPosition !== undefined
+          ? currentPosition
+          : localSession?.currentTime || savedProgress?.currentTime || 0;
+
+      // CASE 1: No local session
+      if (!localSession) {
+        if (serverSession && serverSession.currentTime !== null && serverSession.updatedAt) {
+          const delta = Math.abs(serverSession.currentTime - currentPos);
+          const shouldShowUndo = delta > 30;
+
+          log.info(
+            `No local session, using server position: ${formatTime(serverSession.currentTime)}s (delta: ${formatTime(delta)}s)`
+          );
+
+          return {
+            action: "use_server",
+            previousPosition: currentPos,
+            newPosition: serverSession.currentTime,
+            reason: "newer_server_progress",
+            shouldShowUndo,
+            serverSessionInfo: {
+              updatedAt: serverSession.updatedAt,
+              sessionId: serverSession.id,
+            },
+          };
+        } else {
+          // No local session, no server session - use saved progress or 0
+          log.info("No local or server sessions found, using saved progress");
+          return {
+            action: "no_change",
+            previousPosition: currentPos,
+            newPosition: currentPos,
+            reason: "no_conflict",
+            shouldShowUndo: false,
+          };
+        }
+      }
+
+      // CASE 2: Local session exists, no server session
+      if (!serverSession) {
+        log.info(
+          `Local session exists but no server session, using local position: ${formatTime(localSession.currentTime)}s`
+        );
+
+        return {
+          action: "use_local",
+          previousPosition: currentPos,
+          newPosition: localSession.currentTime,
+          reason: "newer_local_session",
+          shouldShowUndo: false,
+        };
+      }
+
+      // CASE 3: Both local and server sessions exist - compare timestamps
+      // Validate server session has required fields
+      if (serverSession.updatedAt === null || serverSession.currentTime === null) {
+        log.warn("Server session has null fields, using local session");
+        return {
+          action: "use_local",
+          previousPosition: currentPos,
+          newPosition: localSession.currentTime,
+          reason: "newer_local_session",
+          shouldShowUndo: false,
+        };
+      }
+
+      const localUpdatedAt = localSession.updatedAt.getTime();
+      const serverUpdatedAt = serverSession.updatedAt.getTime();
+      const timeDiff = serverUpdatedAt - localUpdatedAt;
+
+      log.info(
+        `Comparing timestamps: local=${localSession.updatedAt.toISOString()} (${formatTime(localSession.currentTime)}s) vs server=${serverSession.updatedAt.toISOString()} (${formatTime(serverSession.currentTime)}s) diff=${timeDiff}ms`
+      );
+
+      // Server session is newer (threshold: 1 second to account for clock skew)
+      if (timeDiff > 1000) {
+        const positionDelta = Math.abs(serverSession.currentTime - currentPos);
+        const shouldShowUndo = positionDelta > 30;
+
+        log.info(
+          `Server session is newer, using server position: ${formatTime(serverSession.currentTime)}s (position delta: ${formatTime(positionDelta)}s)`
+        );
+
+        // End the stale local session
+        await endStaleListeningSession(localSession.id, localSession.currentTime);
+        log.info(`Ended stale local session ${localSession.id}`);
+
+        return {
+          action: "use_server",
+          previousPosition: currentPos,
+          newPosition: serverSession.currentTime,
+          reason: "newer_server_progress",
+          shouldShowUndo,
+          sessionEndedLocally: localSession.id,
+          serverSessionInfo: {
+            updatedAt: serverSession.updatedAt,
+            sessionId: serverSession.id,
+          },
+        };
+      }
+      // Local session is newer
+      else if (timeDiff < -1000) {
+        log.info(
+          `Local session is newer, using local position: ${formatTime(localSession.currentTime)}s`
+        );
+
+        return {
+          action: "use_local",
+          previousPosition: currentPos,
+          newPosition: localSession.currentTime,
+          reason: "newer_local_session",
+          shouldShowUndo: false,
+        };
+      }
+      // Timestamps are very close (within 1 second) - no conflict
+      else {
+        log.info(`Timestamps are similar (${timeDiff}ms apart), no reconciliation needed`);
+
+        return {
+          action: "no_change",
+          previousPosition: currentPos,
+          newPosition: currentPos,
+          reason: "no_conflict",
+          shouldShowUndo: false,
+        };
+      }
+    } catch (error) {
+      log.error("Failed to reconcile with server progress:", error as Error);
+
+      // On error, return no_change to avoid disrupting playback
+      return {
+        action: "no_change",
+        previousPosition: currentPosition || 0,
+        newPosition: currentPosition || 0,
+        reason: "no_conflict",
+        shouldShowUndo: false,
+      };
+    }
+  }
+
+  /**
+   * Get session history for a library item
+   *
+   * Merges local and server sessions into a unified history view.
+   * Fetches and caches server sessions first (with debouncing).
+   *
+   * @param userId - User ID
+   * @param libraryItemId - Library item ID
+   * @param limit - Maximum number of sessions to return
+   * @returns Array of unified session history items, sorted by updatedAt DESC
+   */
+  async getSessionHistory(
+    userId: string,
+    libraryItemId: string,
+    limit: number = 50
+  ): Promise<SessionHistoryItem[]> {
+    try {
+      // Fetch and cache server sessions (with debouncing)
+      await this.fetchAndCacheServerSessions(userId);
+
+      // Get local sessions for this item
+      const localSessions = await getListeningSessionsForItem(userId, libraryItemId, limit);
+
+      // Get server sessions for this item
+      const serverSessions = await getServerSessionsForItem(libraryItemId, userId, limit);
+
+      // Convert to unified format
+      const localHistory: SessionHistoryItem[] = localSessions.map((session) => ({
+        id: session.id,
+        sessionStart: session.sessionStart,
+        sessionEnd: session.sessionEnd,
+        startTime: session.startTime,
+        currentTime: session.currentTime,
+        timeListening: session.timeListening,
+        updatedAt: session.updatedAt,
+        deviceInfo: "This device", // Local sessions are always from this device
+        source: "local" as const,
+        isSynced: session.isSynced,
+      }));
+
+      const serverHistory: SessionHistoryItem[] = serverSessions.map((session) => ({
+        id: session.id,
+        sessionStart: session.startedAt || new Date(0),
+        sessionEnd: null, // Server sessions don't track explicit end times
+        startTime: session.startTime || 0,
+        currentTime: session.currentTime || 0,
+        timeListening: session.timeListening || 0,
+        updatedAt: session.updatedAt || new Date(0),
+        deviceInfo: session.mediaPlayer || "Unknown device",
+        source: "server" as const,
+        isSynced: undefined, // Server sessions don't have sync status
+      }));
+
+      // Merge and sort by updatedAt DESC
+      const allSessions = [...localHistory, ...serverHistory];
+      allSessions.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+      // Limit results
+      return allSessions.slice(0, limit);
+    } catch (error) {
+      log.error("Failed to get session history:", error as Error);
+      return [];
     }
   }
 
