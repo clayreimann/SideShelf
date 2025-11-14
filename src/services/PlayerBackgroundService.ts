@@ -6,10 +6,9 @@
  * Handles comprehensive progress syncing using TrackPlayer events.
  */
 
-import { getUserByUsername } from "@/db/helpers/users";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
-import { getStoredUsername } from "@/lib/secureStore";
+import { getCurrentUser } from "@/utils/userHelpers";
 import { applySmartRewind } from "@/lib/smartRewind";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
@@ -107,13 +106,8 @@ async function getUserIdAndLibraryItemId(): Promise<{
     return null;
   }
 
-  const username = await getStoredUsername();
-  if (!username) {
-    return null;
-  }
-
-  const user = await getUserByUsername(username);
-  if (!user?.id) {
+  const user = await getCurrentUser();
+  if (!user) {
     return null;
   }
 
@@ -547,15 +541,15 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
           log.info(
             `Rehydration failed but playback is active, starting new session item=${currentTrack.libraryItemId}`
           );
-          const username = await getStoredUsername();
-          if (username) {
+          const user = await getCurrentUser();
+          if (user) {
             const playbackRate = await TrackPlayer.getRate();
             const volume = await TrackPlayer.getVolume();
             const sessionId = store.player.currentPlaySessionId;
 
             try {
               await progressService.startSession(
-                username,
+                user.username,
                 currentTrack.libraryItemId,
                 currentTrack.mediaId,
                 event.position, // Start at current position
@@ -643,16 +637,16 @@ async function handleActiveTrackChanged(
 
     lastActiveTrackId.value = currentActiveTrack.id;
 
-    // Get track info from playerSlice and username from secure store
+    // Get track info from playerSlice and current user
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
-    const username = await getStoredUsername();
+    const user = await getCurrentUser();
 
     log.info(
       `Active track changed: ${event.track?.title || "unknown"} item=${currentTrack?.libraryItemId || "unknown"}`
     );
 
-    if (currentTrack && username) {
+    if (currentTrack && user) {
       log.info(
         `Starting session for track: ${currentTrack.title} item=${currentTrack.libraryItemId}`
       );
@@ -692,22 +686,19 @@ async function handleActiveTrackChanged(
       // During normal playback, startSession handles resuming existing sessions correctly
       // But when multiple code paths call it simultaneously, races can occur
       try {
-        const user = await getUserByUsername(username);
-        if (user?.id) {
-          const existingSession = await progressService.getCurrentSession(
-            user.id,
-            currentTrack.libraryItemId
+        const existingSession = await progressService.getCurrentSession(
+          user.id,
+          currentTrack.libraryItemId
+        );
+        if (existingSession) {
+          // Session already exists - let it be
+          // startSession() will handle resuming it if needed
+          // But if we just got here from app resume, there might be concurrent calls
+          // So we skip this one and let the other code path (updateProgress) handle it
+          log.info(
+            `Active session already exists, skipping duplicate startSession call item=${currentTrack.libraryItemId} session=${existingSession.sessionId} position=${formatTime(existingSession.currentTime)}s`
           );
-          if (existingSession) {
-            // Session already exists - let it be
-            // startSession() will handle resuming it if needed
-            // But if we just got here from app resume, there might be concurrent calls
-            // So we skip this one and let the other code path (updateProgress) handle it
-            log.info(
-              `Active session already exists, skipping duplicate startSession call item=${currentTrack.libraryItemId} session=${existingSession.sessionId} position=${formatTime(existingSession.currentTime)}s`
-            );
-            return;
-          }
+          return;
         }
       } catch (error) {
         log.warn(`Failed to check existing session: ${error}`);
@@ -715,7 +706,7 @@ async function handleActiveTrackChanged(
       }
 
       await progressService.startSession(
-        username,
+        user.username,
         currentTrack.libraryItemId,
         currentTrack.mediaId,
         startPosition,
