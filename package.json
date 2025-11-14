@@ -27,6 +27,7 @@
     "ios:device": "expo prebuild --clean && expo run:ios --device",
     "web": "expo start --web",
     "lint": "expo lint",
+    "lint:complexity": "npx eslint . --ext .ts,.tsx,.js,.jsx --format json --output-file eslint-report.json || true",
     "test": "jest --watchAll=false",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
