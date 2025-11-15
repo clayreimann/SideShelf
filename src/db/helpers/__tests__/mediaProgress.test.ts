@@ -33,42 +33,39 @@ describe('MediaProgress Helper', () => {
 
   describe('marshalMediaProgressFromAuthResponse', () => {
     it('should correctly marshal media progress from ApiMeResponse', () => {
-      const mockResponse = {
-        ...mockMeResponse,
-        user: {
-          ...mockMeResponse.user,
-          mediaProgress: [
-            {
-              id: 'progress-1',
-              libraryItemId: 'li-1',
-              episodeId: null,
-              duration: 3600,
-              progress: 0.5,
-              currentTime: 1800,
-              isFinished: false,
-              hideFromContinueListening: false,
-              lastUpdate: 1672531200000,
-              startedAt: 1672444800000,
-              finishedAt: null,
-            },
-            {
-              id: 'progress-2',
-              libraryItemId: 'li-2',
-              episodeId: 'ep-1',
-              duration: 7200,
-              progress: 1.0,
-              currentTime: 7200,
-              isFinished: true,
-              hideFromContinueListening: false,
-              lastUpdate: 1672617600000,
-              startedAt: 1672531200000,
-              finishedAt: 1672617600000,
-            },
-          ],
-        },
+      const mockUser = {
+        ...mockMeResponse.user,
+        mediaProgress: [
+          {
+            id: 'progress-1',
+            libraryItemId: 'li-1',
+            episodeId: null,
+            duration: 3600,
+            progress: 0.5,
+            currentTime: 1800,
+            isFinished: false,
+            hideFromContinueListening: false,
+            lastUpdate: 1672531200000,
+            startedAt: 1672444800000,
+            finishedAt: null,
+          },
+          {
+            id: 'progress-2',
+            libraryItemId: 'li-2',
+            episodeId: 'ep-1',
+            duration: 7200,
+            progress: 1.0,
+            currentTime: 7200,
+            isFinished: true,
+            hideFromContinueListening: false,
+            lastUpdate: 1672617600000,
+            startedAt: 1672531200000,
+            finishedAt: 1672617600000,
+          },
+        ],
       };
 
-      const result = marshalMediaProgressFromAuthResponse(mockResponse);
+      const result = marshalMediaProgressFromAuthResponse(mockUser);
 
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual({
@@ -102,28 +99,22 @@ describe('MediaProgress Helper', () => {
     });
 
     it('should return empty array when no media progress', () => {
-      const mockResponse = {
-        ...mockMeResponse,
-        user: {
-          ...mockMeResponse.user,
-          mediaProgress: [],
-        },
+      const mockUser = {
+        ...mockMeResponse.user,
+        mediaProgress: [],
       };
 
-      const result = marshalMediaProgressFromAuthResponse(mockResponse);
+      const result = marshalMediaProgressFromAuthResponse(mockUser);
 
       expect(result).toHaveLength(0);
     });
 
     it('should return empty array when mediaProgress is undefined', () => {
-      const mockResponse = {
-        ...mockMeResponse,
-        user: {
-          ...mockMeResponse.user,
-        },
+      const mockUser = {
+        ...mockMeResponse.user,
       };
 
-      const result = marshalMediaProgressFromAuthResponse(mockResponse);
+      const result = marshalMediaProgressFromAuthResponse(mockUser);
 
       expect(result).toHaveLength(0);
     });
@@ -145,29 +136,26 @@ describe('MediaProgress Helper', () => {
     });
 
     it('should handle null values in media progress', () => {
-      const mockResponse = {
-        ...mockMeResponse,
-        user: {
-          ...mockMeResponse.user,
-          mediaProgress: [
-            {
-              id: 'progress-1',
-              libraryItemId: 'li-1',
-              episodeId: null,
-              duration: null,
-              progress: null,
-              currentTime: null,
-              isFinished: null,
-              hideFromContinueListening: null,
-              lastUpdate: null,
-              startedAt: null,
-              finishedAt: null,
-            },
-          ],
-        },
+      const mockUser = {
+        ...mockMeResponse.user,
+        mediaProgress: [
+          {
+            id: 'progress-1',
+            libraryItemId: 'li-1',
+            episodeId: null,
+            duration: null,
+            progress: null,
+            currentTime: null,
+            isFinished: null,
+            hideFromContinueListening: null,
+            lastUpdate: null,
+            startedAt: null,
+            finishedAt: null,
+          },
+        ],
       };
 
-      const result = marshalMediaProgressFromAuthResponse(mockResponse);
+      const result = marshalMediaProgressFromAuthResponse(mockUser);
 
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
@@ -187,7 +175,7 @@ describe('MediaProgress Helper', () => {
     });
 
     it('should handle ApiUser object directly', () => {
-      const mockUser = {
+      const mockUserData = {
         ...mockApiUser,
         mediaProgress: [
           {
@@ -206,7 +194,7 @@ describe('MediaProgress Helper', () => {
         ],
       };
 
-      const result = marshalMediaProgressFromAuthResponse(mockUser);
+      const result = marshalMediaProgressFromAuthResponse(mockUserData);
 
       expect(result).toHaveLength(1);
       expect(result[0].userId).toBe('user-1');
@@ -599,29 +587,26 @@ describe('MediaProgress Helper', () => {
 
     it('should handle complete media progress workflow', async () => {
       // Marshal progress from API response
-      const mockResponse = {
-        ...mockMeResponse,
-        user: {
-          ...mockMeResponse.user,
-          mediaProgress: [
-            {
-              id: 'progress-1',
-              libraryItemId: 'li-1',
-              episodeId: null,
-              duration: 3600,
-              progress: 0.5,
-              currentTime: 1800,
-              isFinished: false,
-              hideFromContinueListening: false,
-              lastUpdate: 1672531200000,
-              startedAt: 1672444800000,
-              finishedAt: null,
-            },
-          ],
-        },
+      const mockUser = {
+        ...mockMeResponse.user,
+        mediaProgress: [
+          {
+            id: 'progress-1',
+            libraryItemId: 'li-1',
+            episodeId: null,
+            duration: 3600,
+            progress: 0.5,
+            currentTime: 1800,
+            isFinished: false,
+            hideFromContinueListening: false,
+            lastUpdate: 1672531200000,
+            startedAt: 1672444800000,
+            finishedAt: null,
+          },
+        ],
       };
 
-      const marshaledProgress = marshalMediaProgressFromAuthResponse(mockResponse);
+      const marshaledProgress = marshalMediaProgressFromAuthResponse(mockUser);
       expect(marshaledProgress).toHaveLength(1);
 
       // Upsert the progress

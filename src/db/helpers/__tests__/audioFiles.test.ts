@@ -617,10 +617,26 @@ describe('AudioFiles Helper', () => {
   });
 
   describe('Integration Tests', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       jest.doMock('@/db/client', () => ({
         db: testDb.db,
       }));
+
+      // Insert parent records required for foreign key constraints
+      await testDb.sqlite.execSync(`
+        INSERT INTO libraries (id, name, created_at, updated_at)
+        VALUES ('lib-1', 'Test Library', 1640995200, 1640995200);
+      `);
+
+      await testDb.sqlite.execSync(`
+        INSERT INTO library_items (id, library_id, media_type, added_at, updated_at)
+        VALUES ('li-1', 'lib-1', 'book', 1640995200, 1640995200);
+      `);
+
+      await testDb.sqlite.execSync(`
+        INSERT INTO media_metadata (id, library_item_id, title, media_type)
+        VALUES ('media-1', 'li-1', 'Test Media', 'book');
+      `);
     });
 
     it('should handle complete audio file workflow', async () => {

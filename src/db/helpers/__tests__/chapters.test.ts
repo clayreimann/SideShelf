@@ -277,6 +277,12 @@ describe('Chapters Helper', () => {
 
     describe('getChaptersForMedia', () => {
       beforeEach(async () => {
+        // Insert media-2 parent record
+        await testDb.sqlite.execSync(`
+          INSERT INTO media_metadata (id, library_item_id, title, media_type)
+          VALUES ('media-2', 'li-1', 'Test Media 2', 'book');
+        `);
+
         // Insert test chapters
         const chapterRows: NewChapterRow[] = [
           {
@@ -323,6 +329,12 @@ describe('Chapters Helper', () => {
       });
 
       it('should order chapters by chapterId', async () => {
+        // Insert media-3 parent record
+        await testDb.sqlite.execSync(`
+          INSERT INTO media_metadata (id, library_item_id, title, media_type)
+          VALUES ('media-3', 'li-1', 'Test Media 3', 'book');
+        `);
+
         // Insert chapters in reverse order
         const chapterRows: NewChapterRow[] = [
           {
@@ -364,6 +376,12 @@ describe('Chapters Helper', () => {
 
     describe('deleteChaptersForMedia', () => {
       beforeEach(async () => {
+        // Insert media-2 parent record
+        await testDb.sqlite.execSync(`
+          INSERT INTO media_metadata (id, library_item_id, title, media_type)
+          VALUES ('media-2', 'li-1', 'Test Media 2', 'book');
+        `);
+
         // Insert test chapters
         const chapterRows: NewChapterRow[] = [
           {
@@ -567,10 +585,26 @@ describe('Chapters Helper', () => {
   });
 
   describe('Integration Tests', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       jest.doMock('@/db/client', () => ({
         db: testDb.db,
       }));
+
+      // Insert parent records required for foreign key constraints
+      await testDb.sqlite.execSync(`
+        INSERT INTO libraries (id, name, created_at, updated_at)
+        VALUES ('lib-1', 'Test Library', 1640995200, 1640995200);
+      `);
+
+      await testDb.sqlite.execSync(`
+        INSERT INTO library_items (id, library_id, media_type, added_at, updated_at)
+        VALUES ('li-1', 'lib-1', 'book', 1640995200, 1640995200);
+      `);
+
+      await testDb.sqlite.execSync(`
+        INSERT INTO media_metadata (id, library_item_id, title, media_type)
+        VALUES ('media-1', 'li-1', 'Test Media', 'book');
+      `);
     });
 
     it('should handle complete chapter workflow', async () => {
