@@ -38,6 +38,10 @@ logs/
 # typescript
 *.tsbuildinfo
 
+# test coverage and reports
+coverage/
+eslint-report.json
+
 app-example
 
 # generated native folders
