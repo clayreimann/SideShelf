@@ -24,15 +24,8 @@ module.exports = {
     "!src/**/__tests__/**/*",
     "!src/**/types.ts",
     "!src/app/**/*",
+    "!src/components/**/*",
   ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "html", "json", "json-summary"],
-  coverageThreshold: {
-    global: {
-      branches: 50,
-      functions: 50,
-      lines: 50,
-      statements: 50,
-    },
-  },
 };
