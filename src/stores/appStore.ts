@@ -125,12 +125,18 @@ export function useLibrary() {
   const libraries = useAppStore((state) => state.library.libraries);
   const items = useAppStore((state) => state.library.items);
   const sortConfig = useAppStore((state) => state.library.sortConfig);
-  const isLoadingLibraries = useAppStore((state) => state.library.loading.isLoadingLibraries);
-  const isLoadingItems = useAppStore((state) => state.library.loading.isLoadingItems);
-  const isSelectingLibrary = useAppStore((state) => state.library.loading.isSelectingLibrary);
-  const isInitializing = useAppStore((state) => state.library.loading.isInitializing);
-  const initialized = useAppStore((state) => state.library.initialized);
-  const ready = useAppStore((state) => state.library.ready);
+
+  // Derive loading states from operation state machine
+  const operationState = useAppStore((state) => state.library.operationState);
+  const isLoadingLibraries = operationState === "REFRESHING_LIBRARIES";
+  const isLoadingItems = operationState === "REFRESHING_ITEMS";
+  const isSelectingLibrary = operationState === "SELECTING_LIBRARY";
+  const isInitializing = useAppStore((state) => state.library.readinessState === "INITIALIZING");
+
+  // Derive readiness flags from readiness state machine
+  const readinessState = useAppStore((state) => state.library.readinessState);
+  const initialized = readinessState !== "UNINITIALIZED";
+  const ready = readinessState === "READY";
 
   // Actions (these don't change so we can get them once)
   const initialize = useAppStore((state) => state.initializeLibrarySlice);
@@ -250,8 +256,9 @@ export function useLibraryActions() {
  */
 export function useLibraryStoreInitializer(apiConfigured: boolean, dbInitialized: boolean) {
   const initializeLibrary = useAppStore((state) => state.initializeLibrarySlice);
-  const setLibraryReady = useAppStore((state) => state._setLibraryReady);
-  const initialized = useAppStore((state) => state.library.initialized);
+  const updateReadiness = useAppStore((state) => state._updateReadiness);
+  const readinessState = useAppStore((state) => state.library.readinessState);
+  const initialized = readinessState !== "UNINITIALIZED";
 
   // Initialize the store when dependencies are ready
   React.useEffect(() => {
@@ -262,8 +269,8 @@ export function useLibraryStoreInitializer(apiConfigured: boolean, dbInitialized
 
   // Update ready state when dependencies change
   React.useEffect(() => {
-    setLibraryReady(apiConfigured, dbInitialized);
-  }, [setLibraryReady, apiConfigured, dbInitialized]);
+    updateReadiness(apiConfigured, dbInitialized);
+  }, [updateReadiness, apiConfigured, dbInitialized]);
 }
 
 /**

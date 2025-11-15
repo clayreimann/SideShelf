@@ -1,21 +1,25 @@
-import { cacheCoverIfMissing, getCoverUri, isCoverCached } from '@/lib/covers';
-import type { ApiBook, ApiPodcast } from '@/types/api';
-import { eq } from 'drizzle-orm';
-import { db } from '../client';
-import { libraryItems } from '../schema/libraryItems';
-import { mediaMetadata, MediaMetadataRow, NewMediaMetadataRow } from '../schema/mediaMetadata';
-import { getLocalCoverUrl, setLocalCoverCached } from './localData';
+import { cacheCoverIfMissing, getCoverUri, isCoverCached } from "@/lib/covers";
+import type { ApiBook, ApiBookMinified, ApiPodcast, ApiPodcastMinified } from "@/types/api";
+import { eq } from "drizzle-orm";
+import { db } from "../client";
+import { libraryItems } from "../schema/libraryItems";
+import { mediaMetadata, MediaMetadataRow, NewMediaMetadataRow } from "../schema/mediaMetadata";
+import { getLocalCoverUrl, setLocalCoverCached } from "./localData";
 
 /**
  * Marshal book data from API to media metadata row
+ * Accepts both full and minified API responses
  */
-export function marshalBookToMediaMetadata(book: ApiBook): NewMediaMetadataRow {
+export function marshalBookToMediaMetadata(book: ApiBook | ApiBookMinified): NewMediaMetadataRow {
   const metadata = book.metadata;
+
+  // Type guard to check if this is a full ApiBook (has audioFiles array)
+  const isFullBook = (b: ApiBook | ApiBookMinified): b is ApiBook => "audioFiles" in b;
 
   return {
     id: book.id,
-    libraryItemId: book.libraryItemId,
-    mediaType: 'book',
+    libraryItemId: book.libraryItemId!,
+    mediaType: "book",
 
     // Common fields
     title: metadata.title,
@@ -37,9 +41,14 @@ export function marshalBookToMediaMetadata(book: ApiBook): NewMediaMetadataRow {
     narratorName: metadata.narratorName,
     seriesName: metadata.seriesName,
 
-    // Calculate duration from audio files if available
-    duration: book.audioFiles?.reduce((total, file) => total + (file.duration || 0), 0) || null,
-    trackCount: book.audioFiles?.length || null,
+    // Duration and track count: use array data if available (full response),
+    // otherwise use direct fields (minified response)
+    duration: isFullBook(book)
+      ? book.audioFiles?.reduce((total, file) => total + (file.duration || 0), 0) || null
+      : book.duration || null,
+    trackCount: isFullBook(book)
+      ? book.audioFiles?.length || null
+      : book.numAudioFiles || book.numTracks || null,
 
     // Additional book fields (not in current API but in schema)
     format: null, // Could be derived from audio files
@@ -67,14 +76,20 @@ export function marshalBookToMediaMetadata(book: ApiBook): NewMediaMetadataRow {
 
 /**
  * Marshal podcast data from API to media metadata row
+ * Accepts both full and minified API responses
  */
-export function marshalPodcastToMediaMetadata(podcast: ApiPodcast): NewMediaMetadataRow {
+export function marshalPodcastToMediaMetadata(
+  podcast: ApiPodcast | ApiPodcastMinified
+): NewMediaMetadataRow {
   const metadata = podcast.metadata;
+
+  // Type guard to check if this is a full ApiPodcast (has episodes array)
+  const isFullPodcast = (p: ApiPodcast | ApiPodcastMinified): p is ApiPodcast => "episodes" in p;
 
   return {
     id: podcast.id,
-    libraryItemId: podcast.libraryItemId,
-    mediaType: 'podcast',
+    libraryItemId: podcast.libraryItemId!,
+    mediaType: "podcast",
 
     // Common fields
     title: metadata.title,
@@ -98,8 +113,14 @@ export function marshalPodcastToMediaMetadata(podcast: ApiPodcast): NewMediaMeta
     asin: null,
     publishedYear: null,
     publishedDate: metadata.releaseDate, // Map releaseDate to publishedDate
-    duration: null, // ApiPodcast duration would be sum of episodes
-    trackCount: podcast.episodes?.length || null,
+    // Duration and track count: use array data if available (full response),
+    // otherwise use direct fields (minified response)
+    duration: isFullPodcast(podcast)
+      ? null // Podcast duration would be sum of episodes, but we don't calculate it
+      : podcast.duration || null,
+    trackCount: isFullPodcast(podcast)
+      ? podcast.episodes?.length || null
+      : podcast.numEpisodes || podcast.numTracks || null,
     format: null,
     edition: null,
     abridged: null,
@@ -207,7 +228,9 @@ export async function upsertPodcastsMetadata(podcasts: ApiPodcast[]): Promise<vo
 /**
  * Get media metadata by library item ID
  */
-export async function getMediaMetadataByLibraryItemId(libraryItemId: string): Promise<MediaMetadataRow | null> {
+export async function getMediaMetadataByLibraryItemId(
+  libraryItemId: string
+): Promise<MediaMetadataRow | null> {
   const result = await db
     .select()
     .from(mediaMetadata)
@@ -221,11 +244,7 @@ export async function getMediaMetadataByLibraryItemId(libraryItemId: string): Pr
  * Get media metadata by ID
  */
 export async function getMediaMetadataById(id: string): Promise<MediaMetadataRow | null> {
-  const result = await db
-    .select()
-    .from(mediaMetadata)
-    .where(eq(mediaMetadata.id, id))
-    .limit(1);
+  const result = await db.select().from(mediaMetadata).where(eq(mediaMetadata.id, id)).limit(1);
 
   return result[0] || null;
 }
@@ -310,7 +329,9 @@ export async function cacheCoverAndUpdateMetadata(libraryItemId: string): Promis
     // Only update the local cache if the cover was actually downloaded or if it already exists
     if (result.uri) {
       await setLocalCoverCached(mediaId, result.uri);
-      console.log(`[mediaMetadata] Cached cover for ${libraryItemId} (media: ${mediaId}): ${result.uri} (downloaded: ${result.wasDownloaded})`);
+      console.log(
+        `[mediaMetadata] Cached cover for ${libraryItemId} (media: ${mediaId}): ${result.uri} (downloaded: ${result.wasDownloaded})`
+      );
       return result.wasDownloaded;
     }
 
@@ -324,7 +345,9 @@ export async function cacheCoverAndUpdateMetadata(libraryItemId: string): Promis
 /**
  * Cache covers for all items in a library and update their imageUrls
  */
-export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ downloadedCount: number; totalCount: number }> {
+export async function cacheCoversForLibraryItems(
+  libraryId: string
+): Promise<{ downloadedCount: number; totalCount: number }> {
   try {
     const items = await db
       .select({
@@ -342,14 +365,18 @@ export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ d
       const cachedUrl = await getLocalCoverUrl(item.mediaId);
       if (cachedUrl && isCoverCached(item.libraryItemId)) {
         // ensure the cover cache is recorded in local database
-        console.log(`[mediaMetadata] Cover already cached for ${item.libraryItemId} (media: ${item.mediaId}): ${cachedUrl}`);
+        console.log(
+          `[mediaMetadata] Cover already cached for ${item.libraryItemId} (media: ${item.mediaId}): ${cachedUrl}`
+        );
         await setLocalCoverCached(item.mediaId, getCoverUri(item.libraryItemId));
         itemsWithCachedCovers.add(item.libraryItemId);
       }
     }
 
-    const itemsToCache = items.filter(item => !itemsWithCachedCovers.has(item.libraryItemId));
-    console.log(`[mediaMetadata] Caching covers for ${itemsToCache.length} of ${items.length} items in library ${libraryId}`);
+    const itemsToCache = items.filter((item) => !itemsWithCachedCovers.has(item.libraryItemId));
+    console.log(
+      `[mediaMetadata] Caching covers for ${itemsToCache.length} of ${items.length} items in library ${libraryId}`
+    );
 
     let downloadedCount = 0;
 
@@ -358,12 +385,14 @@ export async function cacheCoversForLibraryItems(libraryId: string): Promise<{ d
     for (let i = 0; i < itemsToCache.length; i += batchSize) {
       const batch = itemsToCache.slice(i, i + batchSize);
       const results = await Promise.all(
-        batch.map(item => cacheCoverAndUpdateMetadata(item.libraryItemId))
+        batch.map((item) => cacheCoverAndUpdateMetadata(item.libraryItemId))
       );
       downloadedCount += results.filter(Boolean).length;
     }
 
-    console.log(`[mediaMetadata] Finished caching covers for library ${libraryId}. Downloaded=${downloadedCount} Already cached=${items.length - itemsToCache.length} Total=${items.length}`);
+    console.log(
+      `[mediaMetadata] Finished caching covers for library ${libraryId}. Downloaded=${downloadedCount} Already cached=${items.length - itemsToCache.length} Total=${items.length}`
+    );
     return { downloadedCount, totalCount: items.length };
   } catch (error) {
     console.error(`[mediaMetadata] Failed to cache covers for library ${libraryId}:`, error);

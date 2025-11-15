@@ -6,7 +6,6 @@
  */
 
 import { Href, Router } from "expo-router";
-import { InteractionManager } from "react-native";
 
 /**
  * Navigate to a detail page within a tab, ensuring the tab's index is in the navigation stack first.
@@ -42,7 +41,7 @@ export function navigateToTabDetail(router: Router, tabPath: string, detailPath:
 
   // Then navigate to the detail page after interactions are complete
   // This ensures the index route is fully rendered before navigating
-  InteractionManager.runAfterInteractions(() => {
+  setImmediate(() => {
     router.push(detailPath as Href);
   });
 }

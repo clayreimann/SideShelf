@@ -6,3 +6,7 @@
 # Testing
 
 - When you make code changes ensure that the tests pass after your changes
+
+# External documentation
+
+- If you need to look up parameters or types about the Audiobookshelf API, check here https://api.audiobookshelf.org/

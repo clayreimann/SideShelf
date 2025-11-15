@@ -40,7 +40,7 @@ export interface ApiPlaySessionResponse {
   libraryId: string;
   libraryItemId: string;
   episodeId?: string;
-  mediaType: 'book' | 'podcast';
+  mediaType: "book" | "podcast";
   mediaMetadata: {
     title: string;
     author: string;
@@ -100,7 +100,7 @@ export interface ApiLibrary {
   folders: ApiFolder[];
   displayOrder: number;
   icon: string;
-  mediaType: 'book' | 'podcast';
+  mediaType: "book" | "podcast";
   provider: string;
   settings: ApiLibrarySettings;
   createdAt: number;
@@ -139,7 +139,7 @@ export interface ApiLibraryItem {
   scanVersion: string;
   isMissing: boolean;
   isInvalid: boolean;
-  mediaType: 'book' | 'podcast';
+  mediaType: "book" | "podcast";
   media: ApiBook | ApiPodcast;
   libraryFiles: ApiLibraryFile[];
 }
@@ -175,6 +175,23 @@ export interface ApiBook {
   ebookFile: ApiEBookFile | null;
 }
 
+/**
+ * Minified book response from /api/libraries/{id}/items?minified=1
+ * Contains summary fields instead of full arrays
+ */
+export interface ApiBookMinified {
+  id: string;
+  libraryItemId?: string; // Not included in API response, must be backfilled
+  metadata: ApiBookMetadataMinified;
+  coverPath: string | null;
+  tags: string[];
+  numTracks: number;
+  numAudioFiles: number;
+  numChapters: number;
+  duration: number;
+  size: number;
+}
+
 export interface ApiBookMetadata {
   title: string | null;
   subtitle: string | null;
@@ -194,6 +211,31 @@ export interface ApiBookMetadata {
   authorNameLF: string;
   narratorName: string;
   seriesName: string;
+  abridged?: boolean;
+}
+
+/**
+ * Minified book metadata from /api/libraries/{id}/items?minified=1
+ * Has computed string fields instead of arrays for authors/narrators/series
+ */
+export interface ApiBookMetadataMinified {
+  title: string | null;
+  titleIgnorePrefix: string | null;
+  subtitle: string | null;
+  authorName: string;
+  authorNameLF: string;
+  narratorName: string;
+  seriesName: string;
+  genres: string[];
+  publishedYear: string | null;
+  publishedDate: string | null;
+  publisher: string | null;
+  description: string | null;
+  isbn: string | null;
+  asin: string | null;
+  language: string | null;
+  explicit: boolean;
+  abridged: boolean;
 }
 
 export interface ApiAuthor {
@@ -304,6 +346,27 @@ export interface ApiPodcast {
   maxNewEpisodesToDownload: number;
 }
 
+/**
+ * Minified podcast response from /api/libraries/{id}/items?minified=1
+ * Contains summary fields instead of full arrays
+ */
+export interface ApiPodcastMinified {
+  id: string;
+  libraryItemId?: string; // Not included in API response, must be backfilled
+  metadata: ApiPodcastMetadataMinified;
+  coverPath: string | null;
+  tags: string[];
+  numTracks: number;
+  numEpisodes: number;
+  duration: number | null;
+  size: number;
+  autoDownloadEpisodes: boolean;
+  autoDownloadSchedule: string;
+  lastEpisodeCheck: number;
+  maxEpisodesToKeep: number;
+  maxNewEpisodesToDownload: number;
+}
+
 export interface ApiPodcastMetadata {
   title: string | null;
   author: string | null;
@@ -319,6 +382,13 @@ export interface ApiPodcastMetadata {
   language: string | null;
   type: string | null;
 }
+
+/**
+ * Minified podcast metadata from /api/libraries/{id}/items?minified=1
+ * Unlike books, podcast metadata is already scalar fields in the full response,
+ * so the minified version is structurally the same
+ */
+export interface ApiPodcastMetadataMinified extends ApiPodcastMetadata {}
 
 export interface ApiPodcastEpisode {
   libraryItemId: string;
@@ -425,7 +495,7 @@ export interface ApiFilterSeries {
 
 export interface ApiLibraryResponse extends ApiLibrary {}
 
-export interface ApiLibraryResponseWithFilterData  {
+export interface ApiLibraryResponseWithFilterData {
   filterdata: ApiFilterData;
   library: ApiLibrary;
   issues: number;
