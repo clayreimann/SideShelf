@@ -12,6 +12,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      checks: write
 
     steps:
       - name: Checkout code
@@ -27,23 +28,56 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
-        run: npm run test:coverage
+        run: npm run test:coverage 2>&1 | tee coverage-output.txt
 
       - name: Run complexity check
         run: npm run lint:complexity
         continue-on-error: true
 
-      - name: Coverage Report
-        uses: ArtiomTr/jest-coverage-report-action@v2
+      - name: Extract coverage summary
+        id: coverage
+        run: |
+          echo "## Test Coverage Summary" > coverage-comment.md
+          echo "" >> coverage-comment.md
+          echo '```' >> coverage-comment.md
+          tail -n 30 coverage-output.txt | grep -A 30 "^-\+$" | tail -n 25 >> coverage-comment.md || echo "Coverage data not found" >> coverage-comment.md
+          echo '```' >> coverage-comment.md
+
+      - name: Post coverage comment
+        uses: actions/github-script@v7
+        continue-on-error: true
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          coverage-file: ./coverage/coverage-summary.json
-          base-coverage-file: ./coverage/coverage-summary.json
-          working-directory: ./
-          annotations: all
-          package-manager: npm
-          test-script: npm run test:coverage
-          skip-step: all
+          script: |
+            const fs = require('fs');
+            const comment = fs.readFileSync('coverage-comment.md', 'utf8');
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('Test Coverage Summary')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
