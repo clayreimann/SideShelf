@@ -14,7 +14,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TrackPlayer, { State } from "react-native-track-player";
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { PlayerService } from "../services/PlayerService";
 import { progressService } from "../services/ProgressService";
 import { createPlayerSlice, PlayerSlice } from "../stores/slices/playerSlice";
@@ -151,7 +151,7 @@ jest.mock("../stores/appStore", () => ({
 }));
 
 describe("Foreground Playing Restoration Integration", () => {
-  let store: ReturnType<typeof create<PlayerSlice>>;
+  let store: UseBoundStore<StoreApi<PlayerSlice>>;
   let playerService: PlayerService;
 
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
@@ -184,14 +184,16 @@ describe("Foreground Playing Restoration Integration", () => {
         downloadInfo: {
           isDownloaded: true,
           downloadPath: "/downloads/test.m4b",
+          downloadedAt: new Date(),
+          updatedAt: new Date(),
         },
       },
     ],
     chapters: [
-      { id: "ch-1", start: 0, end: 1800, title: "Chapter 1" },
-      { id: "ch-2", start: 1800, end: 3600, title: "Chapter 2" },
-      { id: "ch-3", start: 3600, end: 5400, title: "Chapter 3" },
-      { id: "ch-4", start: 5400, end: 7200, title: "Chapter 4" },
+      { id: "ch-1", mediaId: "media-1", chapterId: 1, start: 0, end: 1800, title: "Chapter 1" },
+      { id: "ch-2", mediaId: "media-1", chapterId: 2, start: 1800, end: 3600, title: "Chapter 2" },
+      { id: "ch-3", mediaId: "media-1", chapterId: 3, start: 3600, end: 5400, title: "Chapter 3" },
+      { id: "ch-4", mediaId: "media-1", chapterId: 4, start: 5400, end: 7200, title: "Chapter 4" },
     ],
     duration: 7200,
     isDownloaded: true,
@@ -277,16 +279,13 @@ describe("Foreground Playing Restoration Integration", () => {
 
     // Setup: DB has slightly stale position
     mockedProgressService.getCurrentSession.mockResolvedValue({
-      id: "session-1",
-      userId: "user-1",
+      sessionId: "session-1",
       libraryItemId: "item-1",
       mediaId: "media-1",
+      startTime: 0,
       currentTime: staleDbPosition,
-      timeListening: 100,
-      startedAt: new Date(Date.now() - 100000),
-      updatedAt: new Date(Date.now() - 2000), // Updated 2 seconds ago
-      displayTitle: "Test Book",
-      displayAuthor: "Test Author",
+      duration: 7200,
+      isDownloaded: true,
     });
 
     // Act: Simulate foreground restoration calling syncPositionFromDatabase()
@@ -342,16 +341,13 @@ describe("Foreground Playing Restoration Integration", () => {
 
     // Setup: DB has slightly stale position
     mockedProgressService.getCurrentSession.mockResolvedValue({
-      id: "session-1",
-      userId: "user-1",
+      sessionId: "session-1",
       libraryItemId: "item-1",
       mediaId: "media-1",
+      startTime: 0,
       currentTime: staleDbPosition,
-      timeListening: 100,
-      startedAt: new Date(Date.now() - 100000),
-      updatedAt: new Date(Date.now() - 2000), // Updated 2 seconds ago
-      displayTitle: "Test Book",
-      displayAuthor: "Test Author",
+      duration: 7200,
+      isDownloaded: true,
     });
 
     // Act: Call reconcileTrackPlayerState()
@@ -405,16 +401,13 @@ describe("Foreground Playing Restoration Integration", () => {
 
     // Setup: DB has stale position (10s behind)
     mockedProgressService.getCurrentSession.mockResolvedValue({
-      id: "session-1",
-      userId: "user-1",
+      sessionId: "session-1",
       libraryItemId: "item-1",
       mediaId: "media-1",
+      startTime: 0,
       currentTime: staleDbPosition,
-      timeListening: 100,
-      startedAt: new Date(Date.now() - 100000),
-      updatedAt: new Date(Date.now() - 10000), // Updated 10 seconds ago
-      displayTitle: "Test Book",
-      displayAuthor: "Test Author",
+      duration: 7200,
+      isDownloaded: true,
     });
 
     // Act: Call reconcileTrackPlayerState()
@@ -464,16 +457,13 @@ describe("Foreground Playing Restoration Integration", () => {
 
     // Setup: DB has newer position
     mockedProgressService.getCurrentSession.mockResolvedValue({
-      id: "session-1",
-      userId: "user-1",
+      sessionId: "session-1",
       libraryItemId: "item-1",
       mediaId: "media-1",
+      startTime: 0,
       currentTime: dbPosition,
-      timeListening: 100,
-      startedAt: new Date(Date.now() - 100000),
-      updatedAt: new Date(Date.now() - 1000),
-      displayTitle: "Test Book",
-      displayAuthor: "Test Author",
+      duration: 7200,
+      isDownloaded: true,
     });
 
     // Act: Simulate foreground restoration calling syncPositionFromDatabase()

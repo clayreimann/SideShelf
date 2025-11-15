@@ -36,11 +36,11 @@ export default function RootLayout() {
   const { colors, header } = useThemedStyles();
 
   // Load custom fonts
+  // Note: MaterialCommunityIcons and Octicons are pre-loaded by @expo/vector-icons
+  // Only FontAwesome6 needs explicit loading
   FontAwesome6.font;
   const [fontsLoaded, fontsError] = useFonts({
     FontAwesome6: FontAwesome6.font,
-    MaterialCommunityIcons: MaterialCommunityIcons.font,
-    Octicons: Octicons.font,
   });
 
   // Wait for fonts to load before rendering the app
@@ -93,7 +93,8 @@ export default function RootLayout() {
           const tpState = await TrackPlayer.getPlaybackState();
           trackPlayerIsPlaying = tpState.state === State.Playing;
         } catch (error) {
-          log.warn(`Failed to check TrackPlayer state, assuming not playing ${error}`);
+          const errorObj = error instanceof Error ? error : new Error(String(error));
+          log.warn(`Failed to check TrackPlayer state, assuming not playing: ${errorObj.message}`);
         }
 
         if (trackPlayerIsPlaying) {

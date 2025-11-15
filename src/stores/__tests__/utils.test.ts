@@ -37,6 +37,7 @@ describe("Store Utils", () => {
         mediaType: "book",
         title: "The Great Gatsby",
         author: "F. Scott Fitzgerald",
+        authorName: "F. Scott Fitzgerald",
         authorNameLF: "Fitzgerald, F. Scott",
         narrator: "Jim Dale",
         releaseDate: "1925-04-10",
@@ -44,12 +45,14 @@ describe("Store Utils", () => {
         addedAt: 1640995200000,
         duration: 3600.5,
         coverUri: "/covers/gatsby.jpg",
+        seriesName: null,
       },
       {
         id: "2",
         mediaType: "book",
         title: "To Kill a Mockingbird",
         author: "Harper Lee",
+        authorName: "Harper Lee",
         authorNameLF: "Lee, Harper",
         narrator: "Sissy Spacek",
         releaseDate: "1960-07-11",
@@ -57,12 +60,14 @@ describe("Store Utils", () => {
         addedAt: 1672531200000,
         duration: 4200.0,
         coverUri: "/covers/mockingbird.jpg",
+        seriesName: null,
       },
       {
         id: "3",
         mediaType: "book",
         title: "1984",
         author: "George Orwell",
+        authorName: "George Orwell",
         authorNameLF: "Orwell, George",
         narrator: "Simon Prebble",
         releaseDate: "1949-06-08",
@@ -70,6 +75,7 @@ describe("Store Utils", () => {
         addedAt: 1656667200000,
         duration: 5400.25,
         coverUri: "/covers/1984.jpg",
+        seriesName: null,
       },
     ];
 
@@ -242,23 +248,26 @@ describe("Store Utils", () => {
       {
         id: "author-1",
         name: "George Orwell",
-        addedAt: new Date("2022-01-01"),
-        updatedAt: new Date("2023-01-01"),
+        nameLF: "Orwell, George",
+        imageUrl: null,
         numBooks: 5,
+        cachedImageUri: null,
       },
       {
         id: "author-2",
         name: "Harper Lee",
-        addedAt: new Date("2021-06-15"),
-        updatedAt: new Date("2022-12-01"),
+        nameLF: "Lee, Harper",
+        imageUrl: null,
         numBooks: 2,
+        cachedImageUri: null,
       },
       {
         id: "author-3",
         name: "F. Scott Fitzgerald",
-        addedAt: new Date("2023-03-10"),
-        updatedAt: new Date("2023-06-15"),
+        nameLF: "Fitzgerald, F. Scott",
+        imageUrl: null,
         numBooks: 8,
+        cachedImageUri: null,
       },
     ];
 
@@ -353,6 +362,7 @@ describe("Store Utils", () => {
         addedAt: new Date("2022-01-01"),
         updatedAt: new Date("2023-01-01"),
         bookCount: 7,
+        firstBookCoverUrl: null,
       },
       {
         id: "series-2",
@@ -361,6 +371,7 @@ describe("Store Utils", () => {
         addedAt: new Date("2021-06-15"),
         updatedAt: new Date("2022-12-01"),
         bookCount: 3,
+        firstBookCoverUrl: null,
       },
       {
         id: "series-3",
@@ -369,6 +380,7 @@ describe("Store Utils", () => {
         addedAt: new Date("2023-03-10"),
         updatedAt: new Date("2023-06-15"),
         bookCount: 5,
+        firstBookCoverUrl: null,
       },
     ];
 

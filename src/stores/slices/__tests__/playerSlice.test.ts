@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TrackPlayer from "react-native-track-player";
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { ASYNC_KEYS } from "../../../lib/asyncStore";
 import { progressService } from "../../../services/ProgressService";
 import type { PlayerTrack } from "../../../types/player";
@@ -50,7 +50,7 @@ jest.mock("../../../lib/trackPlayerConfig", () => ({
 }));
 
 describe("PlayerSlice", () => {
-  let store: ReturnType<typeof create<PlayerSlice>>;
+  let store: UseBoundStore<StoreApi<PlayerSlice>>;
 
   // Get mocked functions for type safety
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
@@ -78,12 +78,14 @@ describe("PlayerSlice", () => {
         downloadInfo: {
           isDownloaded: true,
           downloadPath: "/downloads/test.m4b",
+          downloadedAt: new Date(),
+          updatedAt: new Date(),
         },
-      },
+      } as any,
     ],
     chapters: [
-      { id: "ch-1", start: 0, end: 1800, title: "Chapter 1" },
-      { id: "ch-2", start: 1800, end: 3600, title: "Chapter 2" },
+      { id: "ch-1", start: 0, end: 1800, title: "Chapter 1", mediaId: "media-1", chapterId: 0 },
+      { id: "ch-2", start: 1800, end: 3600, title: "Chapter 2", mediaId: "media-1", chapterId: 1 },
     ],
     duration: 3600,
     isDownloaded: true,
@@ -104,7 +106,7 @@ describe("PlayerSlice", () => {
     mockedTrackPlayer.getQueue.mockResolvedValue([]);
     mockedTrackPlayer.seekTo.mockResolvedValue();
     mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(0);
-    mockedTrackPlayer.getActiveTrack.mockResolvedValue(null);
+    mockedTrackPlayer.getActiveTrack.mockResolvedValue(undefined);
     mockedTrackPlayer.updateMetadataForTrack.mockResolvedValue();
     mockedProgressService.getCurrentSession.mockResolvedValue(null);
     getUserByUsername.mockResolvedValue({ id: "user-1" });
@@ -529,7 +531,7 @@ describe("PlayerSlice", () => {
       store.getState().updatePosition(100);
 
       mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(0);
-      mockedTrackPlayer.getActiveTrack.mockResolvedValue({ id: "track-1", title: "Test" });
+      mockedTrackPlayer.getActiveTrack.mockResolvedValue({ id: "track-1", title: "Test", url: "test-url" });
 
       await store.getState().updateNowPlayingMetadata();
 
@@ -575,7 +577,7 @@ describe("PlayerSlice", () => {
       store.getState().updatePosition(100);
 
       mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(0);
-      mockedTrackPlayer.getActiveTrack.mockResolvedValue({ id: "track-1", title: "Test" });
+      mockedTrackPlayer.getActiveTrack.mockResolvedValue({ id: "track-1", title: "Test", url: "test-url" });
 
       await store.getState().updateNowPlayingMetadata();
 
@@ -585,6 +587,9 @@ describe("PlayerSlice", () => {
 
   describe("restorePersistedState", () => {
     it("should restore state from AsyncStorage", async () => {
+      // Create expected restored track (dates become strings after JSON round-trip)
+      const expectedRestoredTrack = JSON.parse(JSON.stringify(mockPlayerTrack));
+
       mockedAsyncStorage.getItem.mockImplementation((key: string) => {
         switch (key) {
           case ASYNC_KEYS.currentTrack:
@@ -607,7 +612,7 @@ describe("PlayerSlice", () => {
       await store.getState().restorePersistedState();
 
       const state = store.getState();
-      expect(state.player.currentTrack).toEqual(mockPlayerTrack);
+      expect(state.player.currentTrack).toEqual(expectedRestoredTrack);
       expect(state.player.playbackRate).toBe(1.5);
       expect(state.player.volume).toBe(0.8);
       expect(state.player.position).toBe(300);
@@ -721,6 +726,9 @@ describe("PlayerSlice", () => {
       // This test prevents a regression where the UI would show a stale chapter during restoration
       // because the chapter was calculated before the TrackPlayer queue was rebuilt.
 
+      // Create expected restored track (dates become strings after JSON round-trip)
+      const expectedRestoredTrack = JSON.parse(JSON.stringify(mockPlayerTrack));
+
       // Mock empty TrackPlayer queue (simulates JS context recreation)
       mockedTrackPlayer.getQueue.mockResolvedValue([]);
 
@@ -742,7 +750,7 @@ describe("PlayerSlice", () => {
       // Chapter should NOT be updated during restoration when TrackPlayer queue is empty
       // It will be correctly updated when the queue is rebuilt (e.g., when user presses play)
       expect(state.player.currentChapter).toBeNull();
-      expect(state.player.currentTrack).toEqual(mockPlayerTrack);
+      expect(state.player.currentTrack).toEqual(expectedRestoredTrack);
       expect(state.player.position).toBe(2000);
     });
   });

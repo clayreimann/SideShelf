@@ -3,7 +3,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { createSettingsSlice, SettingsSlice } from "../settingsSlice";
 
 // Mock appSettings helpers
@@ -28,7 +28,7 @@ jest.mock("@/lib/trackPlayerConfig", () => ({
 }));
 
 describe("SettingsSlice", () => {
-  let store: ReturnType<typeof create<SettingsSlice>>;
+  let store: UseBoundStore<StoreApi<SettingsSlice>>;
 
   // Get mocked functions for type safety
   const {

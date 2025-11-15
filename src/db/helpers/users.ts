@@ -6,13 +6,14 @@ import { eq } from "drizzle-orm";
 export type NewUserRow = typeof users.$inferInsert;
 export type UserRow = typeof users.$inferSelect;
 
-// Extracts minimal user fields needed for our users table from /me or /login responses
-export function marshalUserFromAuthResponse(
-  data: ApiMeResponse | ApiLoginResponse
-): NewUserRow | null {
-  // ApiLoginResponse has data.user, ApiMeResponse IS the user
-  const user = "user" in data ? data.user : data;
+// Type guard to check if response is ApiLoginResponse
+function isApiLoginResponse(data: ApiMeResponse | ApiLoginResponse): data is ApiLoginResponse {
+  return 'user' in data;
+}
 
+// Extracts minimal user fields needed for our users table from /me or /login responses
+export function marshalUserFromAuthResponse(data: ApiMeResponse | ApiLoginResponse): NewUserRow | null {
+  const user = isApiLoginResponse(data) ? data.user : data;
   if (!user?.id || !user.username) return null;
 
   const perms = user.permissions;

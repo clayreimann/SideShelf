@@ -1,4 +1,4 @@
-import { db } from '@/db/client';
+import { getSQLiteDb } from '@/db/client';
 import { markAudioFileAsDownloaded, markLibraryFileAsDownloaded, setLocalCoverCached } from './localData';
 
 /**
@@ -9,20 +9,22 @@ export async function preserveExistingLocalData(): Promise<void> {
   console.log('[migrationHelpers] Starting preservation of existing local data...');
 
   try {
+    const sqliteDb = getSQLiteDb();
+
     // Preserve existing cover URLs from mediaMetadata.imageUrl
     // Note: This assumes imageUrl contains local file paths, not API URLs
-    const existingCovers = await db.execute(`
+    const existingCovers = sqliteDb.getAllSync<{ id: string; image_url: string }>(`
       SELECT id, image_url
       FROM media_metadata
       WHERE image_url IS NOT NULL
         AND (image_url LIKE 'file://%' OR image_url LIKE '/Users/%' OR image_url LIKE '/storage/%')
     `);
 
-    console.log(`[migrationHelpers] Found ${existingCovers.rows.length} existing cover URLs to preserve`);
+    console.log(`[migrationHelpers] Found ${existingCovers.length} existing cover URLs to preserve`);
 
-    for (const row of existingCovers.rows) {
-      const mediaId = row[0] as string;
-      const imageUrl = row[1] as string;
+    for (const row of existingCovers) {
+      const mediaId = row.id;
+      const imageUrl = row.image_url;
 
       try {
         await setLocalCoverCached(mediaId, imageUrl);
@@ -33,17 +35,17 @@ export async function preserveExistingLocalData(): Promise<void> {
     }
 
     // Preserve existing audio file download data
-    const existingAudioDownloads = await db.execute(`
+    const existingAudioDownloads = sqliteDb.getAllSync<{ id: string; download_path: string; downloaded_at: string }>(`
       SELECT id, download_path, downloaded_at
       FROM audio_files
       WHERE is_downloaded = 1 AND download_path IS NOT NULL
     `);
 
-    console.log(`[migrationHelpers] Found ${existingAudioDownloads.rows.length} existing audio file downloads to preserve`);
+    console.log(`[migrationHelpers] Found ${existingAudioDownloads.length} existing audio file downloads to preserve`);
 
-    for (const row of existingAudioDownloads.rows) {
-      const audioFileId = row[0] as string;
-      const downloadPath = row[1] as string;
+    for (const row of existingAudioDownloads) {
+      const audioFileId = row.id;
+      const downloadPath = row.download_path;
 
       try {
         await markAudioFileAsDownloaded(audioFileId, downloadPath);
@@ -54,17 +56,17 @@ export async function preserveExistingLocalData(): Promise<void> {
     }
 
     // Preserve existing library file download data
-    const existingLibraryDownloads = await db.execute(`
+    const existingLibraryDownloads = sqliteDb.getAllSync<{ id: string; download_path: string; downloaded_at: string }>(`
       SELECT id, download_path, downloaded_at
       FROM library_files
       WHERE is_downloaded = 1 AND download_path IS NOT NULL
     `);
 
-    console.log(`[migrationHelpers] Found ${existingLibraryDownloads.rows.length} existing library file downloads to preserve`);
+    console.log(`[migrationHelpers] Found ${existingLibraryDownloads.length} existing library file downloads to preserve`);
 
-    for (const row of existingLibraryDownloads.rows) {
-      const libraryFileId = row[0] as string;
-      const downloadPath = row[1] as string;
+    for (const row of existingLibraryDownloads) {
+      const libraryFileId = row.id;
+      const downloadPath = row.download_path;
 
       try {
         await markLibraryFileAsDownloaded(libraryFileId, downloadPath);
@@ -88,14 +90,16 @@ export async function verifyLocalDataPreservation(): Promise<void> {
   console.log('[migrationHelpers] Verifying local data preservation...');
 
   try {
-    const coverCount = await db.execute('SELECT COUNT(*) FROM local_cover_cache');
-    const audioDownloadCount = await db.execute('SELECT COUNT(*) FROM local_audio_file_downloads');
-    const libraryDownloadCount = await db.execute('SELECT COUNT(*) FROM local_library_file_downloads');
+    const sqliteDb = getSQLiteDb();
+
+    const coverCount = sqliteDb.getAllSync<{ count: number }>('SELECT COUNT(*) as count FROM local_cover_cache');
+    const audioDownloadCount = sqliteDb.getAllSync<{ count: number }>('SELECT COUNT(*) as count FROM local_audio_file_downloads');
+    const libraryDownloadCount = sqliteDb.getAllSync<{ count: number }>('SELECT COUNT(*) as count FROM local_library_file_downloads');
 
     console.log(`[migrationHelpers] Verification results:`);
-    console.log(`  - Preserved covers: ${coverCount.rows[0][0]}`);
-    console.log(`  - Preserved audio downloads: ${audioDownloadCount.rows[0][0]}`);
-    console.log(`  - Preserved library downloads: ${libraryDownloadCount.rows[0][0]}`);
+    console.log(`  - Preserved covers: ${coverCount[0]?.count ?? 0}`);
+    console.log(`  - Preserved audio downloads: ${audioDownloadCount[0]?.count ?? 0}`);
+    console.log(`  - Preserved library downloads: ${libraryDownloadCount[0]?.count ?? 0}`);
   } catch (error) {
     console.error('[migrationHelpers] Failed to verify local data preservation:', error);
   }

@@ -28,13 +28,14 @@ export const mockApiUser: ApiUser = {
   id: 'user-1',
   username: 'testuser',
   type: 'admin',
+  token: 'test-token',
+  createdAt: 1640995200000, // 2022-01-01
+  lastSeen: 1672531200000, // 2023-01-01
   mediaProgress: [],
+  seriesHideFromContinueListening: ['series-1', 'series-2'],
   bookmarks: [],
   isActive: true,
   isLocked: false,
-  createdAt: 1640995200000, // 2022-01-01
-  lastSeen: 1672531200000, // 2023-01-01
-  seriesHideFromContinueListening: ['series-1', 'series-2'],
   permissions: {
     download: true,
     update: true,
@@ -47,19 +48,22 @@ export const mockApiUser: ApiUser = {
   librariesAccessible: [],
   itemTagsAccessible: [],
   hasOpenIDLink: false,
+  accessToken: 'test-access-token',
+  refreshToken: 'test-refresh-token',
 };
 
 export const mockMeResponse: ApiMeResponse = {
   id: 'user-1',
   username: 'testuser',
   type: 'admin',
+  token: 'test-token',
+  createdAt: 1640995200000, // 2022-01-01
+  lastSeen: 1672531200000, // 2023-01-01
   mediaProgress: [],
+  seriesHideFromContinueListening: ['series-1', 'series-2'],
   bookmarks: [],
   isActive: true,
   isLocked: false,
-  createdAt: 1640995200000,
-  lastSeen: 1672531200000,
-  seriesHideFromContinueListening: ['series-1', 'series-2'],
   permissions: {
     download: true,
     update: true,
@@ -202,16 +206,32 @@ export const mockPodcastLibraryRow: LibraryRow = {
 
 // ApiBook fixtures
 export const mockBook: ApiBook = {
+  id: 'media-1',
   libraryItemId: 'li-1',
   metadata: {
     title: 'The Great Gatsby',
     subtitle: 'A Classic Novel',
     authors: [
-      { id: 'author-1', name: 'F. Scott Fitzgerald' }
+      {
+        id: 'author-1',
+        name: 'F. Scott Fitzgerald',
+        asin: null,
+        description: null,
+        imagePath: null,
+        addedAt: 1640995200000,
+        updatedAt: 1640995200000,
+      }
     ],
     narrators: ['Jim Dale'],
     series: [
-      { id: 'series-1', name: 'Classic Literature', sequence: '1' }
+      {
+        id: 'series-1',
+        name: 'Classic Literature',
+        sequence: '1',
+        description: null,
+        addedAt: 1640995200000,
+        updatedAt: 1640995200000,
+      }
     ],
     genres: ['Fiction', 'Classic'],
     publishedYear: '1925',
@@ -267,9 +287,32 @@ export const mockBook: ApiBook = {
         tagArtist: 'F. Scott Fitzgerald',
         tagGenre: 'Fiction',
         tagTitle: 'Chapter 1',
+        tagSeries: null,
+        tagSeriesPart: null,
         tagTrack: '1/20',
+        tagDisc: null,
+        tagSubtitle: null,
         tagAlbumArtist: 'F. Scott Fitzgerald',
         tagDate: '1925',
+        tagComposer: null,
+        tagPublisher: null,
+        tagComment: null,
+        tagDescription: null,
+        tagEncoder: null,
+        tagEncodedBy: null,
+        tagIsbn: null,
+        tagLanguage: null,
+        tagASIN: null,
+        tagOverdriveMediaMarker: null,
+        tagOriginalYear: null,
+        tagReleaseCountry: null,
+        tagReleaseType: null,
+        tagReleaseStatus: null,
+        tagISRC: null,
+        tagMusicBrainzTrackId: null,
+        tagMusicBrainzAlbumId: null,
+        tagMusicBrainzAlbumArtistId: null,
+        tagMusicBrainzArtistId: null,
       },
       mimeType: 'audio/mpeg',
     }
@@ -282,33 +325,13 @@ export const mockBook: ApiBook = {
       title: 'Chapter 1',
     }
   ],
-  duration: 3600.5,
-  size: 15728640,
-  tracks: [
-    {
-      index: 1,
-      startOffset: 0,
-      duration: 3600.5,
-      title: 'Chapter 1',
-      contentUrl: '/s/item/li-1/chapter01.mp3',
-      mimeType: 'audio/mpeg',
-      metadata: {
-        filename: 'chapter01.mp3',
-        ext: '.mp3',
-        path: '/audiobooks/gatsby/chapter01.mp3',
-        relPath: 'chapter01.mp3',
-        size: 15728640,
-        mtimeMs: 1640995200000,
-        ctimeMs: 1640995200000,
-        birthtimeMs: 1640995200000,
-      },
-    }
-  ],
+  missingParts: [],
   ebookFile: null,
 };
 
 // ApiPodcast fixtures
 export const mockPodcast: ApiPodcast = {
+  id: 'media-2',
   libraryItemId: 'li-2',
   metadata: {
     title: 'Tech Talk ApiPodcast',
@@ -319,8 +342,8 @@ export const mockPodcast: ApiPodcast = {
     feedUrl: 'https://example.com/tech-talk/feed.xml',
     imageUrl: 'https://example.com/tech-talk/cover.jpg',
     itunesPageUrl: 'https://podcasts.apple.com/us/podcast/tech-talk/id123456789',
-    itunesId: 123456789,
-    itunesArtistId: 987654321,
+    itunesId: '123456789',
+    itunesArtistId: '987654321',
     explicit: false,
     language: 'en',
     type: 'episodic',
@@ -379,29 +402,37 @@ export const mockPodcast: ApiPodcast = {
         metaTags: {
           tagAlbum: 'Tech Talk ApiPodcast',
           tagArtist: 'Tech Experts',
+          tagGenre: null,
           tagTitle: 'Introduction to AI',
+          tagSeries: null,
+          tagSeriesPart: null,
+          tagTrack: null,
+          tagDisc: null,
+          tagSubtitle: null,
+          tagAlbumArtist: null,
+          tagDate: null,
+          tagComposer: null,
+          tagPublisher: null,
+          tagComment: null,
+          tagDescription: null,
+          tagEncoder: null,
+          tagEncodedBy: null,
+          tagIsbn: null,
+          tagLanguage: null,
+          tagASIN: null,
+          tagOverdriveMediaMarker: null,
+          tagOriginalYear: null,
+          tagReleaseCountry: null,
+          tagReleaseType: null,
+          tagReleaseStatus: null,
+          tagISRC: null,
+          tagMusicBrainzTrackId: null,
+          tagMusicBrainzAlbumId: null,
+          tagMusicBrainzAlbumArtistId: null,
+          tagMusicBrainzArtistId: null,
         },
         mimeType: 'audio/mpeg',
       },
-      audioTrack: {
-        index: 1,
-        startOffset: 0,
-        duration: 1800,
-        title: 'Introduction to AI',
-        contentUrl: '/s/item/li-2/ep1.mp3',
-        mimeType: 'audio/mpeg',
-        metadata: {
-          filename: 'ep1.mp3',
-          ext: '.mp3',
-          path: '/podcasts/tech-talk/ep1.mp3',
-          relPath: 'ep1.mp3',
-          size: 25165824,
-          mtimeMs: 1672531200000,
-          ctimeMs: 1672531200000,
-          birthtimeMs: 1672531200000,
-        },
-      },
-      chapters: [],
       publishedAt: 1672531200000,
       addedAt: 1672531200000,
       updatedAt: 1672531200000,
@@ -452,7 +483,6 @@ export const mockBookLibraryItem: ApiLibraryItem = {
       fileType: 'audio',
     }
   ],
-  size: 15728640,
 };
 
 export const mockPodcastLibraryItem: ApiLibraryItem = {
@@ -492,7 +522,6 @@ export const mockPodcastLibraryItem: ApiLibraryItem = {
       fileType: 'audio',
     }
   ],
-  size: 25165824,
 };
 
 export const mockLibraryItemsResponse: ApiLibraryItemsResponse = {
@@ -512,7 +541,7 @@ export const mockLibraryItemsResponse: ApiLibraryItemsResponse = {
 // Database row fixtures
 export const mockLibraryItemRow: LibraryItemRow = {
   id: 'li-1',
-  ino: '1111111111',
+  ino: 1111111111,
   libraryId: 'lib-1',
   folderId: 'folder-1',
   path: '/audiobooks/gatsby',
@@ -524,16 +553,15 @@ export const mockLibraryItemRow: LibraryItemRow = {
   addedAt: 1640995200000,
   updatedAt: 1672531200000,
   lastScan: 1672531200000,
-  scanVersion: '2.0.0',
+  scanVersion: 2,
   isMissing: false,
   isInvalid: false,
   mediaType: 'book',
-  size: 15728640,
 };
 
 export const mockPodcastLibraryItemRow: LibraryItemRow = {
   id: 'li-2',
-  ino: '2222222222',
+  ino: 2222222222,
   libraryId: 'lib-2',
   folderId: 'folder-2',
   path: '/podcasts/tech-talk',
@@ -545,11 +573,10 @@ export const mockPodcastLibraryItemRow: LibraryItemRow = {
   addedAt: 1672531200000,
   updatedAt: 1672531200000,
   lastScan: 1672531200000,
-  scanVersion: '2.0.0',
+  scanVersion: 2,
   isMissing: false,
   isInvalid: false,
   mediaType: 'podcast',
-  size: 25165824,
 };
 
 // Array fixtures for bulk operations

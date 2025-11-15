@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TrackPlayer, { State } from "react-native-track-player";
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { ASYNC_KEYS } from "../lib/asyncStore";
 import { PlayerService } from "../services/PlayerService";
 import { progressService } from "../services/ProgressService";
@@ -135,7 +135,7 @@ jest.mock("../stores/appStore", () => ({
 }));
 
 describe("Background Restoration Integration", () => {
-  let store: ReturnType<typeof create<PlayerSlice>>;
+  let store: UseBoundStore<StoreApi<PlayerSlice>>;
   let playerService: PlayerService;
 
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
@@ -167,14 +167,16 @@ describe("Background Restoration Integration", () => {
         downloadInfo: {
           isDownloaded: true,
           downloadPath: "/downloads/test.m4b",
+          downloadedAt: new Date(),
+          updatedAt: new Date(),
         },
-      },
+      } as any,
     ],
     chapters: [
-      { id: "ch-1", start: 0, end: 1800, title: "Chapter 1" },
-      { id: "ch-2", start: 1800, end: 3600, title: "Chapter 2" },
-      { id: "ch-3", start: 3600, end: 5400, title: "Chapter 3" },
-      { id: "ch-4", start: 5400, end: 7200, title: "Chapter 4" },
+      { id: "ch-1", start: 0, end: 1800, title: "Chapter 1", mediaId: "media-1", chapterId: 0 },
+      { id: "ch-2", start: 1800, end: 3600, title: "Chapter 2", mediaId: "media-1", chapterId: 1 },
+      { id: "ch-3", start: 3600, end: 5400, title: "Chapter 3", mediaId: "media-1", chapterId: 2 },
+      { id: "ch-4", start: 5400, end: 7200, title: "Chapter 4", mediaId: "media-1", chapterId: 3 },
     ],
     duration: 7200,
     isDownloaded: true,
@@ -292,6 +294,8 @@ describe("Background Restoration Integration", () => {
       start: 3600,
       end: 5400,
       title: "Chapter 3",
+      mediaId: "media-1",
+      chapterId: 2,
     });
     expect(finalState.player.currentChapter?.positionInChapter).toBe(400); // 4000 - 3600
     expect(finalState.player.currentChapter?.chapterDuration).toBe(1800); // 5400 - 3600

@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import {
   mockLibrariesResponse,
   mockLibraryRow,
@@ -59,7 +59,7 @@ jest.mock("@/db/helpers/fullLibraryItems", () => ({
 
 describe("LibrarySlice", () => {
   let testDb: TestDatabase;
-  let store: ReturnType<typeof create<LibrarySlice>>;
+  let store: UseBoundStore<StoreApi<LibrarySlice>>;
 
   // Get mocked functions for type safety
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;

@@ -3,6 +3,7 @@
  */
 
 import { users } from '@/db/schema/users';
+import type { ApiLoginResponse } from '@/types/api';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { eq } from 'drizzle-orm';
 import {
@@ -122,11 +123,13 @@ describe('Users Helper', () => {
     });
 
     it('should handle empty seriesHideFromContinueListening array', () => {
-      const responseWithEmptyArray = {
+      const responseWithEmptyArray: ApiLoginResponse = {
         user: {
           ...mockApiUser,
           seriesHideFromContinueListening: [],
         },
+        userDefaultLibraryId: 'lib-1',
+        serverSettings: mockLoginResponse.serverSettings,
       };
 
       const result = marshalUserFromAuthResponse(responseWithEmptyArray);

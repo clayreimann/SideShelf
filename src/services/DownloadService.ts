@@ -294,8 +294,12 @@ export class DownloadService {
             });
 
             task.error((error) => {
-              const errorMessage = error.error;
-              log.error(`Error downloading ${audioFile.filename}: ${errorMessage}`);
+              const errorObj = error instanceof Error ? error : new Error(String(error));
+              log.error(`Error downloading ${audioFile.filename}:`, errorObj);
+              const errorMessage =
+                typeof error === "object" && error && "error" in error
+                  ? String(error.error)
+                  : String(error);
               reject(new Error(`Failed to download ${audioFile.filename}: ${errorMessage}`));
             });
           });
@@ -458,7 +462,8 @@ export class DownloadService {
 
       return isDownloaded;
     } catch (error) {
-      log.error(`Error checking download status for ${libraryItemId}:`, error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      log.error(`Error checking download status for ${libraryItemId}:`, errorObj);
       return false;
     }
   }
@@ -593,9 +598,7 @@ export class DownloadService {
         }
       })
       .done((data) => {
-        log.info(
-          `*** DOWNLOAD DONE EVENT FIRED *** ${audioFile.filename}: ${JSON.stringify(data)}`
-        );
+        log.info(`*** DOWNLOAD DONE EVENT FIRED *** ${audioFile.filename}: ${JSON.stringify(data)}`);
       })
       .error((data) => {
         log.info(`*** DOWNLOAD ERROR EVENT FIRED ***: ${JSON.stringify(data)}`);
