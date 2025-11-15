@@ -40,8 +40,15 @@ jobs:
           echo "## Test Coverage Summary" > coverage-comment.md
           echo "" >> coverage-comment.md
           echo '```' >> coverage-comment.md
-          tail -n 30 coverage-output.txt | grep -A 30 "^-\+$" | tail -n 25 >> coverage-comment.md || echo "Coverage data not found" >> coverage-comment.md
+          # Extract coverage table from header to test results
+          awk '/File.*% Stmts.*% Branch/,/^Test Suites:/' coverage-output.txt | head -n -1 >> coverage-comment.md
           echo '```' >> coverage-comment.md
+          echo "" >> coverage-comment.md
+          # Add test results summary
+          echo "**Test Results:**" >> coverage-comment.md
+          grep "Test Suites:" coverage-output.txt >> coverage-comment.md || echo "Test results not found" >> coverage-comment.md
+          grep "Tests:" coverage-output.txt >> coverage-comment.md || true
+          grep "Time:" coverage-output.txt >> coverage-comment.md || true
 
       - name: Post coverage comment
         uses: actions/github-script@v7
