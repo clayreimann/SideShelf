@@ -33,3 +33,37 @@ export async function getItem(key: string): Promise<any> {
     return null;
   }
 }
+
+/**
+ * Clear all async storage used by the app
+ * Uses getAllKeys() to ensure we don't miss any keys, even if they're added in the future
+ *
+ * This clears all keys with our app's prefixes:
+ * - "abs." (player state, user data, library settings, sort configs)
+ * - "@app/" (app settings like jump intervals, smart rewind, diagnostics)
+ * - "@logger/" (logger state like error acknowledgment timestamps)
+ */
+export async function clearAllAsyncStorage(): Promise<void> {
+  console.log("[asyncStore] Clearing all async storage...");
+
+  try {
+    // Get all keys from AsyncStorage
+    const allKeys = await AsyncStorage.getAllKeys();
+
+    // Filter to only our app's keys (those starting with our prefixes)
+    const appKeys = allKeys.filter(
+      (key) => key.startsWith("abs.") || key.startsWith("@app/") || key.startsWith("@logger/")
+    );
+
+    console.log(`[asyncStore] Found ${appKeys.length} app keys to clear:`, appKeys);
+
+    if (appKeys.length > 0) {
+      await AsyncStorage.multiRemove(appKeys);
+    }
+
+    console.log("[asyncStore] Async storage cleared successfully");
+  } catch (error) {
+    console.error("[asyncStore] Failed to clear async storage:", error);
+    throw error;
+  }
+}

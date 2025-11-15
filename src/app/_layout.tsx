@@ -92,7 +92,7 @@ export default function RootLayout() {
           const tpState = await TrackPlayer.getPlaybackState();
           trackPlayerIsPlaying = tpState.state === State.Playing;
         } catch (error) {
-          log.warn("Failed to check TrackPlayer state, assuming not playing", error as Error);
+          log.warn(`Failed to check TrackPlayer state, assuming not playing ${error}`);
         }
 
         if (trackPlayerIsPlaying) {

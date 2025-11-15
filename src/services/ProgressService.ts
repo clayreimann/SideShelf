@@ -109,25 +109,55 @@ export class ProgressService {
   }
 
   /**
+   * Gets current user context, optionally including active session.
+   * Centralizes the username→user→session lookup pattern.
+   *
+   * @param libraryItemId - Optional library item to fetch session for
+   * @returns User context with userId, username, and optional session, or null if user not found
+   */
+  private async getCurrentUserContext(libraryItemId?: string): Promise<{
+    userId: string;
+    username: string;
+    session?: LocalListeningSessionRow | null;
+  } | null> {
+    const username = await getStoredUsername();
+    if (!username) {
+      log.info("[getCurrentUserContext] No username found");
+      return null;
+    }
+
+    const user = await getUserByUsername(username);
+    if (!user?.id) {
+      log.info("[getCurrentUserContext] User not found");
+      return null;
+    }
+
+    let session = null;
+    if (libraryItemId) {
+      session = await getActiveSession(user.id, libraryItemId);
+    }
+
+    return {
+      userId: user.id,
+      username,
+      ...(libraryItemId && { session }),
+    };
+  }
+
+  /**
    * Rehydrate active session from database (called explicitly during app initialization)
    * Optionally match against a specific library item ID (e.g., from TrackPlayer)
    */
   async rehydrateActiveSession(matchLibraryItemId?: string): Promise<void> {
     try {
-      const username = await getStoredUsername();
-      if (!username) {
-        log.info("No username found, skipping session rehydration");
-        return;
-      }
-
-      const user = await getUserByUsername(username);
-      if (!user?.id) {
-        log.info("User not found, skipping session rehydration");
+      const context = await this.getCurrentUserContext();
+      if (!context) {
+        log.info("No user found, skipping session rehydration");
         return;
       }
 
       // Get all active sessions for this user
-      const activeSessions = await getAllActiveSessionsForUser(user.id);
+      const activeSessions = await getAllActiveSessionsForUser(context.userId);
       if (activeSessions.length === 0) {
         log.info("No active sessions to rehydrate");
         return;
@@ -168,7 +198,7 @@ export class ProgressService {
           `Ending stale session ${session.id} for ${session.libraryItemId} immediately (${Math.round(sessionAge / 1000)}s old)`
         );
         // Sync before ending
-        await this.syncSessionToServer(user.id, session.libraryItemId, session.id);
+        await this.syncSessionToServer(context.userId, session.libraryItemId, session.id);
         await endStaleListeningSession(session.id, session.currentTime);
         return; // Don't rehydrate stale sessions
       }
@@ -797,9 +827,6 @@ export class ProgressService {
     }
   }
 
-  // Removed: startPauseTimeout and clearPauseTimeout
-  // Pause timeout is now handled by checking session age in updateProgress and other methods
-
   /**
    * Start periodic sync of unsynced sessions (background sync)
    */
@@ -1088,6 +1115,51 @@ export class ProgressService {
       }
     } catch (error) {
       log.error("Failed to fetch server progress:", error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Force resync current position from server
+   * Useful when local position gets out of sync with server
+   */
+  async forceResyncPosition(userId: string, libraryItemId: string): Promise<void> {
+    try {
+      log.info(
+        `Forcing position resync from server userId=${userId} libraryItemId=${libraryItemId}`
+      );
+
+      // Fetch the specific item's progress from the server
+      const progressData = await fetchMediaProgress(libraryItemId);
+      if (!progressData) {
+        log.warn(`No progress data found on server for ${libraryItemId}`);
+        return;
+      }
+
+      // Marshal and upsert to database
+      const marshaled = marshalMediaProgressFromApi(progressData, userId);
+      await upsertMediaProgress([marshaled]);
+
+      // Get the current active session for this item
+      const session = await getActiveSession(userId, libraryItemId);
+      if (!session) {
+        log.info(`No active session found for ${libraryItemId}, position updated in database`);
+        return;
+      }
+
+      // Update the session's currentTime to match the server
+      await updateSessionProgress(
+        session.id,
+        progressData.currentTime,
+        session.playbackRate,
+        session.volume
+      );
+
+      log.info(
+        `Position resynced from server: ${formatTime(progressData.currentTime)}s session=${session.id} item=${libraryItemId}`
+      );
+    } catch (error) {
+      log.error("Failed to force resync position:", error as Error);
       throw error;
     }
   }

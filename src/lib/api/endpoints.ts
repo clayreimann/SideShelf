@@ -46,9 +46,7 @@ export async function fetchLibraries(): Promise<ApiLibrariesResponse> {
   return response.json();
 }
 
-export async function fetchLibrary(
-  libraryId: string
-): Promise<ApiLibraryResponse> {
+export async function fetchLibrary(libraryId: string): Promise<ApiLibraryResponse> {
   const url = `/api/libraries/${libraryId}`;
 
   const response = await apiFetch(url);
@@ -59,13 +57,8 @@ export async function fetchLibrary(
 export async function fetchLibraryWithFilterData(
   libraryId: string
 ): Promise<ApiLibraryResponseWithFilterData> {
-  const response = await apiFetch(
-    `/api/libraries/${libraryId}?include=filterdata`
-  );
-  await handleResponseError(
-    response,
-    "Failed to fetch library with filterdata"
-  );
+  const response = await apiFetch(`/api/libraries/${libraryId}?include=filterdata`);
+  await handleResponseError(response, "Failed to fetch library with filterdata");
   return response.json();
 }
 
@@ -82,12 +75,26 @@ export async function fetchLibraryItems(
 }
 
 /**
+ * Fetch library items sorted by addedAt in descending order (newest first)
+ * Used for incremental syncing to fetch newest items
+ */
+export async function fetchLibraryItemsByAddedAt(
+  libraryId: string,
+  page: number = 0,
+  limit: number = 20
+): Promise<ApiLibraryItemsResponse> {
+  const response = await apiFetch(
+    `/api/libraries/${libraryId}/items?page=${page}&limit=${limit}&minified=1&sort=addedAt&desc=1`
+  );
+  await handleResponseError(response, "Failed to fetch library items by addedAt");
+  return response.json();
+}
+
+/**
  * Fetch all library items across all pages
  * This function handles pagination automatically and returns all items
  */
-export async function fetchAllLibraryItems(
-  libraryId: string
-): Promise<ApiLibraryItem[]> {
+export async function fetchAllLibraryItems(libraryId: string): Promise<ApiLibraryItem[]> {
   const allItems: ApiLibraryItem[] = [];
   let page = 0;
   let hasMore = true;
@@ -106,18 +113,14 @@ export async function fetchAllLibraryItems(
   return allItems;
 }
 
-export async function fetchLibraryItem(
-  libraryItemId: string
-): Promise<ApiLibraryItemResponse> {
+export async function fetchLibraryItem(libraryItemId: string): Promise<ApiLibraryItemResponse> {
   const response = await apiFetch(`/api/items/${libraryItemId}`);
   await handleResponseError(response, "Failed to fetch library item");
   return response.json();
 }
 
 // HEAD request to get the resolved cover URL; caller can use response.url
-export async function fetchLibraryItemCoverHead(
-  libraryItemId: string
-): Promise<Response> {
+export async function fetchLibraryItemCoverHead(libraryItemId: string): Promise<Response> {
   return await apiFetch(`/api/items/${libraryItemId}/cover`, {
     method: "HEAD",
   });
@@ -128,18 +131,14 @@ export async function fetchLibraryItemCoverHead(
  * @param authorId - The author ID
  * @returns Response with the image URL
  */
-export async function fetchAuthorImageHead(
-  authorId: string
-): Promise<Response> {
+export async function fetchAuthorImageHead(authorId: string): Promise<Response> {
   return await apiFetch(`/api/authors/${authorId}/image`, {
     method: "HEAD",
   });
 }
 
 // Batch fetch library items with full details (includes authors, series, audioFiles, chapters, libraryFiles)
-export async function fetchLibraryItemsBatch(
-  libraryItemIds: string[]
-): Promise<ApiLibraryItem[]> {
+export async function fetchLibraryItemsBatch(libraryItemIds: string[]): Promise<ApiLibraryItem[]> {
   const response = await apiFetch("/api/items/batch/get", {
     method: "POST",
     headers: {
@@ -230,8 +229,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
   const deviceType = DeviceInfo.getDeviceType();
   const manufacturer = await DeviceInfo.getManufacturer();
   const model = DeviceInfo.getModel();
-  const sdkVersion =
-    osName === "iOS" ? undefined : await DeviceInfo.getApiLevel();
+  const sdkVersion = osName === "iOS" ? undefined : await DeviceInfo.getApiLevel();
   const clientName = "SideShelf";
   const clientVersion = `${DeviceInfo.getVersion()} (${DeviceInfo.getBuildNumber()})`;
   const deviceId = DeviceInfo.getDeviceId();
@@ -260,7 +258,9 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
  * @param timeListened - Total time listened in this session (usually 0 for new sessions)
  * @returns The created session object with ID
  */
-export async function createLocalSession(params: CreateLocalSessionParams): Promise<{ id: string }> {
+export async function createLocalSession(
+  params: CreateLocalSessionParams
+): Promise<{ id: string }> {
   const {
     sessionId,
     userId,
@@ -280,13 +280,10 @@ export async function createLocalSession(params: CreateLocalSessionParams): Prom
   } = params;
 
   const deviceInfo = overrideDeviceInfo ?? (await getDeviceInfo());
-  const listeningSeconds = sanitizeSeconds(
-    timeListening ?? timeListened ?? 0
-  );
+  const listeningSeconds = sanitizeSeconds(timeListening ?? timeListened ?? 0);
   const startSeconds = sanitizeSeconds(startTime ?? 0);
   const currentSeconds = sanitizeSeconds(currentTime ?? 0);
-  const durationSeconds =
-    duration !== undefined ? sanitizeSeconds(duration) : undefined;
+  const durationSeconds = duration !== undefined ? sanitizeSeconds(duration) : undefined;
   const startedAtMs = sanitizeTimestamp(startedAt ?? Date.now());
   const updatedAtMs = sanitizeTimestamp(updatedAt ?? startedAtMs);
   const body: Record<string, unknown> = {
@@ -392,10 +389,7 @@ export async function closeSession(sessionId: string): Promise<void> {
     },
   });
 
-  await handleResponseError(
-    response,
-    `Failed to close session id=${sessionId}`
-  );
+  await handleResponseError(response, `Failed to close session id=${sessionId}`);
 }
 
 /**
@@ -403,9 +397,7 @@ export async function closeSession(sessionId: string): Promise<void> {
  * @param libraryItemId - The library item to start playing
  * @returns The play session response with streaming URLs
  */
-export async function startPlaySession(
-  libraryItemId: string
-): Promise<ApiPlaySessionResponse> {
+export async function startPlaySession(libraryItemId: string): Promise<ApiPlaySessionResponse> {
   const response = await apiFetch(`/api/items/${libraryItemId}/play`, {
     method: "POST",
     headers: {
@@ -464,14 +456,10 @@ export async function doPing(params: { baseUrl: string }): Promise<boolean> {
           Accept: "application/json",
         },
       }),
-      new Promise<Response>((_, r) =>
-        setTimeout(() => r(new Error("Ping timeout")), 5000)
-      ),
+      new Promise<Response>((_, r) => setTimeout(() => r(new Error("Ping timeout")), 5000)),
     ]);
     if (!response.ok) {
-      log.info(
-        `Ping failed status=${response.status} text=${response.statusText}`
-      );
+      log.info(`Ping failed status=${response.status} text=${response.statusText}`);
       return false;
     }
     const data = await response.json();
@@ -500,9 +488,7 @@ export async function login(
     },
     body: JSON.stringify({ username, password }),
   });
-  log.info(
-    `Login response: status=${response.status} text=${response.statusText}`
-  );
+  log.info(`Login response: status=${response.status} text=${response.statusText}`);
 
   await handleResponseError(response, "Login failed");
   return response.json();

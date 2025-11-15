@@ -26,6 +26,8 @@ jest.mock("@/lib/api/endpoints", () => ({
   fetchLibraries: jest.fn(),
   fetchLibraryItems: jest.fn(),
   fetchAllLibraryItems: jest.fn(),
+  fetchLibraryItemsByAddedAt: jest.fn(),
+  fetchLibraryItemsBatch: jest.fn(),
 }));
 
 // Mock database helpers
@@ -41,12 +43,18 @@ jest.mock("@/db/helpers/libraryItems", () => ({
   marshalLibraryItemsFromResponse: jest.fn(),
   transformItemsToDisplayFormat: jest.fn(),
   upsertLibraryItems: jest.fn(),
+  checkLibraryItemExists: jest.fn(),
+  marshalLibraryItemFromApi: jest.fn(),
 }));
 
 jest.mock("@/db/helpers/mediaMetadata", () => ({
   cacheCoversForLibraryItems: jest.fn(),
   upsertBooksMetadata: jest.fn(),
   upsertPodcastsMetadata: jest.fn(),
+}));
+
+jest.mock("@/db/helpers/fullLibraryItems", () => ({
+  processFullLibraryItems: jest.fn(),
 }));
 
 describe("LibrarySlice", () => {
@@ -59,6 +67,8 @@ describe("LibrarySlice", () => {
     fetchLibraries,
     fetchLibraryItems,
     fetchAllLibraryItems,
+    fetchLibraryItemsByAddedAt,
+    fetchLibraryItemsBatch,
   } = require("@/lib/api/endpoints");
   const {
     getAllLibraries,
@@ -71,12 +81,15 @@ describe("LibrarySlice", () => {
     marshalLibraryItemsFromResponse,
     transformItemsToDisplayFormat,
     upsertLibraryItems,
+    checkLibraryItemExists,
+    marshalLibraryItemFromApi,
   } = require("@/db/helpers/libraryItems");
   const {
     cacheCoversForLibraryItems,
     upsertBooksMetadata,
     upsertPodcastsMetadata,
   } = require("@/db/helpers/mediaMetadata");
+  const { processFullLibraryItems } = require("@/db/helpers/fullLibraryItems");
 
   beforeEach(async () => {
     testDb = await createTestDb();
@@ -102,13 +115,19 @@ describe("LibrarySlice", () => {
     transformItemsToDisplayFormat.mockReturnValue([]);
     marshalLibraryItemsFromResponse.mockReturnValue([]);
     upsertLibraryItems.mockResolvedValue();
+    checkLibraryItemExists.mockResolvedValue(false);
+    marshalLibraryItemFromApi.mockImplementation((item: any) => item);
 
     cacheCoversForLibraryItems.mockResolvedValue({ downloadedCount: 0, totalCount: 0 });
     upsertBooksMetadata.mockResolvedValue();
     upsertPodcastsMetadata.mockResolvedValue();
 
+    processFullLibraryItems.mockResolvedValue();
+
     fetchLibraries.mockResolvedValue(mockLibrariesResponse);
     fetchLibraryItems.mockResolvedValue({ results: [] });
+    fetchLibraryItemsByAddedAt.mockResolvedValue({ results: [] });
+    fetchLibraryItemsBatch.mockResolvedValue([]);
   });
 
   afterEach(async () => {
@@ -120,20 +139,14 @@ describe("LibrarySlice", () => {
       const state = store.getState();
 
       expect(state.library).toEqual({
+        readinessState: "UNINITIALIZED",
+        operationState: "IDLE",
         selectedLibraryId: null,
         selectedLibrary: null,
         libraries: [],
         rawItems: [],
         items: [],
         sortConfig: DEFAULT_SORT_CONFIG,
-        loading: {
-          isLoadingLibraries: false,
-          isLoadingItems: false,
-          isSelectingLibrary: false,
-          isInitializing: true,
-        },
-        initialized: false,
-        ready: false,
       });
     });
   });
@@ -153,19 +166,17 @@ describe("LibrarySlice", () => {
       await store.getState().initializeLibrarySlice(true, true);
 
       const state = store.getState();
-      expect(state.library.initialized).toBe(true);
-      expect(state.library.ready).toBe(true);
+      expect(state.library.readinessState).toBe("READY");
       expect(state.library.selectedLibraryId).toBe("lib-1");
       expect(state.library.libraries).toEqual([mockLibraryRow, mockPodcastLibraryRow]);
       expect(state.library.sortConfig).toEqual({ field: "author", direction: "asc" });
-      expect(state.library.loading.isInitializing).toBe(false);
     });
 
     it("should not reinitialize if already initialized", async () => {
       // Set slice as already initialized
       store.setState((state) => ({
         ...state,
-        library: { ...state.library, initialized: true },
+        library: { ...state.library, readinessState: "READY" },
       }));
 
       await store.getState().initializeLibrarySlice(true, true);
@@ -180,28 +191,28 @@ describe("LibrarySlice", () => {
       await store.getState().initializeLibrarySlice(true, true);
 
       const state = store.getState();
-      expect(state.library.loading.isInitializing).toBe(false);
+      expect(state.library.readinessState).not.toBe("UNINITIALIZED");
       // Should still complete initialization despite storage error
     });
 
     it("should set ready state based on API and DB status", async () => {
       // Test case 1: DB only (not ready)
       await store.getState().initializeLibrarySlice(false, true);
-      expect(store.getState().library.ready).toBe(false);
+      expect(store.getState().library.readinessState).toBe("NOT_READY");
 
       // Reset for next test
       store.getState().resetLibrary();
 
-      // Test case 2: API only (not ready)
+      // Test case 2: API only (not ready - DB not initialized)
       await store.getState().initializeLibrarySlice(true, false);
-      expect(store.getState().library.ready).toBe(false);
+      expect(store.getState().library.readinessState).toBe("NOT_READY");
 
       // Reset for next test
       store.getState().resetLibrary();
 
       // Test case 3: Both API and DB (ready)
       await store.getState().initializeLibrarySlice(true, true);
-      expect(store.getState().library.ready).toBe(true);
+      expect(store.getState().library.readinessState).toBe("READY");
     });
   });
 
@@ -244,7 +255,12 @@ describe("LibrarySlice", () => {
       // Set slice as not ready and clear selected library
       store.setState((state) => ({
         ...state,
-        library: { ...state.library, ready: false, selectedLibraryId: null, selectedLibrary: null },
+        library: {
+          ...state.library,
+          readinessState: "NOT_READY",
+          selectedLibraryId: null,
+          selectedLibrary: null,
+        },
       }));
 
       await store.getState().selectLibrary("lib-1");
@@ -297,9 +313,12 @@ describe("LibrarySlice", () => {
     });
 
     it("should not refresh if not ready", async () => {
+      // Clear mocks from initialization which may have triggered auto-refresh
+      jest.clearAllMocks();
+
       store.setState((state) => ({
         ...state,
-        library: { ...state.library, ready: false },
+        library: { ...state.library, readinessState: "NOT_READY" },
       }));
 
       await store.getState().refresh();
@@ -356,35 +375,35 @@ describe("LibrarySlice", () => {
       const state = store.getState();
       expect(state.library.selectedLibraryId).toBeNull();
       expect(state.library.libraries).toEqual([]);
-      expect(state.library.initialized).toBe(false);
-      expect(state.library.ready).toBe(false);
+      expect(state.library.readinessState).toBe("UNINITIALIZED");
+      expect(state.library.operationState).toBe("IDLE");
     });
   });
 
-  describe("Loading States", () => {
+  describe("Operation States", () => {
     beforeEach(async () => {
       getAllLibraries.mockResolvedValue([mockLibraryRow]);
       await store.getState().initializeLibrarySlice(true, true);
     });
 
-    it("should set loading states during library selection", async () => {
-      let loadingState: boolean | undefined;
+    it("should set operation state during library selection", async () => {
+      let operationState: string | undefined;
 
-      // Mock to capture loading state (use a different library ID to avoid early return)
+      // Mock to capture operation state (use a different library ID to avoid early return)
       getLibraryById.mockImplementation(async () => {
-        loadingState = store.getState().library.loading.isSelectingLibrary;
+        operationState = store.getState().library.operationState;
         return { ...mockLibraryRow, id: "lib-2" };
       });
 
       await store.getState().selectLibrary("lib-2");
 
-      expect(loadingState).toBe(true);
-      expect(store.getState().library.loading.isSelectingLibrary).toBe(false);
+      expect(operationState).toBe("SELECTING_LIBRARY");
+      expect(store.getState().library.operationState).toBe("IDLE");
     });
 
-    it("should set loading states during refresh", async () => {
-      let librariesLoadingState: boolean | undefined;
-      let itemsLoadingState: boolean | undefined;
+    it("should set operation states during refresh", async () => {
+      let librariesOperationState: string | undefined;
+      let itemsOperationState: string | undefined;
 
       store.setState((state) => ({
         ...state,
@@ -392,21 +411,20 @@ describe("LibrarySlice", () => {
       }));
 
       fetchLibraries.mockImplementation(async () => {
-        librariesLoadingState = store.getState().library.loading.isLoadingLibraries;
+        librariesOperationState = store.getState().library.operationState;
         return mockLibrariesResponse;
       });
 
       fetchAllLibraryItems.mockImplementation(async () => {
-        itemsLoadingState = store.getState().library.loading.isLoadingItems;
+        itemsOperationState = store.getState().library.operationState;
         return [];
       });
 
       await store.getState().refresh();
 
-      expect(librariesLoadingState).toBe(true);
-      expect(itemsLoadingState).toBe(true);
-      expect(store.getState().library.loading.isLoadingLibraries).toBe(false);
-      expect(store.getState().library.loading.isLoadingItems).toBe(false);
+      expect(librariesOperationState).toBe("REFRESHING_LIBRARIES");
+      expect(itemsOperationState).toBe("REFRESHING_ITEMS");
+      expect(store.getState().library.operationState).toBe("IDLE");
     });
   });
 
@@ -432,9 +450,9 @@ describe("LibrarySlice", () => {
 
       await expect(store.getState().selectLibrary("lib-1")).resolves.not.toThrow();
 
-      // Loading state should be reset even after error
+      // Operation state should be reset even after error
       const state = store.getState();
-      expect(state.library.loading.isSelectingLibrary).toBe(false);
+      expect(state.library.operationState).toBe("IDLE");
     });
   });
 
@@ -466,13 +484,19 @@ describe("LibrarySlice", () => {
       expect(state.library.sortConfig).toEqual(DEFAULT_SORT_CONFIG); // Should remain unchanged
     });
 
-    it("should set ready state correctly", () => {
-      const setReady = (store.getState() as any)._setLibraryReady;
+    it("should update readiness state correctly", () => {
+      const updateReadiness = (store.getState() as any)._updateReadiness;
 
-      expect(setReady(true, true)).toBe(true);
-      expect(setReady(true, false)).toBe(false);
-      expect(setReady(false, true)).toBe(false);
-      expect(setReady(false, false)).toBe(false);
+      updateReadiness(true, true);
+      expect(store.getState().library.readinessState).toBe("READY");
+
+      store.getState().resetLibrary();
+      updateReadiness(true, false);
+      expect(store.getState().library.readinessState).not.toBe("READY");
+
+      store.getState().resetLibrary();
+      updateReadiness(false, true);
+      expect(store.getState().library.readinessState).not.toBe("READY");
     });
   });
 });
