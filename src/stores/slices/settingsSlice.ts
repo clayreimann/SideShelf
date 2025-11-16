@@ -9,14 +9,20 @@
 
 import {
   getDiagnosticsEnabled,
+  getGroupByLibrary,
   getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
+  getShowAllLibraries,
+  getShowAllPodcastLibraries,
   getSmartRewindEnabled,
   setDiagnosticsEnabled,
+  setGroupByLibrary,
   setHomeLayout,
   setJumpBackwardInterval,
   setJumpForwardInterval,
+  setShowAllLibraries,
+  setShowAllPodcastLibraries,
   setSmartRewindEnabled,
 } from "@/lib/appSettings";
 import { logger } from "@/lib/logger";
@@ -41,6 +47,12 @@ export interface SettingsSliceState {
     homeLayout: "list" | "cover";
     /** Whether diagnostics/developer mode is enabled */
     diagnosticsEnabled: boolean;
+    /** Whether to show all book libraries */
+    showAllLibraries: boolean;
+    /** Whether to show all podcast libraries */
+    showAllPodcastLibraries: boolean;
+    /** Whether to group items by library when showing all libraries */
+    groupByLibrary: boolean;
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -65,6 +77,12 @@ export interface SettingsSliceActions {
   updateHomeLayout: (layout: "list" | "cover") => Promise<void>;
   /** Toggle diagnostics/developer mode */
   updateDiagnosticsEnabled: (enabled: boolean) => Promise<void>;
+  /** Toggle show all libraries */
+  updateShowAllLibraries: (enabled: boolean) => Promise<void>;
+  /** Toggle show all podcast libraries */
+  updateShowAllPodcastLibraries: (enabled: boolean) => Promise<void>;
+  /** Toggle group by library */
+  updateGroupByLibrary: (enabled: boolean) => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -83,6 +101,9 @@ const DEFAULT_SETTINGS = {
   smartRewindEnabled: true,
   homeLayout: "list" as const,
   diagnosticsEnabled: false,
+  showAllLibraries: false,
+  showAllPodcastLibraries: false,
+  groupByLibrary: true,
 };
 
 /**
@@ -126,14 +147,25 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
 
     try {
       // Load all settings from storage in parallel
-      const [jumpForward, jumpBackward, smartRewind, homeLayout, diagnosticsEnabled] =
-        await Promise.all([
-          getJumpForwardInterval(),
-          getJumpBackwardInterval(),
-          getSmartRewindEnabled(),
-          getHomeLayout(),
-          getDiagnosticsEnabled(),
-        ]);
+      const [
+        jumpForward,
+        jumpBackward,
+        smartRewind,
+        homeLayout,
+        diagnosticsEnabled,
+        showAllLibraries,
+        showAllPodcastLibraries,
+        groupByLibrary,
+      ] = await Promise.all([
+        getJumpForwardInterval(),
+        getJumpBackwardInterval(),
+        getSmartRewindEnabled(),
+        getHomeLayout(),
+        getDiagnosticsEnabled(),
+        getShowAllLibraries(),
+        getShowAllPodcastLibraries(),
+        getGroupByLibrary(),
+      ]);
 
       set((state: SettingsSlice) => ({
         ...state,
@@ -143,13 +175,16 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           smartRewindEnabled: smartRewind,
           homeLayout: homeLayout,
           diagnosticsEnabled: diagnosticsEnabled,
+          showAllLibraries: showAllLibraries,
+          showAllPodcastLibraries: showAllPodcastLibraries,
+          groupByLibrary: groupByLibrary,
           initialized: true,
           isLoading: false,
         },
       }));
 
       log.info(
-        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, homeLayout=${homeLayout}, diagnostics=${diagnosticsEnabled}`
+        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, homeLayout=${homeLayout}, diagnostics=${diagnosticsEnabled}, showAllLibraries=${showAllLibraries}, showAllPodcastLibraries=${showAllPodcastLibraries}, groupByLibrary=${groupByLibrary}`
       );
     } catch (error) {
       log.error("Failed to load settings", error as Error);
@@ -360,6 +395,108 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           diagnosticsEnabled: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Toggle show all libraries
+   */
+  updateShowAllLibraries: async (enabled: boolean) => {
+    log.info(`${enabled ? "Enabling" : "Disabling"} show all libraries`);
+
+    const previousValue = get().settings.showAllLibraries;
+
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        showAllLibraries: enabled,
+      },
+    }));
+
+    try {
+      await setShowAllLibraries(enabled);
+      log.info(`Show all libraries ${enabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update show all libraries setting", error as Error);
+
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          showAllLibraries: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Toggle show all podcast libraries
+   */
+  updateShowAllPodcastLibraries: async (enabled: boolean) => {
+    log.info(`${enabled ? "Enabling" : "Disabling"} show all podcast libraries`);
+
+    const previousValue = get().settings.showAllPodcastLibraries;
+
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        showAllPodcastLibraries: enabled,
+      },
+    }));
+
+    try {
+      await setShowAllPodcastLibraries(enabled);
+      log.info(`Show all podcast libraries ${enabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update show all podcast libraries setting", error as Error);
+
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          showAllPodcastLibraries: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Toggle group by library
+   */
+  updateGroupByLibrary: async (enabled: boolean) => {
+    log.info(`${enabled ? "Enabling" : "Disabling"} group by library`);
+
+    const previousValue = get().settings.groupByLibrary;
+
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        groupByLibrary: enabled,
+      },
+    }));
+
+    try {
+      await setGroupByLibrary(enabled);
+      log.info(`Group by library ${enabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update group by library setting", error as Error);
+
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          groupByLibrary: previousValue,
         },
       }));
 

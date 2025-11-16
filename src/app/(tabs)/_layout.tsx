@@ -49,6 +49,12 @@ const TAB_CONFIG: TabConfig[] = [
     androidIcon: { default: "book-outline", selected: "book" },
   },
   {
+    name: "podcasts",
+    titleKey: "tabs.podcasts",
+    sfSymbol: { default: "mic", selected: "mic.fill" },
+    androidIcon: { default: "mic-outline", selected: "mic" },
+  },
+  {
     name: "series",
     titleKey: "tabs.series",
     sfSymbol: { default: "square.stack", selected: "square.stack.fill" },

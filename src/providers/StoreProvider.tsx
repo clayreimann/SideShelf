@@ -11,6 +11,7 @@ import {
     useHomeStoreInitializer,
     useLibraryStoreInitializer,
     usePlayerStoreInitializer,
+    usePodcastStoreInitializer,
     useSeriesStoreInitializer,
     useSettingsStoreInitializer,
     useUserProfileStoreInitializer
@@ -25,6 +26,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     // Initialize all stores
     useLibraryStoreInitializer(apiConfigured, dbInitialized);
+    usePodcastStoreInitializer(apiConfigured, dbInitialized);
     useAuthorsStoreInitializer(apiConfigured, dbInitialized);
     useSeriesStoreInitializer(apiConfigured, dbInitialized);
     usePlayerStoreInitializer(); // Player doesn't need API/DB dependencies

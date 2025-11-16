@@ -13,6 +13,9 @@ const SETTINGS_KEYS = {
   enablePeriodicNowPlayingUpdates: "@app/enablePeriodicNowPlayingUpdates",
   homeLayout: "@app/homeLayout",
   enableDiagnostics: "@app/enableDiagnostics",
+  showAllLibraries: "@app/showAllLibraries",
+  showAllPodcastLibraries: "@app/showAllPodcastLibraries",
+  groupByLibrary: "@app/groupByLibrary",
 } as const;
 
 // Default values
@@ -22,6 +25,9 @@ const DEFAULT_SMART_REWIND_ENABLED = true;
 const DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED = true;
 const DEFAULT_HOME_LAYOUT = "list" as const;
 const DEFAULT_DIAGNOSTICS_ENABLED = false;
+const DEFAULT_SHOW_ALL_LIBRARIES = false;
+const DEFAULT_SHOW_ALL_PODCAST_LIBRARIES = false;
+const DEFAULT_GROUP_BY_LIBRARY = true;
 
 /**
  * Get jump forward interval in seconds
@@ -182,6 +188,84 @@ export async function setDiagnosticsEnabled(enabled: boolean): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.enableDiagnostics, enabled ? "true" : "false");
   } catch (error) {
     console.error("[AppSettings] Failed to save diagnostics setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get whether to show all book libraries
+ * Default: false (show one selected library)
+ */
+export async function getShowAllLibraries(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.showAllLibraries);
+    return value === null ? DEFAULT_SHOW_ALL_LIBRARIES : value === "true";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get show all libraries setting:", error);
+    return DEFAULT_SHOW_ALL_LIBRARIES;
+  }
+}
+
+/**
+ * Set whether to show all book libraries
+ */
+export async function setShowAllLibraries(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.showAllLibraries, enabled ? "true" : "false");
+  } catch (error) {
+    console.error("[AppSettings] Failed to save show all libraries setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get whether to show all podcast libraries
+ * Default: false (show one selected podcast library)
+ */
+export async function getShowAllPodcastLibraries(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.showAllPodcastLibraries);
+    return value === null ? DEFAULT_SHOW_ALL_PODCAST_LIBRARIES : value === "true";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get show all podcast libraries setting:", error);
+    return DEFAULT_SHOW_ALL_PODCAST_LIBRARIES;
+  }
+}
+
+/**
+ * Set whether to show all podcast libraries
+ */
+export async function setShowAllPodcastLibraries(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.showAllPodcastLibraries, enabled ? "true" : "false");
+  } catch (error) {
+    console.error("[AppSettings] Failed to save show all podcast libraries setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get whether to group items by library when showing all libraries
+ * Default: true (group in sections)
+ */
+export async function getGroupByLibrary(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.groupByLibrary);
+    return value === null ? DEFAULT_GROUP_BY_LIBRARY : value === "true";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get group by library setting:", error);
+    return DEFAULT_GROUP_BY_LIBRARY;
+  }
+}
+
+/**
+ * Set whether to group items by library when showing all libraries
+ */
+export async function setGroupByLibrary(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.groupByLibrary, enabled ? "true" : "false");
+  } catch (error) {
+    console.error("[AppSettings] Failed to save group by library setting:", error);
     throw error;
   }
 }

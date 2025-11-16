@@ -19,6 +19,7 @@ export {
     useHome, useHomeStoreInitializer, // Home
     useLibrary, useLibraryActions, useLibraryItemDetails, useLibraryState, useLibraryStore, useLibraryStoreInitializer, // ApiLibrary & Item Details
     usePlayer, usePlayerActions, usePlayerState, usePlayerStoreInitializer, // Player
+    usePodcasts, usePodcastActions, usePodcastState, usePodcastStoreInitializer, // Podcasts
     useSeries, useSeriesActions, useSeriesState, useSeriesStoreInitializer, // ApiSeries
     useSettings, useSettingsStoreInitializer, // Settings
     useStatistics, // Statistics
@@ -30,6 +31,11 @@ export {
 export {
     type LibrarySlice, type LibrarySliceActions, type LibrarySliceState
 } from './slices/librarySlice';
+
+// Podcast slice type exports
+export {
+    type PodcastSlice, type PodcastSliceActions, type PodcastSliceState
+} from './slices/podcastSlice';
 
 // Authors slice type exports
 export {
