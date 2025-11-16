@@ -1115,6 +1115,7 @@ export function useNetwork() {
 
   // Actions
   const initializeNetwork = useAppStore((state) => state.initializeNetwork);
+  const refreshNetworkStatus = useAppStore((state) => state.refreshNetworkStatus);
   const checkServerReachability = useAppStore((state) => state.checkServerReachability);
   const resetNetwork = useAppStore((state) => state.resetNetwork);
 
@@ -1127,6 +1128,7 @@ export function useNetwork() {
       initialized,
       lastServerCheck,
       initializeNetwork,
+      refreshNetworkStatus,
       checkServerReachability,
       resetNetwork,
     }),
@@ -1138,6 +1140,7 @@ export function useNetwork() {
       initialized,
       lastServerCheck,
       initializeNetwork,
+      refreshNetworkStatus,
       checkServerReachability,
       resetNetwork,
     ]

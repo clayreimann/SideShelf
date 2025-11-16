@@ -43,6 +43,8 @@ export interface NetworkSliceActions {
   initializeNetwork: () => void;
   /** Update network state (called by NetInfo listener) */
   _updateNetworkState: (state: NetInfoState) => void;
+  /** Manually refresh network status (useful when NetInfo events don't fire) */
+  refreshNetworkStatus: () => Promise<void>;
   /** Check if ABS server is reachable */
   checkServerReachability: () => Promise<void>;
   /** Reset the slice to initial state */
@@ -70,12 +72,15 @@ const initialState: NetworkSliceState = {
 
 // Server check interval (every 30 seconds when online)
 const SERVER_CHECK_INTERVAL = 30000;
+// Network status refresh interval (every 10 seconds to compensate for iOS simulator issues)
+const NETWORK_STATUS_REFRESH_INTERVAL = 10000;
 
 /**
  * Create the Network slice
  */
 export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
   let serverCheckInterval: ReturnType<typeof setInterval> | null = null;
+  let networkRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
   return {
     // Initial state
@@ -121,6 +126,14 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
           });
         }
       }, SERVER_CHECK_INTERVAL);
+
+      // Start periodic network status refresh (workaround for iOS simulator NetInfo issues)
+      networkRefreshInterval = setInterval(() => {
+        log.debug("Periodic network status refresh");
+        get().refreshNetworkStatus().catch((error) => {
+          log.warn("Network status refresh failed:", error);
+        });
+      }, NETWORK_STATUS_REFRESH_INTERVAL);
 
       set((state: NetworkSlice) => ({
         ...state,
@@ -181,6 +194,20 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
     },
 
     /**
+     * Manually refresh network status by fetching current state from NetInfo
+     */
+    refreshNetworkStatus: async () => {
+      try {
+        log.debug("Refreshing network status manually");
+        const netState = await NetInfo.fetch();
+        log.debug("Manual network fetch completed", { netState });
+        get()._updateNetworkState(netState);
+      } catch (error) {
+        log.error("Failed to refresh network status", error);
+      }
+    },
+
+    /**
      * Check if ABS server is reachable
      */
     checkServerReachability: async () => {
@@ -236,6 +263,10 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
       if (serverCheckInterval) {
         clearInterval(serverCheckInterval);
         serverCheckInterval = null;
+      }
+      if (networkRefreshInterval) {
+        clearInterval(networkRefreshInterval);
+        networkRefreshInterval = null;
       }
       set((state: NetworkSlice) => ({
         ...state,
