@@ -95,14 +95,22 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
       log.info("Initializing network slice...");
 
       // Subscribe to network state changes
+      log.info("Setting up NetInfo event listener");
       const unsubscribe = NetInfo.addEventListener((netState) => {
+        log.debug("NetInfo event received");
         get()._updateNetworkState(netState);
       });
 
       // Fetch initial network state
-      NetInfo.fetch().then((netState) => {
-        get()._updateNetworkState(netState);
-      });
+      log.info("Fetching initial network state");
+      NetInfo.fetch()
+        .then((netState) => {
+          log.info("Initial network state fetched successfully");
+          get()._updateNetworkState(netState);
+        })
+        .catch((error) => {
+          log.error("Failed to fetch initial network state", error);
+        });
 
       // Start periodic server reachability checks
       serverCheckInterval = setInterval(() => {
@@ -133,11 +141,13 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
      * Update network state (called by NetInfo listener)
      */
     _updateNetworkState: (netState: NetInfoState) => {
+      log.debug("_updateNetworkState called", { netState });
+
       const isConnected = netState.isConnected ?? false;
       const isInternetReachable = netState.isInternetReachable;
       const connectionType = netState.type;
 
-      log.debug(
+      log.info(
         `Network state updated: connected=${isConnected}, reachable=${isInternetReachable}, type=${connectionType}`
       );
 
@@ -153,11 +163,13 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
 
       // Check server reachability when network becomes available
       if (isConnected && isInternetReachable) {
+        log.info("Network available, checking server reachability");
         get().checkServerReachability().catch((error) => {
           log.warn("Server reachability check failed after network change:", error);
         });
       } else {
         // Mark server as unreachable when no network
+        log.info("Network unavailable, marking server as unreachable");
         set((state: NetworkSlice) => ({
           ...state,
           network: {
