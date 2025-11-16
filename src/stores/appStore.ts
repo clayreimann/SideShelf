@@ -1108,28 +1108,37 @@ export function useDownloadsStoreInitializer() {
 export function useNetwork() {
   const isConnected = useAppStore((state) => state.network.isConnected);
   const isInternetReachable = useAppStore((state) => state.network.isInternetReachable);
+  const serverReachable = useAppStore((state) => state.network.serverReachable);
   const connectionType = useAppStore((state) => state.network.connectionType);
   const initialized = useAppStore((state) => state.network.initialized);
+  const lastServerCheck = useAppStore((state) => state.network.lastServerCheck);
 
   // Actions
   const initializeNetwork = useAppStore((state) => state.initializeNetwork);
+  const checkServerReachability = useAppStore((state) => state.checkServerReachability);
   const resetNetwork = useAppStore((state) => state.resetNetwork);
 
   return React.useMemo(
     () => ({
       isConnected,
       isInternetReachable,
+      serverReachable,
       connectionType,
       initialized,
+      lastServerCheck,
       initializeNetwork,
+      checkServerReachability,
       resetNetwork,
     }),
     [
       isConnected,
       isInternetReachable,
+      serverReachable,
       connectionType,
       initialized,
+      lastServerCheck,
       initializeNetwork,
+      checkServerReachability,
       resetNetwork,
     ]
   );

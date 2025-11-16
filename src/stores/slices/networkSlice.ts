@@ -9,6 +9,7 @@
 
 import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
 import { logger } from "@/lib/logger";
+import { getApiConfig } from "@/lib/api/api";
 import type { SliceCreator } from "@/types/store";
 
 // Create cached sublogger for this slice
@@ -23,10 +24,14 @@ export interface NetworkSliceState {
     isConnected: boolean;
     /** Whether the device can reach the internet */
     isInternetReachable: boolean | null;
+    /** Whether we can reach the ABS server */
+    serverReachable: boolean | null;
     /** Type of network connection (wifi, cellular, etc.) */
     connectionType: string | null;
     /** Whether the slice has been initialized */
     initialized: boolean;
+    /** Last time server reachability was checked */
+    lastServerCheck: number | null;
   };
 }
 
@@ -38,6 +43,8 @@ export interface NetworkSliceActions {
   initializeNetwork: () => void;
   /** Update network state (called by NetInfo listener) */
   _updateNetworkState: (state: NetInfoState) => void;
+  /** Check if ABS server is reachable */
+  checkServerReachability: () => Promise<void>;
   /** Reset the slice to initial state */
   resetNetwork: () => void;
 }
@@ -54,87 +61,174 @@ const initialState: NetworkSliceState = {
   network: {
     isConnected: false,
     isInternetReachable: null,
+    serverReachable: null,
     connectionType: null,
     initialized: false,
+    lastServerCheck: null,
   },
 };
+
+// Server check interval (every 30 seconds when online)
+const SERVER_CHECK_INTERVAL = 30000;
 
 /**
  * Create the Network slice
  */
-export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => ({
-  // Initial state
-  ...initialState,
+export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
+  let serverCheckInterval: ReturnType<typeof setInterval> | null = null;
 
-  /**
-   * Initialize the slice and start listening to network changes
-   */
-  initializeNetwork: () => {
-    const state = get();
+  return {
+    // Initial state
+    ...initialState,
 
-    if (state.network.initialized) {
-      log.debug("Network already initialized, skipping");
-      return;
-    }
+    /**
+     * Initialize the slice and start listening to network changes
+     */
+    initializeNetwork: () => {
+      const state = get();
 
-    log.info("Initializing network slice...");
+      if (state.network.initialized) {
+        log.debug("Network already initialized, skipping");
+        return;
+      }
 
-    // Subscribe to network state changes
-    const unsubscribe = NetInfo.addEventListener((netState) => {
-      get()._updateNetworkState(netState);
-    });
+      log.info("Initializing network slice...");
 
-    // Fetch initial network state
-    NetInfo.fetch().then((netState) => {
-      get()._updateNetworkState(netState);
-    });
+      // Subscribe to network state changes
+      const unsubscribe = NetInfo.addEventListener((netState) => {
+        get()._updateNetworkState(netState);
+      });
 
-    set((state: NetworkSlice) => ({
-      ...state,
-      network: {
-        ...state.network,
-        initialized: true,
-      },
-    }));
+      // Fetch initial network state
+      NetInfo.fetch().then((netState) => {
+        get()._updateNetworkState(netState);
+      });
 
-    log.info("Network slice initialized successfully");
+      // Start periodic server reachability checks
+      serverCheckInterval = setInterval(() => {
+        const currentState = get();
+        if (currentState.network.isConnected && currentState.network.isInternetReachable) {
+          get().checkServerReachability().catch((error) => {
+            log.warn("Server reachability check failed:", error);
+          });
+        }
+      }, SERVER_CHECK_INTERVAL);
 
-    // Note: We don't call unsubscribe because we want to listen for the app lifetime
-    // In a production app, you might want to store the unsubscribe function
-    // and call it when the app is destroyed
-  },
+      set((state: NetworkSlice) => ({
+        ...state,
+        network: {
+          ...state.network,
+          initialized: true,
+        },
+      }));
 
-  /**
-   * Update network state (called by NetInfo listener)
-   */
-  _updateNetworkState: (netState: NetInfoState) => {
-    const isConnected = netState.isConnected ?? false;
-    const isInternetReachable = netState.isInternetReachable;
-    const connectionType = netState.type;
+      log.info("Network slice initialized successfully");
 
-    log.debug(
-      `Network state updated: connected=${isConnected}, reachable=${isInternetReachable}, type=${connectionType}`
-    );
+      // Note: We don't call unsubscribe because we want to listen for the app lifetime
+      // In a production app, you might want to store the unsubscribe function
+      // and call it when the app is destroyed
+    },
 
-    set((state: NetworkSlice) => ({
-      ...state,
-      network: {
-        ...state.network,
-        isConnected,
-        isInternetReachable,
-        connectionType,
-      },
-    }));
-  },
+    /**
+     * Update network state (called by NetInfo listener)
+     */
+    _updateNetworkState: (netState: NetInfoState) => {
+      const isConnected = netState.isConnected ?? false;
+      const isInternetReachable = netState.isInternetReachable;
+      const connectionType = netState.type;
 
-  /**
-   * Reset the slice to initial state
-   */
-  resetNetwork: () => {
-    log.info("Resetting network slice");
-    set((state: NetworkSlice) => ({
-      ...state,
-      network: initialState.network,
-    }));
-  },
-});
+      log.debug(
+        `Network state updated: connected=${isConnected}, reachable=${isInternetReachable}, type=${connectionType}`
+      );
+
+      set((state: NetworkSlice) => ({
+        ...state,
+        network: {
+          ...state.network,
+          isConnected,
+          isInternetReachable,
+          connectionType,
+        },
+      }));
+
+      // Check server reachability when network becomes available
+      if (isConnected && isInternetReachable) {
+        get().checkServerReachability().catch((error) => {
+          log.warn("Server reachability check failed after network change:", error);
+        });
+      } else {
+        // Mark server as unreachable when no network
+        set((state: NetworkSlice) => ({
+          ...state,
+          network: {
+            ...state.network,
+            serverReachable: false,
+          },
+        }));
+      }
+    },
+
+    /**
+     * Check if ABS server is reachable
+     */
+    checkServerReachability: async () => {
+      const apiConfig = getApiConfig();
+      const baseUrl = apiConfig?.getBaseUrl();
+
+      if (!baseUrl) {
+        log.debug("No API base URL configured, skipping server check");
+        return;
+      }
+
+      try {
+        // Try to ping the server with a minimal request
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+        const response = await fetch(`${baseUrl}/ping`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        const isReachable = response.ok;
+        log.debug(`Server reachability check: ${isReachable ? "reachable" : "unreachable"}`);
+
+        set((state: NetworkSlice) => ({
+          ...state,
+          network: {
+            ...state.network,
+            serverReachable: isReachable,
+            lastServerCheck: Date.now(),
+          },
+        }));
+      } catch (error) {
+        log.warn("Server reachability check failed:", error);
+        set((state: NetworkSlice) => ({
+          ...state,
+          network: {
+            ...state.network,
+            serverReachable: false,
+            lastServerCheck: Date.now(),
+          },
+        }));
+      }
+    },
+
+    /**
+     * Reset the slice to initial state
+     */
+    resetNetwork: () => {
+      log.info("Resetting network slice");
+      if (serverCheckInterval) {
+        clearInterval(serverCheckInterval);
+        serverCheckInterval = null;
+      }
+      set((state: NetworkSlice) => ({
+        ...state,
+        network: initialState.network,
+      }));
+    },
+  };
+};

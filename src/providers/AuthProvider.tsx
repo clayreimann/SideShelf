@@ -1,9 +1,10 @@
 import { authHelpers, mediaProgressHelpers, userHelpers } from '@/db/helpers';
-import { setApiConfig } from '@/lib/api/api';
+import { setApiConfig, setNetworkStatusGetter } from '@/lib/api/api';
 import { login as doLogin } from '@/lib/api/endpoints';
 import { getItem, getStoredUsername, persistUsername, saveItem, SECURE_KEYS } from '@/lib/secureStore';
 import { useDb } from '@/providers/DbProvider';
 import { progressService } from '@/services/ProgressService';
+import { useAppStore } from '@/stores/appStore';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 
@@ -101,6 +102,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return true;
             }
         });
+
+        // Set network status getter for API calls
+        setNetworkStatusGetter(() => {
+            const networkState = useAppStore.getState().network;
+            return {
+                isConnected: networkState.isConnected,
+                serverReachable: networkState.serverReachable,
+            };
+        });
+
         // Only set apiConfigured to true when we have both serverUrl and accessToken
         setApiConfigured(!!state.serverUrl && !!state.accessToken);
     }, [state.serverUrl, state.accessToken]);

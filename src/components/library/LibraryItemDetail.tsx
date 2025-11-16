@@ -16,7 +16,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
-import { useDownloads, useLibraryItemDetails, usePlayer } from "@/stores";
+import { useDownloads, useLibraryItemDetails, useNetwork, usePlayer } from "@/stores";
 import { MenuView } from "@react-native-menu/menu";
 import { Stack, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -98,6 +98,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const { width } = useWindowDimensions();
   const { username, serverUrl, accessToken } = useAuth();
   const { currentTrack, position, isPlaying, isLoadingTrack } = usePlayer();
+  const { serverReachable } = useNetwork();
   const floatingPlayerPadding = useFloatingPlayerPadding();
   const router = useRouter();
 
@@ -491,7 +492,8 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         image: "trash",
         imageColor: "#FF3B30",
       });
-    } else if (!isDownloading) {
+    } else if (!isDownloading && serverReachable !== false) {
+      // Only show download option when server is reachable
       actions.push({
         id: "download",
         title: translate("libraryItem.actions.download"),
@@ -526,7 +528,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     }
 
     return actions;
-  }, [isDownloaded, isDownloading, effectiveProgress, currentTrack, itemId]);
+  }, [isDownloaded, isDownloading, effectiveProgress, currentTrack, itemId, serverReachable]);
 
   if (loading) {
     return (
@@ -758,10 +760,10 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
                 borderRadius: 8,
                 padding: 12,
                 alignItems: "center",
-                opacity: isLoadingTrack ? 0.5 : 1,
+                opacity: isLoadingTrack || (!isDownloaded && serverReachable === false) ? 0.5 : 1,
               }}
               onPress={handlePlay}
-              disabled={isLoadingTrack}
+              disabled={isLoadingTrack || (!isDownloaded && serverReachable === false)}
             >
               <Text
                 style={{
@@ -772,9 +774,11 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
               >
                 {isLoadingTrack
                   ? translate("common.loading")
-                  : currentTrack?.libraryItemId === item?.id && isPlaying
-                    ? translate("common.pause")
-                    : translate("common.play")}
+                  : !isDownloaded && serverReachable === false
+                    ? translate("common.offline")
+                    : currentTrack?.libraryItemId === item?.id && isPlaying
+                      ? translate("common.pause")
+                      : translate("common.play")}
               </Text>
             </TouchableOpacity>
           </View>
