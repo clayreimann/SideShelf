@@ -74,6 +74,14 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "router": {},
       "eas": {

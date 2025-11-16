@@ -1,0 +1,368 @@
+# Cleanup PR Bundle
+#
+# This workflow automatically removes PR update bundles from GitHub Pages when a PR is closed.
+# It runs for all PR closures (both merged and unmerged).
+#
+# Actions performed:
+# 1. Removes the PR's bundle directory (updates/pr-{number}/)
+# 2. Regenerates manifest.json without the removed PR
+# 3. Regenerates index.html to update the listing
+# 4. Posts a cleanup confirmation comment on the PR
+#
+# The workflow gracefully handles edge cases:
+# - gh-pages branch doesn't exist
+# - PR directory already removed
+# - Last PR being removed (creates empty manifest)
+# - Concurrent operations (uses retry logic with rebase)
+
+name: Cleanup PR Bundle
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+# Ensure only one cleanup runs per PR at a time
+concurrency:
+  group: pages-cleanup-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for gh-pages branch
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Remove PR bundle from GitHub Pages
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Fetch gh-pages branch - exit gracefully if it doesn't exist
+          if ! git ls-remote --exit-code --heads origin gh-pages; then
+            echo "gh-pages branch doesn't exist, nothing to clean up"
+            exit 0
+          fi
+
+          echo "Fetching gh-pages branch..."
+          git fetch origin gh-pages:gh-pages
+          git checkout gh-pages
+
+          # Check if PR directory exists
+          if [ ! -d "updates/pr-${PR_NUMBER}" ]; then
+            echo "PR #${PR_NUMBER} directory doesn't exist, nothing to clean up"
+            exit 0
+          fi
+
+          # Remove the PR's bundle directory
+          echo "Removing updates/pr-${PR_NUMBER}..."
+          rm -rf "updates/pr-${PR_NUMBER}"
+
+          # Regenerate manifest.json with remaining PRs
+          echo "Regenerating manifest of remaining PR updates..."
+          cat > updates/manifest.json << 'MANIFESTEOF'
+          {
+            "updates": [
+          MANIFESTEOF
+
+          # Scan remaining PR directories and add to manifest
+          FIRST=true
+          for pr_dir in updates/pr-*/; do
+            # Check if directory exists and has metadata
+            if [ -d "$pr_dir" ] && [ -f "${pr_dir}pr-metadata.json" ]; then
+              if [ "$FIRST" = true ]; then
+                FIRST=false
+              else
+                echo "," >> updates/manifest.json
+              fi
+              cat "${pr_dir}pr-metadata.json" | jq -c '.' >> updates/manifest.json
+            fi
+          done
+
+          cat >> updates/manifest.json << 'MANIFESTEOF'
+            ]
+          }
+          MANIFESTEOF
+
+          # Regenerate main index page (reuse same template as publish workflow)
+          cat > index.html << 'INDEXEOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>SideShelf - PR Updates</title>
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+                max-width: 900px;
+                margin: 0 auto;
+                padding: 30px 20px;
+                background: #f9fafb;
+              }
+              header {
+                text-align: center;
+                padding: 40px 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border-radius: 12px;
+                margin-bottom: 40px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+              }
+              h1 { font-size: 2.5em; margin-bottom: 10px; }
+              .subtitle { font-size: 1.2em; opacity: 0.9; }
+              .updates-list {
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                padding: 30px;
+              }
+              .update-card {
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 15px 0;
+                transition: all 0.3s ease;
+                background: #fafafa;
+              }
+              .update-card:hover {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                transform: translateY(-2px);
+              }
+              .update-card h3 {
+                color: #007AFF;
+                margin-bottom: 10px;
+                font-size: 1.3em;
+              }
+              .update-meta {
+                color: #666;
+                font-size: 0.9em;
+                margin: 8px 0;
+              }
+              .update-actions {
+                margin-top: 15px;
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+              }
+              .button {
+                display: inline-block;
+                padding: 10px 20px;
+                border-radius: 6px;
+                text-decoration: none;
+                font-weight: 600;
+                transition: all 0.2s ease;
+                font-size: 0.95em;
+              }
+              .button-primary {
+                background: #007AFF;
+                color: white;
+              }
+              .button-primary:hover {
+                background: #0051D5;
+              }
+              .button-secondary {
+                background: #e5e7eb;
+                color: #333;
+              }
+              .button-secondary:hover {
+                background: #d1d5db;
+              }
+              .empty-state {
+                text-align: center;
+                padding: 60px 20px;
+                color: #666;
+              }
+              .empty-state svg {
+                width: 80px;
+                height: 80px;
+                margin-bottom: 20px;
+                opacity: 0.5;
+              }
+              .footer {
+                text-align: center;
+                margin-top: 40px;
+                padding-top: 20px;
+                color: #666;
+                font-size: 0.9em;
+              }
+              code {
+                background: #f3f4f6;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: 'SF Mono', Monaco, monospace;
+                font-size: 0.85em;
+              }
+              .loading {
+                text-align: center;
+                padding: 40px;
+                color: #666;
+              }
+            </style>
+          </head>
+          <body>
+            <header>
+              <h1>📱 SideShelf</h1>
+              <p class="subtitle">PR Update Bundles</p>
+            </header>
+
+            <div class="updates-list">
+              <h2 style="margin-bottom: 20px; color: #333;">Available Updates</h2>
+
+              <div id="updates-container">
+                <div class="loading">Loading updates...</div>
+              </div>
+            </div>
+
+            <div class="footer">
+              <p>Generated by GitHub Actions | <a href="https://github.com/REPO_OWNER_PLACEHOLDER/REPO_NAME_PLACEHOLDER" style="color: #007AFF;">View Repository</a></p>
+            </div>
+
+            <script>
+              // Load and display all available PR updates
+              async function loadUpdates() {
+                const container = document.getElementById('updates-container');
+
+                try {
+                  const response = await fetch('updates/manifest.json');
+                  const data = await response.json();
+
+                  if (!data.updates || data.updates.length === 0) {
+                    showEmptyState(container);
+                    return;
+                  }
+
+                  // Sort by PR number (most recent first)
+                  const updates = data.updates.sort((a, b) => b.prNumber - a.prNumber);
+
+                  container.innerHTML = updates.map(update => {
+                    const encodedUrl = encodeURIComponent(
+                      `https://REPO_OWNER_PLACEHOLDER.github.io/REPO_NAME_PLACEHOLDER/updates/pr-${update.prNumber}`
+                    );
+                    const deepLink = `side-shelf://bundle-loader?url=${encodedUrl}`;
+                    const prUrl = `https://github.com/REPO_OWNER_PLACEHOLDER/REPO_NAME_PLACEHOLDER/pull/${update.prNumber}`;
+                    const bundleUrl = `updates/pr-${update.prNumber}`;
+
+                    return `
+                      <div class="update-card">
+                        <h3>PR #${update.prNumber}: ${escapeHtml(update.prTitle)}</h3>
+                        <div class="update-meta">
+                          <p><strong>Branch:</strong> <code>${escapeHtml(update.branch)}</code></p>
+                          <p><strong>Commit:</strong> <code>${update.commitSha.substring(0, 8)}</code></p>
+                          <p><strong>Updated:</strong> ${new Date(update.createdAt).toLocaleString()}</p>
+                        </div>
+                        <div class="update-actions">
+                          <a href="${bundleUrl}" class="button button-primary">📱 View Bundle Page</a>
+                          <a href="${deepLink}" class="button button-secondary">🔗 Open in App</a>
+                          <a href="${prUrl}" class="button button-secondary" target="_blank">→ View PR</a>
+                        </div>
+                      </div>
+                    `;
+                  }).join('');
+                } catch (error) {
+                  console.error('Failed to load updates:', error);
+                  showEmptyState(container);
+                }
+              }
+
+              function showEmptyState(container) {
+                container.innerHTML = `
+                  <div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <h3>No updates found</h3>
+                    <p style="margin-top: 10px;">PR update bundles will appear here when available.</p>
+                    <p style="margin-top: 20px; color: #999; font-size: 0.9em;">Updates are generated when PRs are opened or updated.</p>
+                  </div>
+                `;
+              }
+
+              function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+              }
+
+              loadUpdates();
+            </script>
+          </body>
+          </html>
+          INDEXEOF
+
+          # Replace placeholders in index
+          sed -i "s/REPO_OWNER_PLACEHOLDER/${REPO_OWNER}/g" index.html
+          sed -i "s/REPO_NAME_PLACEHOLDER/${REPO_NAME}/g" index.html
+
+          # Commit changes
+          git add updates/ index.html
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit (directory may have already been removed)"
+          else
+            git commit -m "Cleanup: Remove update bundle for closed PR #${PR_NUMBER}
+
+            Removed updates/pr-${PR_NUMBER}/ and regenerated manifest"
+
+            # Push to gh-pages with retry logic
+            for i in {1..3}; do
+              if git push origin gh-pages; then
+                echo "Successfully pushed cleanup to gh-pages"
+                break
+              else
+                echo "Push failed, attempt $i of 3"
+                if [ $i -lt 3 ]; then
+                  echo "Pulling latest changes and retrying..."
+                  git pull --rebase origin gh-pages
+                  # Re-remove the directory in case of conflicts
+                  rm -rf "updates/pr-${PR_NUMBER}" || true
+                  git add -A
+                fi
+              fi
+            done
+          fi
+
+      - name: Comment on PR about cleanup
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            const repo = context.repo;
+
+            const comment = `## 🧹 Update Bundle Cleaned Up
+
+            The Expo update bundle for this PR has been removed from GitHub Pages.
+
+            **Removed:**
+            - \`updates/pr-${prNumber}/\` directory
+            - Entry from the bundle manifest
+            - Bundle listing from index page
+
+            All artifacts will be retained according to GitHub's artifact retention policy (30 days).`;
+
+            await github.rest.issues.createComment({
+              owner: repo.owner,
+              repo: repo.repo,
+              issue_number: prNumber,
+              body: comment
+            });

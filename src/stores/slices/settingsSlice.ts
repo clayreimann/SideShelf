@@ -8,20 +8,22 @@
  */
 
 import {
+  getCustomUpdateUrl,
   getDiagnosticsEnabled,
+  getHiddenTabs,
   getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
   getSmartRewindEnabled,
   getTabOrder,
-  getHiddenTabs,
+  setCustomUpdateUrl,
   setDiagnosticsEnabled,
+  setHiddenTabs,
   setHomeLayout,
   setJumpBackwardInterval,
   setJumpForwardInterval,
   setSmartRewindEnabled,
   setTabOrder,
-  setHiddenTabs,
 } from "@/lib/appSettings";
 import { logger } from "@/lib/logger";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
@@ -49,6 +51,8 @@ export interface SettingsSliceState {
     tabOrder: string[];
     /** Hidden tabs preference */
     hiddenTabs: string[];
+    /** Custom update URL for loading test bundles */
+    customUpdateUrl: string | null;
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -77,6 +81,8 @@ export interface SettingsSliceActions {
   updateTabOrder: (order: string[]) => Promise<void>;
   /** Update hidden tabs */
   updateHiddenTabs: (hiddenTabs: string[]) => Promise<void>;
+  /** Update custom update URL */
+  updateCustomUpdateUrl: (url: string | null) => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -97,6 +103,7 @@ const DEFAULT_SETTINGS = {
   diagnosticsEnabled: false,
   tabOrder: ["home", "library", "series", "authors", "more"],
   hiddenTabs: [] as string[],
+  customUpdateUrl: null,
 };
 
 /**
@@ -148,6 +155,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         diagnosticsEnabled,
         tabOrder,
         hiddenTabs,
+        customUpdateUrl,
       ] = await Promise.all([
         getJumpForwardInterval(),
         getJumpBackwardInterval(),
@@ -156,6 +164,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         getDiagnosticsEnabled(),
         getTabOrder(),
         getHiddenTabs(),
+        getCustomUpdateUrl(),
       ]);
 
       set((state: SettingsSlice) => ({
@@ -168,6 +177,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           diagnosticsEnabled: diagnosticsEnabled,
           tabOrder: tabOrder,
           hiddenTabs: hiddenTabs,
+          customUpdateUrl: customUpdateUrl,
           initialized: true,
           isLoading: false,
         },
@@ -463,6 +473,45 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           hiddenTabs: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update custom update URL for loading test bundles
+   */
+  updateCustomUpdateUrl: async (url: string | null) => {
+    log.info(`Updating custom update URL to: ${url || "(cleared)"}`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.customUpdateUrl;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        customUpdateUrl: url,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setCustomUpdateUrl(url);
+
+      log.info(`Custom update URL updated`);
+    } catch (error) {
+      log.error("Failed to update custom update URL", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          customUpdateUrl: previousValue,
         },
       }));
 
