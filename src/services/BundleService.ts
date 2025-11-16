@@ -95,7 +95,11 @@ class BundleServiceImpl {
   /**
    * Check for updates from a custom URL or channel
    *
-   * @param url - Custom update URL (if using expo-updates)
+   * Note: expo-updates doesn't support checking arbitrary URLs directly.
+   * The URL must be configured as the update server in app.json or
+   * you must host a compatible update manifest at the default location.
+   *
+   * @param url - Custom update URL (for documentation/validation only)
    * @returns Update information if available
    */
   async checkForUpdate(url?: string): Promise<{
@@ -108,9 +112,17 @@ class BundleServiceImpl {
         return { isAvailable: false };
       }
 
-      log.info(`Checking for updates${url ? ` from ${url}` : ""}...`);
+      if (url) {
+        log.info(`Custom update URL provided: ${url}`);
+        log.warn(
+          "Note: expo-updates uses the configured server from app.json. " +
+            "To use a custom URL, you must configure it as the update server."
+        );
+      }
 
-      // Check for updates (uses configured URL by default)
+      log.info("Checking for updates from configured server...");
+
+      // Check for updates (uses configured URL from app.json)
       const update = await Updates.checkForUpdateAsync();
 
       if (update.isAvailable && update.manifest) {
