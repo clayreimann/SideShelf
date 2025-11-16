@@ -8,6 +8,7 @@ import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
+import { ErrorBoundary } from "@/components/errors";
 import { FontAwesome6, MaterialCommunityIcons, Octicons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { Stack, useRouter } from "expo-router";
@@ -281,42 +282,44 @@ export default function RootLayout() {
 
   return (
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <DbProvider>
-        <AuthProvider>
-          <StoreProvider>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.background },
-                headerStyle: { backgroundColor: header.backgroundColor },
-                headerTintColor: header.tintColor,
-                headerTitleStyle: { color: header.titleColor },
-              }}
-            >
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen
-                name="login"
-                options={{
-                  presentation: "formSheet",
-                  headerTitle: "Sign in",
-                  headerShown: true,
+      <ErrorBoundary boundaryName="AppRoot">
+        <DbProvider>
+          <AuthProvider>
+            <StoreProvider>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.background },
                   headerStyle: { backgroundColor: header.backgroundColor },
                   headerTintColor: header.tintColor,
                   headerTitleStyle: { color: header.titleColor },
                 }}
-              />
-              <Stack.Screen
-                name="FullScreenPlayer"
-                options={{
-                  presentation: "containedModal",
-                  headerShown: false,
-                }}
-              />
-            </Stack>
-          </StoreProvider>
-        </AuthProvider>
-      </DbProvider>
+              >
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen
+                  name="login"
+                  options={{
+                    presentation: "formSheet",
+                    headerTitle: "Sign in",
+                    headerShown: true,
+                    headerStyle: { backgroundColor: header.backgroundColor },
+                    headerTintColor: header.tintColor,
+                    headerTitleStyle: { color: header.titleColor },
+                  }}
+                />
+                <Stack.Screen
+                  name="FullScreenPlayer"
+                  options={{
+                    presentation: "containedModal",
+                    headerShown: false,
+                  }}
+                />
+              </Stack>
+            </StoreProvider>
+          </AuthProvider>
+        </DbProvider>
+      </ErrorBoundary>
     </View>
   );
 }
