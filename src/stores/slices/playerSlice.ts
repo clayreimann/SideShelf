@@ -15,6 +15,7 @@ import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { progressService } from "@/services/ProgressService";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import type { CurrentChapter, PlayerTrack } from "@/types/player";
 import type { SliceCreator } from "@/types/store";
 import TrackPlayer from "react-native-track-player";
@@ -336,6 +337,27 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         isRestoringState: false,
       },
     }));
+
+    // Notify coordinator that state has been restored
+    const finalState = get();
+    dispatchPlayerEvent({
+      type: "RESTORE_STATE",
+      payload: {
+        state: {
+          currentTrack: finalState.player.currentTrack,
+          position: finalState.player.position,
+          playbackRate: finalState.player.playbackRate,
+          volume: finalState.player.volume,
+          isPlaying: finalState.player.isPlaying,
+          currentPlaySessionId: finalState.player.currentPlaySessionId,
+        },
+      },
+    });
+
+    // Signal that restoration is complete
+    dispatchPlayerEvent({
+      type: "RESTORE_COMPLETE",
+    });
   },
   // Initial scoped state
   player: {

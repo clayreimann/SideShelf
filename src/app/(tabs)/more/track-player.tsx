@@ -1,15 +1,18 @@
 /**
  * Track Player Screen
  *
- * Displays track player state information for debugging
+ * Displays track player state information and coordinator diagnostics for debugging
  */
 
+import { CoordinatorDiagnostics } from "@/components/diagnostics/CoordinatorDiagnostics";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
+import type { CoordinatorMetrics, StateContext } from "@/types/coordinator";
 import { Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, SectionList, Text, View } from "react-native";
+import { Pressable, SectionList, Switch, Text, View } from "react-native";
 import TrackPlayer, { State, Track } from "react-native-track-player";
 
 type Section = {
@@ -19,6 +22,7 @@ type Section = {
 
 type ActionItem = {
   label: string;
+  component?: React.ReactNode;
   onPress: () => void;
   disabled?: boolean;
 };
@@ -63,6 +67,10 @@ export default function TrackPlayerScreen() {
   const { styles, isDark } = useThemedStyles();
   const floatingPlayerPadding = useFloatingPlayerPadding();
 
+  // Auto-refresh state
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  // TrackPlayer state
   const [trackPlayerState, setTrackPlayerState] = useState<{
     state: string;
     queueLength: number;
@@ -83,6 +91,17 @@ export default function TrackPlayerScreen() {
     buffered: 0,
     rate: 1.0,
     volume: 1.0,
+  });
+
+  // Coordinator state
+  const [coordinatorState, setCoordinatorState] = useState<{
+    metrics: CoordinatorMetrics | null;
+    context: StateContext | null;
+    queueLength: number;
+  }>({
+    metrics: null,
+    context: null,
+    queueLength: 0,
   });
 
   const refreshTrackPlayerState = useCallback(async () => {
@@ -126,13 +145,68 @@ export default function TrackPlayerScreen() {
     }
   }, []);
 
-  useEffect(() => {
+  const refreshCoordinatorState = useCallback(() => {
+    try {
+      const coordinator = getCoordinator();
+      const metrics = coordinator.getMetrics();
+      const context = coordinator.getContext();
+      const queue = coordinator.getEventQueue();
+
+      setCoordinatorState({
+        metrics,
+        context,
+        queueLength: queue.length,
+      });
+    } catch (error) {
+      console.error("Failed to refresh Coordinator state:", error);
+      setCoordinatorState({
+        metrics: null,
+        context: null,
+        queueLength: 0,
+      });
+    }
+  }, []);
+
+  const refreshAllStates = useCallback(() => {
     void refreshTrackPlayerState();
-  }, [refreshTrackPlayerState]);
+    refreshCoordinatorState();
+  }, [refreshTrackPlayerState, refreshCoordinatorState]);
+
+  // Initial load
+  useEffect(() => {
+    refreshAllStates();
+  }, [refreshAllStates]);
+
+  // Auto-refresh timer
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      refreshAllStates();
+    }, 1000); // Refresh every second
+
+    return () => clearInterval(interval);
+  }, [autoRefresh, refreshAllStates]);
 
   const hasTrack = trackPlayerState.currentTrack !== null;
 
   const sections: Section[] = [
+    // Auto-refresh toggle
+    {
+      title: "Settings",
+      data: [
+        {
+          label: `Auto-refresh`,
+          component: (
+            <Switch value={autoRefresh} onValueChange={() => setAutoRefresh(!autoRefresh)} />
+          ),
+          onPress: () => setAutoRefresh(!autoRefresh),
+          disabled: false,
+        },
+      ],
+    },
+
+    // TrackPlayer State
     {
       title: translate("advanced.sections.trackPlayer"),
       data: [
@@ -142,30 +216,19 @@ export default function TrackPlayerScreen() {
           disabled: true,
         },
         {
-          label: translate("advanced.trackPlayer.queueLength", {
-            length: trackPlayerState.queueLength,
-          }),
-          onPress: disabledOnPress,
-          disabled: true,
-        },
-        {
-          label:
-            translate("advanced.trackPlayer.currentTrack") +
-            (trackPlayerState.currentTrackIndex !== null
-              ? translate("advanced.trackPlayer.trackIndex", {
-                  index: trackPlayerState.currentTrackIndex,
-                })
-              : translate("advanced.trackPlayer.trackNone")),
-          onPress: disabledOnPress,
-          disabled: true,
-        },
-        {
-          label:
-            translate("advanced.trackPlayer.track") +
-            (trackPlayerState.currentTrack?.title ?? translate("advanced.trackPlayer.trackNone")) +
-            (hasTrack
+          label: `${translate("advanced.trackPlayer.track")} ${
+            trackPlayerState.currentTrack?.title ?? translate("advanced.trackPlayer.trackNone")
+          } ${
+            hasTrack
               ? ` (${trackPlayerState.currentTrack?.id ?? translate("advanced.trackPlayer.trackNone")})`
-              : ""),
+              : ""
+          } (${
+            trackPlayerState.currentTrackIndex !== null
+              ? translate("advanced.trackPlayer.trackIndex", {
+                  index: trackPlayerState.currentTrackIndex + 1,
+                })
+              : translate("advanced.trackPlayer.trackNone")
+          } / ${trackPlayerState.queueLength})`,
           onPress: disabledOnPress,
           disabled: true,
         },
@@ -192,13 +255,16 @@ export default function TrackPlayerScreen() {
         },
       ],
     },
+
+    // Coordinator Diagnostics
     {
-      title: translate("advanced.sections.actions"),
+      title: "PlayerStateCoordinator Diagnostics",
       data: [
         {
-          label: translate("advanced.actions.refreshStats"),
-          onPress: refreshTrackPlayerState,
-          disabled: false,
+          component: (<CoordinatorDiagnostics autoRefresh={autoRefresh} />) as React.ReactNode,
+          label: "",
+          onPress: disabledOnPress,
+          disabled: true,
         },
       ],
     },
@@ -215,10 +281,16 @@ export default function TrackPlayerScreen() {
           </View>
         )}
         renderItem={({ item }: { item: ActionItem }) => (
-          <View style={styles.listItem}>
+          <View
+            style={[
+              styles.listItem,
+              { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+            ]}
+          >
             <Pressable onPress={item.onPress} disabled={item.disabled}>
               <Text style={item.disabled ? styles.text : styles.link}>{item.label}</Text>
             </Pressable>
+            {item.component && item.component}
           </View>
         )}
         contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
