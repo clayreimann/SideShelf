@@ -8,11 +8,13 @@
  */
 
 import {
+  getCustomUpdateUrl,
   getDiagnosticsEnabled,
   getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
   getSmartRewindEnabled,
+  setCustomUpdateUrl,
   setDiagnosticsEnabled,
   setHomeLayout,
   setJumpBackwardInterval,
@@ -41,6 +43,8 @@ export interface SettingsSliceState {
     homeLayout: "list" | "cover";
     /** Whether diagnostics/developer mode is enabled */
     diagnosticsEnabled: boolean;
+    /** Custom update URL for loading test bundles */
+    customUpdateUrl: string | null;
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -65,6 +69,8 @@ export interface SettingsSliceActions {
   updateHomeLayout: (layout: "list" | "cover") => Promise<void>;
   /** Toggle diagnostics/developer mode */
   updateDiagnosticsEnabled: (enabled: boolean) => Promise<void>;
+  /** Update custom update URL */
+  updateCustomUpdateUrl: (url: string | null) => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -83,6 +89,7 @@ const DEFAULT_SETTINGS = {
   smartRewindEnabled: true,
   homeLayout: "list" as const,
   diagnosticsEnabled: false,
+  customUpdateUrl: null,
 };
 
 /**
@@ -126,14 +133,21 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
 
     try {
       // Load all settings from storage in parallel
-      const [jumpForward, jumpBackward, smartRewind, homeLayout, diagnosticsEnabled] =
-        await Promise.all([
-          getJumpForwardInterval(),
-          getJumpBackwardInterval(),
-          getSmartRewindEnabled(),
-          getHomeLayout(),
-          getDiagnosticsEnabled(),
-        ]);
+      const [
+        jumpForward,
+        jumpBackward,
+        smartRewind,
+        homeLayout,
+        diagnosticsEnabled,
+        customUpdateUrl,
+      ] = await Promise.all([
+        getJumpForwardInterval(),
+        getJumpBackwardInterval(),
+        getSmartRewindEnabled(),
+        getHomeLayout(),
+        getDiagnosticsEnabled(),
+        getCustomUpdateUrl(),
+      ]);
 
       set((state: SettingsSlice) => ({
         ...state,
@@ -143,6 +157,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           smartRewindEnabled: smartRewind,
           homeLayout: homeLayout,
           diagnosticsEnabled: diagnosticsEnabled,
+          customUpdateUrl: customUpdateUrl,
           initialized: true,
           isLoading: false,
         },
@@ -360,6 +375,45 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           diagnosticsEnabled: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update custom update URL for loading test bundles
+   */
+  updateCustomUpdateUrl: async (url: string | null) => {
+    log.info(`Updating custom update URL to: ${url || "(cleared)"}`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.customUpdateUrl;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        customUpdateUrl: url,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setCustomUpdateUrl(url);
+
+      log.info(`Custom update URL updated`);
+    } catch (error) {
+      log.error("Failed to update custom update URL", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          customUpdateUrl: previousValue,
         },
       }));
 
