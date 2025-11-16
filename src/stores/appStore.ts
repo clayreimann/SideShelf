@@ -989,7 +989,6 @@ export function useSettings() {
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
   const showAllLibraries = useAppStore((state) => state.settings.showAllLibraries);
   const showAllPodcastLibraries = useAppStore((state) => state.settings.showAllPodcastLibraries);
-  const groupByLibrary = useAppStore((state) => state.settings.groupByLibrary);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -1004,7 +1003,6 @@ export function useSettings() {
   const updateShowAllPodcastLibraries = useAppStore(
     (state) => state.updateShowAllPodcastLibraries
   );
-  const updateGroupByLibrary = useAppStore((state) => state.updateGroupByLibrary);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -1016,7 +1014,6 @@ export function useSettings() {
       diagnosticsEnabled,
       showAllLibraries,
       showAllPodcastLibraries,
-      groupByLibrary,
       initialized,
       isLoading,
       initializeSettings,
@@ -1027,7 +1024,6 @@ export function useSettings() {
       updateDiagnosticsEnabled,
       updateShowAllLibraries,
       updateShowAllPodcastLibraries,
-      updateGroupByLibrary,
       resetSettings,
     }),
     [
@@ -1038,7 +1034,6 @@ export function useSettings() {
       diagnosticsEnabled,
       showAllLibraries,
       showAllPodcastLibraries,
-      groupByLibrary,
       initialized,
       isLoading,
       initializeSettings,
@@ -1049,7 +1044,6 @@ export function useSettings() {
       updateDiagnosticsEnabled,
       updateShowAllLibraries,
       updateShowAllPodcastLibraries,
-      updateGroupByLibrary,
       resetSettings,
     ]
   );

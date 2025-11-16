@@ -178,9 +178,6 @@ export const en = {
   "settings.showAllPodcastLibraries": "Show All Podcast Libraries",
   "settings.showAllPodcastLibrariesDescription":
     "Display podcasts from all podcast libraries in the Podcasts tab instead of just one selected podcast library.",
-  "settings.groupByLibrary": "Group by Library",
-  "settings.groupByLibraryDescription":
-    "When showing all libraries, group items by library in sections. When disabled, all items are shown in a single list.",
   "settings.jumpForwardInterval": "Jump Forward Interval",
   "settings.jumpBackwardInterval": "Jump Backward Interval",
   "settings.smartRewind": "Smart Rewind on Resume",

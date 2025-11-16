@@ -9,7 +9,6 @@
 
 import {
   getDiagnosticsEnabled,
-  getGroupByLibrary,
   getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
@@ -17,7 +16,6 @@ import {
   getShowAllPodcastLibraries,
   getSmartRewindEnabled,
   setDiagnosticsEnabled,
-  setGroupByLibrary,
   setHomeLayout,
   setJumpBackwardInterval,
   setJumpForwardInterval,
@@ -51,8 +49,6 @@ export interface SettingsSliceState {
     showAllLibraries: boolean;
     /** Whether to show all podcast libraries */
     showAllPodcastLibraries: boolean;
-    /** Whether to group items by library when showing all libraries */
-    groupByLibrary: boolean;
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -81,8 +77,6 @@ export interface SettingsSliceActions {
   updateShowAllLibraries: (enabled: boolean) => Promise<void>;
   /** Toggle show all podcast libraries */
   updateShowAllPodcastLibraries: (enabled: boolean) => Promise<void>;
-  /** Toggle group by library */
-  updateGroupByLibrary: (enabled: boolean) => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -103,7 +97,6 @@ const DEFAULT_SETTINGS = {
   diagnosticsEnabled: false,
   showAllLibraries: false,
   showAllPodcastLibraries: false,
-  groupByLibrary: true,
 };
 
 /**
@@ -155,7 +148,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         diagnosticsEnabled,
         showAllLibraries,
         showAllPodcastLibraries,
-        groupByLibrary,
       ] = await Promise.all([
         getJumpForwardInterval(),
         getJumpBackwardInterval(),
@@ -164,7 +156,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         getDiagnosticsEnabled(),
         getShowAllLibraries(),
         getShowAllPodcastLibraries(),
-        getGroupByLibrary(),
       ]);
 
       set((state: SettingsSlice) => ({
@@ -177,14 +168,13 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           diagnosticsEnabled: diagnosticsEnabled,
           showAllLibraries: showAllLibraries,
           showAllPodcastLibraries: showAllPodcastLibraries,
-          groupByLibrary: groupByLibrary,
           initialized: true,
           isLoading: false,
         },
       }));
 
       log.info(
-        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, homeLayout=${homeLayout}, diagnostics=${diagnosticsEnabled}, showAllLibraries=${showAllLibraries}, showAllPodcastLibraries=${showAllPodcastLibraries}, groupByLibrary=${groupByLibrary}`
+        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, homeLayout=${homeLayout}, diagnostics=${diagnosticsEnabled}, showAllLibraries=${showAllLibraries}, showAllPodcastLibraries=${showAllPodcastLibraries}`
       );
     } catch (error) {
       log.error("Failed to load settings", error as Error);
@@ -463,40 +453,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           showAllPodcastLibraries: previousValue,
-        },
-      }));
-
-      throw error;
-    }
-  },
-
-  /**
-   * Toggle group by library
-   */
-  updateGroupByLibrary: async (enabled: boolean) => {
-    log.info(`${enabled ? "Enabling" : "Disabling"} group by library`);
-
-    const previousValue = get().settings.groupByLibrary;
-
-    set((state: SettingsSlice) => ({
-      ...state,
-      settings: {
-        ...state.settings,
-        groupByLibrary: enabled,
-      },
-    }));
-
-    try {
-      await setGroupByLibrary(enabled);
-      log.info(`Group by library ${enabled ? "enabled" : "disabled"}`);
-    } catch (error) {
-      log.error("Failed to update group by library setting", error as Error);
-
-      set((state: SettingsSlice) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          groupByLibrary: previousValue,
         },
       }));
 
