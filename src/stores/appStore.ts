@@ -20,6 +20,7 @@ import { createLibrarySlice, LibrarySlice } from "./slices/librarySlice";
 import { createLoggerSlice, LoggerSlice } from "./slices/loggerSlice";
 import { createNetworkSlice, NetworkSlice } from "./slices/networkSlice";
 import { createPlayerSlice, PlayerSlice } from "./slices/playerSlice";
+import { createPodcastSlice, PodcastSlice } from "./slices/podcastSlice";
 import { createSeriesSlice, SeriesSlice } from "./slices/seriesSlice";
 import { createSettingsSlice, SettingsSlice } from "./slices/settingsSlice";
 import { createStatisticsSlice, StatisticsSlice } from "./slices/statisticsSlice";
@@ -33,6 +34,7 @@ import { createUserProfileSlice, UserProfileSlice } from "./slices/userProfileSl
  */
 export interface StoreState
   extends LibrarySlice,
+    PodcastSlice,
     AuthorsSlice,
     SeriesSlice,
     PlayerSlice,
@@ -61,6 +63,9 @@ export const useAppStore = create<StoreState>()(
   subscribeWithSelector((set, get) => ({
     // ApiLibrary slice
     ...createLibrarySlice(set, get),
+
+    // Podcast slice
+    ...createPodcastSlice(set, get),
 
     // Authors slice
     ...createAuthorsSlice(set, get),
@@ -271,6 +276,183 @@ export function useLibraryStoreInitializer(apiConfigured: boolean, dbInitialized
       initializeLibrary(apiConfigured, dbInitialized);
     }
   }, [initializeLibrary, initialized, apiConfigured, dbInitialized]);
+
+  // Update ready state when dependencies change
+  React.useEffect(() => {
+    updateReadiness(apiConfigured, dbInitialized);
+  }, [updateReadiness, apiConfigured, dbInitialized]);
+}
+
+/**
+ * Hook to use the podcast slice with automatic subscription management
+ *
+ * This hook provides a clean interface to the podcast slice, similar to the
+ * existing library hook. It automatically handles subscriptions
+ * and provides type-safe access to the podcast state and actions.
+ *
+ * @example
+ * ```tsx
+ * function PodcastComponent() {
+ *   const {
+ *     selectedPodcastLibrary,
+ *     items,
+ *     selectPodcastLibrary,
+ *     refreshPodcasts
+ *   } = usePodcasts();
+ *
+ *   // Use the store state and actions...
+ * }
+ * ```
+ */
+export function usePodcasts() {
+  const selectedPodcastLibraryId = useAppStore(
+    (state) => state.podcasts.selectedPodcastLibraryId
+  );
+  const selectedPodcastLibrary = useAppStore((state) => state.podcasts.selectedPodcastLibrary);
+  const podcastLibraries = useAppStore((state) => state.podcasts.podcastLibraries);
+  const items = useAppStore((state) => state.podcasts.items);
+  const sortConfig = useAppStore((state) => state.podcasts.sortConfig);
+
+  // Derive loading states from operation state machine
+  const operationState = useAppStore((state) => state.podcasts.operationState);
+  const isLoadingLibraries = operationState === "REFRESHING_LIBRARIES";
+  const isLoadingItems = operationState === "REFRESHING_ITEMS";
+  const isSelectingLibrary = operationState === "SELECTING_LIBRARY";
+  const isInitializing = useAppStore((state) => state.podcasts.readinessState === "INITIALIZING");
+
+  // Derive readiness flags from readiness state machine
+  const readinessState = useAppStore((state) => state.podcasts.readinessState);
+  const initialized = readinessState !== "UNINITIALIZED";
+  const ready = readinessState === "READY";
+
+  // Actions (these don't change so we can get them once)
+  const initialize = useAppStore((state) => state.initializePodcastSlice);
+  const selectPodcastLibrary = useAppStore((state) => state.selectPodcastLibrary);
+  const refreshPodcasts = useAppStore((state) => state.refreshPodcasts);
+  const setSortConfig = useAppStore((state) => state.setPodcastSortConfig);
+  const reset = useAppStore((state) => state.resetPodcasts);
+
+  return React.useMemo(
+    () => ({
+      selectedPodcastLibraryId,
+      selectedPodcastLibrary,
+      podcastLibraries,
+      items,
+      sortConfig,
+      isLoadingLibraries,
+      isLoadingItems,
+      isSelectingLibrary,
+      isInitializing,
+      initialized,
+      ready,
+      initialize,
+      selectPodcastLibrary,
+      refreshPodcasts,
+      setSortConfig,
+      reset,
+    }),
+    [
+      selectedPodcastLibraryId,
+      selectedPodcastLibrary,
+      podcastLibraries,
+      items,
+      sortConfig,
+      isLoadingLibraries,
+      isLoadingItems,
+      isSelectingLibrary,
+      isInitializing,
+      initialized,
+      ready,
+      initialize,
+      selectPodcastLibrary,
+      refreshPodcasts,
+      setSortConfig,
+      reset,
+    ]
+  );
+}
+
+/**
+ * Hook to get specific podcast state without subscribing to the entire slice
+ *
+ * This hook allows components to subscribe to only specific parts of the
+ * podcast state, improving performance by preventing unnecessary re-renders.
+ *
+ * @example
+ * ```tsx
+ * // Only re-render when libraries change
+ * const podcastLibraries = usePodcastState(state => state.podcastLibraries);
+ *
+ * // Only re-render when loading state changes
+ * const isLoading = usePodcastState(state => state.operationState === "REFRESHING_ITEMS");
+ * ```
+ */
+export function usePodcastState<T>(selector: (state: PodcastSlice) => T): T {
+  return useAppStore(selector);
+}
+
+/**
+ * Hook to get podcast actions without subscribing to state
+ *
+ * This hook provides access to podcast actions without subscribing to any state,
+ * which is useful for components that only need to trigger actions.
+ *
+ * @example
+ * ```tsx
+ * function ActionButton() {
+ *   const { selectPodcastLibrary, refreshPodcasts } = usePodcastActions();
+ *
+ *   return (
+ *     <Button onPress={() => selectPodcastLibrary('library-id')}>
+ *       Select Podcast Library
+ *     </Button>
+ *   );
+ * }
+ * ```
+ */
+export function usePodcastActions() {
+  return useAppStore((state) => ({
+    initialize: state.initializePodcastSlice,
+    selectPodcastLibrary: state.selectPodcastLibrary,
+    refreshPodcasts: state.refreshPodcasts,
+    setSortConfig: state.setPodcastSortConfig,
+    reset: state.resetPodcasts,
+  }));
+}
+
+/**
+ * Hook to initialize the podcast store
+ *
+ * This hook should be used in a provider component or at the app root
+ * to initialize the podcast store when the API and database are ready.
+ *
+ * @param apiConfigured - Whether the API is configured and ready
+ * @param dbInitialized - Whether the database is initialized and ready
+ *
+ * @example
+ * ```tsx
+ * function App() {
+ *   const { apiConfigured } = useAuth();
+ *   const { initialized: dbInitialized } = useDb();
+ *
+ *   usePodcastStoreInitializer(apiConfigured, dbInitialized);
+ *
+ *   return <YourAppContent />;
+ * }
+ * ```
+ */
+export function usePodcastStoreInitializer(apiConfigured: boolean, dbInitialized: boolean) {
+  const initializePodcasts = useAppStore((state) => state.initializePodcastSlice);
+  const updateReadiness = useAppStore((state) => state._updatePodcastReadiness);
+  const readinessState = useAppStore((state) => state.podcasts.readinessState);
+  const initialized = readinessState !== "UNINITIALIZED";
+
+  // Initialize the store when dependencies are ready
+  React.useEffect(() => {
+    if (!initialized && (apiConfigured || dbInitialized)) {
+      initializePodcasts(apiConfigured, dbInitialized);
+    }
+  }, [initializePodcasts, initialized, apiConfigured, dbInitialized]);
 
   // Update ready state when dependencies change
   React.useEffect(() => {
@@ -810,6 +992,8 @@ export function useSettings() {
   const smartRewindEnabled = useAppStore((state) => state.settings.smartRewindEnabled);
   const homeLayout = useAppStore((state) => state.settings.homeLayout);
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
+  const showAllLibraries = useAppStore((state) => state.settings.showAllLibraries);
+  const showAllPodcastLibraries = useAppStore((state) => state.settings.showAllPodcastLibraries);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -820,6 +1004,10 @@ export function useSettings() {
   const updateSmartRewindEnabled = useAppStore((state) => state.updateSmartRewindEnabled);
   const updateHomeLayout = useAppStore((state) => state.updateHomeLayout);
   const updateDiagnosticsEnabled = useAppStore((state) => state.updateDiagnosticsEnabled);
+  const updateShowAllLibraries = useAppStore((state) => state.updateShowAllLibraries);
+  const updateShowAllPodcastLibraries = useAppStore(
+    (state) => state.updateShowAllPodcastLibraries
+  );
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -829,6 +1017,8 @@ export function useSettings() {
       smartRewindEnabled,
       homeLayout,
       diagnosticsEnabled,
+      showAllLibraries,
+      showAllPodcastLibraries,
       initialized,
       isLoading,
       initializeSettings,
@@ -837,6 +1027,8 @@ export function useSettings() {
       updateSmartRewindEnabled,
       updateHomeLayout,
       updateDiagnosticsEnabled,
+      updateShowAllLibraries,
+      updateShowAllPodcastLibraries,
       resetSettings,
     }),
     [
@@ -845,6 +1037,8 @@ export function useSettings() {
       smartRewindEnabled,
       homeLayout,
       diagnosticsEnabled,
+      showAllLibraries,
+      showAllPodcastLibraries,
       initialized,
       isLoading,
       initializeSettings,
@@ -853,6 +1047,8 @@ export function useSettings() {
       updateSmartRewindEnabled,
       updateHomeLayout,
       updateDiagnosticsEnabled,
+      updateShowAllLibraries,
+      updateShowAllPodcastLibraries,
       resetSettings,
     ]
   );

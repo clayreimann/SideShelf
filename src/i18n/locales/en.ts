@@ -12,6 +12,7 @@ export const en = {
   // Navigation Tabs
   "tabs.home": "Home",
   "tabs.library": "Library",
+  "tabs.podcasts": "Podcasts",
   "tabs.series": "Series",
   "tabs.authors": "Authors",
   "tabs.more": "More",
@@ -54,6 +55,14 @@ export const en = {
   "library.sortOptions.publishedYear": "Published Year",
   "library.sortOptions.dateAdded": "Date Added",
   "library.searchPlaceholder": "Search by author, title, series, or narrator...",
+
+  // Podcast Screen
+  "podcasts.title": "Podcasts",
+  "podcasts.empty": "No podcast libraries found.",
+  "podcasts.sortOptions.title": "Title",
+  "podcasts.sortOptions.author": "Author",
+  "podcasts.sortOptions.dateAdded": "Date Added",
+  "podcasts.searchPlaceholder": "Search by title or author...",
 
   // Sort Menu
   "sortMenu.title": "Sort by",
@@ -164,6 +173,13 @@ export const en = {
   "settings.sections.advanced": "Advanced",
   "settings.sections.developer": "Developer",
   "settings.currentLibrary": "Current Library",
+  "settings.currentPodcastLibrary": "Current Podcast Library",
+  "settings.showAllLibraries": "Show All Book Libraries",
+  "settings.showAllLibrariesDescription":
+    "Display books from all libraries in the Library tab instead of just one selected library.",
+  "settings.showAllPodcastLibraries": "Show All Podcast Libraries",
+  "settings.showAllPodcastLibrariesDescription":
+    "Display podcasts from all podcast libraries in the Podcasts tab instead of just one selected podcast library.",
   "settings.jumpForwardInterval": "Jump Forward Interval",
   "settings.jumpBackwardInterval": "Jump Backward Interval",
   "settings.smartRewind": "Smart Rewind on Resume",
