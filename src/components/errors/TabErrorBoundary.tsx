@@ -12,12 +12,11 @@
  * - Integrates with app's logger system
  */
 
-import { logger } from '@/lib/logger';
-import { useThemedStyles } from '@/lib/theme';
-import { translate } from '@/i18n';
-import { useRouter } from 'expo-router';
-import React, { Component, type ReactNode } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { logger } from "@/lib/logger";
+import { useThemedStyles } from "@/lib/theme";
+import { useRouter } from "expo-router";
+import React, { Component, type ReactNode } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Props {
   children: ReactNode;
@@ -44,12 +43,7 @@ class TabFallback extends React.Component<{
     const { error, errorInfo, onReset, tabName } = this.props;
 
     return (
-      <TabFallbackContent
-        error={error}
-        errorInfo={errorInfo}
-        onReset={onReset}
-        tabName={tabName}
-      />
+      <TabFallbackContent error={error} errorInfo={errorInfo} onReset={onReset} tabName={tabName} />
     );
   }
 }
@@ -69,83 +63,83 @@ const TabFallbackContent: React.FC<{
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
+      justifyContent: "center",
+      alignItems: "center",
       padding: 20,
       backgroundColor: colors.background,
     },
     title: {
       fontSize: 20,
-      fontWeight: 'bold',
-      color: colors.text,
+      fontWeight: "bold",
+      color: colors.textPrimary,
       marginBottom: 10,
-      textAlign: 'center',
+      textAlign: "center",
     },
     message: {
       fontSize: 16,
       color: colors.textSecondary,
       marginBottom: 20,
-      textAlign: 'center',
+      textAlign: "center",
       paddingHorizontal: 20,
     },
     buttonContainer: {
-      flexDirection: 'column',
+      flexDirection: "column",
       gap: 10,
-      width: '100%',
+      width: "100%",
       maxWidth: 300,
     },
     button: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.background,
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 8,
-      alignItems: 'center',
+      alignItems: "center",
     },
     buttonSecondary: {
-      backgroundColor: colors.backgroundSecondary,
+      backgroundColor: colors.coverBackground,
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 8,
-      alignItems: 'center',
+      alignItems: "center",
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.separator,
     },
     buttonText: {
-      color: '#FFFFFF',
+      color: "#FFFFFF",
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     buttonTextSecondary: {
-      color: colors.text,
+      color: colors.textPrimary,
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     errorDetails: {
       marginTop: 20,
       padding: 15,
-      backgroundColor: colors.backgroundSecondary,
+      backgroundColor: colors.coverBackground,
       borderRadius: 8,
       maxHeight: 200,
-      width: '100%',
+      width: "100%",
     },
     errorText: {
-      fontFamily: 'monospace',
+      fontFamily: "monospace",
       fontSize: 12,
       color: colors.textSecondary,
     },
     tabName: {
       fontSize: 14,
-      color: colors.textTertiary,
+      color: colors.textSecondary,
       marginBottom: 15,
-      textAlign: 'center',
+      textAlign: "center",
     },
   });
 
   const handleGoHome = () => {
     try {
-      router.push('/(tabs)/home');
+      router.push("/(tabs)/home");
     } catch (navError) {
-      console.error('Failed to navigate to home:', navError);
+      console.error("Failed to navigate to home:", navError);
     }
   };
 
@@ -203,16 +197,11 @@ export class TabErrorBoundary extends Component<Props, State> {
     const { tabName } = this.props;
 
     // Log the error to our logging system
-    this.log.error(
-      `Error in ${tabName} tab: ${error.message}`,
-      error
-    );
+    this.log.error(`Error in ${tabName} tab: ${error.message}`, error);
 
     // Also log component stack if in dev mode
     if (__DEV__) {
-      this.log.error(
-        `Component stack for ${tabName} tab: ${errorInfo.componentStack}`,
-      );
+      this.log.error(`Component stack for ${tabName} tab: ${errorInfo.componentStack}`);
     }
 
     // Update state with error info
