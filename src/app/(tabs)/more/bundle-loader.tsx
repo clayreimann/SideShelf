@@ -59,13 +59,19 @@ export default function BundleLoaderScreen() {
 
   const handleSaveUrl = useCallback(async () => {
     try {
-      if (urlInput && !bundleService.validateUrl(urlInput)) {
+      // Basic URL validation
+      if (urlInput && !urlInput.match(/^https?:\/\/.+/)) {
         Alert.alert("Invalid URL", "Please enter a valid HTTP or HTTPS URL");
         return;
       }
 
       await updateCustomUpdateUrl(urlInput || null);
-      Alert.alert("Success", "Update URL saved successfully");
+      Alert.alert(
+        "URL Saved",
+        "Note: The update URL is configured at build time. " +
+          "This setting is for reference only. " +
+          "See Settings for rebuild instructions."
+      );
     } catch (error) {
       console.error("Failed to save URL", error);
       Alert.alert("Error", "Failed to save update URL");
@@ -204,8 +210,10 @@ export default function BundleLoaderScreen() {
               lineHeight: 18,
             }}
           >
-            Enter a custom update URL to load bundles from PR builds. This requires expo-updates
-            to be enabled and configured.
+            Update URL is configured at build time via EXPO_PUBLIC_UPDATE_URL environment variable.
+            {"\n\n"}
+            This field is for reference only. To change the update server, rebuild the app with a
+            new URL.
           </Text>
 
           <TextInput
@@ -351,15 +359,23 @@ export default function BundleLoaderScreen() {
             }}
           >
             <Text style={{ color: textSecondary, fontSize: 13, lineHeight: 20 }}>
-              To use custom bundle loading:
+              How OTA Updates Work:
               {"\n\n"}
-              1. expo-updates must be enabled in the build
+              1. Update server URL is configured at build time
               {"\n"}
-              2. The app must be built with EAS Build (preview or production)
+              2. expo-updates checks the server for new bundles
               {"\n"}
-              3. Bundle updates must match the app's runtime version
+              3. Runtime version must match exactly
+              {"\n"}
+              4. Updates download in background, apply on reload
               {"\n\n"}
-              For development builds, use the Expo dev client instead.
+              To use GitHub Pages updates:
+              {"\n"}
+              Build with: EXPO_PUBLIC_UPDATE_URL=
+              {"\n"}
+              "https://user.github.io/repo/updates/pr-123"
+              {"\n\n"}
+              See docs/architecture/OTA_UPDATES.md for details.
             </Text>
           </View>
         </View>
