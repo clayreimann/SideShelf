@@ -10,6 +10,7 @@ import {
     useDownloadsStoreInitializer,
     useHomeStoreInitializer,
     useLibraryStoreInitializer,
+    useNetworkStoreInitializer,
     usePlayerStoreInitializer,
     useSeriesStoreInitializer,
     useSettingsStoreInitializer,
@@ -30,6 +31,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     usePlayerStoreInitializer(); // Player doesn't need API/DB dependencies
     useSettingsStoreInitializer(); // Settings are independent
     useDownloadsStoreInitializer(); // Downloads are independent
+    useNetworkStoreInitializer(); // Network monitoring is independent
     useUserProfileStoreInitializer(username); // User profile needs username
     useHomeStoreInitializer(username ? username : null); // Home needs userId (username)
 

@@ -42,7 +42,7 @@ export default function CoverItem({ item, showProgress = false }: CoverItemProps
             elevation: 5,
           }}
         >
-          <CoverImage uri={item.imageUrl ?? null} title={item.title} fontSize={16} />
+          <CoverImage uri={item.imageUrl ?? null} title={item.title} fontSize={16} libraryItemId={item.id} />
         </View>
 
         {/* Progress Bar - only shown for items with progress */}

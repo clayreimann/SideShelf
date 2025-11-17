@@ -26,7 +26,7 @@ export function GridItem({ item }: { item: LibraryItemDisplayRow }) {
             { backgroundColor: colors.coverBackground },
           ]}
         >
-          <CoverImage uri={item.coverUri} title={item.title} fontSize={12} />
+          <CoverImage uri={item.coverUri} title={item.title} fontSize={12} libraryItemId={item.id} />
         </View>
       </Pressable>
     </Link>
@@ -53,7 +53,7 @@ export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
               { backgroundColor: colors.coverBackground },
             ]}
           >
-            <CoverImage uri={item.coverUri} title={item.title} fontSize={24} />
+            <CoverImage uri={item.coverUri} title={item.title} fontSize={24} libraryItemId={item.id} />
           </View>
           <View style={styles.listItemInfo}>
             <Text

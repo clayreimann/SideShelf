@@ -1,4 +1,5 @@
 import FloatingPlayer from "@/components/ui/FloatingPlayer";
+import NetworkIndicator from "@/components/ui/NetworkIndicator";
 import { translate, type TranslationKey } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
@@ -143,6 +144,7 @@ export default function TabLayout() {
   if (!tabs.useNativeTabs) {
     return (
       <View style={{ flex: 1 }}>
+        <NetworkIndicator />
         <Tabs
           screenOptions={{
             headerShown: false,
@@ -188,6 +190,7 @@ export default function TabLayout() {
   }
   return (
     <View style={{ flex: 1 }}>
+      <NetworkIndicator />
       <NativeTabs
         blurEffect={isDark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"}
         backgroundColor={tabs.backgroundColor}

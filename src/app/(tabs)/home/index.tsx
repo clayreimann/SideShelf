@@ -7,7 +7,7 @@ import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { progressService } from "@/services/ProgressService";
-import { useHome, useSettings } from "@/stores";
+import { useHome, useNetwork, useSettings } from "@/stores";
 import { useFocusEffect } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
@@ -35,6 +35,7 @@ export default function HomeScreen() {
   const floatingPlayerPadding = useFloatingPlayerPadding();
   const { continueListening, downloaded, listenAgain, isLoadingHome, refreshHome } = useHome();
   const { homeLayout, updateHomeLayout } = useSettings();
+  const { serverReachable } = useNetwork();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Toggle between list and cover layout
@@ -89,7 +90,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       const refreshData = async () => {
-        if (!username || !isAuthenticated) return;
+        if (!username || !isAuthenticated || !serverReachable) return;
 
         try {
           const user = await getUserByUsername(username);
@@ -110,12 +111,12 @@ export default function HomeScreen() {
       };
 
       refreshData();
-    }, [username, isAuthenticated, refreshHome])
+    }, [username, isAuthenticated, serverReachable, refreshHome])
   );
 
   // Handle pull-to-refresh
   const onRefresh = useCallback(async () => {
-    if (!username || !isAuthenticated) return;
+    if (!username || !isAuthenticated || !serverReachable) return;
 
     setIsRefreshing(true);
 
@@ -137,7 +138,7 @@ export default function HomeScreen() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [username, isAuthenticated, refreshHome]);
+  }, [username, isAuthenticated, serverReachable, refreshHome]);
 
   const renderSectionHeader = ({ section }: { section: HomeSection }) => (
     <View style={{ marginBottom: 12, marginTop: 20, paddingHorizontal: 16 }}>

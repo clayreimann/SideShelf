@@ -18,6 +18,7 @@ import {
 } from "./slices/libraryItemDetailsSlice";
 import { createLibrarySlice, LibrarySlice } from "./slices/librarySlice";
 import { createLoggerSlice, LoggerSlice } from "./slices/loggerSlice";
+import { createNetworkSlice, NetworkSlice } from "./slices/networkSlice";
 import { createPlayerSlice, PlayerSlice } from "./slices/playerSlice";
 import { createSeriesSlice, SeriesSlice } from "./slices/seriesSlice";
 import { createSettingsSlice, SettingsSlice } from "./slices/settingsSlice";
@@ -41,6 +42,7 @@ export interface StoreState
     UserProfileSlice,
     DownloadSlice,
     StatisticsSlice,
+    NetworkSlice,
     LoggerSlice {}
 
 /**
@@ -86,6 +88,9 @@ export const useAppStore = create<StoreState>()(
 
     // Statistics slice
     ...createStatisticsSlice(set, get),
+
+    // Network slice
+    ...createNetworkSlice(set, get),
 
     // Logger slice
     ...createLoggerSlice(set, get),
@@ -1086,6 +1091,74 @@ export function useDownloadsStoreInitializer() {
       });
     }
   }, [initializeDownloads, initialized]);
+}
+
+/**
+ * Hook to use the network slice
+ *
+ * @example
+ * ```tsx
+ * function NetworkIndicator() {
+ *   const { isConnected, isInternetReachable } = useNetwork();
+ *
+ *   return <Text>{isConnected ? 'Online' : 'Offline'}</Text>;
+ * }
+ * ```
+ */
+export function useNetwork() {
+  const isConnected = useAppStore((state) => state.network.isConnected);
+  const isInternetReachable = useAppStore((state) => state.network.isInternetReachable);
+  const serverReachable = useAppStore((state) => state.network.serverReachable);
+  const connectionType = useAppStore((state) => state.network.connectionType);
+  const initialized = useAppStore((state) => state.network.initialized);
+  const lastServerCheck = useAppStore((state) => state.network.lastServerCheck);
+
+  // Actions
+  const initializeNetwork = useAppStore((state) => state.initializeNetwork);
+  const refreshNetworkStatus = useAppStore((state) => state.refreshNetworkStatus);
+  const checkServerReachability = useAppStore((state) => state.checkServerReachability);
+  const resetNetwork = useAppStore((state) => state.resetNetwork);
+
+  return React.useMemo(
+    () => ({
+      isConnected,
+      isInternetReachable,
+      serverReachable,
+      connectionType,
+      initialized,
+      lastServerCheck,
+      initializeNetwork,
+      refreshNetworkStatus,
+      checkServerReachability,
+      resetNetwork,
+    }),
+    [
+      isConnected,
+      isInternetReachable,
+      serverReachable,
+      connectionType,
+      initialized,
+      lastServerCheck,
+      initializeNetwork,
+      refreshNetworkStatus,
+      checkServerReachability,
+      resetNetwork,
+    ]
+  );
+}
+
+/**
+ * Hook to initialize the network store
+ */
+export function useNetworkStoreInitializer() {
+  const initializeNetwork = useAppStore((state) => state.initializeNetwork);
+  const initialized = useAppStore((state) => state.network.initialized);
+
+  React.useEffect(() => {
+    if (!initialized) {
+      initializeNetwork();
+    }
+  }, [initializeNetwork, initialized]);
 }
 
 /**

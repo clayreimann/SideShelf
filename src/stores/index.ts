@@ -18,6 +18,7 @@ export {
     useDownloads, useDownloadsStoreInitializer, // Downloads
     useHome, useHomeStoreInitializer, // Home
     useLibrary, useLibraryActions, useLibraryItemDetails, useLibraryState, useLibraryStore, useLibraryStoreInitializer, // ApiLibrary & Item Details
+    useNetwork, useNetworkStoreInitializer, // Network
     usePlayer, usePlayerActions, usePlayerState, usePlayerStoreInitializer, // Player
     useSeries, useSeriesActions, useSeriesState, useSeriesStoreInitializer, // ApiSeries
     useSettings, useSettingsStoreInitializer, // Settings
@@ -65,6 +66,11 @@ export { type DownloadSlice, type DownloadSliceActions, type DownloadSliceState 
 export {
     type DatabaseCounts, type StatisticsSlice, type StatisticsSliceActions, type StatisticsSliceState, type StorageEntry
 } from './slices/statisticsSlice';
+
+// Network slice type exports
+export {
+    type NetworkSlice, type NetworkSliceActions, type NetworkSliceState
+} from './slices/networkSlice';
 
 // Shared types
 export type { LibraryItemRow } from '@/db/schema/libraryItems';
