@@ -7,10 +7,10 @@
  * - Server reachability
  */
 
-import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
-import { logger } from "@/lib/logger";
 import { getApiConfig } from "@/lib/api/api";
+import { logger } from "@/lib/logger";
 import type { SliceCreator } from "@/types/store";
+import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
 
 // Create cached sublogger for this slice
 const log = logger.forTag("NetworkSlice");
@@ -78,7 +78,7 @@ const NETWORK_STATUS_REFRESH_INTERVAL = 10000;
 /**
  * Create the Network slice
  */
-export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
+export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => NetworkSlice) => {
   let serverCheckInterval: ReturnType<typeof setInterval> | null = null;
   let networkRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -121,18 +121,22 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
       serverCheckInterval = setInterval(() => {
         const currentState = get();
         if (currentState.network.isConnected && currentState.network.isInternetReachable) {
-          get().checkServerReachability().catch((error) => {
-            log.warn("Server reachability check failed:", error);
-          });
+          get()
+            .checkServerReachability()
+            .catch((error) => {
+              log.warn(`Server reachability check failed: ${error}`);
+            });
         }
       }, SERVER_CHECK_INTERVAL);
 
       // Start periodic network status refresh (workaround for iOS simulator NetInfo issues)
       networkRefreshInterval = setInterval(() => {
         log.debug("Periodic network status refresh");
-        get().refreshNetworkStatus().catch((error) => {
-          log.warn("Network status refresh failed:", error);
-        });
+        get()
+          .refreshNetworkStatus()
+          .catch((error) => {
+            log.warn(`Network status refresh failed: ${error}`);
+          });
       }, NETWORK_STATUS_REFRESH_INTERVAL);
 
       set((state: NetworkSlice) => ({
@@ -154,7 +158,7 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
      * Update network state (called by NetInfo listener)
      */
     _updateNetworkState: (netState: NetInfoState) => {
-      log.debug("_updateNetworkState called", { netState });
+      log.debug(`_updateNetworkState called netState=${netState}`);
 
       const isConnected = netState.isConnected ?? false;
       const isInternetReachable = netState.isInternetReachable;
@@ -177,9 +181,11 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
       // Check server reachability when network becomes available
       if (isConnected && isInternetReachable) {
         log.info("Network available, checking server reachability");
-        get().checkServerReachability().catch((error) => {
-          log.warn("Server reachability check failed after network change:", error);
-        });
+        get()
+          .checkServerReachability()
+          .catch((error) => {
+            log.warn(`Server reachability check failed after network change: ${error}`);
+          });
       } else {
         // Mark server as unreachable when no network
         log.info("Network unavailable, marking server as unreachable");
@@ -200,10 +206,10 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
       try {
         log.debug("Refreshing network status manually");
         const netState = await NetInfo.fetch();
-        log.debug("Manual network fetch completed", { netState });
+        log.debug(`Manual network fetch completed netState=${netState}`);
         get()._updateNetworkState(netState);
       } catch (error) {
-        log.error("Failed to refresh network status", error);
+        log.error("Failed to refresh network status", error as Error);
       }
     },
 
@@ -243,7 +249,7 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get) => {
           },
         }));
       } catch (error) {
-        log.warn("Server reachability check failed:", error);
+        log.warn(`Server reachability check failed: ${error}`);
         set((state: NetworkSlice) => ({
           ...state,
           network: {

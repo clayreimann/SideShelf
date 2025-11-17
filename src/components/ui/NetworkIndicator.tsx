@@ -5,10 +5,11 @@
  * Shows at the top of the screen to inform users about connection status.
  */
 
-import { useNetwork } from "@/stores";
+import { OfflineIcon } from "@/components/icons";
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text, View, StyleSheet } from "react-native";
+import { useNetwork } from "@/stores";
+import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function NetworkIndicator() {
@@ -28,13 +29,15 @@ export default function NetworkIndicator() {
       style={[
         styles.container,
         {
-          backgroundColor: colors.error || "#dc2626",
+          backgroundColor: colors.error,
           paddingTop: insets.top + 6,
-        }
+        },
       ]}
     >
-      <MaterialCommunityIcons name="cloud-off-outline" size={16} color="white" />
-      <Text style={styles.text}>Offline - Some features may be unavailable</Text>
+      <OfflineIcon />
+      <Text style={styles.text}>
+        {translate("common.offline")} - {translate("common.offline.description")}
+      </Text>
     </View>
   );
 }
