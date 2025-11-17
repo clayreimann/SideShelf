@@ -22,14 +22,14 @@ export function useThemedStyles() {
 
 function createThemedStyles(isDark: boolean) {
   const colors = {
-    background: isDark ? "#222" : "#ffffff",
-    coverBackground: isDark ? "#222" : "#eee",
-    textPrimary: isDark ? "#ffffff" : "#000000",
-    textSecondary: isDark ? "#aaaaaa" : "#666666",
+    background: isDark ? "#222" : "#fff",
+    coverBackground: isDark ? "#333" : "#eee",
+    textPrimary: isDark ? "#fff" : "#000",
+    textSecondary: isDark ? "#aaa" : "#666",
     separator: isDark ? "rgba(255,255,255,0.15)" : "#ccc",
     link: isDark ? "#9CDCFE" : "#0066CC",
-    headerBackground: isDark ? "#333" : "#ffffff",
-    headerText: isDark ? "#ffffff" : "#000000",
+    headerBackground: isDark ? "#333" : "#fff",
+    headerText: isDark ? "#fff" : "#000",
     headerBorder: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
     error: isDark ? "#ff6b6b" : "#dc2626",
   } as const;

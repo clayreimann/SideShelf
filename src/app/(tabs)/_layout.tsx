@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "@/components/errors";
 import FloatingPlayer from "@/components/ui/FloatingPlayer";
 import NetworkIndicator from "@/components/ui/NetworkIndicator";
 import { translate, type TranslationKey } from "@/i18n";
@@ -184,7 +185,9 @@ export default function TabLayout() {
             );
           })}
         </Tabs>
-        <FloatingPlayer />
+        <ErrorBoundary boundaryName="FloatingPlayer">
+          <FloatingPlayer />
+        </ErrorBoundary>
       </View>
     );
   }
@@ -233,7 +236,9 @@ export default function TabLayout() {
         })}
       </NativeTabs>
 
-      <FloatingPlayer />
+      <ErrorBoundary boundaryName="FloatingPlayer">
+        <FloatingPlayer />
+      </ErrorBoundary>
     </View>
   );
 }
