@@ -1,85 +1,83 @@
 # Implementation Plan: Refactor playTrack()
 
-**Priority:** P1 - Critical
-**Risk Level:** High
-**Estimated Effort:** 2-3 days
-**Impact:** Improves maintainability of core playback function (180 lines)
+**Priority:** P1 | **Risk:** High | **Effort:** 2-3 days | **Impact:** Eliminates 60+ lines duplication
 
 ---
 
-## Overview
+## Problem
 
-Refactor `playTrack()` in PlayerService.ts (180 lines, 205-385) into smaller, testable functions.
+Single 180-line function (PlayerService.ts:205-385) handling:
+- User authentication (8 lines)
+- Library item & metadata fetching (30 lines)
+- Audio file validation (25 lines)
+- Track building (40 lines)
+- Queue management (20 lines)
+- Resume position application (25 lines)
+- Playback settings application (15 lines)
 
-**Responsibilities:**
-1. User authentication (8 lines) → Use `getCurrentUserId()` helper
-2. Library item & metadata fetching (30 lines) → Extract
-3. Audio file validation (25 lines) → Extract
-4. Track building (40 lines) → Extract
-5. Queue management (20 lines) → Extract
-6. Resume position (25 lines) → Extract
-7. Playback settings (15 lines) → Extract
-8. Error handling & cleanup (17 lines) → Extract
+**Additional Issue:** 60+ lines duplicated with `reloadTrackPlayerQueue()` (lines 525-563)
 
 ---
 
-## Refactoring Strategy
+## Solution
 
-### Extract 7 Helper Functions
+Extract 7 helper functions:
+
+**1. loadTrackData(userId, libraryItemId)**
+- Fetch library item, metadata, audio files
+- Return validated data
+
+**2. validateAudioFiles(audioFiles, libraryItemId)**
+- Check audio files exist
+- Throw if missing
+
+**3. setupPlaybackQueue(tracks, libraryItemId)**
+- Reset queue
+- Add tracks
+- Set active track
+
+**4. applyResumePosition(resumeInfo)** [SHARED]
+- Sync AsyncStorage if positions differ
+- Apply position to TrackPlayer
+- Update store
+- **Eliminates duplication with reloadTrackPlayerQueue**
+
+**5. applyPlaybackSettings()** [SHARED]
+- Apply playback rate from store
+- Apply volume from store
+- **Eliminates duplication with reloadTrackPlayerQueue**
+
+---
+
+## Implementation
+
+### Main Function (~50 lines)
 
 ```typescript
-// 1. Load track data (~40 lines)
-private async loadTrackData(
-  userId: string,
-  libraryItemId: string
-): Promise<{ item: LibraryItemRow; metadata: MediaMetadataRow; audioFiles: AudioFileRow[] }>
-
-// 2. Validate audio files (~25 lines)
-private validateAudioFiles(audioFiles: AudioFileRow[], libraryItemId: string): void
-
-// 3. Build tracks (~40 lines - use existing buildTrackList)
-// Already exists, just call it directly
-
-// 4. Setup queue (~25 lines)
-private async setupPlaybackQueue(tracks: Track[], libraryItemId: string): Promise<void>
-
-// 5. Determine resume position (~25 lines - use existing)
-// Already exists: determineResumePosition()
-
-// 6. Apply resume position (~25 lines)
-private async applyResumePosition(resumeInfo: ResumeInfo): Promise<void>
-
-// 7. Apply playback settings (~15 lines)
-private async applyPlaybackSettings(): Promise<void>
-```
-
-### New Main Function (~50 lines)
-
-```typescript
-async playTrack(libraryItemId: string): Promise<void> {
+async playTrack(libraryItemId: string) {
   log.info('playTrack called', { libraryItemId });
 
   try {
-    // 1. Authenticate user
+    // 1. Authenticate
     const userId = await getCurrentUserId();
 
-    // 2. Load track data
+    // 2. Load data
     const { item, metadata, audioFiles } = await this.loadTrackData(userId, libraryItemId);
 
     // 3. Validate audio files
     this.validateAudioFiles(audioFiles, libraryItemId);
 
-    // 4. Build tracks
+    // 4. Build tracks (existing method)
     const tracks = await this.buildTrackList(item, metadata, audioFiles);
 
     // 5. Setup queue
     await this.setupPlaybackQueue(tracks, libraryItemId);
 
-    // 6. Determine and apply resume position
+    // 6. Apply resume position
     const resumeInfo = await this.determineResumePosition(libraryItemId);
     await this.applyResumePosition(resumeInfo);
 
-    // 7. Apply playback settings
+    // 7. Apply settings
     await this.applyPlaybackSettings();
 
     log.info('Playback started successfully', { libraryItemId });
@@ -89,137 +87,97 @@ async playTrack(libraryItemId: string): Promise<void> {
 }
 ```
 
----
-
-## Code Deduplication
-
-### Apply Resume Position (Duplicated in reloadTrackPlayerQueue)
-
-**Extract to shared helper:**
+### Shared Helper Example (~25 lines)
 
 ```typescript
-/**
- * Apply resume position to TrackPlayer and sync store
- *
- * @param resumeInfo - Resume position info
- * @param updateStore - Whether to update the store (default: true)
- */
-private async applyResumePosition(
-  resumeInfo: ResumeInfo,
-  updateStore: boolean = true
-): Promise<void> {
+private async applyResumePosition(resumeInfo: ResumeInfo, updateStore = true) {
   // Sync AsyncStorage if positions differ
-  if (
-    resumeInfo.authoritativePosition !== null &&
-    resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition
-  ) {
+  if (resumeInfo.authoritativePosition !== null &&
+      resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition) {
     await saveItem(ASYNC_KEYS.position, resumeInfo.authoritativePosition);
-    log.info(
-      `Synced AsyncStorage position to ${formatTime(resumeInfo.authoritativePosition)}s from ${resumeInfo.source}`
-    );
+    log.info(`Synced AsyncStorage position from ${resumeInfo.source}`);
   }
 
   // Apply position if > 0
   if (resumeInfo.position > 0) {
     if (updateStore) {
-      const store = useAppStore.getState();
-      store.updatePosition(resumeInfo.position);
+      useAppStore.getState().updatePosition(resumeInfo.position);
     }
-
     await TrackPlayer.seekTo(resumeInfo.position);
-
-    log.info(
-      `${updateStore ? 'Resuming playback' : 'Prepared resume position'} from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
-    );
+    log.info(`Resuming from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`);
   }
 }
 ```
 
-**Eliminate ~40 lines** of duplication between `playTrack` and `reloadTrackPlayerQueue`.
+**Note:** `applyPlaybackSettings()` follows same pattern (~15 lines)
 
-### Apply Playback Settings (Duplicated in reloadTrackPlayerQueue)
+---
 
-**Extract to shared helper:**
+## Deduplication Impact
 
-```typescript
-/**
- * Apply playback rate and volume from store
- */
-private async applyPlaybackSettings(): Promise<void> {
-  const store = useAppStore.getState();
-  const { playbackRate, volume } = store.player;
+**Before:**
+- `playTrack()`: 180 lines
+- `reloadTrackPlayerQueue()`: Contains ~40 lines duplicated logic
 
-  if (playbackRate !== 1.0) {
-    await TrackPlayer.setRate(playbackRate);
-    log.info(`Applied playback rate from store: ${playbackRate}`);
-  }
-
-  if (volume !== 1.0) {
-    await TrackPlayer.setVolume(volume);
-    log.info(`Applied volume from store: ${volume}`);
-  }
-}
-```
-
-**Eliminate ~20 lines** of duplication.
+**After:**
+- `playTrack()`: ~140 lines
+- `reloadTrackPlayerQueue()`: Uses shared `applyResumePosition()` and `applyPlaybackSettings()`
+- **~60 lines eliminated**
 
 ---
 
 ## Testing Strategy
 
-```typescript
-describe('PlayerService.playTrack', () => {
-  it('should play track successfully', async () => {
-    // Test complete flow
-  });
+### Unit Tests
+- Test each helper in isolation
+- Test error cases (missing user, item, audio files)
+- Test resume position application
+- Test playback settings application
 
-  it('should handle missing user', async () => {
-    // Test auth error
-  });
-
-  it('should handle missing library item', async () => {
-    // Test validation
-  });
-
-  it('should handle missing audio files', async () => {
-    // Test audio validation
-  });
-
-  it('should resume from correct position', async () => {
-    // Test resume logic
-  });
-
-  it('should apply playback settings', async () => {
-    // Test rate/volume
-  });
-});
-```
+### Integration Tests
+- Test complete playTrack flow
+- Test reloadTrackPlayerQueue with shared helpers
+- Verify no duplication
 
 ---
 
-## Benefits
+## Migration Checklist
 
-- **Line reduction:** 180 → ~140 lines (~22% reduction)
-- **Deduplication:** ~60 lines eliminated across `playTrack` + `reloadTrackPlayerQueue`
-- **Testability:** Can test each step independently
-- **Maintainability:** Clear, single-purpose functions
-- **Reusability:** Shared helpers used in multiple places
+**Day 1:**
+- [ ] Extract loadTrackData, validateAudioFiles, setupPlaybackQueue
+- [ ] Write unit tests
+
+**Day 2:**
+- [ ] Extract applyResumePosition, applyPlaybackSettings (shared)
+- [ ] Update reloadTrackPlayerQueue to use shared helpers
+- [ ] Write integration tests
+
+**Day 3:**
+- [ ] Refactor main playTrack function
+- [ ] Full testing and code review
 
 ---
 
-## Timeline
+## Success Metrics
 
-| Phase | Duration |
-|-------|----------|
-| Extract helpers | 1 day |
-| Refactor main function | 0.5 day |
-| Deduplication | 0.5 day |
-| Testing | 1 day |
-| **Total** | **3 days** |
+- [ ] playTrack reduced to ~140 lines
+- [ ] 60+ lines of duplication eliminated
+- [ ] Test coverage: 85%+
+- [ ] All existing tests pass
+- [ ] Playback works correctly
+
+---
+
+## Risks
+
+**Risk:** Breaking core playback
+**Mitigation:** Comprehensive tests, careful extraction, preserve exact behavior
+
+**Rollback:** `git revert <commit>`
 
 ---
 
 ## References
 
 - Current: `src/services/PlayerService.ts:205-385`
-- Duplicate logic: `src/services/PlayerService.ts:525-563`
+- Duplication: `src/services/PlayerService.ts:525-563`
