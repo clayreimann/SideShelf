@@ -41,7 +41,7 @@ function resolveUrl(input: string): string {
   return `${normalized}/${input}`;
 }
 
-export type ApiFetchOptions = RequestInit & {
+export type ApiFetchOptions = Omit<RequestInit, 'signal'> & {
   auth?: boolean;
   timeout?: number; // Optional timeout in milliseconds
 };
@@ -60,7 +60,7 @@ export async function apiFetch(
   }
 
   const url = resolveUrl(pathOrUrl);
-  const { auth = true, timeout, headers, signal, ...rest } = init || {};
+  const { auth = true, timeout, headers, ...rest } = init || {};
   const config = apiClientService.getConfig();
   const token = config?.getAccessToken();
 
@@ -78,16 +78,15 @@ export async function apiFetch(
     headerObj["User-Agent"] = getCustomUserAgent();
   }
 
-  // Combine timeout signal with user-provided signal
+  // Apply timeout
   const timeoutSignal = apiClientService.createTimeoutSignal(timeout);
-  const combinedSignal = apiClientService.combineSignals(timeoutSignal, signal ?? undefined);
 
   const method = (rest.method || "GET").toUpperCase();
   const startTime = Date.now();
   log.info(`-> ${method} ${scrubUrl(url)}`);
   detailedLog.info(`-> ${method} ${scrubUrl(url)} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${rest.body}`);
 
-  const res = await fetch(url, { ...rest, headers: headerObj, signal: combinedSignal });
+  const res = await fetch(url, { ...rest, headers: headerObj, signal: timeoutSignal });
   const endTime = Date.now();
   const duration = endTime - startTime;
   log.info(`<- ${res.status} ${method} ${scrubUrl(url)} [${formatBytes(Number(res.headers.get("content-length")))}] [${duration}ms] [${res.headers.get("content-type")}]`);
@@ -96,9 +95,8 @@ export async function apiFetch(
     log.info("access token expired, refreshing token...");
     const success = await apiClientService.handleUnauthorized();
     if (success) {
-      // Recursive call will have its own timing
-      // Note: we don't pass the original signal to avoid double-abort issues
-      return await apiFetch(pathOrUrl, { ...init, headers: headerObj });
+      // Retry with fresh token (recursive call will have its own timing)
+      return await apiFetch(pathOrUrl, init);
     }
   }
   if (!res.ok) {

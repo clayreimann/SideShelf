@@ -77,29 +77,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setApiConfig({
             getBaseUrl: () => state.serverUrl,
             getAccessToken: () => state.accessToken,
-            refreshAccessToken: async () => {
-                setApiConfigured(false);
-                console.log(`[AuthProvider] Refreshing access token ${state.serverUrl} ${state.refreshToken ? 'has refresh token' : 'no refresh token'}`);
-                if (!state.serverUrl || !state.refreshToken) return false;
-                const response = await fetch(`${state.serverUrl}/auth/refresh`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-refresh-token': state.refreshToken
-                    }
-                });
-                console.log(`[AuthProvider] Refresh access token response: ${response.status} ${response.statusText}`);
-                if (!response.ok) {
-                    const text = await response.clone().text();
-                    console.log(`[AuthProvider] Refresh access token failed: ${text}`);
-                    setState(s => ({ ...s, accessToken: null, refreshToken: null, loginMessage: 'Session expired' }));
-                    return false;
-                }
-                const data = await response.json();
-                const {accessToken, refreshToken} = authHelpers.extractTokensFromAuthResponse(data);
-                if (!accessToken || !refreshToken) return false;
+            getRefreshToken: () => state.refreshToken,
+            setTokens: async (accessToken: string, refreshToken: string) => {
+                console.log('[AuthProvider] Updating tokens from refresh');
                 await persistTokensAndState(setState, { accessToken, refreshToken });
-                return true;
+            },
+            clearTokens: async () => {
+                console.log('[AuthProvider] Clearing tokens due to refresh failure');
+                await Promise.all([
+                    saveItem(SECURE_KEYS.accessToken, null),
+                    saveItem(SECURE_KEYS.refreshToken, null),
+                ]);
+                setState(s => ({ ...s, accessToken: null, refreshToken: null, loginMessage: 'Session expired' }));
             }
         });
 
@@ -114,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Only set apiConfigured to true when we have both serverUrl and accessToken
         setApiConfigured(!!state.serverUrl && !!state.accessToken);
-    }, [state.serverUrl, state.accessToken]);
+    }, [state.serverUrl, state.accessToken, state.refreshToken]);
 
     const isAuthenticated = useMemo(() => !!state.accessToken && !!state.serverUrl, [state.accessToken, state.serverUrl]);
 

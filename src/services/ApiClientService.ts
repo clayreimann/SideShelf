@@ -1,15 +1,15 @@
 /**
  * API Client Service
  *
- * Manages API configuration, token refresh coordination, and request lifecycle.
+ * Manages API configuration and token refresh coordination.
  * This service handles:
  * - API configuration management
  * - Token refresh with mutex to prevent race conditions
- * - Request queuing during token refresh
+ * - All HTTP operations including token refresh
  * - Configurable timeouts
- * - Request cancellation support
  */
 
+import { authHelpers } from "@/db/helpers";
 import { logger } from "@/lib/logger";
 
 const log = logger.forTag("api:client");
@@ -17,19 +17,15 @@ const log = logger.forTag("api:client");
 export type ApiConfig = {
   getBaseUrl: () => string | null;
   getAccessToken: () => string | null;
-  refreshAccessToken: () => Promise<boolean>;
+  getRefreshToken: () => string | null;
+  setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
+  clearTokens: () => Promise<void>;
   timeout?: number; // in milliseconds, defaults to 30000
-};
-
-type PendingRequest = {
-  resolve: (value: boolean) => void;
-  reject: (error: Error) => void;
 };
 
 class ApiClientService {
   private config: ApiConfig | null = null;
   private refreshPromise: Promise<boolean> | null = null;
-  private pendingRequests: PendingRequest[] = [];
 
   /**
    * Set the API configuration
@@ -47,21 +43,18 @@ class ApiClientService {
   }
 
   /**
-   * Handle unauthorized response with mutex and request queuing
-   * This prevents race conditions when multiple requests hit 401 simultaneously
+   * Handle unauthorized response with mutex to prevent concurrent refreshes
    *
    * When multiple requests receive 401 at the same time:
    * - First request initiates token refresh
-   * - Subsequent requests are queued and wait for the refresh to complete
-   * - All queued requests are resolved/rejected together based on refresh result
+   * - Subsequent requests await the same refresh promise
+   * - All requests retry after refresh completes
    */
   async handleUnauthorized(): Promise<boolean> {
-    // If a refresh is already in progress, queue this request
+    // If a refresh is already in progress, await it
     if (this.refreshPromise) {
-      log.info("Token refresh already in progress, queuing request");
-      return new Promise<boolean>((resolve, reject) => {
-        this.pendingRequests.push({ resolve, reject });
-      });
+      log.info("Token refresh already in progress, waiting...");
+      return await this.refreshPromise;
     }
 
     // Start the refresh process
@@ -70,45 +63,63 @@ class ApiClientService {
 
     try {
       const success = await this.refreshPromise;
-
-      // Resolve all queued requests
-      if (this.pendingRequests.length > 0) {
-        log.info(`Resolving ${this.pendingRequests.length} queued requests`);
-        this.pendingRequests.forEach((req) => req.resolve(success));
-        this.pendingRequests = [];
-      }
-
       return success;
-    } catch (error) {
-      // Reject all queued requests
-      if (this.pendingRequests.length > 0) {
-        log.error(`Rejecting ${this.pendingRequests.length} queued requests`);
-        this.pendingRequests.forEach((req) =>
-          req.reject(error instanceof Error ? error : new Error("Token refresh failed"))
-        );
-        this.pendingRequests = [];
-      }
-      throw error;
     } finally {
       this.refreshPromise = null;
     }
   }
 
   /**
-   * Perform the actual token refresh
+   * Perform the actual token refresh by calling the /auth/refresh endpoint
    */
   private async performTokenRefresh(): Promise<boolean> {
-    if (!this.config?.refreshAccessToken) {
-      log.error("No refresh token handler configured");
+    if (!this.config) {
+      log.error("No API config available");
+      return false;
+    }
+
+    const baseUrl = this.config.getBaseUrl();
+    const refreshToken = this.config.getRefreshToken();
+
+    if (!baseUrl || !refreshToken) {
+      log.error("Missing base URL or refresh token");
+      await this.config.clearTokens();
       return false;
     }
 
     try {
-      const success = await this.config.refreshAccessToken();
-      log.info(`Token refresh ${success ? "succeeded" : "failed"}`);
-      return success;
+      const response = await fetch(`${baseUrl}/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-refresh-token": refreshToken,
+        },
+        signal: AbortSignal.timeout(this.getTimeout()),
+      });
+
+      log.info(`Token refresh response: ${response.status}`);
+
+      if (!response.ok) {
+        log.error(`Token refresh failed with status ${response.status}`);
+        await this.config.clearTokens();
+        return false;
+      }
+
+      const data = await response.json();
+      const tokens = authHelpers.extractTokensFromAuthResponse(data);
+
+      if (!tokens.accessToken || !tokens.refreshToken) {
+        log.error("Token refresh response missing tokens");
+        await this.config.clearTokens();
+        return false;
+      }
+
+      await this.config.setTokens(tokens.accessToken, tokens.refreshToken);
+      log.info("Token refresh succeeded");
+      return true;
     } catch (error) {
       log.error("Token refresh error:", error);
+      await this.config.clearTokens();
       return false;
     }
   }
@@ -132,41 +143,10 @@ class ApiClientService {
   }
 
   /**
-   * Combine multiple abort signals into one
-   * This allows both timeout and manual cancellation
-   *
-   * @param signals - Array of AbortSignals to combine
-   * @returns A new AbortSignal that aborts when any input signal aborts
-   */
-  combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal {
-    const controller = new AbortController();
-    const validSignals = signals.filter((s): s is AbortSignal => s !== undefined);
-
-    for (const signal of validSignals) {
-      if (signal.aborted) {
-        controller.abort(signal.reason);
-        break;
-      }
-      signal.addEventListener("abort", () => {
-        controller.abort(signal.reason);
-      });
-    }
-
-    return controller.signal;
-  }
-
-  /**
    * Check if a refresh is currently in progress
    */
   isRefreshing(): boolean {
     return this.refreshPromise !== null;
-  }
-
-  /**
-   * Get the number of requests currently queued
-   */
-  getQueuedRequestCount(): number {
-    return this.pendingRequests.length;
   }
 }
 
