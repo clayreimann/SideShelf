@@ -1,6 +1,6 @@
 import { formatBytes } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
-import { apiClientService, type ApiConfig } from "@/services/ApiClientService";
+import { apiClientService } from "@/services/ApiClientService";
 import DeviceInfo from "react-native-device-info";
 
 type NetworkStatusGetter = () => {
@@ -15,14 +15,6 @@ let getNetworkStatus: NetworkStatusGetter | null = null;
 
 let cachedUserAgent: string | null = null;
 
-export function setApiConfig(next: ApiConfig) {
-  apiClientService.setConfig(next);
-}
-
-export function getApiConfig(): ApiConfig | null {
-  return apiClientService.getConfig();
-}
-
 export function setNetworkStatusGetter(getter: NetworkStatusGetter) {
   getNetworkStatus = getter;
 }
@@ -33,8 +25,7 @@ function normalizeBaseUrl(url: string): string {
 
 function resolveUrl(input: string): string {
   if (/^https?:\/\//i.test(input)) return input;
-  const config = apiClientService.getConfig();
-  const base = config?.getBaseUrl();
+  const base = apiClientService.getBaseUrl();
   if (!base) return input;
   const normalized = normalizeBaseUrl(base);
   if (input.startsWith("/")) return `${normalized}${input}`;
@@ -61,8 +52,7 @@ export async function apiFetch(
 
   const url = resolveUrl(pathOrUrl);
   const { auth = true, timeout, headers, ...rest } = init || {};
-  const config = apiClientService.getConfig();
-  const token = config?.getAccessToken();
+  const token = apiClientService.getAccessToken();
 
   const headerObj: Record<string, string> = { Accept: "application/json" };
   mergeHeaders(headerObj, headers);
@@ -145,8 +135,7 @@ function redactHeaders(
 }
 
 function scrubUrl(url: string): string {
-  const config = apiClientService.getConfig();
-  const baseUrl = config?.getBaseUrl();
+  const baseUrl = apiClientService.getBaseUrl();
   return url.replace(baseUrl?.split("://")[1] || "SKIP", "<base-url>");
 }
 

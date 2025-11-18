@@ -1,45 +1,145 @@
 /**
  * API Client Service
  *
- * Manages API configuration and token refresh coordination.
+ * Owns and manages API credentials and configuration.
  * This service handles:
- * - API configuration management
+ * - Token and base URL storage and persistence
  * - Token refresh with mutex to prevent race conditions
  * - All HTTP operations including token refresh
  * - Configurable timeouts
+ * - Notifying subscribers of auth state changes
  */
 
 import { authHelpers } from "@/db/helpers";
+import { getItem, saveItem, SECURE_KEYS } from "@/lib/secureStore";
 import { logger } from "@/lib/logger";
 
 const log = logger.forTag("api:client");
 
-export type ApiConfig = {
-  getBaseUrl: () => string | null;
-  getAccessToken: () => string | null;
-  getRefreshToken: () => string | null;
-  setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
-  clearTokens: () => Promise<void>;
-  timeout?: number; // in milliseconds, defaults to 30000
-};
+type AuthStateListener = () => void;
 
 class ApiClientService {
-  private config: ApiConfig | null = null;
+  private baseUrl: string | null = null;
+  private accessToken: string | null = null;
+  private refreshToken: string | null = null;
+  private username: string | null = null;
   private refreshPromise: Promise<boolean> | null = null;
+  private listeners: Set<AuthStateListener> = new Set();
+  private timeout: number = 30000; // default 30 seconds
 
   /**
-   * Set the API configuration
+   * Initialize by loading credentials from secure storage
    */
-  setConfig(config: ApiConfig): void {
-    this.config = config;
-    log.info("API client configured");
+  async initialize(): Promise<void> {
+    log.info("Initializing API client service");
+    const [serverUrl, accessToken, refreshToken] = await Promise.all([
+      getItem(SECURE_KEYS.serverUrl),
+      getItem(SECURE_KEYS.accessToken),
+      getItem(SECURE_KEYS.refreshToken),
+    ]);
+
+    this.baseUrl = serverUrl;
+    this.accessToken = accessToken;
+    this.refreshToken = refreshToken;
+
+    log.info(`Loaded credentials: baseUrl=${!!this.baseUrl}, accessToken=${!!this.accessToken}, refreshToken=${!!this.refreshToken}`);
   }
 
   /**
-   * Get the current API configuration
+   * Subscribe to auth state changes
+   * @returns Unsubscribe function
    */
-  getConfig(): ApiConfig | null {
-    return this.config;
+  subscribe(listener: AuthStateListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Notify all subscribers of auth state changes
+   */
+  private notifyListeners(): void {
+    this.listeners.forEach((listener) => listener());
+  }
+
+  /**
+   * Get base URL
+   */
+  getBaseUrl(): string | null {
+    return this.baseUrl;
+  }
+
+  /**
+   * Get access token
+   */
+  getAccessToken(): string | null {
+    return this.accessToken;
+  }
+
+  /**
+   * Get refresh token
+   */
+  getRefreshToken(): string | null {
+    return this.refreshToken;
+  }
+
+  /**
+   * Get username
+   */
+  getUsername(): string | null {
+    return this.username;
+  }
+
+  /**
+   * Check if authenticated (has both baseUrl and accessToken)
+   */
+  isAuthenticated(): boolean {
+    return !!this.baseUrl && !!this.accessToken;
+  }
+
+  /**
+   * Set base URL and persist to secure storage
+   */
+  async setBaseUrl(url: string): Promise<void> {
+    const normalized = url.trim().replace(/\/$/, "");
+    this.baseUrl = normalized;
+    await saveItem(SECURE_KEYS.serverUrl, normalized);
+    this.notifyListeners();
+  }
+
+  /**
+   * Set tokens and persist to secure storage
+   */
+  async setTokens(accessToken: string, refreshToken: string, username?: string): Promise<void> {
+    log.info("Updating tokens");
+    this.accessToken = accessToken;
+    this.refreshToken = refreshToken;
+    if (username !== undefined) {
+      this.username = username;
+    }
+
+    await Promise.all([
+      saveItem(SECURE_KEYS.accessToken, accessToken),
+      saveItem(SECURE_KEYS.refreshToken, refreshToken),
+    ]);
+
+    this.notifyListeners();
+  }
+
+  /**
+   * Clear tokens and persist to secure storage
+   */
+  async clearTokens(): Promise<void> {
+    log.info("Clearing tokens");
+    this.accessToken = null;
+    this.refreshToken = null;
+    this.username = null;
+
+    await Promise.all([
+      saveItem(SECURE_KEYS.accessToken, null),
+      saveItem(SECURE_KEYS.refreshToken, null),
+    ]);
+
+    this.notifyListeners();
   }
 
   /**
@@ -73,35 +173,27 @@ class ApiClientService {
    * Perform the actual token refresh by calling the /auth/refresh endpoint
    */
   private async performTokenRefresh(): Promise<boolean> {
-    if (!this.config) {
-      log.error("No API config available");
-      return false;
-    }
-
-    const baseUrl = this.config.getBaseUrl();
-    const refreshToken = this.config.getRefreshToken();
-
-    if (!baseUrl || !refreshToken) {
+    if (!this.baseUrl || !this.refreshToken) {
       log.error("Missing base URL or refresh token");
-      await this.config.clearTokens();
+      await this.clearTokens();
       return false;
     }
 
     try {
-      const response = await fetch(`${baseUrl}/auth/refresh`, {
+      const response = await fetch(`${this.baseUrl}/auth/refresh`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-refresh-token": refreshToken,
+          "x-refresh-token": this.refreshToken,
         },
-        signal: AbortSignal.timeout(this.getTimeout()),
+        signal: AbortSignal.timeout(this.timeout),
       });
 
       log.info(`Token refresh response: ${response.status}`);
 
       if (!response.ok) {
         log.error(`Token refresh failed with status ${response.status}`);
-        await this.config.clearTokens();
+        await this.clearTokens();
         return false;
       }
 
@@ -110,16 +202,16 @@ class ApiClientService {
 
       if (!tokens.accessToken || !tokens.refreshToken) {
         log.error("Token refresh response missing tokens");
-        await this.config.clearTokens();
+        await this.clearTokens();
         return false;
       }
 
-      await this.config.setTokens(tokens.accessToken, tokens.refreshToken);
+      await this.setTokens(tokens.accessToken, tokens.refreshToken);
       log.info("Token refresh succeeded");
       return true;
     } catch (error) {
       log.error("Token refresh error:", error);
-      await this.config.clearTokens();
+      await this.clearTokens();
       return false;
     }
   }
@@ -128,7 +220,14 @@ class ApiClientService {
    * Get the configured timeout value
    */
   getTimeout(): number {
-    return this.config?.timeout ?? 30000;
+    return this.timeout;
+  }
+
+  /**
+   * Set the timeout value
+   */
+  setTimeout(timeout: number): void {
+    this.timeout = timeout;
   }
 
   /**
@@ -138,7 +237,7 @@ class ApiClientService {
    * @returns AbortSignal that will abort after the timeout
    */
   createTimeoutSignal(customTimeout?: number): AbortSignal {
-    const timeout = customTimeout ?? this.getTimeout();
+    const timeout = customTimeout ?? this.timeout;
     return AbortSignal.timeout(timeout);
   }
 

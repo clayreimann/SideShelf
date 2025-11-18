@@ -5,30 +5,48 @@
 The previous API configuration approach had several architectural issues:
 
 - **Race conditions**: Multiple simultaneous 401 responses triggered concurrent token refresh attempts
-- **Circular dependencies**: AuthProvider used raw `fetch()` to refresh tokens, bypassing the API client
-- **Mixed responsibilities**: AuthProvider handled both auth state AND made HTTP calls for token refresh
-- **Tight coupling**: Token refresh logic embedded in AuthProvider created unclear separation of concerns
+- **Circular coupling**: AuthProvider and ApiClientService injected callbacks into each other
+- **Unclear ownership**: Tokens lived in AuthProvider but API operations needed them
+- **Mixed responsibilities**: AuthProvider handled both React state AND credential storage
 
 ## Strategy
 
-The refactored architecture introduces **ApiClientService** as a dedicated singleton that owns all HTTP operations and coordinates token refresh:
+The refactored architecture makes **ApiClientService** the single source of truth for credentials:
 
 ### Separation of Concerns
 
-- **AuthProvider**: Manages authentication state and token persistence only
-  - Provides callbacks for token access (`getAccessToken`, `getRefreshToken`)
-  - Provides callbacks for token updates (`setTokens`, `clearTokens`)
-  - No HTTP operations
-
-- **ApiClientService**: Owns all HTTP operations including token refresh
-  - Makes the `/auth/refresh` HTTP call directly
+- **ApiClientService**: Owns credentials and all HTTP operations
+  - Stores tokens and base URL in memory
+  - Persists to secure storage directly
+  - Makes all HTTP calls including `/auth/refresh`
   - Coordinates concurrent 401 responses with shared promise (mutex pattern)
-  - Manages request timeouts
-  - Updates tokens via AuthProvider callbacks
+  - Notifies subscribers when auth state changes
+
+- **AuthProvider**: Manages React state and UI concerns only
+  - Subscribes to ApiClientService for auth state changes
+  - Provides React context for components
+  - Manages username separately (not in ApiClientService)
+  - Calls ApiClientService methods for login/logout
+  - No direct secure storage access
 
 - **apiFetch**: Pure HTTP client function
-  - Delegates to ApiClientService for configuration and 401 handling
-  - No direct knowledge of auth state
+  - Calls ApiClientService getters for credentials
+  - Delegates 401 handling to ApiClientService
+  - No state management
+
+### Credential Ownership
+
+```
+ApiClientService (owns credentials)
+   ↓ stores/loads
+SecureStorage
+   ↑ subscribes to changes
+AuthProvider (React state)
+   ↓ provides context
+React Components
+```
+
+No circular dependencies - AuthProvider reads from ApiClientService, never writes.
 
 ### Token Refresh Flow
 
@@ -36,14 +54,15 @@ When a 401 occurs:
 1. First request initiates token refresh via `ApiClientService.handleUnauthorized()`
 2. Concurrent 401s await the same shared promise (no duplicate refreshes)
 3. ApiClientService makes POST to `/auth/refresh` endpoint
-4. On success: calls `config.setTokens()` to update AuthProvider state
-5. On failure: calls `config.clearTokens()` and sets "Session expired" message
-6. All waiting requests retry with fresh token (or fail if refresh failed)
+4. On success: ApiClientService updates its own tokens and notifies subscribers
+5. On failure: ApiClientService clears tokens and notifies subscribers
+6. AuthProvider receives notification and updates React state
+7. All waiting requests retry with fresh token (or fail if refresh failed)
 
 ### Benefits
 
-- **Clear ownership**: All HTTP operations in one place (ApiClientService)
-- **No circular dependencies**: AuthProvider never makes HTTP calls
-- **Testability**: Can test token refresh logic independently of React context
+- **Single source of truth**: ApiClientService owns all credential state
+- **No circular dependencies**: Clean one-way data flow
+- **Testability**: Can test API operations without React
 - **Race condition prevention**: Shared promise ensures single refresh for concurrent 401s
-- **Simple timeouts**: Configurable per-request without exposing AbortController complexity
+- **Simple API surface**: No callback injection, just direct method calls
