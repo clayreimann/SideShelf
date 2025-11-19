@@ -1,7 +1,12 @@
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { MenuView } from "@react-native-menu/menu";
 import { SymbolView, SymbolViewProps } from "expo-symbols";
 import { Platform, Pressable, Text, View } from "react-native";
+
+// Common jump interval options (in seconds)
+const JUMP_INTERVALS = [5, 10, 15, 30, 45, 60, 90, 120];
 
 /**
  * SkipButton component
@@ -11,6 +16,7 @@ import { Platform, Pressable, Text, View } from "react-native";
  * - Android: Uses Material Icons with text overlay showing interval
  *
  * The interval is configurable and shows the actual seconds on the button.
+ * Long-press the button to open a menu with different jump interval options.
  */
 export interface SkipButtonProps {
     direction: 'forward' | 'backward';
@@ -19,6 +25,8 @@ export interface SkipButtonProps {
     hitBoxSize?: number;
     iconSize?: number;
     onPress: () => void;
+    /** Called when user selects a specific jump interval from the long-press menu */
+    onJump?: (seconds: number) => void;
 }
 
 export default function SkipButton({
@@ -26,7 +34,8 @@ export default function SkipButton({
     interval,
     hitBoxSize = 44,
     iconSize = 24,
-    onPress
+    onPress,
+    onJump
 }: SkipButtonProps) {
     const { colors } = useThemedStyles();
 
@@ -46,7 +55,24 @@ export default function SkipButton({
         return `${symbolBase}` as SymbolViewProps['name'];
     };
 
-    return (
+    // Format jump interval for display
+    const formatInterval = (intervalSeconds: number): string => {
+        if (intervalSeconds < 60) {
+            return translate('player.jumpMenu.seconds', { seconds: intervalSeconds });
+        } else {
+            const minutes = Math.floor(intervalSeconds / 60);
+            return translate('player.jumpMenu.minutes', { minutes });
+        }
+    };
+
+    // Create menu actions for jump intervals
+    const menuActions = JUMP_INTERVALS.map(intervalSeconds => ({
+        id: intervalSeconds.toString(),
+        title: formatInterval(intervalSeconds),
+        state: intervalSeconds === seconds ? 'on' : 'off',
+    }));
+
+    const buttonContent = (
         <Pressable
             onPress={onPress}
             style={({pressed}) => ({
@@ -84,5 +110,27 @@ export default function SkipButton({
                 </View>
             )}
         </Pressable>
+    );
+
+    // If no onJump handler provided, just render the button without menu
+    if (!onJump) {
+        return buttonContent;
+    }
+
+    return (
+        <MenuView
+            title={translate(
+                direction === 'forward'
+                    ? 'player.jumpMenu.titleForward'
+                    : 'player.jumpMenu.titleBackward'
+            )}
+            onPressAction={({ nativeEvent }) => {
+                const jumpSeconds = parseInt(nativeEvent.event);
+                onJump(jumpSeconds);
+            }}
+            actions={menuActions}
+        >
+            {buttonContent}
+        </MenuView>
     );
 }
