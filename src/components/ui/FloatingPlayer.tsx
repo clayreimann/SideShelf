@@ -14,17 +14,31 @@ import { borderRadius, floatingPlayer, spacing } from '@/lib/styles';
 import { useThemedStyles } from '@/lib/theme';
 import { playerService } from '@/services/PlayerService';
 import { usePlayer } from '@/stores/appStore';
-import { router } from 'expo-router';
+import { router, usePathname, useGlobalSearchParams } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function FloatingPlayer() {
   const { styles, isDark } = useThemedStyles();
   const { currentTrack, currentChapter } = usePlayer();
+  const pathname = usePathname();
+  const params = useGlobalSearchParams();
 
   // Don't show if no track is loaded
   if (!currentTrack) {
     return null;
+  }
+
+  // Hide floating player if we're on the item details page of the currently playing item
+  // Check various routes: /library/[item], /home/item/[itemId], /authors/[authorId]/item/[itemId], /series/[seriesId]/item/[itemId]
+  const isOnItemDetailsPage = pathname.includes('/library/') || pathname.includes('/item/');
+  if (isOnItemDetailsPage) {
+    // Extract item ID from params
+    const itemId = params.item || params.itemId;
+    // If we're viewing the currently playing item's details page, hide the floating player
+    if (itemId === currentTrack.libraryItemId) {
+      return null;
+    }
   }
 
   const handlePlayPausePress = async () => {
