@@ -174,6 +174,24 @@ export default function FullScreenPlayer() {
     }
   }, [position, jumpForwardInterval]);
 
+  const handleJumpBackward = useCallback(async (seconds: number) => {
+    try {
+      // One-time jump to the selected interval (does not change default)
+      await playerService.seekTo(Math.max(position - seconds, 0));
+    } catch (error) {
+      console.error("[FullScreenPlayer] Failed to jump backward:", error);
+    }
+  }, [position]);
+
+  const handleJumpForward = useCallback(async (seconds: number) => {
+    try {
+      // One-time jump to the selected interval (does not change default)
+      await playerService.seekTo(position + seconds);
+    } catch (error) {
+      console.error("[FullScreenPlayer] Failed to jump forward:", error);
+    }
+  }, [position]);
+
   const handleRateChange = useCallback(async (rate: number) => {
     try {
       await playerService.setRate(rate);
@@ -356,6 +374,7 @@ export default function FullScreenPlayer() {
             direction="backward"
             interval={jumpBackwardInterval}
             onPress={handleSkipBackward}
+            onJump={handleJumpBackward}
             iconSize={32}
             hitBoxSize={60}
           />
@@ -364,6 +383,7 @@ export default function FullScreenPlayer() {
             direction="forward"
             interval={jumpForwardInterval}
             onPress={handleSkipForward}
+            onJump={handleJumpForward}
             iconSize={32}
             hitBoxSize={60}
           />
