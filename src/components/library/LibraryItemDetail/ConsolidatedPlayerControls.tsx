@@ -5,11 +5,11 @@ import { translate } from "@/i18n";
 import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettings";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
-import { usePlayer } from "@/stores/appStore";
+import { usePlayer, useUserProfile } from "@/stores/appStore";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Alert, Text, TouchableOpacity, View } from "react-native";
 
 interface ConsolidatedPlayerControlsProps {
   libraryItemId: string;
@@ -24,8 +24,10 @@ export default function ConsolidatedPlayerControls({
 }: ConsolidatedPlayerControlsProps) {
   const { styles, isDark, colors } = useThemedStyles();
   const { currentTrack, position, currentChapter, isPlaying, isLoadingTrack } = usePlayer();
+  const { createBookmark } = useUserProfile();
   const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
   const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
+  const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
   // Check if this is the currently playing item
   const isCurrentlyPlaying = currentTrack?.libraryItemId === libraryItemId;
@@ -76,6 +78,23 @@ export default function ConsolidatedPlayerControls({
   const handleOpenFullScreenPlayer = useCallback(() => {
     router.push("/FullScreenPlayer");
   }, []);
+
+  const handleCreateBookmark = useCallback(async () => {
+    if (!currentTrack || isCreatingBookmark) {
+      return;
+    }
+
+    setIsCreatingBookmark(true);
+    try {
+      await createBookmark(currentTrack.libraryItemId, position);
+      Alert.alert("Bookmark Created", "Bookmark created successfully");
+    } catch (error) {
+      console.error("[ConsolidatedPlayerControls] Failed to create bookmark:", error);
+      Alert.alert("Error", "Failed to create bookmark. Please try again.");
+    } finally {
+      setIsCreatingBookmark(false);
+    }
+  }, [currentTrack, position, createBookmark, isCreatingBookmark]);
 
   // Calculate chapter progress
   const chapterPosition = currentChapter?.positionInChapter || 0;
@@ -184,7 +203,40 @@ export default function ConsolidatedPlayerControls({
             <Ionicons name="expand" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
-        <View style={{ flexDirection: "row", justifyContent: "center" }}></View>
+
+        {/* Secondary Actions */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            alignItems: "center",
+            marginTop: 8,
+            gap: 16,
+          }}
+        >
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 16,
+              backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+            }}
+            onPress={handleCreateBookmark}
+            disabled={isCreatingBookmark}
+          >
+            <Ionicons
+              name={isCreatingBookmark ? "hourglass-outline" : "bookmark-outline"}
+              size={16}
+              color={colors.textPrimary}
+            />
+            <Text style={[styles.text, { fontSize: 12 }]}>
+              {isCreatingBookmark ? "Adding..." : "Bookmark"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
