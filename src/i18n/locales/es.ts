@@ -72,6 +72,7 @@ export const es = {
   "libraryItem.duration": "Duración: ",
   "libraryItem.durationUnknown": "Desconocida",
   "libraryItem.size": "Tamaño: ",
+  "libraryItem.progress.finshed": "Terminado",
 
   // Library Item Actions
   "libraryItem.actions.download": "Descargar",
