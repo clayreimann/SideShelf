@@ -1,18 +1,24 @@
 import CoverImage from '@/components/ui/CoverImange';
+import { ProgressBar } from '@/components/ui';
 import { SeriesBookRow } from '@/db/helpers/series';
+import { getMediaProgressForLibraryItem, MediaProgressRow } from '@/db/helpers/mediaProgress';
+import { getUserByUsername } from '@/db/helpers/users';
 import { formatTime } from '@/lib/helpers/formatters';
 import { useThemedStyles } from '@/lib/theme';
-import { useSeries } from '@/stores';
+import { useAuth } from '@/providers/AuthProvider';
+import { useSeries, useDownloads, useNetwork } from '@/stores';
 import { useFocusEffect } from '@react-navigation/native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function SeriesDetailScreen() {
   const { styles, colors } = useThemedStyles();
@@ -25,6 +31,13 @@ export default function SeriesDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ seriesId?: string | string[] }>();
   const seriesId = Array.isArray(params.seriesId) ? params.seriesId[0] : params.seriesId;
+  const { username, serverUrl, accessToken } = useAuth();
+  const { startDownload, isItemDownloaded } = useDownloads();
+  const { serverReachable } = useNetwork();
+
+  // State for tracking progress data for all books in the series
+  const [progressMap, setProgressMap] = useState<Map<string, MediaProgressRow>>(new Map());
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
 
   const selectedSeries = useMemo(
     () => seriesList.find(serie => serie.id === seriesId),
@@ -40,9 +53,114 @@ export default function SeriesDetailScreen() {
     }, [ready, selectedSeries, refetchSeries])
   );
 
+  // Fetch progress data for all books in the series
+  useEffect(() => {
+    const fetchProgressData = async () => {
+      if (!selectedSeries || !username) return;
+
+      try {
+        const user = await getUserByUsername(username);
+        if (!user?.id) return;
+
+        const progressDataMap = new Map<string, MediaProgressRow>();
+
+        // Fetch progress for each book in the series
+        for (const book of selectedSeries.books) {
+          const progress = await getMediaProgressForLibraryItem(book.libraryItemId, user.id);
+          if (progress) {
+            progressDataMap.set(book.libraryItemId, progress);
+          }
+        }
+
+        setProgressMap(progressDataMap);
+      } catch (error) {
+        console.error('[SeriesDetailScreen] Failed to fetch progress data:', error);
+      }
+    };
+
+    fetchProgressData();
+  }, [selectedSeries, username]);
+
+  // Handler for downloading all unfinished items in the series
+  const handleDownloadAllUnfinished = useCallback(async () => {
+    if (!selectedSeries || !serverUrl || !accessToken || isDownloadingAll) return;
+
+    // Check if server is reachable
+    if (serverReachable === false) {
+      Alert.alert(
+        'Server Offline',
+        'Cannot start downloads while server is offline.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Find all unfinished items
+    const unfinishedItems = selectedSeries.books.filter(book => {
+      const progress = progressMap.get(book.libraryItemId);
+      const downloaded = isItemDownloaded(book.libraryItemId);
+
+      // Item is unfinished if: not downloaded AND (no progress OR not finished)
+      return !downloaded && (!progress || !progress.isFinished);
+    });
+
+    if (unfinishedItems.length === 0) {
+      Alert.alert(
+        'No Unfinished Items',
+        'All items in this series are either finished or already downloaded.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Confirm download
+    Alert.alert(
+      'Download Unfinished Items',
+      `Download ${unfinishedItems.length} unfinished ${unfinishedItems.length === 1 ? 'item' : 'items'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Download',
+          onPress: async () => {
+            setIsDownloadingAll(true);
+            try {
+              // Start downloads sequentially to avoid overwhelming the system
+              for (const item of unfinishedItems) {
+                try {
+                  await startDownload(item.libraryItemId, serverUrl, accessToken);
+                } catch (error) {
+                  console.error(`[SeriesDetailScreen] Failed to download ${item.title}:`, error);
+                  // Continue with other downloads even if one fails
+                }
+              }
+
+              Alert.alert(
+                'Downloads Started',
+                `Started downloading ${unfinishedItems.length} ${unfinishedItems.length === 1 ? 'item' : 'items'}.`,
+                [{ text: 'OK' }]
+              );
+            } catch (error) {
+              console.error('[SeriesDetailScreen] Error downloading items:', error);
+              Alert.alert(
+                'Download Error',
+                `Failed to start downloads: ${String(error)}`,
+                [{ text: 'OK' }]
+              );
+            } finally {
+              setIsDownloadingAll(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [selectedSeries, serverUrl, accessToken, isDownloadingAll, serverReachable, progressMap, isItemDownloaded, startDownload]);
+
   const renderBook = useCallback(
     ({ item }: { item: SeriesBookRow }) => {
       const sequenceLabel = item.sequence ? `Book ${item.sequence}` : null;
+      const progress = progressMap.get(item.libraryItemId);
+      const downloaded = isItemDownloaded(item.libraryItemId);
+
       return (
         <TouchableOpacity
           onPress={() => seriesId && router.push(`/series/${seriesId}/item/${item.libraryItemId}`)}
@@ -79,11 +197,31 @@ export default function SeriesDetailScreen() {
                 {formatTime(item.duration)}
               </Text>
             )}
+            {/* Progress bar */}
+            {progress && (progress.currentTime && progress.currentTime > 0 || progress.isFinished) && (
+              <View style={{ marginTop: 6 }}>
+                <ProgressBar
+                  progress={progress.progress || 0}
+                  variant="small"
+                  showTimeLabels={false}
+                  showPercentage={false}
+                />
+              </View>
+            )}
+            {/* Download status */}
+            {downloaded && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <Ionicons name="checkmark-circle" size={14} color="#34C759" />
+                <Text style={[styles.text, { fontSize: 12, color: '#34C759', marginLeft: 4 }]}>
+                  Downloaded
+                </Text>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
       );
     },
-    [colors.coverBackground, router, seriesId, styles.text.color]
+    [colors.coverBackground, router, seriesId, styles.text.color, progressMap, isItemDownloaded]
   );
 
   if (!seriesId) {
@@ -134,6 +272,19 @@ export default function SeriesDetailScreen() {
       <Stack.Screen
         options={{
           title: selectedSeries.name || 'Series',
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={handleDownloadAllUnfinished}
+              disabled={isDownloadingAll || serverReachable === false}
+              style={{ paddingHorizontal: 16, paddingVertical: 4, opacity: isDownloadingAll || serverReachable === false ? 0.5 : 1 }}
+            >
+              {isDownloadingAll ? (
+                <ActivityIndicator size="small" color={colors.link} />
+              ) : (
+                <Ionicons name="download-outline" size={24} color={colors.link} />
+              )}
+            </TouchableOpacity>
+          ),
         }}
       />
     </>
