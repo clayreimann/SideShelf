@@ -1,6 +1,7 @@
 import PlayPauseButton from "@/components/player/PlayPauseButton";
 import SkipButton from "@/components/player/SkipButton";
 import { ProgressBar } from "@/components/ui";
+import { translate } from "@/i18n";
 import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettings";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
@@ -84,8 +85,40 @@ export default function ConsolidatedPlayerControls({
 
   const isDisabled = isLoadingTrack || (!isDownloaded && serverReachable === false);
 
+  if (!isCurrentlyPlaying) {
+    return (
+      <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
+        <TouchableOpacity
+          style={{
+            backgroundColor: "#34C759",
+            borderRadius: 8,
+            padding: 12,
+            alignItems: "center",
+            opacity: isDisabled ? 0.5 : 1,
+          }}
+          onPress={handlePlayPause}
+          disabled={isDisabled}
+        >
+          <Text
+            style={{
+              color: "white",
+              fontSize: 16,
+              fontWeight: "600",
+            }}
+          >
+            {isLoadingTrack
+              ? translate("common.loading")
+              : !isDownloaded && serverReachable === false
+                ? translate("common.offline")
+                : translate("common.play")}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
-    <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
+    <View style={{ marginBottom: 12, paddingHorizontal: 16 }}>
       <View
         style={{
           backgroundColor: isDark ? "#333" : "#f5f5f5",
@@ -95,30 +128,14 @@ export default function ConsolidatedPlayerControls({
       >
         {/* Chapter Progress - only show if this item is currently playing */}
         {isCurrentlyPlaying && chapterTitle && (
-          <View style={{ marginBottom: 12 }}>
-            <Text
-              style={[
-                styles.text,
-                {
-                  fontSize: 14,
-                  fontWeight: "600",
-                  marginBottom: 8,
-                  textAlign: "center",
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {chapterTitle}
-            </Text>
-            <ProgressBar
-              progress={chapterProgress}
-              variant="medium"
-              showTimeLabels={true}
-              currentTime={chapterPosition}
-              duration={chapterDuration}
-              showPercentage={false}
-            />
-          </View>
+          <ProgressBar
+            progress={chapterProgress}
+            variant="medium"
+            showTimeLabels={true}
+            currentTime={chapterPosition}
+            duration={chapterDuration}
+            customPercentageText={chapterTitle}
+          />
         )}
 
         {/* Player Controls */}
@@ -130,74 +147,44 @@ export default function ConsolidatedPlayerControls({
             gap: 8,
           }}
         >
+          {/* Keep the number of items in the row odd to keep play centered */}
+          <View style={{ width: 48 }} />
+
           {/* Skip Backward - only show if currently playing */}
-          {isCurrentlyPlaying && (
-            <SkipButton
-              direction="backward"
-              interval={jumpBackwardInterval}
-              onPress={handleSkipBackward}
-              iconSize={28}
-              hitBoxSize={48}
-            />
-          )}
+          <SkipButton
+            direction="backward"
+            interval={jumpBackwardInterval}
+            onPress={handleSkipBackward}
+            iconSize={32}
+            hitBoxSize={48}
+          />
 
           {/* Play/Pause Button */}
-          <TouchableOpacity
-            style={{
-              backgroundColor: "#34C759",
-              borderRadius: 8,
-              paddingVertical: 12,
-              paddingHorizontal: isCurrentlyPlaying ? 20 : 32,
-              alignItems: "center",
-              opacity: isDisabled ? 0.5 : 1,
-              flex: isCurrentlyPlaying ? 0 : 1,
-            }}
-            onPress={handlePlayPause}
-            disabled={isDisabled}
-          >
-            <Text
-              style={{
-                color: "white",
-                fontSize: 16,
-                fontWeight: "600",
-              }}
-            >
-              {isLoadingTrack
-                ? "Loading..."
-                : !isDownloaded && serverReachable === false
-                  ? "Offline"
-                  : isCurrentlyPlaying && isPlaying
-                    ? "Pause"
-                    : "Play"}
-            </Text>
-          </TouchableOpacity>
+          <PlayPauseButton onPress={handlePlayPause} iconSize={32} hitBoxSize={48} />
 
           {/* Skip Forward - only show if currently playing */}
-          {isCurrentlyPlaying && (
-            <SkipButton
-              direction="forward"
-              interval={jumpForwardInterval}
-              onPress={handleSkipForward}
-              iconSize={28}
-              hitBoxSize={48}
-            />
-          )}
+          <SkipButton
+            direction="forward"
+            interval={jumpForwardInterval}
+            onPress={handleSkipForward}
+            iconSize={32}
+            hitBoxSize={48}
+          />
 
           {/* Open Full Screen Player Button - only show if currently playing */}
-          {isCurrentlyPlaying && (
-            <TouchableOpacity
-              style={{
-                width: 48,
-                height: 48,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-              onPress={handleOpenFullScreenPlayer}
-            >
-              <Ionicons name="expand" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={{
+              width: 48,
+              height: 48,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+            onPress={handleOpenFullScreenPlayer}
+          >
+            <Ionicons name="expand" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
         </View>
+        <View style={{ flexDirection: "row", justifyContent: "center" }}></View>
       </View>
     </View>
   );

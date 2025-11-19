@@ -22,18 +22,11 @@ import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
 import { useDownloads, useLibraryItemDetails, useNetwork, usePlayer } from "@/stores";
-import { MenuView } from "@react-native-menu/menu";
-import { Stack, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { MenuView } from "@react-native-menu/menu";
+import { Stack } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 interface LibraryItemDetailProps {
   itemId: string;
@@ -46,7 +39,6 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const { currentTrack, position } = usePlayer();
   const { serverReachable } = useNetwork();
   const floatingPlayerPadding = useFloatingPlayerPadding();
-  const router = useRouter();
 
   // State for author and series IDs
   const [authorId, setAuthorId] = useState<string | null>(null);
@@ -494,9 +486,6 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           seriesId={seriesId}
         />
 
-        {/* Progress display */}
-        {effectiveProgress && <ProgressSection progress={effectiveProgress} />}
-
         {/* Download Section */}
         {isDownloading && (
           <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
@@ -517,6 +506,9 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
             serverReachable={serverReachable ?? false}
           />
         )}
+
+        {/* Progress display */}
+        {effectiveProgress && <ProgressSection progress={effectiveProgress} />}
 
         {/* Genres and Tags */}
         <GenresTagsSection genres={genres} tags={tags} />
