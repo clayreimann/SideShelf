@@ -1,9 +1,10 @@
 import { authHelpers, mediaProgressHelpers, userHelpers } from '@/db/helpers';
-import { setApiConfig, setNetworkStatusGetter } from '@/lib/api/api';
+import { setNetworkStatusGetter } from '@/lib/api/api';
 import { login as doLogin } from '@/lib/api/endpoints';
-import { getItem, getStoredUsername, persistUsername, saveItem, SECURE_KEYS } from '@/lib/secureStore';
+import { getStoredUsername, persistUsername } from '@/lib/secureStore';
 import { useDb } from '@/providers/DbProvider';
 import { progressService } from '@/services/ProgressService';
+import { apiClientService } from '@/services/ApiClientService';
 import { useAppStore } from '@/stores/appStore';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
@@ -13,12 +14,14 @@ type AuthState = {
     accessToken: string | null;
     refreshToken: string | null;
     username: string | null;
+    loginMessage?: string;
 };
 
-type AuthContextValue = AuthState & {
+type AuthContextValue = {
     initialized: boolean;
     isAuthenticated: boolean;
-    apiConfigured: boolean;
+    serverUrl: string | null;
+    username: string | null;
     loginMessage?: string;
     setServerUrl: (url: string) => Promise<void>;
     login: (params: { serverUrl: string; username: string; password: string }) => Promise<void>;
@@ -27,83 +30,57 @@ type AuthContextValue = AuthState & {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-async function persistTokensAndState(
-    setState: React.Dispatch<React.SetStateAction<AuthState>>,
-    {
-        accessToken,
-        refreshToken,
-        username,
-    }: { accessToken: string | null; refreshToken: string | null; username?: string | null }
-): Promise<void> {
-    const usernamePersistence =
-        username !== undefined ? persistUsername(username) : Promise.resolve();
-
-    await Promise.all([
-        saveItem(SECURE_KEYS.accessToken, accessToken),
-        saveItem(SECURE_KEYS.refreshToken, refreshToken),
-        usernamePersistence,
-    ]);
-    setState((s) => ({
-        ...s,
-        accessToken,
-        refreshToken,
-        loginMessage: undefined,
-        username: username !== undefined ? username : s.username,
-    }));
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { initialized: dbInitialized } = useDb();
     const [state, setState] = useState<AuthState>({ serverUrl: null, accessToken: null, refreshToken: null, username: null });
-    const [apiConfigured, setApiConfigured] = useState(false);
     const [initialized, setInitialized] = useState(false);
 
+    // Initialize API client service and load credentials
     useEffect(() => {
         (async () => {
             if (!dbInitialized) return;
-            const [serverUrl, accessToken, refreshToken] = await Promise.all([
-                getItem(SECURE_KEYS.serverUrl),
-                getItem(SECURE_KEYS.accessToken),
-                getItem(SECURE_KEYS.refreshToken),
-            ]);
+
+            // Initialize API client service (loads from secure storage)
+            await apiClientService.initialize();
+
+            // Load username separately (it's not in ApiClientService)
             const username = await getStoredUsername();
             await persistUsername(username);
-            setState(s => ({ ...s, serverUrl, accessToken, refreshToken, username }));
+
+            // Sync local state from ApiClientService
+            setState({
+                serverUrl: apiClientService.getBaseUrl(),
+                accessToken: apiClientService.getAccessToken(),
+                refreshToken: apiClientService.getRefreshToken(),
+                username,
+            });
+
             setInitialized(true);
         })();
     }, [dbInitialized]);
 
+    // Subscribe to auth state changes from ApiClientService
     useEffect(() => {
-        setApiConfig({
-            getBaseUrl: () => state.serverUrl,
-            getAccessToken: () => state.accessToken,
-            refreshAccessToken: async () => {
-                setApiConfigured(false);
-                console.log(`[AuthProvider] Refreshing access token ${state.serverUrl} ${state.refreshToken ? 'has refresh token' : 'no refresh token'}`);
-                if (!state.serverUrl || !state.refreshToken) return false;
-                const response = await fetch(`${state.serverUrl}/auth/refresh`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-refresh-token': state.refreshToken
-                    }
-                });
-                console.log(`[AuthProvider] Refresh access token response: ${response.status} ${response.statusText}`);
-                if (!response.ok) {
-                    const text = await response.clone().text();
-                    console.log(`[AuthProvider] Refresh access token failed: ${text}`);
-                    setState(s => ({ ...s, accessToken: null, refreshToken: null, loginMessage: 'Session expired' }));
-                    return false;
-                }
-                const data = await response.json();
-                const {accessToken, refreshToken} = authHelpers.extractTokensFromAuthResponse(data);
-                if (!accessToken || !refreshToken) return false;
-                await persistTokensAndState(setState, { accessToken, refreshToken });
-                return true;
-            }
+        const unsubscribe = apiClientService.subscribe(() => {
+            console.log('[AuthProvider] Auth state changed, syncing state');
+            const wasAuthenticated = state.accessToken !== null;
+            const isNowAuthenticated = apiClientService.getAccessToken() !== null;
+
+            setState((prev: AuthState) => ({
+                ...prev,
+                serverUrl: apiClientService.getBaseUrl(),
+                accessToken: apiClientService.getAccessToken(),
+                refreshToken: apiClientService.getRefreshToken(),
+                // If we went from authenticated to not authenticated, show session expired
+                loginMessage: wasAuthenticated && !isNowAuthenticated ? 'Session expired' : prev.loginMessage,
+            }));
         });
 
-        // Set network status getter for API calls
+        return unsubscribe;
+    }, [state.accessToken]);
+
+    // Set network status getter for API calls
+    useEffect(() => {
         setNetworkStatusGetter(() => {
             const networkState = useAppStore.getState().network;
             return {
@@ -111,12 +88,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 serverReachable: networkState.serverReachable,
             };
         });
+    }, []);
 
-        // Only set apiConfigured to true when we have both serverUrl and accessToken
-        setApiConfigured(!!state.serverUrl && !!state.accessToken);
-    }, [state.serverUrl, state.accessToken]);
-
-    const isAuthenticated = useMemo(() => !!state.accessToken && !!state.serverUrl, [state.accessToken, state.serverUrl]);
+    const isAuthenticated = useMemo(() => apiClientService.isAuthenticated(), [state.accessToken, state.serverUrl]);
 
     // Handle app state changes for progress syncing
     useEffect(() => {
@@ -140,15 +114,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [isAuthenticated, state.username]);
 
     const setServerUrl = useCallback(async (url: string) => {
-        const normalized = url.trim().replace(/\/$/, '');
-        await saveItem(SECURE_KEYS.serverUrl, normalized);
-        setState((s) => ({ ...s, serverUrl: normalized }));
+        await apiClientService.setBaseUrl(url);
+        // State will be updated via subscription
     }, []);
 
     const login = useCallback(async ({ serverUrl, username, password }: { serverUrl: string; username: string; password: string }) => {
         const base = serverUrl.trim().replace(/\/$/, '');
-        // Persist server URL so the field is prefilled next time
-        await saveItem(SECURE_KEYS.serverUrl, base);
+
+        // Set server URL
+        await apiClientService.setBaseUrl(base);
 
         try {
             let response = await doLogin(base, username, password);
@@ -157,8 +131,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 throw new Error('Missing token in response');
             }
 
-            await persistTokensAndState(setState, { accessToken, refreshToken, username });
-            setState((s) => ({ ...s, serverUrl: base }));
+            // Update tokens in ApiClientService
+            await apiClientService.setTokens(accessToken, refreshToken!, username);
+
+            // Persist username separately
+            await persistUsername(username);
+
+            // Update local state
+            setState((prev: AuthState) => ({ ...prev, username, loginMessage: undefined }));
 
             const user = userHelpers.marshalUserFromAuthResponse(response);
             const mediaProgress = mediaProgressHelpers.marshalMediaProgressFromAuthResponse(response.user);
@@ -175,23 +155,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const logout = useCallback(async () => {
-        await Promise.all([
-            saveItem(SECURE_KEYS.accessToken, null),
-            saveItem(SECURE_KEYS.refreshToken, null),
-            persistUsername(null),
-        ]);
-        setState((s) => ({ ...s, accessToken: null, refreshToken: null, username: null }));
+        await apiClientService.clearTokens();
+        await persistUsername(null);
+        setState((s: AuthState) => ({ ...s, username: null }));
+        // Token state will be updated via subscription
     }, []);
 
     const value = useMemo<AuthContextValue>(() => ({
-        ...state,
         initialized,
         isAuthenticated,
-        apiConfigured,
+        serverUrl: state.serverUrl,
+        username: state.username,
+        loginMessage: state.loginMessage,
         setServerUrl,
         login,
         logout,
-    }), [state, initialized, isAuthenticated, apiConfigured, setServerUrl, login, logout]);
+    }), [initialized, isAuthenticated, state.serverUrl, state.username, state.loginMessage, setServerUrl, login, logout]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,12 +1,7 @@
 import { formatBytes } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { apiClientService } from "@/services/ApiClientService";
 import DeviceInfo from "react-native-device-info";
-
-type ApiConfig = {
-  getBaseUrl: () => string | null;
-  getAccessToken: () => string | null;
-  refreshAccessToken: () => Promise<boolean>;
-};
 
 type NetworkStatusGetter = () => {
   isConnected: boolean;
@@ -16,18 +11,9 @@ type NetworkStatusGetter = () => {
 const log = logger.forTag("api:fetch");
 const detailedLog = logger.forTag("api:fetch:detailed");
 
-let config: ApiConfig | null = null;
 let getNetworkStatus: NetworkStatusGetter | null = null;
 
 let cachedUserAgent: string | null = null;
-
-export function setApiConfig(next: ApiConfig) {
-  config = next;
-}
-
-export function getApiConfig(): ApiConfig | null {
-  return config;
-}
 
 export function setNetworkStatusGetter(getter: NetworkStatusGetter) {
   getNetworkStatus = getter;
@@ -39,33 +25,33 @@ function normalizeBaseUrl(url: string): string {
 
 function resolveUrl(input: string): string {
   if (/^https?:\/\//i.test(input)) return input;
-  const base = config?.getBaseUrl();
+  const base = apiClientService.getBaseUrl();
   if (!base) return input;
   const normalized = normalizeBaseUrl(base);
   if (input.startsWith("/")) return `${normalized}${input}`;
   return `${normalized}/${input}`;
 }
 
-export type ApiFetchOptions = RequestInit & {
+export type ApiFetchOptions = Omit<RequestInit, "signal"> & {
   auth?: boolean;
+  timeout?: number; // Optional timeout in milliseconds
 };
 
-export async function apiFetch(
-  pathOrUrl: string,
-  init?: ApiFetchOptions
-): Promise<Response> {
+export async function apiFetch(pathOrUrl: string, init?: ApiFetchOptions): Promise<Response> {
   // Check network status before making request
   if (getNetworkStatus) {
     const networkStatus = getNetworkStatus();
     if (!networkStatus.isConnected || networkStatus.serverReachable === false) {
-      log.warn(`Network unavailable, failing fast: connected=${networkStatus.isConnected}, serverReachable=${networkStatus.serverReachable}`);
+      log.warn(
+        `Network unavailable, failing fast: connected=${networkStatus.isConnected}, serverReachable=${networkStatus.serverReachable}`
+      );
       throw new Error("Network unavailable - please check your connection and try again");
     }
   }
 
   const url = resolveUrl(pathOrUrl);
-  const { auth = true, headers, ...rest } = init || {};
-  const token = config?.getAccessToken();
+  const { auth = true, timeout, headers, ...rest } = init || {};
+  const token = apiClientService.getAccessToken();
 
   const headerObj: Record<string, string> = { Accept: "application/json" };
   mergeHeaders(headerObj, headers);
@@ -74,44 +60,52 @@ export async function apiFetch(
     headerObj["Authorization"] = `Bearer ${token}`;
   }
 
-  const hasUserAgent = Object.keys(headerObj).some(
-    (key) => key.toLowerCase() === "user-agent"
-  );
+  const hasUserAgent = Object.keys(headerObj).some((key) => key.toLowerCase() === "user-agent");
   if (!hasUserAgent) {
     headerObj["User-Agent"] = getCustomUserAgent();
   }
 
+  // Apply timeout
+  const { controller, timeoutId } = apiClientService.createTimeoutSignal(timeout);
+
   const method = (rest.method || "GET").toUpperCase();
   const startTime = Date.now();
   log.info(`-> ${method} ${scrubUrl(url)}`);
-  detailedLog.info(`-> ${method} ${scrubUrl(url)} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${rest.body}`);
+  detailedLog.info(
+    `-> ${method} ${scrubUrl(url)} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${rest.body}`
+  );
 
-  const res = await fetch(url, { ...rest, headers: headerObj });
-  const endTime = Date.now();
-  const duration = endTime - startTime;
-  log.info(`<- ${res.status} ${method} ${scrubUrl(url)} [${formatBytes(Number(res.headers.get("content-length")))}] [${duration}ms] [${res.headers.get("content-type")}]`);
-  detailedLog.info(`<- ${res.status} ${method} ${scrubUrl(url)} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()} [${duration}ms]`);
-  if (res.status === 401) {
-    log.info("access token expired, refreshing token...");
-    const success = await config?.refreshAccessToken();
-    if (success) {
-      // Recursive call will have its own timing
-      return await apiFetch(pathOrUrl, { ...init, headers: headerObj });
+  try {
+    const res = await fetch(url, { ...rest, headers: headerObj, signal: controller.signal });
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    log.info(
+      `<- ${res.status} ${method} ${scrubUrl(url)} [${formatBytes(Number(res.headers.get("content-length")))}] [${duration}ms] [${res.headers.get("content-type")}]`
+    );
+    detailedLog.info(
+      `<- ${res.status} ${method} ${scrubUrl(url)} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()} [${duration}ms]`
+    );
+    if (res.status === 401) {
+      log.info("access token expired, refreshing token...");
+      const success = await apiClientService.handleUnauthorized();
+      if (success) {
+        // Retry with fresh token (recursive call will have its own timing)
+        return await apiFetch(pathOrUrl, init);
+      }
     }
+    if (!res.ok) {
+      try {
+        const text = await res.clone().text();
+        log.warn(`Response body:\n${text}`);
+      } catch {}
+    }
+    return res;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  if (!res.ok) {
-    try {
-      const text = await res.clone().text();
-      log.warn(`Response body:\n${text}`);
-    } catch {}
-  }
-  return res;
 }
 
-function mergeHeaders(
-  target: Record<string, string>,
-  source?: HeadersInit
-): void {
+function mergeHeaders(target: Record<string, string>, source?: HeadersInit): void {
   if (!source) return;
   if (source instanceof Headers) {
     source.forEach((value, key) => {
@@ -128,9 +122,7 @@ function mergeHeaders(
   Object.assign(target, source as Record<string, string>);
 }
 
-function redactHeaders(
-  headers: Record<string, string>
-): Record<string, string> {
+function redactHeaders(headers: Record<string, string>): Record<string, string> {
   const redacted: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
     if (key.toLowerCase() === "authorization") {
@@ -145,7 +137,7 @@ function redactHeaders(
 }
 
 function scrubUrl(url: string): string {
-  const baseUrl = config?.getBaseUrl();
+  const baseUrl = apiClientService.getBaseUrl();
   return url.replace(baseUrl?.split("://")[1] || "SKIP", "<base-url>");
 }
 

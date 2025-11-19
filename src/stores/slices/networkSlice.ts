@@ -7,7 +7,7 @@
  * - Server reachability
  */
 
-import { getApiConfig } from "@/lib/api/api";
+import { apiClientService } from "@/services/ApiClientService";
 import { logger } from "@/lib/logger";
 import type { SliceCreator } from "@/types/store";
 import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
@@ -217,8 +217,7 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
      * Check if ABS server is reachable
      */
     checkServerReachability: async () => {
-      const apiConfig = getApiConfig();
-      const baseUrl = apiConfig?.getBaseUrl();
+      const baseUrl = apiClientService.getBaseUrl();
 
       if (!baseUrl) {
         log.debug("No API base URL configured, skipping server check");

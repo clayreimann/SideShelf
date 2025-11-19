@@ -16,8 +16,8 @@ import { getLibraryItemById } from "@/db/helpers/libraryItems";
 import { getActiveSession, getAllActiveSessionsForUser } from "@/db/helpers/localListeningSessions";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
-import { getApiConfig } from "@/lib/api/api";
 import { startPlaySession } from "@/lib/api/endpoints";
+import { apiClientService } from "@/services/ApiClientService";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
 import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
@@ -838,17 +838,11 @@ export class PlayerService {
   }
 
   /**
-   * Get base URL and access token from API config
+   * Get base URL and access token from API client service
    */
   private getApiInfo(): { baseUrl: string; accessToken: string } | null {
-    const config = getApiConfig();
-    if (!config) {
-      log.error(" API config not available");
-      return null;
-    }
-
-    const baseUrl = config.getBaseUrl();
-    const accessToken = config.getAccessToken();
+    const baseUrl = apiClientService.getBaseUrl();
+    const accessToken = apiClientService.getAccessToken();
 
     if (!baseUrl || !accessToken) {
       log.error(" Missing base URL or access token");

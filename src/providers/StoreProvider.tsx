@@ -6,34 +6,35 @@
  */
 
 import {
-    useAuthorsStoreInitializer,
-    useDownloadsStoreInitializer,
-    useHomeStoreInitializer,
-    useLibraryStoreInitializer,
-    useNetworkStoreInitializer,
-    usePlayerStoreInitializer,
-    useSeriesStoreInitializer,
-    useSettingsStoreInitializer,
-    useUserProfileStoreInitializer
-} from '@/stores';
-import React from 'react';
-import { useAuth } from './AuthProvider';
-import { useDb } from './DbProvider';
+  useAuthorsStoreInitializer,
+  useDownloadsStoreInitializer,
+  useHomeStoreInitializer,
+  useLibraryStoreInitializer,
+  useNetworkStoreInitializer,
+  usePlayerStoreInitializer,
+  useSeriesStoreInitializer,
+  useSettingsStoreInitializer,
+  useUserProfileStoreInitializer,
+} from "@/stores";
+import React from "react";
+import { useAuth } from "./AuthProvider";
+import { useDb } from "./DbProvider";
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-    const { apiConfigured, username } = useAuth();
-    const { initialized: dbInitialized } = useDb();
+  const { isAuthenticated, username } = useAuth();
+  const { initialized: dbInitialized } = useDb();
 
-    // Initialize all stores
-    useLibraryStoreInitializer(apiConfigured, dbInitialized);
-    useAuthorsStoreInitializer(apiConfigured, dbInitialized);
-    useSeriesStoreInitializer(apiConfigured, dbInitialized);
-    usePlayerStoreInitializer(); // Player doesn't need API/DB dependencies
-    useSettingsStoreInitializer(); // Settings are independent
-    useDownloadsStoreInitializer(); // Downloads are independent
-    useNetworkStoreInitializer(); // Network monitoring is independent
-    useUserProfileStoreInitializer(username); // User profile needs username
-    useHomeStoreInitializer(username ? username : null); // Home needs userId (username)
+  // Initialize all stores
+  // Note: isAuthenticated indicates we have valid API credentials
+  useLibraryStoreInitializer(isAuthenticated, dbInitialized);
+  useAuthorsStoreInitializer(isAuthenticated, dbInitialized);
+  useSeriesStoreInitializer(isAuthenticated, dbInitialized);
+  usePlayerStoreInitializer(); // Player doesn't need API/DB dependencies
+  useSettingsStoreInitializer(); // Settings are independent
+  useDownloadsStoreInitializer(); // Downloads are independent
+  useNetworkStoreInitializer(); // Network monitoring is independent
+  useUserProfileStoreInitializer(username); // User profile needs username
+  useHomeStoreInitializer(username ? username : null); // Home needs userId (username)
 
-    return <>{children}</>;
+  return <>{children}</>;
 }
