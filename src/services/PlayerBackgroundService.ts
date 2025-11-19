@@ -11,6 +11,9 @@ import { logger } from "@/lib/logger";
 import { getCurrentUser } from "@/utils/userHelpers";
 import { applySmartRewind } from "@/lib/smartRewind";
 import { progressService } from "@/services/ProgressService";
+import { downloadService } from "@/services/DownloadService";
+import { getNextItemInSeries } from "@/db/helpers/nextItem";
+import { getAutoQueueNextItemEnabled } from "@/lib/appSettings";
 import { useAppStore } from "@/stores/appStore";
 import { AppState } from "react-native";
 import TrackPlayer, {
@@ -60,6 +63,8 @@ declare global {
   var __playerBackgroundServiceInitializedAt: number | undefined;
   // eslint-disable-next-line no-var
   var __playerBackgroundServiceSubscriptions: Array<() => void> | undefined;
+  // eslint-disable-next-line no-var
+  var __autoQueuedNextItemFor: string | undefined;
 }
 
 /**
@@ -383,6 +388,116 @@ async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<vo
 }
 
 /**
+ * Check if we should auto-queue the next item in the series
+ * Called during playback progress updates
+ */
+async function checkAndQueueNextItem(
+  libraryItemId: string,
+  currentPosition: number,
+  duration: number
+): Promise<void> {
+  try {
+    // Check if we've already queued the next item for this library item
+    if (global.__autoQueuedNextItemFor === libraryItemId) {
+      return;
+    }
+
+    // Check if auto-queue is enabled
+    const autoQueueEnabled = await getAutoQueueNextItemEnabled();
+    if (!autoQueueEnabled) {
+      return;
+    }
+
+    // Calculate conditions
+    const remainingTime = duration - currentPosition; // in seconds
+    const percentComplete = duration > 0 ? currentPosition / duration : 0;
+
+    // Constants for auto-queue logic
+    const MIN_REMAINING_TIME = 5 * 60; // 5 minutes minimum (hard minimum)
+    const TRIGGER_REMAINING_TIME = 30 * 60; // 30 minutes remaining
+    const TRIGGER_PERCENT_COMPLETE = 0.95; // 95% completion
+
+    // Don't queue if we're below the hard minimum
+    if (remainingTime < MIN_REMAINING_TIME) {
+      return;
+    }
+
+    // Check if we should trigger auto-queue
+    // Trigger at 95% completion OR 30 minutes remaining, whichever is closer to the end
+    const shouldQueueByPercent = percentComplete >= TRIGGER_PERCENT_COMPLETE;
+    const shouldQueueByTime = remainingTime <= TRIGGER_REMAINING_TIME;
+
+    if (!shouldQueueByPercent && !shouldQueueByTime) {
+      return;
+    }
+
+    log.info(
+      `Auto-queue conditions met: ${(percentComplete * 100).toFixed(1)}% complete, ${formatTime(remainingTime)} remaining for item=${libraryItemId}`
+    );
+
+    // Find the next item in the series
+    const nextItem = await getNextItemInSeries(libraryItemId);
+    if (!nextItem) {
+      log.info(`No next item found in series for item=${libraryItemId}`);
+      return;
+    }
+
+    log.info(
+      `Found next item in series: ${nextItem.title} (${nextItem.libraryItemId}) for item=${libraryItemId}`
+    );
+
+    // Check if the next item is already downloaded
+    const isDownloaded = await downloadService.isLibraryItemDownloaded(nextItem.libraryItemId);
+    if (isDownloaded) {
+      log.info(`Next item is already downloaded: ${nextItem.libraryItemId}`);
+      global.__autoQueuedNextItemFor = libraryItemId;
+      return;
+    }
+
+    // Check if download is already in progress
+    const isDownloading = downloadService.isDownloadActive(nextItem.libraryItemId);
+    if (isDownloading) {
+      log.info(`Next item is already downloading: ${nextItem.libraryItemId}`);
+      global.__autoQueuedNextItemFor = libraryItemId;
+      return;
+    }
+
+    // Get user and server info for download
+    const user = await getCurrentUser();
+    const store = useAppStore.getState();
+    const serverUrl = store.auth.serverUrl;
+    const token = store.auth.token;
+
+    if (!user || !serverUrl || !token) {
+      log.warn(
+        `Cannot auto-queue next item: missing credentials user=${!!user} serverUrl=${!!serverUrl} token=${!!token}`
+      );
+      return;
+    }
+
+    // Mark as queued before starting download to prevent duplicate triggers
+    global.__autoQueuedNextItemFor = libraryItemId;
+
+    // Start the download in the background
+    log.info(`Starting auto-queue download for next item: ${nextItem.title}`);
+    downloadService
+      .startDownload(nextItem.libraryItemId, serverUrl, token)
+      .then(() => {
+        log.info(`Auto-queue download completed for: ${nextItem.title}`);
+      })
+      .catch((error) => {
+        log.error(`Auto-queue download failed for: ${nextItem.title}`, error as Error);
+        // Reset the flag on error so it can be retried
+        if (global.__autoQueuedNextItemFor === libraryItemId) {
+          global.__autoQueuedNextItemFor = undefined;
+        }
+      });
+  } catch (error) {
+    log.error(`Error in checkAndQueueNextItem:`, error as Error);
+  }
+}
+
+/**
  * Handle playback progress updates (fired every second during playback)
  * This is where we check if periodic sync to server is needed
  */
@@ -482,6 +597,15 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
           store._setLastPauseTime(pauseTime);
           await TrackPlayer.pause();
         }
+      }
+
+      // Check if we should auto-queue the next item
+      if (currentTrack && isPlaying) {
+        await checkAndQueueNextItem(
+          ids.libraryItemId,
+          event.position,
+          currentTrack.duration
+        );
       }
 
       // Check if we should sync to server (uses adaptive intervals based on network type)
@@ -636,6 +760,9 @@ async function handleActiveTrackChanged(
     }
 
     lastActiveTrackId.value = currentActiveTrack.id;
+
+    // Reset the auto-queue flag when track changes
+    global.__autoQueuedNextItemFor = undefined;
 
     // Get track info from playerSlice and current user
     const store = useAppStore.getState();

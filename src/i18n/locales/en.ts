@@ -169,6 +169,9 @@ export const en = {
   "settings.smartRewind": "Smart Rewind on Resume",
   "settings.smartRewindDescription":
     "Automatically rewind a few seconds when resuming playback after a pause. The rewind time increases based on how long playback was paused (3s to 30s).",
+  "settings.autoQueueNextItem": "Auto-Queue Next Item",
+  "settings.autoQueueNextItemDescription":
+    "Automatically download the next item in a series or podcast when nearing the end of the current item (at 95% completion or less than 30 minutes remaining).",
   "settings.diagnostics": "Enable Diagnostics",
   "settings.diagnosticsDescription":
     "Show diagnostic and debugging screens in the More tab. Includes logs, storage info, and track player state.",
