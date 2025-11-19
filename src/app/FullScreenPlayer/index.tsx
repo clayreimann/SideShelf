@@ -20,7 +20,8 @@ import CoverImage from "@/components/ui/CoverImange";
 import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettings";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
-import { usePlayer } from "@/stores/appStore";
+import { usePlayer, useUserProfile } from "@/stores/appStore";
+import { Ionicons } from "@expo/vector-icons";
 import { router, Stack } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -30,6 +31,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
+  Alert,
 } from "react-native";
 
 function durationToUnits(seconds: number): number[] {
@@ -51,15 +53,17 @@ function formatTimeWithUnits(seconds: number, includeSeconds: boolean = true): s
 }
 
 export default function FullScreenPlayer() {
-  const { styles, isDark } = useThemedStyles();
+  const { styles, isDark, colors } = useThemedStyles();
   const { width, height } = useWindowDimensions();
 
   const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
+  const { createBookmark } = useUserProfile();
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
   const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
   const [showChapterList, setShowChapterList] = useState(false);
+  const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
   // Animation values
   const coverSizeAnim = useRef(new Animated.Value(0)).current; // 0 = full size, 1 = minimized
@@ -207,6 +211,23 @@ export default function FullScreenPlayer() {
       console.error("[FullScreenPlayer] Failed to set volume:", error);
     }
   }, []);
+
+  const handleCreateBookmark = useCallback(async () => {
+    if (!currentTrack || isCreatingBookmark) {
+      return;
+    }
+
+    setIsCreatingBookmark(true);
+    try {
+      const bookmark = await createBookmark(currentTrack.libraryItemId, position);
+      Alert.alert("Bookmark Created", `Bookmark created at ${formatTimeWithUnits(position, true)}`);
+    } catch (error) {
+      console.error("[FullScreenPlayer] Failed to create bookmark:", error);
+      Alert.alert("Error", "Failed to create bookmark. Please try again.");
+    } finally {
+      setIsCreatingBookmark(false);
+    }
+  }, [currentTrack, position, createBookmark, isCreatingBookmark]);
 
   const handleStartOfChapter = useCallback(async () => {
     if (!currentChapter) {
@@ -410,6 +431,29 @@ export default function FullScreenPlayer() {
               Speed
             </Text>
             <PlaybackSpeedControl />
+          </View>
+          <View style={{ alignItems: "center" }}>
+            <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
+              Bookmark
+            </Text>
+            <TouchableOpacity
+              onPress={handleCreateBookmark}
+              disabled={isCreatingBookmark}
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <Ionicons
+                name={isCreatingBookmark ? "hourglass-outline" : "bookmark-outline"}
+                size={24}
+                color={colors.text}
+              />
+            </TouchableOpacity>
           </View>
           <View style={{ alignItems: "center" }}>
             <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>

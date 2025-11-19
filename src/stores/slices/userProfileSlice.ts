@@ -8,8 +8,9 @@
  */
 
 import { getUserByUsername, UserRow } from '@/db/helpers/users';
-import { getDeviceInfo } from '@/lib/api/endpoints';
+import { createBookmark, deleteBookmark, fetchMe, getDeviceInfo } from '@/lib/api/endpoints';
 import { logger } from '@/lib/logger';
+import type { ApiAudioBookmark } from '@/types/api';
 import type { SliceCreator } from '@/types/store';
 
 // Create cached sublogger for this slice
@@ -50,6 +51,8 @@ export interface UserProfileSliceState {
         user: UserRow | null;
         /** Server information */
         serverInfo: ServerInfo | null;
+        /** User's bookmarks */
+        bookmarks: ApiAudioBookmark[];
         /** Whether the slice has been initialized */
         initialized: boolean;
         /** Whether data is currently being loaded */
@@ -70,6 +73,14 @@ export interface UserProfileSliceActions {
     refreshServerInfo: () => Promise<void>;
     /** Update user record */
     updateUser: (username: string) => Promise<void>;
+    /** Fetch and update bookmarks from server */
+    refreshBookmarks: () => Promise<void>;
+    /** Create a new bookmark */
+    createBookmark: (libraryItemId: string, time: number, title?: string) => Promise<ApiAudioBookmark>;
+    /** Delete a bookmark */
+    deleteBookmark: (libraryItemId: string, bookmarkId: string) => Promise<void>;
+    /** Get bookmarks for a specific library item */
+    getItemBookmarks: (libraryItemId: string) => ApiAudioBookmark[];
     /** Reset the slice to initial state */
     resetUserProfile: () => void;
 }
@@ -87,6 +98,7 @@ const initialState: UserProfileSliceState = {
         deviceInfo: null,
         user: null,
         serverInfo: null,
+        bookmarks: [],
         initialized: false,
         isLoading: false,
     },
@@ -121,10 +133,11 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
         }));
 
         try {
-            // Fetch device info and user in parallel
-            const [deviceInfo, user] = await Promise.all([
+            // Fetch device info, user, and bookmarks in parallel
+            const [deviceInfo, user, meResponse] = await Promise.all([
                 getDeviceInfo(),
                 getUserByUsername(username),
+                fetchMe(),
             ]);
 
             set((state: UserProfileSlice) => ({
@@ -133,12 +146,13 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
                     ...state.userProfile,
                     deviceInfo,
                     user,
+                    bookmarks: meResponse.bookmarks || [],
                     initialized: true,
                     isLoading: false,
                 },
             }));
 
-            log.info(`User profile initialized successfully: username=${username}, deviceId=${deviceInfo.deviceId}`);
+            log.info(`User profile initialized successfully: username=${username}, deviceId=${deviceInfo.deviceId}, bookmarks=${meResponse.bookmarks?.length || 0}`);
         } catch (error) {
             log.error('Failed to initialize user profile', error as Error);
 
@@ -226,6 +240,90 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
             log.error('Failed to update user record', error as Error);
             throw error;
         }
+    },
+
+    /**
+     * Fetch and update bookmarks from server
+     */
+    refreshBookmarks: async () => {
+        log.info('Refreshing bookmarks...');
+
+        try {
+            const meResponse = await fetchMe();
+
+            set((state: UserProfileSlice) => ({
+                ...state,
+                userProfile: {
+                    ...state.userProfile,
+                    bookmarks: meResponse.bookmarks || [],
+                },
+            }));
+
+            log.info(`Bookmarks refreshed successfully (${meResponse.bookmarks?.length || 0} bookmarks)`);
+        } catch (error) {
+            log.error('Failed to refresh bookmarks', error as Error);
+            throw error;
+        }
+    },
+
+    /**
+     * Create a new bookmark
+     */
+    createBookmark: async (libraryItemId: string, time: number, title?: string) => {
+        log.info(`Creating bookmark for item ${libraryItemId} at ${time}s...`);
+
+        try {
+            const response = await createBookmark(libraryItemId, time, title);
+            const newBookmark = response.bookmark;
+
+            // Add the new bookmark to the state
+            set((state: UserProfileSlice) => ({
+                ...state,
+                userProfile: {
+                    ...state.userProfile,
+                    bookmarks: [...state.userProfile.bookmarks, newBookmark],
+                },
+            }));
+
+            log.info(`Bookmark created successfully: ${newBookmark.id}`);
+            return newBookmark;
+        } catch (error) {
+            log.error('Failed to create bookmark', error as Error);
+            throw error;
+        }
+    },
+
+    /**
+     * Delete a bookmark
+     */
+    deleteBookmark: async (libraryItemId: string, bookmarkId: string) => {
+        log.info(`Deleting bookmark ${bookmarkId}...`);
+
+        try {
+            await deleteBookmark(libraryItemId, bookmarkId);
+
+            // Remove the bookmark from the state
+            set((state: UserProfileSlice) => ({
+                ...state,
+                userProfile: {
+                    ...state.userProfile,
+                    bookmarks: state.userProfile.bookmarks.filter((b) => b.id !== bookmarkId),
+                },
+            }));
+
+            log.info(`Bookmark deleted successfully: ${bookmarkId}`);
+        } catch (error) {
+            log.error('Failed to delete bookmark', error as Error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get bookmarks for a specific library item
+     */
+    getItemBookmarks: (libraryItemId: string) => {
+        const state = get();
+        return state.userProfile.bookmarks.filter((b) => b.libraryItemId === libraryItemId);
     },
 
     /**
