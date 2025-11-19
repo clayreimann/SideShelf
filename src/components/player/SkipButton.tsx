@@ -69,7 +69,6 @@ export default function SkipButton({
     const menuActions = JUMP_INTERVALS.map(intervalSeconds => ({
         id: intervalSeconds.toString(),
         title: formatInterval(intervalSeconds),
-        state: intervalSeconds === seconds ? 'on' : 'off',
     }));
 
     const buttonContent = (

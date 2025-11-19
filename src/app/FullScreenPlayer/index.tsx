@@ -20,7 +20,7 @@ import CoverImage from "@/components/ui/CoverImange";
 import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettings";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
-import { usePlayer, useSettings } from "@/stores/appStore";
+import { usePlayer } from "@/stores/appStore";
 import { router, Stack } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -55,7 +55,6 @@ export default function FullScreenPlayer() {
   const { width, height } = useWindowDimensions();
 
   const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
-  const { updateJumpForwardInterval, updateJumpBackwardInterval } = useSettings();
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
@@ -177,29 +176,21 @@ export default function FullScreenPlayer() {
 
   const handleJumpBackward = useCallback(async (seconds: number) => {
     try {
-      // Jump to the selected interval
+      // One-time jump to the selected interval (does not change default)
       await playerService.seekTo(Math.max(position - seconds, 0));
-      // Update the saved jump interval for future use
-      await updateJumpBackwardInterval(seconds);
-      // Update local state to reflect the new interval
-      setJumpBackwardInterval(seconds);
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to jump backward:", error);
     }
-  }, [position, updateJumpBackwardInterval]);
+  }, [position]);
 
   const handleJumpForward = useCallback(async (seconds: number) => {
     try {
-      // Jump to the selected interval
+      // One-time jump to the selected interval (does not change default)
       await playerService.seekTo(position + seconds);
-      // Update the saved jump interval for future use
-      await updateJumpForwardInterval(seconds);
-      // Update local state to reflect the new interval
-      setJumpForwardInterval(seconds);
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to jump forward:", error);
     }
-  }, [position, updateJumpForwardInterval]);
+  }, [position]);
 
   const handleRateChange = useCallback(async (rate: number) => {
     try {
