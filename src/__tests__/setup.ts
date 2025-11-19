@@ -31,16 +31,86 @@ jest.mock("@/db/client", () => ({
   mockSQLiteDb = sqliteDb;
 };
 
-jest.mock("expo-file-system", () => ({
-  documentDirectory: "file://test-documents/",
-  cacheDirectory: "file://test-cache/",
-  downloadAsync: jest.fn(),
-  getInfoAsync: jest.fn(),
-  makeDirectoryAsync: jest.fn(),
-  deleteAsync: jest.fn(),
-  readAsStringAsync: jest.fn(),
-  writeAsStringAsync: jest.fn(),
-}));
+// Mock expo-file-system with the new v19+ API (Paths, Directory, File)
+jest.mock("expo-file-system", () => {
+  // Create a simple in-memory file system for testing
+  const mockFileSystem = new Map<string, Uint8Array>();
+
+  class MockFile {
+    mockParent: any;
+    mockName: string;
+
+    constructor(mockParent: any, mockName: string) {
+      this.mockParent = mockParent;
+      this.mockName = mockName;
+    }
+
+    get uri(): string {
+      return `${this.mockParent.uri}/${this.mockName}`;
+    }
+
+    get exists(): boolean {
+      return mockFileSystem.has(this.uri);
+    }
+
+    write(content: Uint8Array | string): void {
+      const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
+      mockFileSystem.set(this.uri, bytes);
+    }
+
+    read(): Uint8Array | null {
+      return mockFileSystem.get(this.uri) || null;
+    }
+
+    delete(): void {
+      mockFileSystem.delete(this.uri);
+    }
+  }
+
+  class MockDirectory {
+    mockParent: string | MockDirectory;
+    mockName: string;
+
+    constructor(mockParent: string | MockDirectory, mockName: string) {
+      this.mockParent = mockParent;
+      this.mockName = mockName;
+    }
+
+    get uri(): string {
+      if (typeof this.mockParent === "string") {
+        return `${this.mockParent}/${this.mockName}`;
+      }
+      return `${this.mockParent.uri}/${this.mockName}`;
+    }
+
+    create(options?: { intermediates?: boolean; idempotent?: boolean }): void {
+      // Mock implementation - directories are virtual in our mock
+    }
+
+    get exists(): boolean {
+      return true; // Always true for our mock
+    }
+  }
+
+  return {
+    // New API (v19+)
+    Paths: {
+      cache: "file://test-cache",
+      document: "file://test-documents",
+    },
+    Directory: MockDirectory,
+    File: MockFile,
+    // Old API (for backward compatibility)
+    documentDirectory: "file://test-documents/",
+    cacheDirectory: "file://test-cache/",
+    downloadAsync: jest.fn(),
+    getInfoAsync: jest.fn(),
+    makeDirectoryAsync: jest.fn(),
+    deleteAsync: jest.fn(),
+    readAsStringAsync: jest.fn(),
+    writeAsStringAsync: jest.fn(),
+  };
+});
 
 jest.mock("expo-secure-store", () => ({
   setItemAsync: jest.fn(),

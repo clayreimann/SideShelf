@@ -186,8 +186,9 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         // Load all libraries from database cache
         let libraries = await getAllLibraries();
 
-        // If ready and no libraries in cache, fetch from API
-        if (apiConfigured && dbInitialized && libraries.length === 0) {
+        // If we have API access and no libraries in cache, fetch from API
+        // Note: apiConfigured can be undefined during initialization, so check truthiness
+        if (apiConfigured === true && libraries.length === 0) {
           log.info(" No cached libraries found, fetching from API...");
           libraries = await get()._refetchLibraries();
         }
@@ -922,11 +923,17 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
   /**
    * Update readiness state based on API and DB availability
    * Handles state transitions: UNINITIALIZED/INITIALIZING/NOT_READY → READY
+   *
+   * Note: Library slice can work in limited capacity with just DB (offline mode),
+   * but needs both API and DB to be fully READY for sync operations.
    */
   _updateReadiness: (apiConfigured: boolean, dbInitialized: boolean) => {
     const state = get();
     const wasReady = isReady(state);
-    const shouldBeReady = apiConfigured && dbInitialized;
+    // Explicitly check for true to handle undefined during initialization
+    const hasApi = apiConfigured === true;
+    const hasDb = dbInitialized === true;
+    const shouldBeReady = hasApi && hasDb;
 
     log.info(
       `Updating readiness: api=${apiConfigured}, db=${dbInitialized}, shouldBeReady=${shouldBeReady}`
@@ -939,6 +946,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
       newReadinessState = "READY";
     } else if (state.library.readinessState === "INITIALIZING") {
       // If we're initializing and not ready, go to NOT_READY
+      // This allows offline mode - slice is initialized but not ready for API ops
       newReadinessState = "NOT_READY";
     }
 

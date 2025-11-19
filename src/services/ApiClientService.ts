@@ -42,7 +42,9 @@ class ApiClientService {
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
 
-    log.info(`Loaded credentials: baseUrl=${!!this.baseUrl}, accessToken=${!!this.accessToken}, refreshToken=${!!this.refreshToken}`);
+    log.info(
+      `Loaded credentials: baseUrl=${!!this.baseUrl}, accessToken=${!!this.accessToken}, refreshToken=${!!this.refreshToken}`
+    );
   }
 
   /**
@@ -179,6 +181,10 @@ class ApiClientService {
       return false;
     }
 
+    // Create abort controller with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
     try {
       const response = await fetch(`${this.baseUrl}/auth/refresh`, {
         method: "POST",
@@ -186,9 +192,10 @@ class ApiClientService {
           "Content-Type": "application/json",
           "x-refresh-token": this.refreshToken,
         },
-        signal: AbortSignal.timeout(this.timeout),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       log.info(`Token refresh response: ${response.status}`);
 
       if (!response.ok) {
@@ -210,6 +217,7 @@ class ApiClientService {
       log.info("Token refresh succeeded");
       return true;
     } catch (error) {
+      clearTimeout(timeoutId);
       log.error("Token refresh error:", error);
       await this.clearTokens();
       return false;
@@ -233,12 +241,21 @@ class ApiClientService {
   /**
    * Create an AbortSignal that times out after the configured duration
    *
+   * Note: Returns an AbortController instead of just a signal because the caller
+   * needs to clean up the timeout. Callers should use controller.signal for fetch
+   * and must call clearTimeout on the returned timeoutId.
+   *
    * @param customTimeout - Optional custom timeout in milliseconds
-   * @returns AbortSignal that will abort after the timeout
+   * @returns Object with controller and timeoutId for cleanup
    */
-  createTimeoutSignal(customTimeout?: number): AbortSignal {
+  createTimeoutSignal(customTimeout?: number): {
+    controller: AbortController;
+    timeoutId: NodeJS.Timeout;
+  } {
     const timeout = customTimeout ?? this.timeout;
-    return AbortSignal.timeout(timeout);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    return { controller, timeoutId };
   }
 
   /**
