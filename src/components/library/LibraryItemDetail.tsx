@@ -1,7 +1,13 @@
-import { AuthorIcon, DownloadButton, NarratorIcon, SeriesIcon } from "@/components/icons";
+import AudioFilesSection from "@/components/library/LibraryItemDetail/AudioFilesSection";
 import ChapterList from "@/components/library/LibraryItemDetail/ChapterList";
+import ConsolidatedPlayerControls from "@/components/library/LibraryItemDetail/ConsolidatedPlayerControls";
+import CoverSection from "@/components/library/LibraryItemDetail/CoverSection";
+import DescriptionSection from "@/components/library/LibraryItemDetail/DescriptionSection";
 import DownloadProgressView from "@/components/library/LibraryItemDetail/DownloadProgressView";
-import { CollapsibleSection, ProgressBar } from "@/components/ui";
+import GenresTagsSection from "@/components/library/LibraryItemDetail/GenresTagsSection";
+import MetadataSection from "@/components/library/LibraryItemDetail/MetadataSection";
+import ProgressSection from "@/components/library/LibraryItemDetail/ProgressSection";
+import TitleSection from "@/components/library/LibraryItemDetail/TitleSection";
 import { getMediaAuthors, getMediaSeries } from "@/db/helpers/mediaJoins";
 import { getMediaProgressForLibraryItem, upsertMediaProgress } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
@@ -9,7 +15,6 @@ import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { updateMediaProgress } from "@/lib/api/endpoints";
 import { getCoverUri } from "@/lib/covers";
-import { navigateToAuthor, navigateToSeries } from "@/lib/navigation";
 import { spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
@@ -17,90 +22,23 @@ import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
 import { useDownloads, useLibraryItemDetails, useNetwork, usePlayer } from "@/stores";
-import { MenuView } from "@react-native-menu/menu";
-import { Stack, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import RenderHtml from "react-native-render-html";
-import CoverImage from "../ui/CoverImange";
+import { MenuView } from "@react-native-menu/menu";
+import { Stack } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 interface LibraryItemDetailProps {
   itemId: string;
   onTitleChange?: (title: string) => void;
 }
 
-// Helper function to format time in seconds to HH:MM:SS
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  } else {
-    return `${minutes}:${secs.toString().padStart(2, "0")}`;
-  }
-}
-
-// Helper function to format duration in seconds to readable format (e.g., "12h 30m")
-function formatDuration(seconds: number | null | undefined): string {
-  if (!seconds) return "";
-
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  if (hours > 0) {
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  } else if (minutes > 0) {
-    return `${minutes}m`;
-  }
-  return "";
-}
-
-function Separator() {
-  const { isDark } = useThemedStyles();
-  return (
-    <View style={{ marginHorizontal: 12 }}>
-      <Text
-        style={{
-          color: isDark ? "#bbb" : "#444",
-          fontSize: 24,
-          textAlign: "center",
-        }}
-      >
-        •
-      </Text>
-    </View>
-  );
-}
-
-const HTMLTagsStyles = {
-  p: { marginBottom: 12, lineHeight: 24 },
-  div: { marginBottom: 8 },
-  br: { marginBottom: 8 },
-  b: { fontWeight: "bold" as const },
-  strong: { fontWeight: "bold" as const },
-  i: { fontStyle: "italic" as const },
-};
-
 export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItemDetailProps) {
-  const { styles, colors, isDark } = useThemedStyles();
-  const { width } = useWindowDimensions();
+  const { styles, colors } = useThemedStyles();
   const { username, serverUrl, accessToken } = useAuth();
-  const { currentTrack, position, isPlaying, isLoadingTrack } = usePlayer();
+  const { currentTrack, position } = usePlayer();
   const { serverReachable } = useNetwork();
   const floatingPlayerPadding = useFloatingPlayerPadding();
-  const router = useRouter();
 
   // State for author and series IDs
   const [authorId, setAuthorId] = useState<string | null>(null);
@@ -134,9 +72,6 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const downloadProgress = activeDownloads[itemId] || null;
   const isDownloading = !!downloadProgress;
   const isDownloaded = isItemDownloaded(itemId);
-
-  const htmlSource = useMemo(() => ({ html: metadata?.description ?? "" }), [metadata]);
-  const baseStyle = useMemo(() => ({ color: colors.textPrimary, fontSize: 16 }), [colors]);
 
   // Fetch item details from store
   useEffect(() => {
@@ -389,37 +324,6 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     // State will be updated via progress subscription
   }, [item]);
 
-  // Play handler
-  const handlePlay = useCallback(async () => {
-    if (!item) {
-      Alert.alert(
-        translate("libraryItem.alerts.cannotPlay"),
-        translate("libraryItem.alerts.itemNotFound")
-      );
-      return;
-    }
-
-    try {
-      // Check if this item is currently playing
-      const isThisItemPlaying = currentTrack?.libraryItemId === item.id;
-
-      if (isThisItemPlaying) {
-        // Toggle play/pause for currently playing item
-        await playerService.togglePlayPause();
-      } else {
-        // Play a different item
-        await playerService.playTrack(item.id);
-      }
-    } catch (error) {
-      console.error("[LibraryItemDetail] Failed to play track:", error);
-      Alert.alert(
-        translate("common.error"),
-        translate("libraryItem.alerts.playbackFailed", { error: String(error) }),
-        [{ text: translate("common.ok") }]
-      );
-    }
-  }, [item, currentTrack]);
-
   // Force resync position handler
   const handleForceResync = useCallback(async () => {
     if (!item || !username) return;
@@ -553,7 +457,10 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const author = metadata?.authorName || metadata?.author || translate("libraryItem.unknownAuthor");
   const narrator = metadata?.narratorName || null;
   const series = metadata?.seriesName || null;
-  const imageSize = width * 0.6;
+
+  // Calculate cover size - approximately 60% of screen width
+  // We'll use a fixed reasonable size since we don't have useWindowDimensions anymore
+  const imageSize = 240; // Reasonable size for most screens
 
   return (
     <>
@@ -561,183 +468,23 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         style={[componentStyles.scrollView, { backgroundColor: styles.container.backgroundColor }]}
         contentContainerStyle={[componentStyles.scrollViewContent, floatingPlayerPadding]}
       >
-        <View style={{ alignItems: "center", marginBottom: 16 }}>
-          <View
-            style={{
-              height: imageSize,
-              width: imageSize,
-              borderRadius: 8,
-              overflow: "hidden",
-            }}
-          >
-            <CoverImage uri={coverUri} title={title} fontSize={14} />
-          </View>
-        </View>
-        <Text
-          style={[
-            styles.text,
-            {
-              fontSize: 24,
-              fontWeight: "bold",
-              marginBottom: 8,
-              textAlign: "center",
-            },
-          ]}
-        >
-          {title}
-        </Text>
-        {/* Author, Narrator, Series */}
-        <View
-          style={{
-            flexDirection: "column",
-            width: "100%",
-            justifyContent: "center",
-            alignItems: "center",
-            marginBottom: 8,
-          }}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              width: "100%",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <TouchableOpacity
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                flexShrink: 1,
-              }}
-              onPress={() => {
-                if (authorId) {
-                  navigateToAuthor(router, authorId);
-                }
-              }}
-              disabled={!authorId}
-            >
-              <AuthorIcon style={{ marginRight: 8 }} />
-              <Text
-                style={[
-                  styles.text,
-                  {
-                    textAlign: "center",
-                    flexShrink: 1,
-                    textDecorationLine: authorId ? "underline" : "none",
-                  },
-                ]}
-              >
-                {author}
-              </Text>
-            </TouchableOpacity>
-            {narrator ? (
-              <>
-                <Separator />
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    flexShrink: 1,
-                  }}
-                >
-                  <NarratorIcon style={{ marginRight: 8 }} />
-                  <Text style={[styles.text, { textAlign: "center", flexShrink: 1 }]}>
-                    {narrator}
-                  </Text>
-                </View>
-              </>
-            ) : null}
-          </View>
-          {series ? (
-            <TouchableOpacity
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              onPress={() => {
-                if (seriesId) {
-                  navigateToSeries(router, seriesId);
-                }
-              }}
-              disabled={!seriesId}
-            >
-              <SeriesIcon />
-              <Text
-                style={[
-                  styles.text,
-                  {
-                    fontStyle: "italic",
-                    marginBottom: 4,
-                    marginLeft: 4,
-                    textAlign: "center",
-                    textDecorationLine: seriesId ? "underline" : "none",
-                  },
-                ]}
-              >
-                {series}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-          {/* Duration, Year, and Download Status */}
-          {(metadata?.duration || metadata?.publishedYear || isDownloaded) && (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                marginTop: 4,
-                flexWrap: "wrap",
-              }}
-            >
-              {metadata?.duration && (
-                <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
-                  {formatDuration(metadata.duration)}
-                </Text>
-              )}
-              {metadata?.publishedYear && (
-                <>
-                  {metadata?.duration && <Separator />}
-                  <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
-                    {metadata.publishedYear}
-                  </Text>
-                </>
-              )}
-              {isDownloaded && (
-                <>
-                  {(metadata?.duration || metadata?.publishedYear) && <Separator />}
-                  <Text style={[styles.text, { fontSize: 14, color: "#34C759" }]}>
-                    {translate("libraryItem.downloaded")}
-                  </Text>
-                </>
-              )}
-            </View>
-          )}
-        </View>
+        {/* Cover Image */}
+        <CoverSection coverUri={coverUri} title={title} imageSize={imageSize} />
 
-        {/* Progress display */}
-        {effectiveProgress && (
-          <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
-            <View
-              style={{
-                backgroundColor: isDark ? "#333" : "#f5f5f5",
-                borderRadius: 8,
-                padding: 12,
-              }}
-            >
-              <ProgressBar
-                progress={effectiveProgress.progress || 0}
-                variant="medium"
-                showTimeLabels={!!(effectiveProgress.currentTime && effectiveProgress.duration)}
-                currentTime={effectiveProgress.currentTime || undefined}
-                duration={effectiveProgress.duration || undefined}
-                showPercentage={true}
-              />
-            </View>
-          </View>
-        )}
+        {/* Title */}
+        <TitleSection title={title} />
+
+        {/* Author, Narrator, Series, Duration, Year, Download Status */}
+        <MetadataSection
+          author={author}
+          narrator={narrator}
+          series={series}
+          duration={metadata?.duration}
+          publishedYear={metadata?.publishedYear}
+          isDownloaded={isDownloaded}
+          authorId={authorId}
+          seriesId={seriesId}
+        />
 
         {/* Download Section */}
         {isDownloading && (
@@ -751,148 +498,34 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           </View>
         )}
 
-        {/* Play Button */}
+        {/* Consolidated Player Controls (replaces simple Play button) */}
         {audioFiles.length > 0 && (
-          <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
-            <TouchableOpacity
-              style={{
-                backgroundColor: "#34C759",
-                borderRadius: 8,
-                padding: 12,
-                alignItems: "center",
-                opacity: isLoadingTrack || (!isDownloaded && serverReachable === false) ? 0.5 : 1,
-              }}
-              onPress={handlePlay}
-              disabled={isLoadingTrack || (!isDownloaded && serverReachable === false)}
-            >
-              <Text
-                style={{
-                  color: "white",
-                  fontSize: 16,
-                  fontWeight: "600",
-                }}
-              >
-                {isLoadingTrack
-                  ? translate("common.loading")
-                  : !isDownloaded && serverReachable === false
-                    ? translate("common.offline")
-                    : currentTrack?.libraryItemId === item?.id && isPlaying
-                      ? translate("common.pause")
-                      : translate("common.play")}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <ConsolidatedPlayerControls
+            libraryItemId={itemId}
+            isDownloaded={isDownloaded}
+            serverReachable={serverReachable ?? false}
+          />
         )}
 
-        {genres && genres.length > 0 && (
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              marginBottom: 8,
-              justifyContent: "center",
-            }}
-          >
-            {genres.map((g: string, idx: number) => (
-              <View
-                key={g + idx}
-                style={{
-                  backgroundColor: isDark ? "#333" : "#eee",
-                  borderRadius: 12,
-                  paddingHorizontal: 8,
-                  paddingVertical: 2,
-                  margin: 2,
-                }}
-              >
-                <Text style={{ fontSize: 12, color: isDark ? "#ccc" : "#333" }}>{g}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-        {tags && tags.length > 0 && (
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              marginBottom: 8,
-              justifyContent: "center",
-            }}
-          >
-            {tags.map((t: string, idx: number) => (
-              <View
-                key={t + idx}
-                style={{
-                  backgroundColor: isDark ? "#1a4f6e" : "#d0eaff",
-                  borderRadius: 12,
-                  paddingHorizontal: 8,
-                  paddingVertical: 2,
-                  margin: 2,
-                }}
-              >
-                <Text style={{ fontSize: 12, color: isDark ? "#ccc" : "#333" }}>{t}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-        {/* Collapsible Description */}
-        {description && (
-          <CollapsibleSection title={translate("libraryItem.description")} defaultExpanded={true}>
-            <RenderHtml
-              contentWidth={width - 64}
-              source={htmlSource}
-              baseStyle={baseStyle}
-              tagsStyles={HTMLTagsStyles}
-            />
-          </CollapsibleSection>
-        )}
+        {/* Progress display */}
+        {effectiveProgress && <ProgressSection progress={effectiveProgress} />}
 
-        {/* Collapsible Chapters */}
+        {/* Genres and Tags */}
+        <GenresTagsSection genres={genres} tags={tags} />
+
+        {/* Description */}
+        <DescriptionSection description={description} />
+
+        {/* Chapters */}
         <ChapterList
           chapters={chapters}
           currentPosition={currentTrack?.libraryItemId === itemId ? position : 0}
           libraryItemId={itemId}
-          isCurrentlyPlaying={currentTrack?.libraryItemId === itemId && isPlaying}
+          isCurrentlyPlaying={currentTrack?.libraryItemId === itemId}
         />
 
-        {/* Collapsible Audio Files */}
-        {audioFiles.length > 0 && (
-          <CollapsibleSection
-            title={translate("libraryItem.audioFiles", { count: audioFiles.length })}
-          >
-            {audioFiles.map((file, index) => (
-              <View
-                key={file.id}
-                style={{
-                  paddingVertical: 8,
-                  borderBottomWidth: index < audioFiles.length - 1 ? 1 : 0,
-                  borderBottomColor: isDark ? "#444" : "#eee",
-                }}
-              >
-                <Text
-                  style={[styles.text, { fontWeight: "600", marginBottom: 2 }]}
-                  numberOfLines={1}
-                >
-                  {file.filename}
-                </Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
-                    Duration: {file.duration ? formatTime(file.duration) : "Unknown"}
-                  </Text>
-                  {file.size && (
-                    <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
-                      Size: {(file.size / 1024 / 1024).toFixed(1)} MB
-                    </Text>
-                  )}
-                  {file.downloadInfo?.isDownloaded && (
-                    <Text style={[styles.text, { fontSize: 12, color: "#007AFF" }]}>
-                      ⬇ Downloaded
-                    </Text>
-                  )}
-                </View>
-              </View>
-            ))}
-          </CollapsibleSection>
-        )}
+        {/* Audio Files */}
+        <AudioFilesSection audioFiles={audioFiles} />
       </ScrollView>
 
       <Stack.Screen
