@@ -321,4 +321,7 @@ export const es = {
   "player.sleepTimer.remaining": "{target} ({time})",
   "player.playbackSpeed.title": "Velocidad de reproducción",
   "player.playbackSpeed.rate": "{rate}x",
+  "player.jumpMenu.titleForward": "Avance por",
+  "player.jumpMenu.titleBackward": "Retroceso por",
+  "player.jumpMenu.seconds": "{seconds} segundos",
 } as const;
