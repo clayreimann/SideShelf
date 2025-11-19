@@ -13,6 +13,7 @@ const SETTINGS_KEYS = {
   enablePeriodicNowPlayingUpdates: "@app/enablePeriodicNowPlayingUpdates",
   homeLayout: "@app/homeLayout",
   enableDiagnostics: "@app/enableDiagnostics",
+  enableAutoQueueNextItem: "@app/enableAutoQueueNextItem",
 } as const;
 
 // Default values
@@ -22,6 +23,7 @@ const DEFAULT_SMART_REWIND_ENABLED = true;
 const DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED = true;
 const DEFAULT_HOME_LAYOUT = "list" as const;
 const DEFAULT_DIAGNOSTICS_ENABLED = false;
+const DEFAULT_AUTO_QUEUE_NEXT_ITEM_ENABLED = true;
 
 /**
  * Get jump forward interval in seconds
@@ -182,6 +184,32 @@ export async function setDiagnosticsEnabled(enabled: boolean): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.enableDiagnostics, enabled ? "true" : "false");
   } catch (error) {
     console.error("[AppSettings] Failed to save diagnostics setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get whether auto-queue next item is enabled
+ * Default: true (enabled)
+ */
+export async function getAutoQueueNextItemEnabled(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.enableAutoQueueNextItem);
+    return value === null ? DEFAULT_AUTO_QUEUE_NEXT_ITEM_ENABLED : value === "true";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get auto-queue next item setting:", error);
+    return DEFAULT_AUTO_QUEUE_NEXT_ITEM_ENABLED;
+  }
+}
+
+/**
+ * Set whether auto-queue next item is enabled
+ */
+export async function setAutoQueueNextItemEnabled(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.enableAutoQueueNextItem, enabled ? "true" : "false");
+  } catch (error) {
+    console.error("[AppSettings] Failed to save auto-queue next item setting:", error);
     throw error;
   }
 }

@@ -21,11 +21,13 @@ export default function SettingsScreen() {
     jumpForwardInterval,
     jumpBackwardInterval,
     smartRewindEnabled,
+    autoQueueNextItemEnabled,
     diagnosticsEnabled,
     isLoading,
     updateJumpForwardInterval,
     updateJumpBackwardInterval,
     updateSmartRewindEnabled,
+    updateAutoQueueNextItemEnabled,
     updateDiagnosticsEnabled,
   } = useSettings();
   const { libraries, selectedLibrary, selectLibrary } = useLibrary();
@@ -71,6 +73,19 @@ export default function SettingsScreen() {
       }
     },
     [updateSmartRewindEnabled]
+  );
+
+  // Toggle auto-queue next item
+  const toggleAutoQueueNextItem = useCallback(
+    async (value: boolean) => {
+      try {
+        await updateAutoQueueNextItemEnabled(value);
+      } catch (error) {
+        console.error("Failed to update auto-queue next item setting", error);
+        Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
+      }
+    },
+    [updateAutoQueueNextItemEnabled]
   );
 
   // Toggle diagnostics
@@ -270,6 +285,7 @@ export default function SettingsScreen() {
               paddingVertical: 14,
               backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
               borderRadius: 10,
+              marginBottom: 16,
             }}
           >
             <View style={{ flex: 1, marginRight: 12 }}>
@@ -288,6 +304,35 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Toggle value={smartRewindEnabled} onValueChange={toggleSmartRewind} />
+          </View>
+
+          {/* Auto-Queue Next Item Toggle */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingVertical: 14,
+              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+              borderRadius: 10,
+            }}
+          >
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  color: colors.textPrimary,
+                  fontWeight: "500",
+                  marginBottom: 4,
+                }}
+              >
+                {translate("settings.autoQueueNextItem")}
+              </Text>
+              <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
+                {translate("settings.autoQueueNextItemDescription")}
+              </Text>
+            </View>
+            <Toggle value={autoQueueNextItemEnabled} onValueChange={toggleAutoQueueNextItem} />
           </View>
         </View>
 
