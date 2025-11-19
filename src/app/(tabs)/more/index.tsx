@@ -6,6 +6,7 @@ import DeviceInfo from "react-native-device-info";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 
 type ActionItem = {
   label: string;
@@ -45,11 +46,28 @@ export default function MoreScreen() {
     loadVersionInfo();
   }, []);
 
+  const openFeedback = async () => {
+    try {
+      const version = DeviceInfo.getVersion();
+      const buildNumber = DeviceInfo.getBuildNumber();
+      const systemVersion = DeviceInfo.getSystemVersion();
+      const deviceName = DeviceInfo.getDeviceId();
+
+      // Build the issue URL with pre-filled template chooser
+      const baseUrl = "https://github.com/clayreimann/SideShelf/issues/new/choose";
+
+      await WebBrowser.openBrowserAsync(baseUrl);
+    } catch (error) {
+      console.error("[MoreScreen] Failed to open feedback URL:", error);
+    }
+  };
+
   const data = useMemo(() => {
     const items: ActionItem[] = [
       // { label: 'Collections', onPress: () => router.push('/more/collections') },
       { label: translate("more.aboutMe"), onPress: () => router.push("/more/me") },
       { label: translate("more.settings"), onPress: () => router.push("/more/settings") },
+      { label: translate("more.feedback"), onPress: openFeedback },
     ];
 
     // Conditionally add diagnostics screens
@@ -100,7 +118,7 @@ export default function MoreScreen() {
     });
 
     return items;
-  }, [router, logout, showErrorBadge, errorCount, diagnosticsEnabled]);
+  }, [router, logout, showErrorBadge, errorCount, diagnosticsEnabled, openFeedback]);
   return (
     <>
       <FlatList

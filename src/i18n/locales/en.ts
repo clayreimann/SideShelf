@@ -143,6 +143,7 @@ export const en = {
   "more.title": "More",
   "more.aboutMe": "About Me",
   "more.settings": "Settings",
+  "more.feedback": "Leave Feedback",
   "more.advanced": "Advanced",
   "more.libraryStats": "Library Stats",
   "more.storage": "Storage",

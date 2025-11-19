@@ -145,6 +145,7 @@ export const es = {
   "more.title": "Más",
   "more.aboutMe": "Acerca de mí",
   "more.settings": "Configuración",
+  "more.feedback": "Dejar comentarios",
   "more.advanced": "Avanzado",
   "more.libraryStats": "Estadísticas de biblioteca",
   "more.storage": "Almacenamiento",
