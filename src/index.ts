@@ -11,17 +11,27 @@
  */
 
 // Import crypto polyfill for React Native (required for UUID generation)
-import 'react-native-get-random-values';
+import "react-native-get-random-values";
 
-import { getFullVersionString, getPreviousVersion, hasAppBeenUpdated, saveCurrentVersion } from '@/lib/appVersion';
-import { logger } from '@/lib/logger';
-import { playerService } from '@/services/PlayerService';
-import { progressService } from '@/services/ProgressService';
-import { useAppStore } from '@/stores/appStore';
-import TrackPlayer from 'react-native-track-player';
+import {
+  getFullVersionString,
+  getPreviousVersion,
+  hasAppBeenUpdated,
+  saveCurrentVersion,
+} from "@/lib/appVersion";
+import { logger } from "@/lib/logger";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
+import { playerService } from "@/services/PlayerService";
+import { progressService } from "@/services/ProgressService";
+import { useAppStore } from "@/stores/appStore";
+import TrackPlayer from "react-native-track-player";
 
-const log = logger.forTag('App');
+const log = logger.forTag("App");
 
+// Ensure that the coordinator is initialized on app startup
+const coordinator = getCoordinator();
+export { coordinator };
 /**
  * Initialize all singleton services
  *
@@ -31,17 +41,17 @@ const log = logger.forTag('App');
  */
 export async function initializeApp(): Promise<void> {
   // Use console.log for this initial message since logger isn't initialized yet
-  console.log('[App] Starting application initialization...');
+  console.log("[App] Starting application initialization...");
 
   try {
     // In development mode, log that we're handling hot-reload
     if (__DEV__) {
-      console.log('[App] Development mode: handling potential hot-reload scenario');
+      console.log("[App] Development mode: handling potential hot-reload scenario");
     }
 
     // Initialize logger first to load persisted settings (disabled tags)
     await logger.initialize();
-    log.info('Logger initialized and settings loaded');
+    log.info("Logger initialized and settings loaded");
 
     // Initialize logger slice and subscribe to count updates
     const loggerSlice = useAppStore.getState().logger;
@@ -62,7 +72,9 @@ export async function initializeApp(): Promise<void> {
       const currentVersion = getFullVersionString();
 
       if (previousVersion) {
-        log.info(`App updated from ${previousVersion.version} (${previousVersion.buildNumber}) to ${currentVersion}`);
+        log.info(
+          `App updated from ${previousVersion.version} (${previousVersion.buildNumber}) to ${currentVersion}`
+        );
       } else {
         log.info(`First run - version ${currentVersion}`);
       }
@@ -81,12 +93,15 @@ export async function initializeApp(): Promise<void> {
 
     // Restore persisted player state on cold boot
     try {
+      // Notify coordinator that app is starting state restoration
+      dispatchPlayerEvent({ type: "APP_FOREGROUNDED" });
+
       await useAppStore.getState().restorePersistedState();
-      log.info('Player state restored from persistence');
+      log.info("Player state restored from persistence");
 
       // Rehydrate ProgressService session from database (explicit call, no longer in constructor)
       await progressService.rehydrateActiveSession();
-      log.info('ProgressService session rehydrated');
+      log.info("ProgressService session rehydrated");
 
       // Restore PlayerService state from ProgressService session
       await playerService.restorePlayerServiceFromSession();
@@ -94,7 +109,7 @@ export async function initializeApp(): Promise<void> {
       // Reconcile TrackPlayer state with JS state
       await playerService.reconcileTrackPlayerState();
     } catch (error) {
-      log.error('Failed to restore persisted player state', error as Error);
+      log.error("Failed to restore persisted player state", error as Error);
       // Don't throw - continue initialization even if state restoration fails
     }
 
@@ -102,9 +117,9 @@ export async function initializeApp(): Promise<void> {
     // await downloadService.initialize();
     // await otherService.initialize();
 
-    log.info('Application initialization completed successfully');
+    log.info("Application initialization completed successfully");
   } catch (error) {
-    log.error('Failed to initialize application', error as Error);
+    log.error("Failed to initialize application", error as Error);
     throw error;
   }
 }
@@ -115,16 +130,16 @@ export async function initializeApp(): Promise<void> {
  */
 async function handleAppUpdate(): Promise<void> {
   try {
-    log.info('Handling app update...');
+    log.info("Handling app update...");
 
     // Note: Module cache clearing (require.cache) is not available in React Native
     // React Native handles module hot-reloading differently than Node.js
     // Any update-specific logic can go here
     // For example: database migrations, cache cleanup, etc.
 
-    log.info('App update handling complete');
+    log.info("App update handling complete");
   } catch (error) {
-    log.error('Error handling app update', error as Error);
+    log.error("Error handling app update", error as Error);
     // Don't throw - we want the app to continue even if update handling fails
   }
 }
@@ -137,22 +152,22 @@ async function handleAppUpdate(): Promise<void> {
  */
 async function initializeTrackPlayer(): Promise<void> {
   try {
-    log.info('Initializing React Native Track Player...');
+    log.info("Initializing React Native Track Player...");
 
     // Register the playback service for background audio
     // This is safe to call multiple times
-    TrackPlayer.registerPlaybackService(() => require('@/services/PlayerBackgroundService'));
+    TrackPlayer.registerPlaybackService(() => require("@/services/PlayerBackgroundService"));
 
     // Initialize the player service singleton
     await playerService.initialize();
 
-    log.info('React Native Track Player initialized successfully');
+    log.info("React Native Track Player initialized successfully");
   } catch (error) {
-    log.error('Failed to initialize React Native Track Player', error as Error);
+    log.error("Failed to initialize React Native Track Player", error as Error);
 
     // In development mode, don't throw the error to prevent app crashes during hot-reload
     if (__DEV__) {
-      log.warn('Continuing despite track player initialization error (development mode)');
+      log.warn("Continuing despite track player initialization error (development mode)");
       return;
     }
 
@@ -163,8 +178,8 @@ async function initializeTrackPlayer(): Promise<void> {
 /**
  * Re-export commonly used services for convenience
  */
-export { playerService } from '@/services/PlayerService';
-export { progressService as unifiedProgressService } from '@/services/ProgressService';
+export { playerService } from "@/services/PlayerService";
+export { progressService as unifiedProgressService } from "@/services/ProgressService";
 
 // Future service exports will go here:
 // export { downloadService } from '@/services/DownloadService';

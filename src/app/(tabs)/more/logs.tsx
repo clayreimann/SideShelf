@@ -10,10 +10,8 @@ import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAppStore } from "@/stores/appStore";
 import { Ionicons } from "@expo/vector-icons";
-import * as Clipboard from "expo-clipboard";
-import { File, Paths } from "expo-file-system";
+import { copyToClipboard, exportAsTextFile } from "@/lib/exportUtils";
 import { Stack, router } from "expo-router";
-import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -409,60 +407,54 @@ export default function LogsScreen() {
   }, []);
 
   const handleExportToClipboard = useCallback(() => {
-    try {
-      const exportText = filteredLogs
-        .map((logEntry) => {
-          const timestamp =
-            logEntry.timestamp instanceof Date
-              ? logEntry.timestamp.toISOString()
-              : new Date(logEntry.timestamp).toISOString();
-          return `[${timestamp}] [${logEntry.level.toUpperCase()}] [${
-            logEntry.tag
-          }] ${logEntry.message}`;
-        })
-        .join("\n");
+    const exportText = filteredLogs
+      .map((logEntry) => {
+        const timestamp =
+          logEntry.timestamp instanceof Date
+            ? logEntry.timestamp.toISOString()
+            : new Date(logEntry.timestamp).toISOString();
+        return `[${timestamp}] [${logEntry.level.toUpperCase()}] [${
+          logEntry.tag
+        }] ${logEntry.message}`;
+      })
+      .join("\n");
 
-      Clipboard.setStringAsync(exportText);
-      Alert.alert(translate("common.success"), translate("logs.alerts.copySuccess"));
-    } catch (error) {
-      log.error("Failed to export logs to clipboard", error as Error);
-      Alert.alert(translate("common.error"), translate("logs.alerts.copyFailed"));
-    }
+    copyToClipboard(exportText, {
+      onSuccess: () => {
+        Alert.alert(translate("common.success"), translate("logs.alerts.copySuccess"));
+      },
+      onError: (error) => {
+        log.error("Failed to export logs to clipboard", error);
+        Alert.alert(translate("common.error"), translate("logs.alerts.copyFailed"));
+      },
+    });
   }, [filteredLogs]);
 
   const handleExportToFile = useCallback(async () => {
-    try {
-      const exportText = filteredLogs
-        .map((logEntry) => {
-          const timestamp =
-            logEntry.timestamp instanceof Date
-              ? logEntry.timestamp.toISOString()
-              : new Date(logEntry.timestamp).toISOString();
-          return `[${timestamp}] [${logEntry.level.toUpperCase()}] [${
-            logEntry.tag
-          }] ${logEntry.message}`;
-        })
-        .join("\n");
+    const exportText = filteredLogs
+      .map((logEntry) => {
+        const timestamp =
+          logEntry.timestamp instanceof Date
+            ? logEntry.timestamp.toISOString()
+            : new Date(logEntry.timestamp).toISOString();
+        return `[${timestamp}] [${logEntry.level.toUpperCase()}] [${
+          logEntry.tag
+        }] ${logEntry.message}`;
+      })
+      .join("\n");
 
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `abs-logs-${timestamp}.txt`;
-      const file = new File(Paths.cache, filename);
-
-      await file.write(exportText);
-
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (isAvailable) {
-        await Sharing.shareAsync(file.uri, {
-          mimeType: "text/plain",
-          dialogTitle: translate("logs.actions.shareFile"),
-        });
-      } else {
-        Alert.alert(translate("common.error"), translate("logs.alerts.shareNotAvailable"));
-      }
-    } catch (error) {
-      log.error("Failed to export logs to file", error as Error);
-      Alert.alert(translate("common.error"), translate("logs.alerts.shareFailed"));
-    }
+    await exportAsTextFile(exportText, {
+      filename: "abs-logs",
+      dialogTitle: translate("logs.actions.shareFile"),
+      onError: (error) => {
+        log.error("Failed to export logs to file", error);
+        if (error.message.includes("not available")) {
+          Alert.alert(translate("common.error"), translate("logs.alerts.shareNotAvailable"));
+        } else {
+          Alert.alert(translate("common.error"), translate("logs.alerts.shareFailed"));
+        }
+      },
+    });
   }, [filteredLogs]);
 
   const scrollToBottom = useCallback(() => {

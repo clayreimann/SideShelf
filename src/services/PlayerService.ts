@@ -26,6 +26,7 @@ import { logger } from "@/lib/logger";
 import { applySmartRewind } from "@/lib/smartRewind";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { progressService } from "@/services/ProgressService";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
 import type { PlayerTrack } from "@/types/player";
@@ -203,6 +204,13 @@ export class PlayerService {
    */
   async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
     try {
+      // Phase 1: Notify coordinator (observer mode - doesn't affect behavior)
+      // Phase 1: Dispatch to event bus (prevents circular dependencies)
+      dispatchPlayerEvent({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId, episodeId },
+      });
+
       diagLog.info(`playTrack called for libraryItemId: ${libraryItemId}`);
       // Diagnostic: log current track, position, playing state before loading
       await this.printDebugInfo("playTrack::init");
@@ -390,6 +398,9 @@ export class PlayerService {
    * Pause playback
    */
   async pause(): Promise<void> {
+    // Phase 1: Dispatch to event bus
+    dispatchPlayerEvent({ type: "PAUSE" });
+
     const store = useAppStore.getState();
     const pauseTime = Date.now();
     store._setLastPauseTime(pauseTime);
@@ -401,6 +412,9 @@ export class PlayerService {
    * Resume playback with optional smart rewind
    */
   async play(): Promise<void> {
+    // Phase 1: Dispatch to event bus
+    dispatchPlayerEvent({ type: "PLAY" });
+
     const prepared = await this.rebuildCurrentTrackIfNeeded();
     if (!prepared) {
       log.warn("Playback request ignored: no track available after restoration");
@@ -492,6 +506,12 @@ export class PlayerService {
     const store = useAppStore.getState();
     store._setTrackLoading(true);
 
+    // Dispatch RELOAD_QUEUE event to state machine
+    dispatchPlayerEvent({
+      type: "RELOAD_QUEUE",
+      payload: { libraryItemId: track.libraryItemId },
+    });
+
     let success = false;
 
     try {
@@ -550,6 +570,12 @@ export class PlayerService {
         await TrackPlayer.setVolume(updatedStore.player.volume);
         log.info(`Applied stored volume: ${updatedStore.player.volume}`);
       }
+
+      // Dispatch QUEUE_RELOADED event to state machine
+      dispatchPlayerEvent({
+        type: "QUEUE_RELOADED",
+        payload: { position: resumeInfo.position },
+      });
 
       success = true;
       return true;
@@ -712,6 +738,9 @@ export class PlayerService {
    * Stop playback and clear queue
    */
   async stop(): Promise<void> {
+    // Phase 1: Dispatch to event bus
+    dispatchPlayerEvent({ type: "STOP" });
+
     // PlayerBackgroundService will handle ending the session
     await TrackPlayer.stop();
     await TrackPlayer.reset();

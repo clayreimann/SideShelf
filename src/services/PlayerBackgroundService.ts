@@ -11,6 +11,7 @@ import { logger } from "@/lib/logger";
 import { getCurrentUser } from "@/utils/userHelpers";
 import { applySmartRewind } from "@/lib/smartRewind";
 import { progressService } from "@/services/ProgressService";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { useAppStore } from "@/stores/appStore";
 import { AppState } from "react-native";
 import TrackPlayer, {
@@ -338,6 +339,12 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
  */
 async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<void> {
   try {
+    // Phase 1: Dispatch to event bus
+    dispatchPlayerEvent({
+      type: 'NATIVE_STATE_CHANGED',
+      payload: { state: event.state },
+    });
+
     // Clear loading state when playback actually starts
     if (event.state === State.Playing) {
       const store = useAppStore.getState();
@@ -388,6 +395,12 @@ async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<vo
  */
 async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent): Promise<void> {
   try {
+    // Phase 1: Dispatch to event bus
+    dispatchPlayerEvent({
+      type: 'NATIVE_PROGRESS_UPDATED',
+      payload: { position: event.position, duration: event.duration, buffered: event.buffered },
+    });
+
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
     const ids = await getUserIdAndLibraryItemId();
@@ -634,6 +647,13 @@ async function handleActiveTrackChanged(
     if (!currentActiveTrack || currentActiveTrack.id === lastActiveTrackId.value) {
       return;
     }
+
+    // Phase 1: Dispatch to event bus
+    // Note: We pass null for track since we don't have PlayerTrack here
+    dispatchPlayerEvent({
+      type: 'NATIVE_TRACK_CHANGED',
+      payload: { track: null },
+    });
 
     lastActiveTrackId.value = currentActiveTrack.id;
 

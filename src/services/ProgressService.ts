@@ -42,6 +42,7 @@ import {
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import NetInfo from "@react-native-community/netinfo";
 
 // Create cached sublogger for this service
@@ -420,6 +421,12 @@ export class ProgressService {
 
       // Session is now in DB - no need to store in instance
 
+      // Notify coordinator that a session has been created
+      dispatchPlayerEvent({
+        type: "SESSION_CREATED",
+        payload: { sessionId },
+      });
+
       // If we have an existing server session ID (from streaming), use it
       if (existingServerSessionId) {
         log.info(`Using existing server session ID: ${existingServerSessionId}`);
@@ -465,6 +472,12 @@ export class ProgressService {
 
         // Final sync to server
         await this.syncSessionToServer(userId, libraryItemId, session.id);
+
+        // Notify coordinator that session has ended
+        dispatchPlayerEvent({
+          type: "SESSION_ENDED",
+          payload: { sessionId: session.id },
+        });
 
         log.info(`Ended session ${session.id} session=${session.id} item=${libraryItemId}`);
       } else {
@@ -630,6 +643,14 @@ export class ProgressService {
       // Update session progress in DB - this happens on EVERY progress update
       await updateSessionProgress(session.id, currentTime, playbackRate, volume);
 
+      // Notify coordinator of session update (throttled via 10s check to avoid spam)
+      if (Math.floor(currentTime) % 10 === 0) {
+        dispatchPlayerEvent({
+          type: "SESSION_UPDATED",
+          payload: { position: currentTime },
+        });
+      }
+
       // Diagnostic: log DB update every 10 seconds to verify updates are happening
       if (Math.floor(currentTime) % 10 === 0) {
         log.debug(
@@ -786,6 +807,9 @@ export class ProgressService {
     sessionId?: string
   ): Promise<void> {
     try {
+      // Notify coordinator that session sync is starting
+      dispatchPlayerEvent({ type: "SESSION_SYNC_STARTED" });
+
       // Check network connectivity
       const netInfo = await NetInfo.fetch();
       if (!netInfo.isConnected) {
@@ -819,11 +843,20 @@ export class ProgressService {
 
       // Use the existing syncSingleSession method
       await this.syncSingleSession(sessionData);
+
+      // Notify coordinator that session sync completed successfully
+      dispatchPlayerEvent({ type: "SESSION_SYNC_COMPLETED" });
     } catch (error) {
       const session = await getActiveSession(userId, libraryItemId);
       log.error(
         `Failed to sync session to server: ${(error as Error).message} session=${session?.id || "none"} item=${libraryItemId}`
       );
+
+      // Notify coordinator that session sync failed
+      dispatchPlayerEvent({
+        type: "SESSION_SYNC_FAILED",
+        payload: { error: error as Error },
+      });
     }
   }
 
