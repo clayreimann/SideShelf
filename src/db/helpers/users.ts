@@ -1,16 +1,20 @@
-import { db } from '@/db/client';
-import { users } from '@/db/schema/users';
-import type { ApiLoginResponse, ApiMeResponse, ApiUser } from '@/types/api';
-import { eq } from 'drizzle-orm';
+import { db } from "@/db/client";
+import { users } from "@/db/schema/users";
+import type { ApiLoginResponse, ApiMeResponse, ApiUser } from "@/types/api";
+import { eq } from "drizzle-orm";
 
 export type NewUserRow = typeof users.$inferInsert;
 export type UserRow = typeof users.$inferSelect;
 
 // Extracts minimal user fields needed for our users table from /me or /login responses
-export function marshalUserFromAuthResponse(data: ApiMeResponse | ApiLoginResponse): NewUserRow | null {
-  if (!data?.user?.id || !data.user.username) return null;
+export function marshalUserFromAuthResponse(
+  data: ApiMeResponse | ApiLoginResponse
+): NewUserRow | null {
+  // ApiLoginResponse has data.user, ApiMeResponse IS the user
+  const user = "user" in data ? data.user : data;
 
-  const user = data.user;
+  if (!user?.id || !user.username) return null;
+
   const perms = user.permissions;
 
   const row: NewUserRow = {
@@ -20,7 +24,7 @@ export function marshalUserFromAuthResponse(data: ApiMeResponse | ApiLoginRespon
     createdAt: user.createdAt ?? null,
     lastSeen: user.lastSeen ?? null,
     hideFromContinueListening: user.seriesHideFromContinueListening?.length
-      ? user.seriesHideFromContinueListening.join(',')
+      ? user.seriesHideFromContinueListening.join(",")
       : null,
     canDownload: perms?.download ?? null,
     canUpdate: perms?.update ?? null,
@@ -46,7 +50,7 @@ export function marshalUserFromUser(user: ApiUser): NewUserRow | null {
     createdAt: user.createdAt ?? null,
     lastSeen: user.lastSeen ?? null,
     hideFromContinueListening: user.seriesHideFromContinueListening?.length
-      ? user.seriesHideFromContinueListening.join(',')
+      ? user.seriesHideFromContinueListening.join(",")
       : null,
     canDownload: perms?.download ?? null,
     canUpdate: perms?.update ?? null,
@@ -61,17 +65,10 @@ export function marshalUserFromUser(user: ApiUser): NewUserRow | null {
 
 export async function upsertUser(row: NewUserRow | null): Promise<void> {
   if (!row) return;
-  await db
-    .insert(users)
-    .values(row)
-    .onConflictDoUpdate({ target: users.id, set: row });
+  await db.insert(users).values(row).onConflictDoUpdate({ target: users.id, set: row });
 }
 
 export async function getUserByUsername(username: string): Promise<UserRow | null> {
-  const result = await db
-    .select()
-    .from(users)
-    .where(eq(users.username, username))
-    .limit(1);
+  const result = await db.select().from(users).where(eq(users.username, username)).limit(1);
   return result[0] || null;
 }

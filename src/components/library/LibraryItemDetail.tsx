@@ -22,7 +22,13 @@ import { useAuth } from "@/providers/AuthProvider";
 import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
-import { useDownloads, useLibraryItemDetails, useNetwork, usePlayer, useUserProfile } from "@/stores";
+import {
+  useDownloads,
+  useLibraryItemDetails,
+  useNetwork,
+  usePlayer,
+  useUserProfile,
+} from "@/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
 import { Stack } from "expo-router";
@@ -36,7 +42,7 @@ interface LibraryItemDetailProps {
 
 export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItemDetailProps) {
   const { styles, colors } = useThemedStyles();
-  const { username, serverUrl, accessToken } = useAuth();
+  const { username } = useAuth();
   const { currentTrack, position } = usePlayer();
   const { serverReachable } = useNetwork();
   const floatingPlayerPadding = useFloatingPlayerPadding();
@@ -268,10 +274,27 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
   // Download handlers - use store actions
   const handleDownload = useCallback(async () => {
-    if (!item || !serverUrl || !accessToken || isDownloading) return;
+    console.log("[LibraryItemDetail] Download button clicked", {
+      hasItem: !!item,
+      itemId: item?.id,
+      isDownloading,
+    });
+
+    if (!item) {
+      console.warn("[LibraryItemDetail] Cannot download: no item");
+      return;
+    }
+
+    if (isDownloading) {
+      console.warn("[LibraryItemDetail] Cannot download: download already in progress");
+      return;
+    }
+
+    console.log("[LibraryItemDetail] Starting download for item:", item.id);
 
     try {
-      await startDownload(item.id, serverUrl, accessToken);
+      await startDownload(item.id);
+      console.log("[LibraryItemDetail] Download started successfully");
     } catch (error) {
       console.error("[LibraryItemDetail] Download failed:", error);
       Alert.alert(
@@ -280,7 +303,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         [{ text: translate("common.ok") }]
       );
     }
-  }, [item, serverUrl, accessToken, isDownloading, startDownload]);
+  }, [item, isDownloading, startDownload]);
 
   const handleDeleteDownload = useCallback(async () => {
     if (!item) return;

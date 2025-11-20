@@ -17,6 +17,7 @@ import {
   verifyFileExists,
 } from "@/lib/fileSystem";
 import { logger } from "@/lib/logger";
+import { apiClientService } from "@/services/ApiClientService";
 import type {
   DownloadConfig,
   DownloadInfo,
@@ -156,17 +157,33 @@ export class DownloadService {
    */
   public async startDownload(
     libraryItemId: string,
-    serverUrl: string,
-    token: string,
     onProgress?: DownloadProgressCallback,
     options?: { forceRedownload?: boolean }
   ): Promise<void> {
+    const serverUrl = apiClientService.getBaseUrl();
+    const token = apiClientService.getAccessToken();
+
+    log.info(
+      `startDownload called for ${libraryItemId} ${JSON.stringify({
+        hasServerUrl: !!serverUrl,
+        hasToken: !!token,
+        hasCallback: !!onProgress,
+        forceRedownload: options?.forceRedownload ?? false,
+      })}`
+    );
+
+    if (!serverUrl || !token) {
+      throw new Error("Server URL and access token are required for downloads");
+    }
+
     if (!this.isInitialized) {
+      log.info("Download service not initialized, initializing now...");
       await this.initialize();
     }
 
     // Check if already downloading
     if (this.isDownloadActive(libraryItemId)) {
+      log.warn(`Download already in progress for ${libraryItemId}, rejecting new download request`);
       throw new Error("Download already in progress for this item");
     }
 
@@ -237,8 +254,6 @@ export class DownloadService {
               filename: audioFile.filename,
               size: audioFile.size || undefined,
             },
-            serverUrl,
-            token,
             (taskInfo, bytesDownloaded, bytesTotal) => {
               updateProgress(taskInfo.filename, bytesDownloaded, bytesTotal);
             },
@@ -279,11 +294,8 @@ export class DownloadService {
             });
 
             task.error((error) => {
-              log.error(`Error downloading ${audioFile.filename}:`, error as Error);
-              const errorMessage =
-                typeof error === "object" && error && "error" in error
-                  ? String(error.error)
-                  : String(error);
+              const errorMessage = error.error;
+              log.error(`Error downloading ${audioFile.filename}: ${errorMessage}`);
               reject(new Error(`Failed to download ${audioFile.filename}: ${errorMessage}`));
             });
           });
@@ -389,24 +401,48 @@ export class DownloadService {
    * Check if a library item is fully downloaded
    */
   public async isLibraryItemDownloaded(libraryItemId: string): Promise<boolean> {
+    log.info(`Checking download status for library item ${libraryItemId}...`);
+
     try {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
-      if (!metadata) return false;
+      if (!metadata) {
+        log.info(`No metadata found for ${libraryItemId} - not downloaded`);
+        return false;
+      }
 
       const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-      if (audioFiles.length === 0) return false;
+      if (audioFiles.length === 0) {
+        log.info(`No audio files found for ${libraryItemId} - not downloaded`);
+        return false;
+      }
+
+      log.info(
+        `Found ${audioFiles.length} audio files for ${libraryItemId}, verifying download status...`
+      );
 
       // Check if all audio files are marked as downloaded AND actually exist on disk
-      const downloadCheckPromises = audioFiles.map(async (file) => {
+      const downloadCheckPromises = audioFiles.map(async (file, index) => {
+        log.info(`Checking file ${index + 1}/${audioFiles.length}: ${file.filename}`);
+
         if (!file.downloadInfo?.isDownloaded) {
+          log.info(`  ✗ File ${file.filename} not marked as downloaded in database`);
           return false;
         }
+
+        log.info(
+          `  ✓ File ${file.filename} marked as downloaded at: ${file.downloadInfo.downloadPath}`
+        );
 
         // Verify the file actually exists on disk
         const fileExists = await verifyFileExists(file.downloadInfo.downloadPath);
         if (!fileExists) {
-          log.warn(`File marked as downloaded but missing: ${file.downloadInfo.downloadPath}`);
+          log.warn(
+            `  ✗ File ${file.filename} marked as downloaded but MISSING from disk at: ${file.downloadInfo.downloadPath}`
+          );
+          log.warn(`    This may indicate iOS cleaned up the file to free storage space`);
           // TODO: Could mark as not downloaded in database here
+        } else {
+          log.info(`  ✓ File ${file.filename} verified on disk`);
         }
         return fileExists;
       });
@@ -414,10 +450,15 @@ export class DownloadService {
       const downloadResults = await Promise.all(downloadCheckPromises);
       const isDownloaded = downloadResults.every((result) => result);
 
-      log.info(`Checking if library item is downloaded for ${libraryItemId}: ${isDownloaded}`);
+      const downloadedCount = downloadResults.filter((r) => r).length;
+      log.info(
+        `Download verification complete for ${libraryItemId}: ${downloadedCount}/${audioFiles.length} files present on disk`
+      );
+      log.info(`Final result: ${isDownloaded ? "FULLY DOWNLOADED" : "NOT FULLY DOWNLOADED"}`);
+
       return isDownloaded;
     } catch (error) {
-      log.error(`Error checking download status for ${libraryItemId}:`, error);
+      log.error(`Error checking download status for ${libraryItemId}:`, error as Error);
       return false;
     }
   }
@@ -498,11 +539,15 @@ export class DownloadService {
   private async downloadAudioFile(
     libraryItemId: string,
     audioFile: { id: string; ino: string; filename: string; size?: number },
-    serverUrl: string,
-    token: string,
     onProgress?: (taskInfo: DownloadTaskInfo, bytesDownloaded: number, bytesTotal: number) => void,
     forceRedownload?: boolean
   ): Promise<DownloadTask> {
+    const serverUrl = apiClientService.getBaseUrl();
+    const token = apiClientService.getAccessToken();
+
+    if (!serverUrl || !token) {
+      throw new Error("Server URL and access token are required for downloads");
+    }
     await ensureDownloadsDirectory(libraryItemId);
     const destPath = getDownloadPath(libraryItemId, audioFile.filename);
 
@@ -535,10 +580,10 @@ export class DownloadService {
       },
     })
       .begin((data) => {
-        log.info("Download begin:", data);
+        log.info(`Download begin: ${JSON.stringify(data)}`);
       })
       .progress((data) => {
-        log.info("Download progress:", data);
+        log.info(`Download progress: ${JSON.stringify(data)}`);
         const progressPercent = data.bytesDownloaded / data.bytesTotal;
 
         if (progressPercent >= 0.95) {
@@ -548,10 +593,12 @@ export class DownloadService {
         }
       })
       .done((data) => {
-        log.info(`*** DOWNLOAD DONE EVENT FIRED *** ${audioFile.filename}:`, data);
+        log.info(
+          `*** DOWNLOAD DONE EVENT FIRED *** ${audioFile.filename}: ${JSON.stringify(data)}`
+        );
       })
       .error((data) => {
-        log.info(`*** DOWNLOAD ERROR EVENT FIRED ***:`, data);
+        log.info(`*** DOWNLOAD ERROR EVENT FIRED ***: ${JSON.stringify(data)}`);
       });
 
     const taskInfo: DownloadTaskInfo = {
@@ -563,7 +610,7 @@ export class DownloadService {
 
     // Set up progress callback
     task.progress((data) => {
-      log.info("Download progress:", data);
+      log.info(`Download progress: ${JSON.stringify(data)}`);
       onProgress?.(taskInfo, data.bytesDownloaded, data.bytesTotal);
     });
 
