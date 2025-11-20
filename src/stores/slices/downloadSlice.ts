@@ -45,7 +45,7 @@ export interface DownloadSliceActions {
   /** Initialize the slice by checking download states */
   initializeDownloads: () => Promise<void>;
   /** Start a download for an item */
-  startDownload: (itemId: string, serverUrl: string, accessToken: string) => Promise<void>;
+  startDownload: (itemId: string) => Promise<void>;
   /** Update download progress for an item */
   updateDownloadProgress: (itemId: string, progress: DownloadProgress) => void;
   /** Mark download as completed */
@@ -197,15 +197,12 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
   /**
    * Start a download for an item
    */
-  startDownload: async (itemId: string, serverUrl: string, accessToken: string) => {
-    log.info(`[DownloadSlice] Starting download for ${itemId}...`, {
-      hasServerUrl: !!serverUrl,
-      hasAccessToken: !!accessToken,
-    });
+  startDownload: async (itemId: string) => {
+    log.info(`[DownloadSlice] Starting download for ${itemId}...`);
 
     try {
       // Start the download with a progress callback that handles all states
-      await downloadService.startDownload(itemId, serverUrl, accessToken, (progress) => {
+      await downloadService.startDownload(itemId, (progress) => {
         log.info(`[DownloadSlice] Progress update for ${itemId}:`, {
           status: progress.status,
           totalProgress: progress.totalProgress,

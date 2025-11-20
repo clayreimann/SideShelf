@@ -17,6 +17,7 @@ import {
   verifyFileExists,
 } from "@/lib/fileSystem";
 import { logger } from "@/lib/logger";
+import { apiClientService } from "@/services/ApiClientService";
 import type {
   DownloadConfig,
   DownloadInfo,
@@ -156,17 +157,22 @@ export class DownloadService {
    */
   public async startDownload(
     libraryItemId: string,
-    serverUrl: string,
-    token: string,
     onProgress?: DownloadProgressCallback,
     options?: { forceRedownload?: boolean }
   ): Promise<void> {
+    const serverUrl = apiClientService.getBaseUrl();
+    const token = apiClientService.getAccessToken();
+
     log.info(`startDownload called for ${libraryItemId}`, {
       hasServerUrl: !!serverUrl,
       hasToken: !!token,
       hasCallback: !!onProgress,
       forceRedownload: options?.forceRedownload ?? false,
     });
+
+    if (!serverUrl || !token) {
+      throw new Error("Server URL and access token are required for downloads");
+    }
 
     if (!this.isInitialized) {
       log.info("Download service not initialized, initializing now...");
@@ -246,8 +252,6 @@ export class DownloadService {
               filename: audioFile.filename,
               size: audioFile.size || undefined,
             },
-            serverUrl,
-            token,
             (taskInfo, bytesDownloaded, bytesTotal) => {
               updateProgress(taskInfo.filename, bytesDownloaded, bytesTotal);
             },
@@ -536,11 +540,15 @@ export class DownloadService {
   private async downloadAudioFile(
     libraryItemId: string,
     audioFile: { id: string; ino: string; filename: string; size?: number },
-    serverUrl: string,
-    token: string,
     onProgress?: (taskInfo: DownloadTaskInfo, bytesDownloaded: number, bytesTotal: number) => void,
     forceRedownload?: boolean
   ): Promise<DownloadTask> {
+    const serverUrl = apiClientService.getBaseUrl();
+    const token = apiClientService.getAccessToken();
+
+    if (!serverUrl || !token) {
+      throw new Error("Server URL and access token are required for downloads");
+    }
     await ensureDownloadsDirectory(libraryItemId);
     const destPath = getDownloadPath(libraryItemId, audioFile.filename);
 

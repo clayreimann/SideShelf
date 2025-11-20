@@ -42,7 +42,7 @@ interface LibraryItemDetailProps {
 
 export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItemDetailProps) {
   const { styles, colors } = useThemedStyles();
-  const { username, serverUrl, accessToken } = useAuth();
+  const { username } = useAuth();
   const { currentTrack, position } = usePlayer();
   const { serverReachable } = useNetwork();
   const floatingPlayerPadding = useFloatingPlayerPadding();
@@ -277,23 +277,11 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     console.log("[LibraryItemDetail] Download button clicked", {
       hasItem: !!item,
       itemId: item?.id,
-      hasServerUrl: !!serverUrl,
-      hasAccessToken: !!accessToken,
       isDownloading,
     });
 
     if (!item) {
       console.warn("[LibraryItemDetail] Cannot download: no item");
-      return;
-    }
-
-    if (!serverUrl) {
-      console.warn("[LibraryItemDetail] Cannot download: no server URL");
-      return;
-    }
-
-    if (!accessToken) {
-      console.warn("[LibraryItemDetail] Cannot download: no access token");
       return;
     }
 
@@ -305,7 +293,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     console.log("[LibraryItemDetail] Starting download for item:", item.id);
 
     try {
-      await startDownload(item.id, serverUrl, accessToken);
+      await startDownload(item.id);
       console.log("[LibraryItemDetail] Download started successfully");
     } catch (error) {
       console.error("[LibraryItemDetail] Download failed:", error);
@@ -315,7 +303,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         [{ text: translate("common.ok") }]
       );
     }
-  }, [item, serverUrl, accessToken, isDownloading, startDownload]);
+  }, [item, isDownloading, startDownload]);
 
   const handleDeleteDownload = useCallback(async () => {
     if (!item) return;

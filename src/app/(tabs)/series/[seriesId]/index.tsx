@@ -22,7 +22,7 @@ export default function SeriesDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ seriesId?: string | string[] }>();
   const seriesId = Array.isArray(params.seriesId) ? params.seriesId[0] : params.seriesId;
-  const { username, serverUrl, isAuthenticated } = useAuth();
+  const { username, isAuthenticated } = useAuth();
   const { startDownload, isItemDownloaded } = useDownloads();
   const { serverReachable } = useNetwork();
 
@@ -74,7 +74,7 @@ export default function SeriesDetailScreen() {
 
   // Handler for downloading all unfinished items in the series
   const handleDownloadAllUnfinished = useCallback(async () => {
-    if (!selectedSeries || !serverUrl || !isAuthenticated || isDownloadingAll) return;
+    if (!selectedSeries || !isAuthenticated || isDownloadingAll) return;
 
     // Check if server is reachable
     if (serverReachable === false) {
@@ -116,7 +116,7 @@ export default function SeriesDetailScreen() {
               // Start downloads sequentially to avoid overwhelming the system
               for (const item of unfinishedItems) {
                 try {
-                  await startDownload(item.libraryItemId, serverUrl, accessToken);
+                  await startDownload(item.libraryItemId);
                 } catch (error) {
                   console.error(`[SeriesDetailScreen] Failed to download ${item.title}:`, error);
                   // Continue with other downloads even if one fails
@@ -142,7 +142,6 @@ export default function SeriesDetailScreen() {
     );
   }, [
     selectedSeries,
-    serverUrl,
     isAuthenticated,
     isDownloadingAll,
     serverReachable,
