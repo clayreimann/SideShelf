@@ -163,12 +163,14 @@ export class DownloadService {
     const serverUrl = apiClientService.getBaseUrl();
     const token = apiClientService.getAccessToken();
 
-    log.info(`startDownload called for ${libraryItemId}`, {
-      hasServerUrl: !!serverUrl,
-      hasToken: !!token,
-      hasCallback: !!onProgress,
-      forceRedownload: options?.forceRedownload ?? false,
-    });
+    log.info(
+      `startDownload called for ${libraryItemId} ${JSON.stringify({
+        hasServerUrl: !!serverUrl,
+        hasToken: !!token,
+        hasCallback: !!onProgress,
+        forceRedownload: options?.forceRedownload ?? false,
+      })}`
+    );
 
     if (!serverUrl || !token) {
       throw new Error("Server URL and access token are required for downloads");
@@ -292,11 +294,8 @@ export class DownloadService {
             });
 
             task.error((error) => {
-              log.error(`Error downloading ${audioFile.filename}:`, error as Error);
-              const errorMessage =
-                typeof error === "object" && error && "error" in error
-                  ? String(error.error)
-                  : String(error);
+              const errorMessage = error.error;
+              log.error(`Error downloading ${audioFile.filename}: ${errorMessage}`);
               reject(new Error(`Failed to download ${audioFile.filename}: ${errorMessage}`));
             });
           });
@@ -459,7 +458,7 @@ export class DownloadService {
 
       return isDownloaded;
     } catch (error) {
-      log.error(`Error checking download status for ${libraryItemId}:`, error);
+      log.error(`Error checking download status for ${libraryItemId}:`, error as Error);
       return false;
     }
   }
@@ -581,10 +580,10 @@ export class DownloadService {
       },
     })
       .begin((data) => {
-        log.info("Download begin:", data);
+        log.info(`Download begin: ${JSON.stringify(data)}`);
       })
       .progress((data) => {
-        log.info("Download progress:", data);
+        log.info(`Download progress: ${JSON.stringify(data)}`);
         const progressPercent = data.bytesDownloaded / data.bytesTotal;
 
         if (progressPercent >= 0.95) {
@@ -594,10 +593,12 @@ export class DownloadService {
         }
       })
       .done((data) => {
-        log.info(`*** DOWNLOAD DONE EVENT FIRED *** ${audioFile.filename}:`, data);
+        log.info(
+          `*** DOWNLOAD DONE EVENT FIRED *** ${audioFile.filename}: ${JSON.stringify(data)}`
+        );
       })
       .error((data) => {
-        log.info(`*** DOWNLOAD ERROR EVENT FIRED ***:`, data);
+        log.info(`*** DOWNLOAD ERROR EVENT FIRED ***: ${JSON.stringify(data)}`);
       });
 
     const taskInfo: DownloadTaskInfo = {
@@ -609,7 +610,7 @@ export class DownloadService {
 
     // Set up progress callback
     task.progress((data) => {
-      log.info("Download progress:", data);
+      log.info(`Download progress: ${JSON.stringify(data)}`);
       onProgress?.(taskInfo, data.bytesDownloaded, data.bytesTotal);
     });
 
