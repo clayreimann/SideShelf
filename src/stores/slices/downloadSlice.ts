@@ -129,13 +129,22 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
       // Verify each item is fully downloaded (check if ALL audio files are downloaded)
       // Do this in batches to avoid blocking
       const downloadedItemIds = new Set<string>();
+      const partiallyDownloadedItems: string[] = [];
       const batchSize = 10;
 
       for (let i = 0; i < candidateItemIds.length; i += batchSize) {
         const batch = candidateItemIds.slice(i, i + batchSize);
+        log.info(
+          `Verifying batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(candidateItemIds.length / batchSize)}...`
+        );
+
         const checkPromises = batch.map(async (itemId) => {
           try {
             const isDownloaded = await downloadService.isLibraryItemDownloaded(itemId);
+            if (!isDownloaded && candidateItemIds.includes(itemId)) {
+              // Item has some downloaded files but not all
+              partiallyDownloadedItems.push(itemId);
+            }
             return isDownloaded ? itemId : null;
           } catch (error) {
             log.error(`Error checking download status for ${itemId}`, error as Error);
@@ -152,6 +161,12 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
       }
 
       log.info(`Verified ${downloadedItemIds.size} fully downloaded items`);
+      if (partiallyDownloadedItems.length > 0) {
+        log.warn(
+          `Found ${partiallyDownloadedItems.length} partially downloaded items (some files missing from disk):`,
+          partiallyDownloadedItems
+        );
+      }
 
       set((state: DownloadSlice) => ({
         ...state,
@@ -183,25 +198,37 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
    * Start a download for an item
    */
   startDownload: async (itemId: string, serverUrl: string, accessToken: string) => {
-    log.info(`Starting download for ${itemId}...`);
+    log.info(`[DownloadSlice] Starting download for ${itemId}...`, {
+      hasServerUrl: !!serverUrl,
+      hasAccessToken: !!accessToken,
+    });
 
     try {
       // Start the download with a progress callback that handles all states
       await downloadService.startDownload(itemId, serverUrl, accessToken, (progress) => {
+        log.info(`[DownloadSlice] Progress update for ${itemId}:`, {
+          status: progress.status,
+          totalProgress: progress.totalProgress,
+          downloadedFiles: progress.downloadedFiles,
+          totalFiles: progress.totalFiles,
+        });
+
         // Update progress in store
         get().updateDownloadProgress(itemId, progress);
 
         // Handle completion
         if (progress.status === "completed") {
+          log.info(`[DownloadSlice] Download completed for ${itemId}`);
           get().completeDownload(itemId);
         } else if (progress.status === "error" || progress.status === "cancelled") {
+          log.warn(`[DownloadSlice] Download ${progress.status} for ${itemId}`);
           get().removeActiveDownload(itemId);
         }
       });
 
-      log.info(`Download started for ${itemId}`);
+      log.info(`[DownloadSlice] Download started successfully for ${itemId}`);
     } catch (error) {
-      log.error(`Failed to start download for ${itemId}`, error as Error);
+      log.error(`[DownloadSlice] Failed to start download for ${itemId}`, error as Error);
       throw error;
     }
   },

@@ -161,12 +161,21 @@ export class DownloadService {
     onProgress?: DownloadProgressCallback,
     options?: { forceRedownload?: boolean }
   ): Promise<void> {
+    log.info(`startDownload called for ${libraryItemId}`, {
+      hasServerUrl: !!serverUrl,
+      hasToken: !!token,
+      hasCallback: !!onProgress,
+      forceRedownload: options?.forceRedownload ?? false,
+    });
+
     if (!this.isInitialized) {
+      log.info("Download service not initialized, initializing now...");
       await this.initialize();
     }
 
     // Check if already downloading
     if (this.isDownloadActive(libraryItemId)) {
+      log.warn(`Download already in progress for ${libraryItemId}, rejecting new download request`);
       throw new Error("Download already in progress for this item");
     }
 
@@ -389,24 +398,48 @@ export class DownloadService {
    * Check if a library item is fully downloaded
    */
   public async isLibraryItemDownloaded(libraryItemId: string): Promise<boolean> {
+    log.info(`Checking download status for library item ${libraryItemId}...`);
+
     try {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
-      if (!metadata) return false;
+      if (!metadata) {
+        log.info(`No metadata found for ${libraryItemId} - not downloaded`);
+        return false;
+      }
 
       const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-      if (audioFiles.length === 0) return false;
+      if (audioFiles.length === 0) {
+        log.info(`No audio files found for ${libraryItemId} - not downloaded`);
+        return false;
+      }
+
+      log.info(
+        `Found ${audioFiles.length} audio files for ${libraryItemId}, verifying download status...`
+      );
 
       // Check if all audio files are marked as downloaded AND actually exist on disk
-      const downloadCheckPromises = audioFiles.map(async (file) => {
+      const downloadCheckPromises = audioFiles.map(async (file, index) => {
+        log.info(`Checking file ${index + 1}/${audioFiles.length}: ${file.filename}`);
+
         if (!file.downloadInfo?.isDownloaded) {
+          log.info(`  ✗ File ${file.filename} not marked as downloaded in database`);
           return false;
         }
+
+        log.info(
+          `  ✓ File ${file.filename} marked as downloaded at: ${file.downloadInfo.downloadPath}`
+        );
 
         // Verify the file actually exists on disk
         const fileExists = await verifyFileExists(file.downloadInfo.downloadPath);
         if (!fileExists) {
-          log.warn(`File marked as downloaded but missing: ${file.downloadInfo.downloadPath}`);
+          log.warn(
+            `  ✗ File ${file.filename} marked as downloaded but MISSING from disk at: ${file.downloadInfo.downloadPath}`
+          );
+          log.warn(`    This may indicate iOS cleaned up the file to free storage space`);
           // TODO: Could mark as not downloaded in database here
+        } else {
+          log.info(`  ✓ File ${file.filename} verified on disk`);
         }
         return fileExists;
       });
@@ -414,7 +447,12 @@ export class DownloadService {
       const downloadResults = await Promise.all(downloadCheckPromises);
       const isDownloaded = downloadResults.every((result) => result);
 
-      log.info(`Checking if library item is downloaded for ${libraryItemId}: ${isDownloaded}`);
+      const downloadedCount = downloadResults.filter((r) => r).length;
+      log.info(
+        `Download verification complete for ${libraryItemId}: ${downloadedCount}/${audioFiles.length} files present on disk`
+      );
+      log.info(`Final result: ${isDownloaded ? "FULLY DOWNLOADED" : "NOT FULLY DOWNLOADED"}`);
+
       return isDownloaded;
     } catch (error) {
       log.error(`Error checking download status for ${libraryItemId}:`, error);
