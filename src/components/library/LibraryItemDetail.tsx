@@ -22,7 +22,13 @@ import { useAuth } from "@/providers/AuthProvider";
 import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
-import { useDownloads, useLibraryItemDetails, useNetwork, usePlayer, useUserProfile } from "@/stores";
+import {
+  useDownloads,
+  useLibraryItemDetails,
+  useNetwork,
+  usePlayer,
+  useUserProfile,
+} from "@/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
 import { Stack } from "expo-router";
@@ -268,10 +274,39 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
   // Download handlers - use store actions
   const handleDownload = useCallback(async () => {
-    if (!item || !serverUrl || !accessToken || isDownloading) return;
+    console.log("[LibraryItemDetail] Download button clicked", {
+      hasItem: !!item,
+      itemId: item?.id,
+      hasServerUrl: !!serverUrl,
+      hasAccessToken: !!accessToken,
+      isDownloading,
+    });
+
+    if (!item) {
+      console.warn("[LibraryItemDetail] Cannot download: no item");
+      return;
+    }
+
+    if (!serverUrl) {
+      console.warn("[LibraryItemDetail] Cannot download: no server URL");
+      return;
+    }
+
+    if (!accessToken) {
+      console.warn("[LibraryItemDetail] Cannot download: no access token");
+      return;
+    }
+
+    if (isDownloading) {
+      console.warn("[LibraryItemDetail] Cannot download: download already in progress");
+      return;
+    }
+
+    console.log("[LibraryItemDetail] Starting download for item:", item.id);
 
     try {
       await startDownload(item.id, serverUrl, accessToken);
+      console.log("[LibraryItemDetail] Download started successfully");
     } catch (error) {
       console.error("[LibraryItemDetail] Download failed:", error);
       Alert.alert(

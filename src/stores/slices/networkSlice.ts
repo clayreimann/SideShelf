@@ -139,14 +139,16 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
       }, SERVER_CHECK_INTERVAL);
 
       // Start periodic network status refresh (workaround for iOS simulator NetInfo issues)
-      networkRefreshInterval = setInterval(() => {
-        log.debug("Periodic network status refresh");
-        get()
-          .refreshNetworkStatus()
-          .catch((error) => {
-            log.warn(`Network status refresh failed: ${error}`);
-          });
-      }, NETWORK_STATUS_REFRESH_INTERVAL);
+      if (__DEV__) {
+        networkRefreshInterval = setInterval(() => {
+          log.debug("Periodic network status refresh");
+          get()
+            .refreshNetworkStatus()
+            .catch((error) => {
+              log.warn(`Network status refresh failed: ${error}`);
+            });
+        }, NETWORK_STATUS_REFRESH_INTERVAL);
+      }
 
       set((state: NetworkSlice) => ({
         ...state,
@@ -173,7 +175,7 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
       const isInternetReachable = netState.isInternetReachable;
       const connectionType = netState.type;
 
-      log.info(
+      log.debug(
         `Network state updated: connected=${isConnected}, reachable=${isInternetReachable}, type=${connectionType}`
       );
 
@@ -189,7 +191,7 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
 
       // Check server reachability when network becomes available
       if (isConnected && isInternetReachable !== false) {
-        log.info("Network available, checking server reachability");
+        log.debug("Network available, checking server reachability");
         get()
           .checkServerReachability()
           .catch((error) => {
