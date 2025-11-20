@@ -7,8 +7,8 @@
  * - Server reachability
  */
 
-import { apiClientService } from "@/services/ApiClientService";
 import { logger } from "@/lib/logger";
+import { apiClientService } from "@/services/ApiClientService";
 import type { SliceCreator } from "@/types/store";
 import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
 
@@ -58,10 +58,14 @@ export interface NetworkSlice extends NetworkSliceState, NetworkSliceActions {}
 
 /**
  * Initial state
+ *
+ * Note: We default isConnected to true (optimistically connected) to avoid
+ * showing "not connected" UI flash on app start before NetInfo initializes.
+ * The network status will be updated once NetInfo fetches the actual state.
  */
 const initialState: NetworkSliceState = {
   network: {
-    isConnected: false,
+    isConnected: true,
     isInternetReachable: null,
     serverReachable: null,
     connectionType: null,
@@ -101,7 +105,7 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
 
       // Subscribe to network state changes
       log.info("Setting up NetInfo event listener");
-      const unsubscribe = NetInfo.addEventListener((netState) => {
+      NetInfo.addEventListener((netState) => {
         log.debug("NetInfo event received");
         get()._updateNetworkState(netState);
       });
@@ -117,6 +121,11 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
           log.error("Failed to fetch initial network state", error);
         });
 
+      get()
+        .checkServerReachability()
+        .catch((error) => {
+          log.warn(`Server reachability check failed: ${error}`);
+        });
       // Start periodic server reachability checks
       serverCheckInterval = setInterval(() => {
         const currentState = get();
@@ -158,7 +167,7 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
      * Update network state (called by NetInfo listener)
      */
     _updateNetworkState: (netState: NetInfoState) => {
-      log.debug(`_updateNetworkState called netState=${netState}`);
+      log.debug(`_updateNetworkState called netState=${JSON.stringify(netState)}`);
 
       const isConnected = netState.isConnected ?? false;
       const isInternetReachable = netState.isInternetReachable;
@@ -179,7 +188,7 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
       }));
 
       // Check server reachability when network becomes available
-      if (isConnected && isInternetReachable) {
+      if (isConnected && isInternetReachable !== false) {
         log.info("Network available, checking server reachability");
         get()
           .checkServerReachability()
@@ -206,7 +215,7 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
       try {
         log.debug("Refreshing network status manually");
         const netState = await NetInfo.fetch();
-        log.debug(`Manual network fetch completed netState=${netState}`);
+        log.debug(`Manual network fetch completed netState=${JSON.stringify(netState)}`);
         get()._updateNetworkState(netState);
       } catch (error) {
         log.error("Failed to refresh network status", error as Error);

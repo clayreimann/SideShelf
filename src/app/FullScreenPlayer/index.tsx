@@ -9,6 +9,7 @@
  * - Playback rate and volume controls
  */
 
+import BookmarkButton from "@/components/player/BookmarkButton";
 import ChapterList from "@/components/player/ChapterList";
 import JumpTrackButton from "@/components/player/JumpTrackButton";
 import PlaybackSpeedControl from "@/components/player/PlaybackSpeedControl";
@@ -20,7 +21,7 @@ import CoverImage from "@/components/ui/CoverImange";
 import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettings";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
-import { usePlayer } from "@/stores/appStore";
+import { usePlayer, useUserProfile } from "@/stores/appStore";
 import { router, Stack } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -30,6 +31,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
+  Alert,
 } from "react-native";
 
 function durationToUnits(seconds: number): number[] {
@@ -51,15 +53,17 @@ function formatTimeWithUnits(seconds: number, includeSeconds: boolean = true): s
 }
 
 export default function FullScreenPlayer() {
-  const { styles, isDark } = useThemedStyles();
+  const { styles, isDark, colors } = useThemedStyles();
   const { width, height } = useWindowDimensions();
 
   const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
+  const { createBookmark } = useUserProfile();
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
   const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
   const [showChapterList, setShowChapterList] = useState(false);
+  const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
   // Animation values
   const coverSizeAnim = useRef(new Animated.Value(0)).current; // 0 = full size, 1 = minimized
@@ -174,23 +178,29 @@ export default function FullScreenPlayer() {
     }
   }, [position, jumpForwardInterval]);
 
-  const handleJumpBackward = useCallback(async (seconds: number) => {
-    try {
-      // One-time jump to the selected interval (does not change default)
-      await playerService.seekTo(Math.max(position - seconds, 0));
-    } catch (error) {
-      console.error("[FullScreenPlayer] Failed to jump backward:", error);
-    }
-  }, [position]);
+  const handleJumpBackward = useCallback(
+    async (seconds: number) => {
+      try {
+        // One-time jump to the selected interval (does not change default)
+        await playerService.seekTo(Math.max(position - seconds, 0));
+      } catch (error) {
+        console.error("[FullScreenPlayer] Failed to jump backward:", error);
+      }
+    },
+    [position]
+  );
 
-  const handleJumpForward = useCallback(async (seconds: number) => {
-    try {
-      // One-time jump to the selected interval (does not change default)
-      await playerService.seekTo(position + seconds);
-    } catch (error) {
-      console.error("[FullScreenPlayer] Failed to jump forward:", error);
-    }
-  }, [position]);
+  const handleJumpForward = useCallback(
+    async (seconds: number) => {
+      try {
+        // One-time jump to the selected interval (does not change default)
+        await playerService.seekTo(position + seconds);
+      } catch (error) {
+        console.error("[FullScreenPlayer] Failed to jump forward:", error);
+      }
+    },
+    [position]
+  );
 
   const handleRateChange = useCallback(async (rate: number) => {
     try {
@@ -207,6 +217,23 @@ export default function FullScreenPlayer() {
       console.error("[FullScreenPlayer] Failed to set volume:", error);
     }
   }, []);
+
+  const handleCreateBookmark = useCallback(async () => {
+    if (!currentTrack || isCreatingBookmark) {
+      return;
+    }
+
+    setIsCreatingBookmark(true);
+    try {
+      const bookmark = await createBookmark(currentTrack.libraryItemId, position);
+      Alert.alert("Bookmark Created", `Bookmark created at ${formatTimeWithUnits(position, true)}`);
+    } catch (error) {
+      console.error("[FullScreenPlayer] Failed to create bookmark:", error);
+      Alert.alert("Error", "Failed to create bookmark. Please try again.");
+    } finally {
+      setIsCreatingBookmark(false);
+    }
+  }, [currentTrack, position, createBookmark, isCreatingBookmark]);
 
   const handleStartOfChapter = useCallback(async () => {
     if (!currentChapter) {
@@ -410,6 +437,29 @@ export default function FullScreenPlayer() {
               Speed
             </Text>
             <PlaybackSpeedControl />
+          </View>
+          <View style={{ alignItems: "center" }}>
+            <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
+              Bookmark
+            </Text>
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <BookmarkButton
+                isCreating={isCreatingBookmark}
+                onPress={handleCreateBookmark}
+                disabled={isCreatingBookmark}
+                iconSize={24}
+                hitBoxSize={48}
+              />
+            </View>
           </View>
           <View style={{ alignItems: "center" }}>
             <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>

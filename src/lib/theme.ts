@@ -32,6 +32,7 @@ function createThemedStyles(isDark: boolean) {
     headerText: isDark ? "#fff" : "#000",
     headerBorder: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
     error: isDark ? "#ff6b6b" : "#dc2626",
+    shadow: isDark ? "#fff" : "#000",
   } as const;
 
   const tabs = {

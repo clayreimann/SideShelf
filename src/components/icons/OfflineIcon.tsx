@@ -19,7 +19,7 @@ export interface OfflineIconProps {
   style?: object;
 }
 
-export default function SeriesIcon({ size = 20, color = "white", style }: OfflineIconProps) {
+export default function OfflineIcon({ size = 20, color = "white", style }: OfflineIconProps) {
   const { colors } = useThemedStyles();
   const iconColor = color || colors.textPrimary;
 

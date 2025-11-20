@@ -493,3 +493,59 @@ export async function login(
   await handleResponseError(response, "Login failed");
   return response.json();
 }
+
+/**
+ * Create a bookmark for a library item
+ * @param libraryItemId - The library item ID
+ * @param time - The time position in seconds
+ * @param title - Optional title for the bookmark
+ * @returns The created bookmark
+ */
+export async function createBookmark(
+  libraryItemId: string,
+  time: number,
+  title?: string
+): Promise<{ bookmark: import("@/types/api").ApiAudioBookmark }> {
+  const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      time,
+      title: title || `Bookmark at ${formatTime(time)}`,
+    }),
+  });
+
+  await handleResponseError(response, "Failed to create bookmark");
+  return response.json();
+}
+
+/**
+ * Delete a bookmark
+ * @param libraryItemId - The library item ID
+ * @param bookmarkId - The bookmark ID to delete
+ */
+export async function deleteBookmark(
+  libraryItemId: string,
+  bookmarkId: string
+): Promise<void> {
+  const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark/${bookmarkId}`, {
+    method: "DELETE",
+  });
+
+  await handleResponseError(response, "Failed to delete bookmark");
+}
+
+// Helper function to format time for bookmark titles
+function formatTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  } else {
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+  }
+}

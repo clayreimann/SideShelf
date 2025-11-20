@@ -874,6 +874,7 @@ export function useUserProfile() {
   const deviceInfo = useAppStore((state) => state.userProfile.deviceInfo);
   const user = useAppStore((state) => state.userProfile.user);
   const serverInfo = useAppStore((state) => state.userProfile.serverInfo);
+  const bookmarks = useAppStore((state) => state.userProfile.bookmarks);
   const initialized = useAppStore((state) => state.userProfile.initialized);
   const isLoading = useAppStore((state) => state.userProfile.isLoading);
 
@@ -882,6 +883,10 @@ export function useUserProfile() {
   const refreshDeviceInfo = useAppStore((state) => state.refreshDeviceInfo);
   const refreshServerInfo = useAppStore((state) => state.refreshServerInfo);
   const updateUser = useAppStore((state) => state.updateUser);
+  const refreshBookmarks = useAppStore((state) => state.refreshBookmarks);
+  const createBookmark = useAppStore((state) => state.createBookmark);
+  const deleteBookmark = useAppStore((state) => state.deleteBookmark);
+  const getItemBookmarks = useAppStore((state) => state.getItemBookmarks);
   const resetUserProfile = useAppStore((state) => state.resetUserProfile);
 
   return React.useMemo(
@@ -889,24 +894,34 @@ export function useUserProfile() {
       deviceInfo,
       user,
       serverInfo,
+      bookmarks,
       initialized,
       isLoading,
       initializeUserProfile,
       refreshDeviceInfo,
       refreshServerInfo,
       updateUser,
+      refreshBookmarks,
+      createBookmark,
+      deleteBookmark,
+      getItemBookmarks,
       resetUserProfile,
     }),
     [
       deviceInfo,
       user,
       serverInfo,
+      bookmarks,
       initialized,
       isLoading,
       initializeUserProfile,
       refreshDeviceInfo,
       refreshServerInfo,
       updateUser,
+      refreshBookmarks,
+      createBookmark,
+      deleteBookmark,
+      getItemBookmarks,
       resetUserProfile,
     ]
   );

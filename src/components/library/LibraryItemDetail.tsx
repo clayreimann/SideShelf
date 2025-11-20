@@ -1,4 +1,5 @@
 import AudioFilesSection from "@/components/library/LibraryItemDetail/AudioFilesSection";
+import BookmarksSection from "@/components/library/LibraryItemDetail/BookmarksSection";
 import ChapterList from "@/components/library/LibraryItemDetail/ChapterList";
 import ConsolidatedPlayerControls from "@/components/library/LibraryItemDetail/ConsolidatedPlayerControls";
 import CoverSection from "@/components/library/LibraryItemDetail/CoverSection";
@@ -21,7 +22,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
-import { useDownloads, useLibraryItemDetails, useNetwork, usePlayer } from "@/stores";
+import { useDownloads, useLibraryItemDetails, useNetwork, usePlayer, useUserProfile } from "@/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
 import { Stack } from "expo-router";
@@ -52,6 +53,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     loading: itemLoading,
   } = useLibraryItemDetails();
   const { activeDownloads, isItemDownloaded, startDownload, deleteDownload } = useDownloads();
+  const { getItemBookmarks, deleteBookmark } = useUserProfile();
 
   // Get cached item data or null
   const cachedData = getCachedItem(itemId);
@@ -72,6 +74,11 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const downloadProgress = activeDownloads[itemId] || null;
   const isDownloading = !!downloadProgress;
   const isDownloaded = isItemDownloaded(itemId);
+
+  // Get bookmarks for this item
+  const itemBookmarks = useMemo(() => {
+    return getItemBookmarks(itemId);
+  }, [itemId, getItemBookmarks]);
 
   // Fetch item details from store
   useEffect(() => {
@@ -522,6 +529,14 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           currentPosition={currentTrack?.libraryItemId === itemId ? position : 0}
           libraryItemId={itemId}
           isCurrentlyPlaying={currentTrack?.libraryItemId === itemId}
+        />
+
+        {/* Bookmarks */}
+        <BookmarksSection
+          bookmarks={itemBookmarks}
+          libraryItemId={itemId}
+          isCurrentlyPlaying={currentTrack?.libraryItemId === itemId}
+          onDeleteBookmark={deleteBookmark}
         />
 
         {/* Audio Files */}

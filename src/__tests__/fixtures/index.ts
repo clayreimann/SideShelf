@@ -28,6 +28,10 @@ export const mockApiUser: ApiUser = {
   id: 'user-1',
   username: 'testuser',
   type: 'admin',
+  mediaProgress: [],
+  bookmarks: [],
+  isActive: true,
+  isLocked: false,
   createdAt: 1640995200000, // 2022-01-01
   lastSeen: 1672531200000, // 2023-01-01
   seriesHideFromContinueListening: ['series-1', 'series-2'],
@@ -40,9 +44,37 @@ export const mockApiUser: ApiUser = {
     accessAllTags: true,
     accessExplicitContent: false,
   },
+  librariesAccessible: [],
+  itemTagsAccessible: [],
+  hasOpenIDLink: false,
 };
 
 export const mockMeResponse: ApiMeResponse = {
+  id: 'user-1',
+  username: 'testuser',
+  type: 'admin',
+  mediaProgress: [],
+  bookmarks: [],
+  isActive: true,
+  isLocked: false,
+  createdAt: 1640995200000,
+  lastSeen: 1672531200000,
+  seriesHideFromContinueListening: ['series-1', 'series-2'],
+  permissions: {
+    download: true,
+    update: true,
+    delete: false,
+    upload: true,
+    accessAllLibraries: true,
+    accessAllTags: true,
+    accessExplicitContent: false,
+  },
+  librariesAccessible: [],
+  itemTagsAccessible: [],
+  hasOpenIDLink: false,
+};
+
+export const mockLoginResponse: ApiLoginResponse = {
   user: mockApiUser,
   userDefaultLibraryId: 'lib-1',
   serverSettings: {
@@ -73,12 +105,6 @@ export const mockMeResponse: ApiMeResponse = {
     logLevel: 2,
     version: '2.0.0',
   },
-  Source: 'test',
-};
-
-export const mockLoginResponse: ApiLoginResponse = {
-  ...mockMeResponse,
-  accessToken: 'test-access-token',
 };
 
 export const mockUserRow: UserRow = {

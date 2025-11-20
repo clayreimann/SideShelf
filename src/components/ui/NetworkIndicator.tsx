@@ -13,14 +13,14 @@ import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function NetworkIndicator() {
-  const { isConnected, isInternetReachable, serverReachable } = useNetwork();
+  const { isConnected, isInternetReachable, serverReachable, initialized } = useNetwork();
   const { colors } = useThemedStyles();
   const insets = useSafeAreaInsets();
 
   // Show indicator when offline, no internet, or server unreachable
   const isOffline = !isConnected || isInternetReachable === false || serverReachable === false;
 
-  if (!isOffline) {
+  if (!isOffline || !initialized) {
     return null;
   }
 

@@ -3,21 +3,10 @@ import { logger } from "@/lib/logger";
 import { apiClientService } from "@/services/ApiClientService";
 import DeviceInfo from "react-native-device-info";
 
-type NetworkStatusGetter = () => {
-  isConnected: boolean;
-  serverReachable: boolean | null;
-};
-
 const log = logger.forTag("api:fetch");
 const detailedLog = logger.forTag("api:fetch:detailed");
 
-let getNetworkStatus: NetworkStatusGetter | null = null;
-
 let cachedUserAgent: string | null = null;
-
-export function setNetworkStatusGetter(getter: NetworkStatusGetter) {
-  getNetworkStatus = getter;
-}
 
 function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/$/, "");
@@ -38,17 +27,6 @@ export type ApiFetchOptions = Omit<RequestInit, "signal"> & {
 };
 
 export async function apiFetch(pathOrUrl: string, init?: ApiFetchOptions): Promise<Response> {
-  // Check network status before making request
-  if (getNetworkStatus) {
-    const networkStatus = getNetworkStatus();
-    if (!networkStatus.isConnected || networkStatus.serverReachable === false) {
-      log.warn(
-        `Network unavailable, failing fast: connected=${networkStatus.isConnected}, serverReachable=${networkStatus.serverReachable}`
-      );
-      throw new Error("Network unavailable - please check your connection and try again");
-    }
-  }
-
   const url = resolveUrl(pathOrUrl);
   const { auth = true, timeout, headers, ...rest } = init || {};
   const token = apiClientService.getAccessToken();
