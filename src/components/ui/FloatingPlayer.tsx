@@ -8,18 +8,18 @@
  * - Tapping anywhere else opens the full-screen modal
  */
 
-import PlayPauseButton from '@/components/player/PlayPauseButton';
-import CoverImage from '@/components/ui/CoverImange';
-import { borderRadius, floatingPlayer, spacing } from '@/lib/styles';
-import { useThemedStyles } from '@/lib/theme';
-import { playerService } from '@/services/PlayerService';
-import { usePlayer } from '@/stores/appStore';
-import { router, usePathname, useGlobalSearchParams } from 'expo-router';
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import PlayPauseButton from "@/components/player/PlayPauseButton";
+import CoverImage from "@/components/ui/CoverImange";
+import { borderRadius, floatingPlayer, spacing } from "@/lib/styles";
+import { useThemedStyles } from "@/lib/theme";
+import { playerService } from "@/services/PlayerService";
+import { usePlayer } from "@/stores/appStore";
+import { router, useGlobalSearchParams, usePathname } from "expo-router";
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function FloatingPlayer() {
-  const { styles, isDark } = useThemedStyles();
+  const { styles, isDark, colors } = useThemedStyles();
   const { currentTrack, currentChapter } = usePlayer();
   const pathname = usePathname();
   const params = useGlobalSearchParams();
@@ -31,7 +31,7 @@ export default function FloatingPlayer() {
 
   // Hide floating player if we're on the item details page of the currently playing item
   // Check various routes: /library/[item], /home/item/[itemId], /authors/[authorId]/item/[itemId], /series/[seriesId]/item/[itemId]
-  const isOnItemDetailsPage = pathname.includes('/library/') || pathname.includes('/item/');
+  const isOnItemDetailsPage = pathname.includes("/library/") || pathname.includes("/item/");
   if (isOnItemDetailsPage) {
     // Extract item ID from params
     const itemId = params.item || params.itemId;
@@ -45,24 +45,24 @@ export default function FloatingPlayer() {
     try {
       await playerService.togglePlayPause();
     } catch (error) {
-      console.error('[FloatingPlayer] Failed to toggle play/pause:', error);
+      console.error("[FloatingPlayer] Failed to toggle play/pause:", error);
     }
   };
 
   const handlePlayerPress = () => {
-    router.push('/FullScreenPlayer');
+    router.push("/FullScreenPlayer");
   };
 
-  const chapterTitle = currentChapter?.chapter.title || 'Loading...';
+  const chapterTitle = currentChapter?.chapter.title || "Loading...";
 
   return (
     <View
       style={[
         componentStyles.container,
         {
-          backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
-          borderTopColor: isDark ? '#333' : '#e0e0e0',
-          shadowColor: isDark ? '#fff' : '#000',
+          backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
+          borderTopColor: isDark ? "#333" : "#e0e0e0",
+          shadowColor: colors.shadow,
         },
       ]}
     >
@@ -71,8 +71,8 @@ export default function FloatingPlayer() {
         {/* Cover Image */}
         <View style={componentStyles.coverContainer}>
           <CoverImage
-            uri={currentTrack?.coverUri ?? ''}
-            title={currentTrack?.title ?? 'No track selected'}
+            uri={currentTrack?.coverUri ?? ""}
+            title={currentTrack?.title ?? "No track selected"}
             fontSize={48}
           />
         </View>
@@ -83,7 +83,7 @@ export default function FloatingPlayer() {
             {chapterTitle}
           </Text>
           <Text style={[styles.text, componentStyles.trackTitle]} numberOfLines={1}>
-            {currentTrack?.title ?? 'No selection'}
+            {currentTrack?.title ?? "No selection"}
           </Text>
         </View>
       </Pressable>
@@ -95,15 +95,15 @@ export default function FloatingPlayer() {
 
 const componentStyles = StyleSheet.create({
   container: {
-    position: 'absolute',
+    position: "absolute",
     bottom: floatingPlayer.bottomOffset,
     left: spacing.md,
     right: spacing.md,
     height: floatingPlayer.height,
     borderRadius: borderRadius.md,
     borderTopWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: spacing.md,
     shadowOffset: {
       width: 0,
@@ -111,19 +111,18 @@ const componentStyles = StyleSheet.create({
     },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 8,
   },
   pressableArea: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   coverContainer: {
     width: 48,
     height: 48,
     borderRadius: borderRadius.sm,
     marginRight: spacing.md,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   infoContainer: {
     flex: 1,
@@ -131,7 +130,7 @@ const componentStyles = StyleSheet.create({
   },
   chapterTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 2,
   },
   trackTitle: {

@@ -1,3 +1,5 @@
+import BookmarkButton from "@/components/player/BookmarkButton";
+import FullScreenButton from "@/components/player/FullScreenButton";
 import PlayPauseButton from "@/components/player/PlayPauseButton";
 import SkipButton from "@/components/player/SkipButton";
 import { ProgressBar } from "@/components/ui";
@@ -6,7 +8,6 @@ import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettin
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useUserProfile } from "@/stores/appStore";
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
@@ -22,8 +23,8 @@ export default function ConsolidatedPlayerControls({
   isDownloaded,
   serverReachable,
 }: ConsolidatedPlayerControlsProps) {
-  const { styles, isDark, colors } = useThemedStyles();
-  const { currentTrack, position, currentChapter, isPlaying, isLoadingTrack } = usePlayer();
+  const { isDark, colors } = useThemedStyles();
+  const { currentTrack, position, currentChapter, isLoadingTrack } = usePlayer();
   const { createBookmark } = useUserProfile();
   const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
   const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
@@ -137,23 +138,35 @@ export default function ConsolidatedPlayerControls({
   }
 
   return (
-    <View style={{ marginBottom: 12, paddingHorizontal: 16 }}>
+    <View
+      style={{
+        marginBottom: 16,
+        paddingHorizontal: 16,
+        shadowColor: colors.shadow,
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 0 },
+      }}
+    >
       <View
         style={{
-          backgroundColor: isDark ? "#333" : "#f5f5f5",
+          backgroundColor: colors.coverBackground,
           borderRadius: 8,
           padding: 12,
         }}
       >
+        <View style={{ alignItems: "center", marginBottom: 8 }}>
+          <Text style={{ color: colors.textPrimary }}>{chapterTitle}</Text>
+        </View>
         {/* Chapter Progress - only show if this item is currently playing */}
-        {isCurrentlyPlaying && chapterTitle && (
+        {isCurrentlyPlaying && (
           <ProgressBar
             progress={chapterProgress}
             variant="medium"
             showTimeLabels={true}
             currentTime={chapterPosition}
             duration={chapterDuration}
-            customPercentageText={chapterTitle}
+            showPercentage={false}
           />
         )}
 
@@ -167,7 +180,13 @@ export default function ConsolidatedPlayerControls({
           }}
         >
           {/* Keep the number of items in the row odd to keep play centered */}
-          <View style={{ width: 48 }} />
+          <BookmarkButton
+            isCreating={isCreatingBookmark}
+            onPress={handleCreateBookmark}
+            disabled={isCreatingBookmark}
+            iconSize={24}
+            hitBoxSize={48}
+          />
 
           {/* Skip Backward - only show if currently playing */}
           <SkipButton
@@ -179,7 +198,7 @@ export default function ConsolidatedPlayerControls({
           />
 
           {/* Play/Pause Button */}
-          <PlayPauseButton onPress={handlePlayPause} iconSize={32} hitBoxSize={48} />
+          <PlayPauseButton onPress={handlePlayPause} iconSize={48} hitBoxSize={48} />
 
           {/* Skip Forward - only show if currently playing */}
           <SkipButton
@@ -191,51 +210,7 @@ export default function ConsolidatedPlayerControls({
           />
 
           {/* Open Full Screen Player Button - only show if currently playing */}
-          <TouchableOpacity
-            style={{
-              width: 48,
-              height: 48,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-            onPress={handleOpenFullScreenPlayer}
-          >
-            <Ionicons name="expand" size={24} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Secondary Actions */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "center",
-            alignItems: "center",
-            marginTop: 8,
-            gap: 16,
-          }}
-        >
-          <TouchableOpacity
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 4,
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 16,
-              backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)",
-            }}
-            onPress={handleCreateBookmark}
-            disabled={isCreatingBookmark}
-          >
-            <Ionicons
-              name={isCreatingBookmark ? "hourglass-outline" : "bookmark-outline"}
-              size={16}
-              color={colors.textPrimary}
-            />
-            <Text style={[styles.text, { fontSize: 12 }]}>
-              {isCreatingBookmark ? "Adding..." : "Bookmark"}
-            </Text>
-          </TouchableOpacity>
+          <FullScreenButton onPress={handleOpenFullScreenPlayer} iconSize={24} hitBoxSize={48} />
         </View>
       </View>
     </View>

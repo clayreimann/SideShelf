@@ -9,6 +9,7 @@
  * - Playback rate and volume controls
  */
 
+import BookmarkButton from "@/components/player/BookmarkButton";
 import ChapterList from "@/components/player/ChapterList";
 import JumpTrackButton from "@/components/player/JumpTrackButton";
 import PlaybackSpeedControl from "@/components/player/PlaybackSpeedControl";
@@ -21,7 +22,6 @@ import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettin
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useUserProfile } from "@/stores/appStore";
-import { Ionicons } from "@expo/vector-icons";
 import { router, Stack } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -178,23 +178,29 @@ export default function FullScreenPlayer() {
     }
   }, [position, jumpForwardInterval]);
 
-  const handleJumpBackward = useCallback(async (seconds: number) => {
-    try {
-      // One-time jump to the selected interval (does not change default)
-      await playerService.seekTo(Math.max(position - seconds, 0));
-    } catch (error) {
-      console.error("[FullScreenPlayer] Failed to jump backward:", error);
-    }
-  }, [position]);
+  const handleJumpBackward = useCallback(
+    async (seconds: number) => {
+      try {
+        // One-time jump to the selected interval (does not change default)
+        await playerService.seekTo(Math.max(position - seconds, 0));
+      } catch (error) {
+        console.error("[FullScreenPlayer] Failed to jump backward:", error);
+      }
+    },
+    [position]
+  );
 
-  const handleJumpForward = useCallback(async (seconds: number) => {
-    try {
-      // One-time jump to the selected interval (does not change default)
-      await playerService.seekTo(position + seconds);
-    } catch (error) {
-      console.error("[FullScreenPlayer] Failed to jump forward:", error);
-    }
-  }, [position]);
+  const handleJumpForward = useCallback(
+    async (seconds: number) => {
+      try {
+        // One-time jump to the selected interval (does not change default)
+        await playerService.seekTo(position + seconds);
+      } catch (error) {
+        console.error("[FullScreenPlayer] Failed to jump forward:", error);
+      }
+    },
+    [position]
+  );
 
   const handleRateChange = useCallback(async (rate: number) => {
     try {
@@ -436,9 +442,7 @@ export default function FullScreenPlayer() {
             <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
               Bookmark
             </Text>
-            <TouchableOpacity
-              onPress={handleCreateBookmark}
-              disabled={isCreatingBookmark}
+            <View
               style={{
                 width: 48,
                 height: 48,
@@ -448,12 +452,14 @@ export default function FullScreenPlayer() {
                 alignItems: "center",
               }}
             >
-              <Ionicons
-                name={isCreatingBookmark ? "hourglass-outline" : "bookmark-outline"}
-                size={24}
-                color={colors.text}
+              <BookmarkButton
+                isCreating={isCreatingBookmark}
+                onPress={handleCreateBookmark}
+                disabled={isCreatingBookmark}
+                iconSize={24}
+                hitBoxSize={48}
               />
-            </TouchableOpacity>
+            </View>
           </View>
           <View style={{ alignItems: "center" }}>
             <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
