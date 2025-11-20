@@ -2,7 +2,7 @@
  * Logger Type Definitions
  */
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
 /**
  * Log entry for database storage
@@ -34,4 +34,6 @@ export interface SubLogger {
   info(message: string): void;
   warn(message: string): void;
   error(message: string, error?: Error): void;
+  /** Internal method to refresh the extended logger reference */
+  _refreshExtendedLogger?: () => void;
 }

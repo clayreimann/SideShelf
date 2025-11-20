@@ -23,22 +23,34 @@
  *   log.error('Error message', error);
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { consoleTransport, logger as rnLogger } from 'react-native-logs';
-import { v4 as uuidv4 } from 'uuid';
-import { deleteLogsBefore, insertLogToDb } from './db';
-import type { LogLevel, SubLogger } from './types';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { consoleTransport, logger as rnLogger } from "react-native-logs";
+import { v4 as uuidv4 } from "uuid";
+import { deleteLogsBefore, insertLogToDb } from "./db";
+import type { LogLevel, SubLogger } from "./types";
 
-const DISABLED_TAGS_KEY = '@logger/disabled_tags';
-const RETENTION_DURATION_KEY = '@logger/retention_duration_ms';
-const DEFAULTED_TO_DISABLED_KEY = '@logger/defaulted_to_disabled';
-const TAG_LEVELS_KEY = '@logger/tag_levels';
-const DEFAULT_LOG_LEVEL_KEY = '@logger/default_log_level';
+const DISABLED_TAGS_KEY = "@logger/disabled_tags";
+const RETENTION_DURATION_KEY = "@logger/retention_duration_ms";
+const DEFAULTED_TO_DISABLED_KEY = "@logger/defaulted_to_disabled";
+const TAG_LEVELS_KEY = "@logger/tag_levels";
+const DEFAULT_LOG_LEVEL_KEY = "@logger/default_log_level";
 
 // Re-export types and DB functions for convenience
-export { clearAllLogs, getAllLogs, getAllTags, getLogsByLevel, getLogsByTag, getErrorCount, getWarningCount, getErrorCountSince, getWarningCountSince, vacuumDatabase, getDatabaseSize } from './db';
-export type { LogRow } from './db';
-export type { LogEntry, LogLevel, SubLogger } from './types';
+export {
+  clearAllLogs,
+  getAllLogs,
+  getAllTags,
+  getLogsByLevel,
+  getLogsByTag,
+  getErrorCount,
+  getWarningCount,
+  getErrorCountSince,
+  getWarningCountSince,
+  vacuumDatabase,
+  getDatabaseSize,
+} from "./db";
+export type { LogRow } from "./db";
+export type { LogEntry, LogLevel, SubLogger } from "./types";
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const MIN_LOG_RETENTION_MS = ONE_HOUR_MS; // Always keep at least 1 hour of logs
@@ -49,10 +61,10 @@ const DEFAULT_LOG_RETENTION_MS = ONE_HOUR_MS; // Default retention when no prefe
  * This list can be updated over time as new verbose logging tags are added.
  * The system tracks which tags have been processed to avoid overriding user preferences.
  */
-const DEFAULT_DISABLED_TAGS = ['api:fetch:detailed'];
+const DEFAULT_DISABLED_TAGS = ["api:fetch:detailed"];
 
 let currentRetentionDurationMs = DEFAULT_LOG_RETENTION_MS;
-let defaultLogLevel: LogLevel = 'info'; // Default log level (can be overridden)
+let defaultLogLevel: LogLevel = "info"; // Default log level (can be overridden)
 let logWriteCount = 0;
 const PURGE_EVERY_N_LOGS = 100; // Purge every 100 logs instead of random 1%
 let lastPurgeTime = 0;
@@ -66,10 +78,10 @@ const clampRetentionDuration = (durationMs: number): number =>
  */
 const sqliteTransport = (props: any) => {
   const timestamp = new Date();
-  const { msg, rawMsg, level, extension, options } = props;
+  const { rawMsg, level, extension } = props;
 
   // Extract tag from extension or use 'App' as default
-  const tag = extension || 'App';
+  const tag = extension || "App";
 
   const includeStack = __DEV__;
   const formatArg = (arg: any): string => {
@@ -80,7 +92,7 @@ const sqliteTransport = (props: any) => {
       return `Error: ${arg.message}`;
     }
 
-    if (typeof arg === 'object') {
+    if (typeof arg === "object") {
       try {
         return JSON.stringify(arg);
       } catch {
@@ -92,20 +104,15 @@ const sqliteTransport = (props: any) => {
   };
 
   // Format message
-  let message = '';
-  if (typeof rawMsg[0] === 'string') {
+  let message = "";
+  if (typeof rawMsg[0] === "string") {
     message = rawMsg[0];
     // Include any additional arguments
     if (rawMsg.length > 1) {
-      message +=
-        ' ' +
-        rawMsg
-          .slice(1)
-          .map(formatArg)
-          .join(' ');
+      message += " " + rawMsg.slice(1).map(formatArg).join(" ");
     }
   } else {
-    message = rawMsg.map(formatArg).join(' ');
+    message = rawMsg.map(formatArg).join(" ");
   }
 
   // Write to SQLite database (async, non-blocking)
@@ -119,7 +126,7 @@ const sqliteTransport = (props: any) => {
   });
 
   // Notify subscribers if error or warning was logged
-  if (logLevel === 'error' || logLevel === 'warn') {
+  if (logLevel === "error" || logLevel === "warn") {
     // Notify subscribers asynchronously to avoid blocking
     setTimeout(() => {
       try {
@@ -137,8 +144,7 @@ const sqliteTransport = (props: any) => {
   logWriteCount++;
   const now = Date.now();
   const shouldPurge =
-    logWriteCount >= PURGE_EVERY_N_LOGS ||
-    (now - lastPurgeTime) >= PURGE_INTERVAL_MS;
+    logWriteCount >= PURGE_EVERY_N_LOGS || now - lastPurgeTime >= PURGE_INTERVAL_MS;
 
   if (shouldPurge) {
     try {
@@ -150,17 +156,19 @@ const sqliteTransport = (props: any) => {
       logWriteCount = 0;
 
       // VACUUM after purging to reclaim space
-      const { vacuumDatabase } = require('./db');
+      const { vacuumDatabase } = require("./db");
       vacuumDatabase();
 
       // If there's an acknowledgment timestamp older than the cutoff,
       // reset it so new errors/warnings will show the badge again
       try {
         // Lazy import to avoid circular dependency
-        const { useAppStore } = require('@/stores/appStore');
+        const { useAppStore } = require("@/stores/appStore");
         const loggerSlice = useAppStore.getState().logger;
-        if (loggerSlice?.errorsAcknowledgedTimestamp !== null &&
-            loggerSlice.errorsAcknowledgedTimestamp < cutoffTimestamp) {
+        if (
+          loggerSlice?.errorsAcknowledgedTimestamp !== null &&
+          loggerSlice.errorsAcknowledgedTimestamp < cutoffTimestamp
+        ) {
           // Acknowledgment timestamp is older than the cutoff - reset it
           loggerSlice.resetErrorAcknowledgment();
           // Also update counts to check for any remaining errors/warnings
@@ -173,34 +181,72 @@ const sqliteTransport = (props: any) => {
         // Ignore errors - store might not be available yet
       }
     } catch (error) {
-      console.error('[Logger] Failed to trim old logs:', error);
+      console.error("[Logger] Failed to trim old logs:", error);
     }
   }
 };
 
 /**
- * Configure react-native-logs
- * Note: severity is set dynamically based on defaultLogLevel
+ * Get the minimum log level required based on default level and per-tag levels
+ * This ensures react-native-logs doesn't filter out messages we want to handle per-tag
+ *
+ * @param tagLevelsMap - Optional map of tag levels (used during logger initialization)
  */
-const getConfig = () => ({
+const getMinimumSeverity = (tagLevelsMap?: Map<string, LogLevel>): LogLevel => {
+  // Start with the default level
+  let minLevel: LogLevel = defaultLogLevel;
+
+  // If no tag levels map provided, just return the default
+  if (!tagLevelsMap || tagLevelsMap.size === 0) {
+    return minLevel;
+  }
+
+  // Check if any tag has a lower (more verbose) level than the default
+  const levelValues: Record<LogLevel, number> = {
+    debug: 0,
+    info: 1,
+    warn: 2,
+    error: 3,
+  };
+
+  let minLevelValue = levelValues[defaultLogLevel];
+
+  for (const tagLevel of tagLevelsMap.values()) {
+    const tagLevelValue = levelValues[tagLevel];
+    if (tagLevelValue < minLevelValue) {
+      minLevelValue = tagLevelValue;
+      minLevel = tagLevel;
+    }
+  }
+
+  return minLevel;
+};
+
+/**
+ * Configure react-native-logs
+ * Note: severity is set to the minimum level needed to support all tag-level configurations
+ *
+ * @param tagLevelsMap - Optional map of tag levels (used during logger initialization)
+ */
+const getConfig = (tagLevelsMap?: Map<string, LogLevel>) => ({
   levels: {
     debug: 0,
     info: 1,
     warn: 2,
     error: 3,
   },
-  severity: defaultLogLevel,
+  severity: getMinimumSeverity(tagLevelsMap),
   transport: __DEV__ ? [consoleTransport, sqliteTransport] : [sqliteTransport],
   transportOptions: {
     colors: {
-      debug: 'blueBright' as const,
-      info: 'green' as const,
-      warn: 'yellow' as const,
-      error: 'red' as const,
+      debug: "blueBright" as const,
+      info: "green" as const,
+      warn: "yellow" as const,
+      error: "red" as const,
     },
   },
   async: true,
-  dateFormat: 'iso' as const,
+  dateFormat: "iso" as const,
   printLevel: true,
   printDate: true,
   enabled: true,
@@ -240,13 +286,14 @@ class Logger {
    */
   private async loadSettings(): Promise<void> {
     try {
-      const [storedTags, storedRetention, storedDefaulted, storedTagLevels, storedDefaultLevel] = await Promise.all([
-        AsyncStorage.getItem(DISABLED_TAGS_KEY),
-        AsyncStorage.getItem(RETENTION_DURATION_KEY),
-        AsyncStorage.getItem(DEFAULTED_TO_DISABLED_KEY),
-        AsyncStorage.getItem(TAG_LEVELS_KEY),
-        AsyncStorage.getItem(DEFAULT_LOG_LEVEL_KEY),
-      ]);
+      const [storedTags, storedRetention, storedDefaulted, storedTagLevels, storedDefaultLevel] =
+        await Promise.all([
+          AsyncStorage.getItem(DISABLED_TAGS_KEY),
+          AsyncStorage.getItem(RETENTION_DURATION_KEY),
+          AsyncStorage.getItem(DEFAULTED_TO_DISABLED_KEY),
+          AsyncStorage.getItem(TAG_LEVELS_KEY),
+          AsyncStorage.getItem(DEFAULT_LOG_LEVEL_KEY),
+        ]);
 
       // Load existing disabled tags
       if (storedTags) {
@@ -273,10 +320,15 @@ class Logger {
 
       // If we processed any new default tags, save the updated state
       if (newTagsToDisable.length > 0) {
-        console.log(`[Logger] Applied default disabled state to ${newTagsToDisable.length} new tags: ${newTagsToDisable.join(', ')}`);
+        console.log(
+          `[Logger] Applied default disabled state to ${newTagsToDisable.length} new tags: ${newTagsToDisable.join(", ")}`
+        );
         await Promise.all([
           this.saveDisabledTags(),
-          AsyncStorage.setItem(DEFAULTED_TO_DISABLED_KEY, JSON.stringify(Array.from(defaultedTags))),
+          AsyncStorage.setItem(
+            DEFAULTED_TO_DISABLED_KEY,
+            JSON.stringify(Array.from(defaultedTags))
+          ),
         ]);
       }
 
@@ -304,15 +356,24 @@ class Logger {
       // Load default log level
       if (storedDefaultLevel) {
         const level = storedDefaultLevel as LogLevel;
-        if (['debug', 'info', 'warn', 'error'].includes(level)) {
+        if (["debug", "info", "warn", "error"].includes(level)) {
           defaultLogLevel = level;
           console.log(`[Logger] Loaded default log level: ${level}`);
         }
       }
 
+      // Recreate the logger instance with loaded tag levels
+      // This ensures the global severity accounts for any per-tag debug levels
+      if (this.tagLevels.size > 0) {
+        rnLoggerInstance = rnLogger.createLogger(getConfig(this.tagLevels));
+        // Refresh any already-created subloggers (shouldn't be any at init, but for safety)
+        this.refreshAllSubLoggers();
+        console.log("[Logger] Recreated logger instance with tag-level configurations");
+      }
+
       this.initialized = true;
     } catch (error) {
-      console.error('[Logger] Failed to load logger settings from storage:', error);
+      console.error("[Logger] Failed to load logger settings from storage:", error);
       this.initialized = true;
     }
   }
@@ -325,7 +386,7 @@ class Logger {
       const tags = Array.from(this.disabledTags);
       await AsyncStorage.setItem(DISABLED_TAGS_KEY, JSON.stringify(tags));
     } catch (error) {
-      console.error('[Logger] Failed to save disabled tags to storage:', error);
+      console.error("[Logger] Failed to save disabled tags to storage:", error);
     }
   }
 
@@ -339,18 +400,20 @@ class Logger {
     const timeout = 1000; // 1 second
     const start = Date.now();
     while (!this.initialized && Date.now() - start < timeout) {
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
   }
 
   /**
    * Get a cached sublogger for a specific tag
    * This avoids creating multiple subloggers for the same tag
+   *
+   * The sublogger holds a reference to an extended logger that can be refreshed
+   * when rnLoggerInstance is recreated
    */
   forTag(tag: string): SubLogger {
     let subLogger = this.subLoggers.get(tag);
     if (!subLogger) {
-      const extendedLogger = rnLoggerInstance.extend(tag);
       const isTagDisabled = () => this.disabledTags.has(tag);
       const getTagLevel = () => this.tagLevels.get(tag);
       const getGlobalSeverity = () => defaultLogLevel;
@@ -376,24 +439,31 @@ class Logger {
         return messageLevelValue >= effectiveLevelValue;
       };
 
+      // Hold a reference to the extended logger that can be updated
+      let extendedLogger = rnLoggerInstance.extend(tag);
+
       subLogger = {
         debug: (message: string) => {
-          if (shouldLog('debug')) extendedLogger.debug(message);
+          if (shouldLog("debug")) extendedLogger.debug(message);
         },
         info: (message: string) => {
-          if (shouldLog('info')) extendedLogger.info(message);
+          if (shouldLog("info")) extendedLogger.info(message);
         },
         warn: (message: string) => {
-          if (shouldLog('warn')) extendedLogger.warn(message);
+          if (shouldLog("warn")) extendedLogger.warn(message);
         },
         error: (message: string, error?: Error) => {
-          if (shouldLog('error')) {
+          if (shouldLog("error")) {
             if (error) {
               extendedLogger.error(message, error);
             } else {
               extendedLogger.error(message);
             }
           }
+        },
+        // Internal method to refresh the extended logger when rnLoggerInstance is recreated
+        _refreshExtendedLogger: () => {
+          extendedLogger = rnLoggerInstance.extend(tag);
         },
       };
       this.subLoggers.set(tag, subLogger);
@@ -470,7 +540,7 @@ class Logger {
       deleteLogsBefore(cutoffDate);
 
       // VACUUM after purging to reclaim space
-      const { vacuumDatabase } = require('./db');
+      const { vacuumDatabase } = require("./db");
       vacuumDatabase();
 
       // Reset counters
@@ -481,10 +551,12 @@ class Logger {
       // reset it so new errors/warnings will show the badge again
       try {
         // Lazy import to avoid circular dependency
-        const { useAppStore } = require('@/stores/appStore');
+        const { useAppStore } = require("@/stores/appStore");
         const loggerSlice = useAppStore.getState().logger;
-        if (loggerSlice?.errorsAcknowledgedTimestamp !== null &&
-            loggerSlice.errorsAcknowledgedTimestamp < cutoffTimestamp) {
+        if (
+          loggerSlice?.errorsAcknowledgedTimestamp !== null &&
+          loggerSlice.errorsAcknowledgedTimestamp < cutoffTimestamp
+        ) {
           // Acknowledgment timestamp is older than the cutoff - reset it
           loggerSlice.resetErrorAcknowledgment();
           // Also update counts to check for any remaining errors/warnings
@@ -495,10 +567,10 @@ class Logger {
         }
       } catch (error) {
         // Ignore errors - store might not be available yet
-        console.error('[Logger] Failed to update acknowledgment after trim:', error);
+        console.error("[Logger] Failed to update acknowledgment after trim:", error);
       }
     } catch (error) {
-      console.error('[Logger] Failed to manually trim logs:', error);
+      console.error("[Logger] Failed to manually trim logs:", error);
     }
   }
 
@@ -507,7 +579,7 @@ class Logger {
    */
   clearLogs(): void {
     // This is handled by the db module
-    const { clearAllLogs } = require('./db');
+    const { clearAllLogs } = require("./db");
     clearAllLogs();
   }
 
@@ -536,7 +608,7 @@ class Logger {
     try {
       await AsyncStorage.setItem(RETENTION_DURATION_KEY, clampedDuration.toString());
     } catch (error) {
-      console.error('[Logger] Failed to save log retention preference:', error);
+      console.error("[Logger] Failed to save log retention preference:", error);
     }
 
     if (hasChanged) {
@@ -550,6 +622,16 @@ class Logger {
   async setRetentionDurationHours(hours: number): Promise<void> {
     const durationMs = Math.round(hours) * ONE_HOUR_MS;
     await this.setRetentionDurationMs(durationMs);
+  }
+
+  /**
+   * Refresh all cached subloggers to use the current rnLoggerInstance
+   * Called when rnLoggerInstance is recreated
+   */
+  private refreshAllSubLoggers(): void {
+    for (const subLogger of this.subLoggers.values()) {
+      subLogger._refreshExtendedLogger?.();
+    }
   }
 
   /**
@@ -616,7 +698,7 @@ class Logger {
       }
       await AsyncStorage.setItem(TAG_LEVELS_KEY, JSON.stringify(tagLevelsObj));
     } catch (error) {
-      console.error('[Logger] Failed to save tag levels to storage:', error);
+      console.error("[Logger] Failed to save tag levels to storage:", error);
     }
   }
 
@@ -626,8 +708,13 @@ class Logger {
   async setTagLevel(tag: string, level: LogLevel): Promise<void> {
     this.tagLevels.set(tag, level);
     await this.saveTagLevels();
-    // Invalidate cached sublogger so it picks up the new level
-    this.subLoggers.delete(tag);
+
+    // Recreate the logger instance to update global severity if needed
+    // This is necessary when a tag level is more verbose than the current global severity
+    rnLoggerInstance = rnLogger.createLogger(getConfig(this.tagLevels));
+
+    // Refresh all cached subloggers to use the new logger instance
+    this.refreshAllSubLoggers();
   }
 
   /**
@@ -655,8 +742,13 @@ class Logger {
   async clearTagLevel(tag: string): Promise<void> {
     this.tagLevels.delete(tag);
     await this.saveTagLevels();
-    // Invalidate cached sublogger so it picks up the global level
-    this.subLoggers.delete(tag);
+
+    // Recreate the logger instance to update global severity if needed
+    // This is necessary when removing a tag level that was the most verbose
+    rnLoggerInstance = rnLogger.createLogger(getConfig(this.tagLevels));
+
+    // Refresh all cached subloggers to use the new logger instance
+    this.refreshAllSubLoggers();
   }
 
   /**
@@ -676,10 +768,10 @@ class Logger {
 
     // Recreate the logger instance with new severity config
     // This ensures react-native-logs respects the new default level
-    rnLoggerInstance = rnLogger.createLogger(getConfig());
+    rnLoggerInstance = rnLogger.createLogger(getConfig(this.tagLevels));
 
-    // Clear all cached subloggers so they use the new logger instance
-    this.subLoggers.clear();
+    // Refresh all cached subloggers to use the new logger instance
+    this.refreshAllSubLoggers();
 
     console.log(`[Logger] Default log level set to: ${level}`);
   }
@@ -704,7 +796,7 @@ class Logger {
    */
   notifyCountUpdate(callback?: LogCountUpdateCallback): void {
     try {
-      const { getErrorCount, getWarningCount } = require('./db');
+      const { getErrorCount, getWarningCount } = require("./db");
       const errorCount = getErrorCount();
       const warningCount = getWarningCount();
 
@@ -717,7 +809,7 @@ class Logger {
         }
       }
     } catch (error) {
-      console.error('[Logger] Failed to notify count update:', error);
+      console.error("[Logger] Failed to notify count update:", error);
     }
   }
 }

@@ -23,7 +23,7 @@ export default function ConsolidatedPlayerControls({
   isDownloaded,
   serverReachable,
 }: ConsolidatedPlayerControlsProps) {
-  const { isDark, colors } = useThemedStyles();
+  const { colors } = useThemedStyles();
   const { currentTrack, position, currentChapter, isLoadingTrack } = usePlayer();
   const { createBookmark } = useUserProfile();
   const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
