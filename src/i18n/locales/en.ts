@@ -178,14 +178,19 @@ export const en = {
   "settings.autoReconnectDescription":
     "Automatically reconnect the audio player background service when the app returns from background or after context recreation. Disable if experiencing issues with playback.",
   "settings.tabBar.title": "Customize Tab Bar",
-  "settings.tabBar.subtitle": "Show, hide, and reorder tabs",
+  "settings.tabBar.subtitle": "Organize tabs and menu items",
   "settings.tabBar.description":
-    "Customize which tabs are shown in the tab bar and change their order. Use the arrow buttons to reorder tabs and the eye icon to show or hide them.",
-  "settings.tabBar.cannotHideAll.title": "Cannot Hide Tab",
-  "settings.tabBar.cannotHideAll.message": "You must have at least one visible tab.",
-  "settings.tabBar.cannotHideMore.title": "Cannot Hide More Tab",
+    "Move tabs between the tab bar and More menu. Use arrow buttons to reorder, (+) to add to tab bar, and (-) to move to More menu.",
+  "settings.tabBar.sections.tabBar": "Tab Bar",
+  "settings.tabBar.sections.moreMenu": "More Menu",
+  "settings.tabBar.cannotHideAll.title": "Cannot Remove Tab",
+  "settings.tabBar.cannotHideAll.message": "The tab bar must have at least one tab.",
+  "settings.tabBar.cannotHideMore.title": "Cannot Remove More Tab",
   "settings.tabBar.cannotHideMore.message":
-    "The More tab cannot be hidden as it contains important settings and app information.",
+    "The More tab cannot be removed as it contains settings and app information.",
+  "settings.tabBar.limitReached.title": "Tab Bar Full",
+  "settings.tabBar.limitReached.message":
+    "The tab bar can only show {max} tabs. Remove a tab first to add this one.",
   "settings.tabBar.reset.title": "Reset to Defaults",
   "settings.tabBar.reset.message":
     "Are you sure you want to reset the tab bar to the default order and show all tabs?",

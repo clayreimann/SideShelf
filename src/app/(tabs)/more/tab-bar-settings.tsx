@@ -1,7 +1,7 @@
 /**
  * Tab Bar Settings Screen
  *
- * Configure which tabs are shown/hidden and their order
+ * Configure which tabs are shown in the tab bar vs the More menu
  */
 
 import { translate, type TranslationKey } from "@/i18n";
@@ -10,7 +10,11 @@ import { useSettings } from "@/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import { useCallback, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
+
+// Maximum tabs in the tab bar (platform-specific)
+// iOS typically supports 5 tabs, Android similar
+const MAX_TAB_BAR_ITEMS = Platform.select({ ios: 5, android: 5, default: 5 });
 
 // Tab configuration with labels
 const ALL_TABS = [
@@ -31,20 +35,38 @@ export default function TabBarSettingsScreen() {
   const borderColor = isDark ? "#3A3A3C" : "#C7C7CC";
   const itemBackground = isDark ? "#1C1C1E" : "#FFFFFF";
 
-  // Get ordered tabs based on user preferences
-  const orderedTabs = tabOrder
+  // Split tabs into visible (tab bar) and hidden (more menu)
+  const visibleTabNames = tabOrder.filter((name) => !hiddenTabs.includes(name));
+  const hiddenTabNames = tabOrder.filter((name) => hiddenTabs.includes(name));
+
+  const visibleTabs = visibleTabNames
     .map((name) => ALL_TABS.find((tab) => tab.name === name))
     .filter((tab): tab is (typeof ALL_TABS)[number] => tab !== undefined);
 
-  // Move tab up in order
+  const hiddenTabsData = hiddenTabNames
+    .map((name) => ALL_TABS.find((tab) => tab.name === name))
+    .filter((tab): tab is (typeof ALL_TABS)[number] => tab !== undefined);
+
+  // Move tab up within its section (visible or hidden)
   const moveTabUp = useCallback(
-    async (index: number) => {
-      if (index === 0 || isUpdating) return;
+    async (tabName: string, isInTabBar: boolean) => {
+      if (isUpdating) return;
+
+      const list = isInTabBar ? visibleTabNames : hiddenTabNames;
+      const index = list.indexOf(tabName);
+      if (index <= 0) return;
 
       setIsUpdating(true);
       try {
-        const newOrder = [...tabOrder];
-        [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+        // Swap with previous item in the section
+        const newList = [...list];
+        [newList[index - 1], newList[index]] = [newList[index], newList[index - 1]];
+
+        // Reconstruct full tab order
+        const newOrder = isInTabBar
+          ? [...newList, ...hiddenTabNames]
+          : [...visibleTabNames, ...newList];
+
         await updateTabOrder(newOrder);
       } catch (error) {
         console.error("Failed to update tab order", error);
@@ -53,18 +75,29 @@ export default function TabBarSettingsScreen() {
         setIsUpdating(false);
       }
     },
-    [tabOrder, updateTabOrder, isUpdating]
+    [visibleTabNames, hiddenTabNames, updateTabOrder, isUpdating]
   );
 
-  // Move tab down in order
+  // Move tab down within its section (visible or hidden)
   const moveTabDown = useCallback(
-    async (index: number) => {
-      if (index === tabOrder.length - 1 || isUpdating) return;
+    async (tabName: string, isInTabBar: boolean) => {
+      if (isUpdating) return;
+
+      const list = isInTabBar ? visibleTabNames : hiddenTabNames;
+      const index = list.indexOf(tabName);
+      if (index === -1 || index >= list.length - 1) return;
 
       setIsUpdating(true);
       try {
-        const newOrder = [...tabOrder];
-        [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+        // Swap with next item in the section
+        const newList = [...list];
+        [newList[index], newList[index + 1]] = [newList[index + 1], newList[index]];
+
+        // Reconstruct full tab order
+        const newOrder = isInTabBar
+          ? [...newList, ...hiddenTabNames]
+          : [...visibleTabNames, ...newList];
+
         await updateTabOrder(newOrder);
       } catch (error) {
         console.error("Failed to update tab order", error);
@@ -73,24 +106,45 @@ export default function TabBarSettingsScreen() {
         setIsUpdating(false);
       }
     },
-    [tabOrder, updateTabOrder, isUpdating]
+    [visibleTabNames, hiddenTabNames, updateTabOrder, isUpdating]
   );
 
-  // Toggle tab visibility
-  const toggleTabVisibility = useCallback(
+  // Move tab from More Menu to Tab Bar
+  const moveToTabBar = useCallback(
     async (tabName: string) => {
       if (isUpdating) return;
 
-      // Prevent hiding all tabs or the "More" tab (which contains settings)
-      const visibleTabs = tabOrder.filter((t) => !hiddenTabs.includes(t));
-      if (visibleTabs.length === 1 && visibleTabs[0] === tabName) {
+      // Check if we've reached the tab bar limit
+      if (visibleTabNames.length >= MAX_TAB_BAR_ITEMS) {
         Alert.alert(
-          translate("settings.tabBar.cannotHideAll.title"),
-          translate("settings.tabBar.cannotHideAll.message")
+          translate("settings.tabBar.limitReached.title"),
+          translate("settings.tabBar.limitReached.message", {
+            max: MAX_TAB_BAR_ITEMS.toString(),
+          })
         );
         return;
       }
 
+      setIsUpdating(true);
+      try {
+        const newHiddenTabs = hiddenTabs.filter((t) => t !== tabName);
+        await updateHiddenTabs(newHiddenTabs);
+      } catch (error) {
+        console.error("Failed to move tab to tab bar", error);
+        Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
+      } finally {
+        setIsUpdating(false);
+      }
+    },
+    [visibleTabNames, hiddenTabs, updateHiddenTabs, isUpdating]
+  );
+
+  // Move tab from Tab Bar to More Menu
+  const moveToMoreMenu = useCallback(
+    async (tabName: string) => {
+      if (isUpdating) return;
+
+      // Prevent hiding the More tab or leaving tab bar empty
       if (tabName === "more") {
         Alert.alert(
           translate("settings.tabBar.cannotHideMore.title"),
@@ -99,21 +153,26 @@ export default function TabBarSettingsScreen() {
         return;
       }
 
+      if (visibleTabNames.length <= 1) {
+        Alert.alert(
+          translate("settings.tabBar.cannotHideAll.title"),
+          translate("settings.tabBar.cannotHideAll.message")
+        );
+        return;
+      }
+
       setIsUpdating(true);
       try {
-        const isHidden = hiddenTabs.includes(tabName);
-        const newHiddenTabs = isHidden
-          ? hiddenTabs.filter((t) => t !== tabName)
-          : [...hiddenTabs, tabName];
+        const newHiddenTabs = [...hiddenTabs, tabName];
         await updateHiddenTabs(newHiddenTabs);
       } catch (error) {
-        console.error("Failed to update hidden tabs", error);
+        console.error("Failed to move tab to more menu", error);
         Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
       } finally {
         setIsUpdating(false);
       }
     },
-    [hiddenTabs, tabOrder, updateHiddenTabs, isUpdating]
+    [visibleTabNames, hiddenTabs, updateHiddenTabs, isUpdating]
   );
 
   // Reset to defaults
@@ -145,6 +204,98 @@ export default function TabBarSettingsScreen() {
     );
   }, [updateTabOrder, updateHiddenTabs]);
 
+  // Render a tab item with controls
+  const renderTabItem = (
+    tab: (typeof ALL_TABS)[number],
+    index: number,
+    isInTabBar: boolean,
+    listLength: number
+  ) => {
+    const isFirst = index === 0;
+    const isLast = index === listLength - 1;
+
+    return (
+      <View
+        key={tab.name}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          backgroundColor: itemBackground,
+          borderRadius: 10,
+          padding: 12,
+          marginBottom: 8,
+          borderWidth: 1,
+          borderColor: borderColor,
+        }}
+      >
+        {/* Tab Label */}
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              fontSize: 16,
+              color: colors.textPrimary,
+              fontWeight: "500",
+            }}
+          >
+            {translate(tab.titleKey)}
+          </Text>
+        </View>
+
+        {/* Control Buttons */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          {/* Move Up */}
+          <Pressable
+            onPress={() => moveTabUp(tab.name, isInTabBar)}
+            disabled={isFirst || isUpdating}
+            style={{
+              padding: 8,
+              opacity: isFirst || isUpdating ? 0.3 : 1,
+            }}
+          >
+            <Ionicons name="arrow-up" size={20} color={colors.textPrimary} />
+          </Pressable>
+
+          {/* Move Down */}
+          <Pressable
+            onPress={() => moveTabDown(tab.name, isInTabBar)}
+            disabled={isLast || isUpdating}
+            style={{
+              padding: 8,
+              opacity: isLast || isUpdating ? 0.3 : 1,
+            }}
+          >
+            <Ionicons name="arrow-down" size={20} color={colors.textPrimary} />
+          </Pressable>
+
+          {/* Move between sections */}
+          {isInTabBar ? (
+            <Pressable
+              onPress={() => moveToMoreMenu(tab.name)}
+              disabled={isUpdating}
+              style={{
+                padding: 8,
+                opacity: isUpdating ? 0.5 : 1,
+              }}
+            >
+              <Ionicons name="remove-circle-outline" size={20} color="#FF3B30" />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => moveToTabBar(tab.name)}
+              disabled={isUpdating}
+              style={{
+                padding: 8,
+                opacity: isUpdating ? 0.5 : 1,
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={20} color="#34C759" />
+            </Pressable>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: translate("settings.tabBar.title") }} />
@@ -157,88 +308,43 @@ export default function TabBarSettingsScreen() {
           </Text>
         </View>
 
-        {/* Tab List */}
+        {/* Tab Bar Section */}
         <View style={{ padding: 16, paddingTop: 8 }}>
-          {orderedTabs.map((tab, index) => {
-            const isHidden = hiddenTabs.includes(tab.name);
-            const isFirst = index === 0;
-            const isLast = index === orderedTabs.length - 1;
-
-            return (
-              <View
-                key={tab.name}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  backgroundColor: itemBackground,
-                  borderRadius: 10,
-                  padding: 12,
-                  marginBottom: 8,
-                  borderWidth: 1,
-                  borderColor: borderColor,
-                  opacity: isHidden ? 0.5 : 1,
-                }}
-              >
-                {/* Tab Label */}
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      fontSize: 16,
-                      color: colors.textPrimary,
-                      fontWeight: "500",
-                      textDecorationLine: isHidden ? "line-through" : "none",
-                    }}
-                  >
-                    {translate(tab.titleKey)}
-                  </Text>
-                </View>
-
-                {/* Reorder Buttons */}
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  {/* Move Up */}
-                  <Pressable
-                    onPress={() => moveTabUp(index)}
-                    disabled={isFirst || isUpdating}
-                    style={{
-                      padding: 8,
-                      opacity: isFirst || isUpdating ? 0.3 : 1,
-                    }}
-                  >
-                    <Ionicons name="arrow-up" size={20} color={colors.textPrimary} />
-                  </Pressable>
-
-                  {/* Move Down */}
-                  <Pressable
-                    onPress={() => moveTabDown(index)}
-                    disabled={isLast || isUpdating}
-                    style={{
-                      padding: 8,
-                      opacity: isLast || isUpdating ? 0.3 : 1,
-                    }}
-                  >
-                    <Ionicons name="arrow-down" size={20} color={colors.textPrimary} />
-                  </Pressable>
-
-                  {/* Toggle Visibility */}
-                  <Pressable
-                    onPress={() => toggleTabVisibility(tab.name)}
-                    disabled={isUpdating}
-                    style={{
-                      padding: 8,
-                      opacity: isUpdating ? 0.5 : 1,
-                    }}
-                  >
-                    <Ionicons
-                      name={isHidden ? "eye-off" : "eye"}
-                      size={20}
-                      color={colors.textPrimary}
-                    />
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })}
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "600",
+              color: textSecondary,
+              marginBottom: 12,
+              textTransform: "uppercase",
+            }}
+          >
+            {translate("settings.tabBar.sections.tabBar")} ({visibleTabs.length}/{MAX_TAB_BAR_ITEMS})
+          </Text>
+          {visibleTabs.map((tab, index) =>
+            renderTabItem(tab, index, true, visibleTabs.length)
+          )}
         </View>
+
+        {/* More Menu Section */}
+        {hiddenTabsData.length > 0 && (
+          <View style={{ padding: 16, paddingTop: 0 }}>
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: "600",
+                color: textSecondary,
+                marginBottom: 12,
+                textTransform: "uppercase",
+              }}
+            >
+              {translate("settings.tabBar.sections.moreMenu")} ({hiddenTabsData.length})
+            </Text>
+            {hiddenTabsData.map((tab, index) =>
+              renderTabItem(tab, index, false, hiddenTabsData.length)
+            )}
+          </View>
+        )}
 
         {/* Reset Button */}
         <View style={{ padding: 16 }}>
