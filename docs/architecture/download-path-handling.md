@@ -15,6 +15,7 @@ file:///var/mobile/Containers/Data/Application/ABC12345-XXXX-XXXX-XXXX-XXXXXXXXX
 ```
 
 **The Problem:** This container identifier can change between app launches. When it does:
+
 1. Files on disk are moved to the new container path
 2. Absolute paths stored in the database become invalid
 3. The app can't find files even though they still exist on disk
@@ -22,6 +23,7 @@ file:///var/mobile/Containers/Data/Application/ABC12345-XXXX-XXXX-XXXX-XXXXXXXXX
 ### Impact on Downloads
 
 When a user downloads an audiobook:
+
 1. The file is saved to the downloads directory
 2. The file path is stored in the database
 3. If the path is absolute (not relative), it includes the container ID
@@ -35,6 +37,7 @@ When a user downloads an audiobook:
 The app uses a two-function approach in `src/lib/fileSystem.ts`:
 
 1. **`toAppRelativePath(path: string)`**: Converts absolute paths to relative paths before storing
+
    ```typescript
    // Before storing: file://.../ABC123/.../downloads/book.m4b
    // After: downloads/book.m4b
@@ -67,11 +70,13 @@ The app has two complementary repair mechanisms to handle container path changes
 ### 1. Per-Item Repair (On-Demand)
 
 Despite relative path storage, some paths may still be absolute in the database:
+
 - Paths from before the relative path migration
 - Paths that couldn't be converted to relative (edge cases)
 - Corrupted data from crashes during writes
 
 The `DownloadService.repairDownloadStatus()` function is called automatically when:
+
 - The item details screen is opened
 - Any component needs to verify download status
 
@@ -94,6 +99,7 @@ Action: Update database with expected path
 When the app comes back from background, the container path may have changed. To handle this, the app automatically refreshes all active file references.
 
 The `PlayerService.refreshFilePathsAfterContainerChange()` function is called automatically when:
+
 - The app moves from background to foreground
 - Before any player state restoration
 
@@ -112,6 +118,7 @@ The refresh process:
 Both repair mechanisms log their actions for debugging:
 
 **Per-Item Repair:**
+
 ```
 [DownloadService] Repairing download status for item-123...
 [DownloadService] File marked as downloaded but missing at stored path: book.m4b
@@ -123,6 +130,7 @@ Both repair mechanisms log their actions for debugging:
 ```
 
 **Global Path Refresh:**
+
 ```
 [RootLayout] App moved to foreground (was backgrounded for 120.45s)
 [PlayerService] Refreshing file paths after potential container change...
@@ -183,56 +191,10 @@ for (const row of existingAudioDownloads) {
 ### Edge Case
 
 If the container ID changed between when the old data was created and when the migration runs:
+
 - `toAppRelativePath()` can't convert the path (it's not under current base directory)
 - The absolute path is stored as-is
 - **Automatic repair will fix it** on next item details view
-
-## Code Locations
-
-### Path Conversion
-
-- **Path conversion**: `src/lib/fileSystem.ts`
-  - `toAppRelativePath()` - Converts absolute paths to relative before storing
-  - `resolveAppPath()` - Resolves relative paths to absolute when reading
-  - `getDownloadPath()` - Gets current absolute path for a download file
-
-### Database Operations
-
-- **Database helpers**: `src/db/helpers/localData.ts`
-  - `markAudioFileAsDownloaded()` - uses `toAppRelativePath()`
-  - `getAudioFileDownloadInfo()` - uses `resolveAppPath()`
-
-### Repair Mechanisms
-
-- **Per-item repair**: `src/services/DownloadService.ts`
-  - `repairDownloadStatus()` - Repairs download paths for a single item
-  - Called from: `src/components/library/LibraryItemDetail.tsx` (item details screen)
-
-- **Global path refresh**: `src/services/PlayerService.ts`
-  - `refreshFilePathsAfterContainerChange()` - Refreshes current track cover URI
-  - Called from: `src/app/_layout.tsx` (app foreground handler)
-
-## Testing
-
-### Manual Test
-
-1. Download a book
-2. Check the database path:
-   ```sql
-   SELECT download_path FROM local_audio_file_downloads LIMIT 1;
-   ```
-3. Should see relative path like: `downloads/abc-123/book.m4b`
-4. Close and reopen app
-5. Open item details
-6. Book should still show as downloaded
-
-### Simulating Container Change
-
-Since we can't force iOS to change the container ID, the automatic repair can be tested by:
-
-1. Manually updating database with an absolute path with fake container ID
-2. Opening item details screen
-3. Checking logs for repair messages
 
 ## Future Improvements
 
