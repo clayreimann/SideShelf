@@ -5,7 +5,7 @@
  * Phase 1: Defined but not enforced (observer mode).
  */
 
-import { PlayerState, PlayerEvent } from "@/types/coordinator";
+import { PlayerEvent, PlayerState } from "@/types/coordinator";
 
 /**
  * State transition matrix
@@ -18,6 +18,7 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     LOAD_TRACK: PlayerState.LOADING,
     RESTORE_STATE: PlayerState.RESTORING,
     RELOAD_QUEUE: PlayerState.LOADING,
+    NATIVE_STATE_CHANGED: PlayerState.IDLE, // Allow native state changes while idle
     APP_FOREGROUNDED: PlayerState.IDLE, // No-op transition - app foregrounded while idle
   },
 
@@ -27,6 +28,7 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
     NATIVE_STATE_CHANGED: PlayerState.LOADING, // Allow state changes during loading
+    NATIVE_PROGRESS_UPDATED: PlayerState.LOADING, // Allow progress updates during loading
   },
 
   [PlayerState.READY]: {
@@ -34,13 +36,19 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     LOAD_TRACK: PlayerState.LOADING,
     STOP: PlayerState.IDLE,
     SEEK: PlayerState.SEEKING,
+    NATIVE_STATE_CHANGED: PlayerState.READY, // Allow native state changes during ready
+    NATIVE_ERROR: PlayerState.ERROR,
+    NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
   },
 
   [PlayerState.PLAYING]: {
     PAUSE: PlayerState.PAUSED,
     STOP: PlayerState.STOPPING,
     SEEK: PlayerState.SEEKING,
+    LOAD_TRACK: PlayerState.LOADING, // Allow switching tracks while playing
     BUFFERING_STARTED: PlayerState.BUFFERING,
+    NATIVE_STATE_CHANGED: PlayerState.PLAYING, // Allow native state changes during playback
+    NATIVE_TRACK_CHANGED: PlayerState.PLAYING, // Allow track changes during playback
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
     APP_BACKGROUNDED: PlayerState.PLAYING, // Continue in background
@@ -51,11 +59,16 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     STOP: PlayerState.STOPPING,
     SEEK: PlayerState.SEEKING,
     LOAD_TRACK: PlayerState.LOADING,
+    NATIVE_STATE_CHANGED: PlayerState.PAUSED, // Allow native state changes while paused
+    NATIVE_TRACK_CHANGED: PlayerState.PAUSED, // Allow track changes while paused
+    NATIVE_ERROR: PlayerState.ERROR,
+    NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
   },
 
   [PlayerState.SEEKING]: {
     SEEK_COMPLETE: PlayerState.READY,
     NATIVE_PROGRESS_UPDATED: PlayerState.READY, // Seek complete
+    NATIVE_STATE_CHANGED: PlayerState.SEEKING, // Allow native state changes during seek
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
   },
@@ -63,6 +76,7 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
   [PlayerState.BUFFERING]: {
     BUFFERING_COMPLETED: PlayerState.PLAYING,
     NATIVE_STATE_CHANGED: PlayerState.PLAYING,
+    NATIVE_TRACK_CHANGED: PlayerState.BUFFERING, // Allow track changes during buffering
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
     PAUSE: PlayerState.PAUSED,
