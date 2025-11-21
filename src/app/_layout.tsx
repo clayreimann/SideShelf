@@ -87,6 +87,14 @@ export default function RootLayout() {
           `App moved to foreground (was backgrounded for ${(timeInBackground / 1000).toFixed(2)}s)`
         );
 
+        // Refresh file paths in case iOS changed the container path
+        // This ensures cover images and other file references remain valid
+        try {
+          await playerService.refreshFilePathsAfterContainerChange();
+        } catch (error) {
+          log.error("Failed to refresh file paths on foreground", error as Error);
+        }
+
         // Check TrackPlayer directly to see if it's currently playing
         let trackPlayerIsPlaying = false;
         try {

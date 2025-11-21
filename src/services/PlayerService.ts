@@ -1489,6 +1489,66 @@ export class PlayerService {
       }
     }
   }
+
+  /**
+   * Refresh file paths after iOS container path changes
+   *
+   * iOS can change the application container path between app launches or when
+   * coming back from background. This causes absolute paths to become invalid
+   * even though the files still exist at a different absolute path.
+   *
+   * This method:
+   * 1. Refreshes the current track's cover URI
+   * 2. Updates the now playing metadata in TrackPlayer
+   *
+   * Should be called when the app comes to foreground to ensure all file
+   * references are valid for the current container path.
+   */
+  async refreshFilePathsAfterContainerChange(): Promise<void> {
+    log.info("[PlayerService] Refreshing file paths after potential container change...");
+
+    try {
+      const store = useAppStore.getState();
+      const currentTrack = store.player.currentTrack;
+
+      if (!currentTrack) {
+        log.debug("No current track, skipping path refresh");
+        return;
+      }
+
+      // The cover URI may contain an old absolute path
+      // getCoverUri() will resolve it to the current container path
+      const refreshedCoverUri = getCoverUri(currentTrack.libraryItemId);
+
+      // Check if the cover URI actually changed
+      if (refreshedCoverUri !== currentTrack.coverUri) {
+        log.info(
+          `[PlayerService] Cover URI changed for ${currentTrack.libraryItemId}, updating track metadata`
+        );
+        log.debug(`  Old: ${currentTrack.coverUri}`);
+        log.debug(`  New: ${refreshedCoverUri}`);
+
+        // Update the track in the store
+        const updatedTrack: PlayerTrack = {
+          ...currentTrack,
+          coverUri: refreshedCoverUri,
+        };
+
+        store._setCurrentTrack(updatedTrack);
+
+        // Update TrackPlayer's now playing metadata with the new cover URI
+        // This ensures the lock screen and notification show the correct cover
+        await this.updateNowPlayingMetadata();
+
+        log.info("[PlayerService] Track metadata refreshed with new cover URI");
+      } else {
+        log.debug("Cover URI unchanged, no refresh needed");
+      }
+    } catch (error) {
+      log.error("Failed to refresh file paths after container change", error as Error);
+      // Don't throw - this is a best-effort operation
+    }
+  }
 }
 
 // Export singleton instance

@@ -60,16 +60,16 @@ CREATE TABLE local_audio_file_downloads (
 );
 ```
 
-## Automatic Repair Mechanism
+## Automatic Repair Mechanisms
 
-### Why It's Needed
+The app has two complementary repair mechanisms to handle container path changes:
+
+### 1. Per-Item Repair (On-Demand)
 
 Despite relative path storage, some paths may still be absolute in the database:
 - Paths from before the relative path migration
 - Paths that couldn't be converted to relative (edge cases)
 - Corrupted data from crashes during writes
-
-### How It Works
 
 The `DownloadService.repairDownloadStatus()` function is called automatically when:
 - The item details screen is opened
@@ -89,10 +89,29 @@ Expected path: file://.../XYZ789/.../downloads/book.m4b  ✓ (current container)
 Action: Update database with expected path
 ```
 
+### 2. Global Path Refresh (App Foreground)
+
+When the app comes back from background, the container path may have changed. To handle this, the app automatically refreshes all active file references.
+
+The `PlayerService.refreshFilePathsAfterContainerChange()` function is called automatically when:
+- The app moves from background to foreground
+- Before any player state restoration
+
+The refresh process:
+
+1. **Check current track**: Is there an active track with a cover image?
+2. **Recalculate cover URI**: Use `getCoverUri()` to get the path with current container
+3. **Compare paths**: Has the cover URI changed?
+4. **If changed, update**:
+   - Update the track in the player store
+   - Update TrackPlayer's now playing metadata
+   - This refreshes lock screen and notification images
+
 ### Logging
 
-The repair function logs all actions at INFO level:
+Both repair mechanisms log their actions for debugging:
 
+**Per-Item Repair:**
 ```
 [DownloadService] Repairing download status for item-123...
 [DownloadService] File marked as downloaded but missing at stored path: book.m4b
@@ -103,26 +122,42 @@ The repair function logs all actions at INFO level:
 [DownloadService] Repaired 1 file(s) for library item item-123
 ```
 
+**Global Path Refresh:**
+```
+[RootLayout] App moved to foreground (was backgrounded for 120.45s)
+[PlayerService] Refreshing file paths after potential container change...
+[PlayerService] Cover URI changed for item-123, updating track metadata
+  Old: file://.../ABC123/.../covers/item-123
+  New: file://.../XYZ789/.../covers/item-123
+[PlayerService] Track metadata refreshed with new cover URI
+```
+
 ## User Experience
 
 ### Before Automatic Repair
 
-1. User downloads a book
-2. App restarts (container ID changes)
-3. Item details screen shows book as "not downloaded"
-4. User taps download button
-5. App checks disk, finds file, marks as downloaded
-6. **Annoying**: User had to tap download for a book they already have
+1. User downloads a book and plays it
+2. App goes to background (container ID changes)
+3. **Cover image broken** in lock screen/notification
+4. User opens item details
+5. Item shows as "not downloaded"
+6. User taps download button
+7. App checks disk, finds file, marks as downloaded
+8. **Annoying**: Broken cover + user had to tap download for a book they already have
 
 ### After Automatic Repair
 
-1. User downloads a book
-2. App restarts (container ID changes)
-3. Item details screen opens
-4. **Automatic repair runs silently**
-5. File is found and path is updated
-6. Screen shows book as downloaded
-7. **Seamless**: No user action needed
+1. User downloads a book and plays it
+2. App goes to background (container ID changes)
+3. **App comes to foreground**
+4. **Global path refresh runs automatically**:
+   - Cover URI is refreshed for current track
+   - Lock screen/notification updated with correct image
+5. User opens item details
+6. **Per-item repair runs silently**:
+   - Download paths verified and fixed if needed
+7. Screen shows book as downloaded with correct cover
+8. **Seamless**: Cover works, downloads show correctly, no user action needed
 
 ## Migration Considerations
 
@@ -154,19 +189,28 @@ If the container ID changed between when the old data was created and when the m
 
 ## Code Locations
 
+### Path Conversion
+
 - **Path conversion**: `src/lib/fileSystem.ts`
-  - `toAppRelativePath()`
-  - `resolveAppPath()`
+  - `toAppRelativePath()` - Converts absolute paths to relative before storing
+  - `resolveAppPath()` - Resolves relative paths to absolute when reading
+  - `getDownloadPath()` - Gets current absolute path for a download file
+
+### Database Operations
 
 - **Database helpers**: `src/db/helpers/localData.ts`
   - `markAudioFileAsDownloaded()` - uses `toAppRelativePath()`
   - `getAudioFileDownloadInfo()` - uses `resolveAppPath()`
 
-- **Repair mechanism**: `src/services/DownloadService.ts`
-  - `repairDownloadStatus()`
+### Repair Mechanisms
 
-- **Automatic trigger**: `src/components/library/LibraryItemDetail.tsx`
-  - Called in `useEffect` when component loads
+- **Per-item repair**: `src/services/DownloadService.ts`
+  - `repairDownloadStatus()` - Repairs download paths for a single item
+  - Called from: `src/components/library/LibraryItemDetail.tsx` (item details screen)
+
+- **Global path refresh**: `src/services/PlayerService.ts`
+  - `refreshFilePathsAfterContainerChange()` - Refreshes current track cover URI
+  - Called from: `src/app/_layout.tsx` (app foreground handler)
 
 ## Testing
 
@@ -195,6 +239,7 @@ Since we can't force iOS to change the container ID, the automatic repair can be
 1. **Batch repair on app startup**: Currently repairs per-item, could batch all items
 2. **Background repair**: Run repair during idle time instead of on-demand
 3. **Metrics**: Track how often repairs are needed to understand frequency
+4. **Proactive detection**: Check if container path actually changed before refreshing
 
 ## Related Issues
 
