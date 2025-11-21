@@ -1125,19 +1125,20 @@ export class PlayerService {
 
       // Get DB session as source of truth for position (if we have libraryItemId)
       let dbPosition = store.player.position;
+      let dbSessionUpdatedAt: Date | null = null;
       if (store.player.currentTrack?.libraryItemId) {
         try {
           const username = await getStoredUsername();
           if (username) {
             const user = await getUserByUsername(username);
             if (user?.id) {
-              const dbSession = await progressService.getCurrentSession(
+              const dbSession = await getActiveSession(
                 user.id,
                 store.player.currentTrack.libraryItemId
               );
               if (dbSession) {
                 dbPosition = dbSession.currentTime;
-                // Note: SessionInfo doesn't have updatedAt property
+                dbSessionUpdatedAt = dbSession.updatedAt;
               }
             }
           }
@@ -1199,19 +1200,39 @@ export class PlayerService {
         let authoritativePosition = dbPosition;
         let positionSource = "DB";
 
-        // Note: SessionInfo doesn't have updatedAt property, so we can't check for stale sessions
-        // We'll always trust DB position when available
+        if (dbSessionUpdatedAt) {
+          const sessionAge = Date.now() - dbSessionUpdatedAt.getTime();
+
+          // If DB session is stale (>60s old) and TrackPlayer position is ahead, prefer TrackPlayer
+          if (sessionAge > STALE_SESSION_THRESHOLD && tpPosition > dbPosition) {
+            authoritativePosition = tpPosition;
+            positionSource = "TrackPlayer (DB session is stale)";
+            log.warn(
+              `DB session is stale (${formatTime(sessionAge / 1000)}s old), preferring TrackPlayer position: ${formatTime(tpPosition)}s over DB: ${formatTime(dbPosition)}s`
+            );
+          }
+        }
 
         log.info(
           `Position mismatch detected: TrackPlayer=${formatTime(tpPosition)}s, DB=${formatTime(dbPosition)}s, Store=${formatTime(storePosition)}s, diff=${formatTime(positionDiff)}s, ${trackInfo}`
         );
 
         if (hasTracks) {
-          await TrackPlayer.seekTo(authoritativePosition);
-          store.updatePosition(authoritativePosition);
-          report.actionsTaken.push(
-            `Adjusted TrackPlayer position to ${positionSource} value: ${formatTime(authoritativePosition)}s`
-          );
+          // Don't seek TrackPlayer if actively playing to avoid stutters
+          // When playing, TrackPlayer position is ahead of DB due to 1-2s sync lag
+          if (!tpIsPlaying) {
+            await TrackPlayer.seekTo(authoritativePosition);
+            store.updatePosition(authoritativePosition);
+            report.actionsTaken.push(
+              `Adjusted TrackPlayer position to ${positionSource} value: ${formatTime(authoritativePosition)}s`
+            );
+          } else {
+            // Update store but don't seek TrackPlayer
+            store.updatePosition(authoritativePosition);
+            report.actionsTaken.push(
+              `Did not seek TrackPlayer because it's actively playing (would cause stutter). Updated store position to ${positionSource} value: ${formatTime(authoritativePosition)}s`
+            );
+          }
         } else {
           const reason = store.player.currentTrack
             ? "TrackPlayer queue is empty - queue should be rebuilt via restorePlayerServiceFromSession() or playTrack()"
@@ -1307,15 +1328,25 @@ export class PlayerService {
         return;
       }
 
-      // Update store position
+      // Check if TrackPlayer is actively playing
+      const playbackState = await TrackPlayer.getPlaybackState();
+      const isPlaying = playbackState.state === State.Playing;
+
+      // Update store position (for UI consistency)
       store.updatePosition(session.currentTime);
 
-      // Seek TrackPlayer to the new position
-      await TrackPlayer.seekTo(session.currentTime);
-
-      log.info(
-        `Position synced from database: ${formatTime(session.currentTime)}s for ${currentTrack.libraryItemId}`
-      );
+      // Only seek TrackPlayer if NOT actively playing to avoid stutters
+      // When playing, TrackPlayer position is ahead of DB due to 1-2s sync lag
+      if (!isPlaying) {
+        await TrackPlayer.seekTo(session.currentTime);
+        log.info(
+          `Position synced from database: ${formatTime(session.currentTime)}s for ${currentTrack.libraryItemId}`
+        );
+      } else {
+        log.info(
+          `Position updated from database in store: ${formatTime(session.currentTime)}s (TrackPlayer not seeked because actively playing)`
+        );
+      }
     } catch (error) {
       log.error("Error syncing position from database", error as Error);
       throw error;

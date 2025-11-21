@@ -1,15 +1,15 @@
-import { db } from '@/db/client';
-import { libraryItems } from '@/db/schema/libraryItems';
-import { localCoverCache } from '@/db/schema/localData';
-import { mediaMetadata } from '@/db/schema/mediaMetadata';
-import { resolveAppPath } from '@/lib/fileSystem';
-import type { ApiLibraryItem, ApiLibraryItemsResponse } from '@/types/api';
-import type { LibraryItemDisplayRow } from '@/types/components';
-import type { LibraryItemRow, NewLibraryItemRow } from '@/types/database';
-import { and, eq, inArray, not, sql } from 'drizzle-orm';
-import { audioFiles } from '../schema/audioFiles';
-import { mediaAuthors, mediaNarrators, mediaSeries } from '../schema/mediaJoins';
-import { series } from '../schema/series';
+import { db } from "@/db/client";
+import { libraryItems } from "@/db/schema/libraryItems";
+import { localCoverCache } from "@/db/schema/localData";
+import { mediaMetadata } from "@/db/schema/mediaMetadata";
+import { resolveAppPath } from "@/lib/fileSystem";
+import type { ApiLibraryItem, ApiLibraryItemsResponse } from "@/types/api";
+import type { LibraryItemDisplayRow } from "@/types/components";
+import type { LibraryItemRow, NewLibraryItemRow } from "@/types/database";
+import { and, eq, inArray, not, sql } from "drizzle-orm";
+import { audioFiles } from "../schema/audioFiles";
+import { mediaAuthors, mediaNarrators, mediaSeries } from "../schema/mediaJoins";
+import { series } from "../schema/series";
 
 // Marshal a single ApiLibraryItem from API to database row
 export function marshalLibraryItemFromApi(item: ApiLibraryItem): NewLibraryItemRow {
@@ -35,17 +35,15 @@ export function marshalLibraryItemFromApi(item: ApiLibraryItem): NewLibraryItemR
 }
 
 // Marshal library items from API response
-export function marshalLibraryItemsFromResponse(response: ApiLibraryItemsResponse): NewLibraryItemRow[] {
+export function marshalLibraryItemsFromResponse(
+  response: ApiLibraryItemsResponse
+): NewLibraryItemRow[] {
   return response.results.map(marshalLibraryItemFromApi);
 }
 
 // Upsert a single library item
 export async function upsertLibraryItem(row: NewLibraryItemRow): Promise<LibraryItemRow> {
-  const existing = await db
-    .select()
-    .from(libraryItems)
-    .where(eq(libraryItems.id, row.id))
-    .limit(1);
+  const existing = await db.select().from(libraryItems).where(eq(libraryItems.id, row.id)).limit(1);
 
   if (existing.length > 0) {
     const [updated] = await db
@@ -72,13 +70,9 @@ export async function upsertLibraryItems(rows: NewLibraryItemRow[]): Promise<voi
 // Transaction-aware variant for batch operations
 export async function upsertLibraryItemTx(
   tx: typeof db,
-  row: NewLibraryItemRow,
+  row: NewLibraryItemRow
 ): Promise<LibraryItemRow> {
-  const existing = await tx
-    .select()
-    .from(libraryItems)
-    .where(eq(libraryItems.id, row.id))
-    .limit(1);
+  const existing = await tx.select().from(libraryItems).where(eq(libraryItems.id, row.id)).limit(1);
 
   if (existing.length > 0) {
     const [updated] = await tx
@@ -95,10 +89,7 @@ export async function upsertLibraryItemTx(
 
 // Get all library items from database
 export async function getAllLibraryItems(): Promise<LibraryItemRow[]> {
-  return await db
-    .select()
-    .from(libraryItems)
-    .orderBy(libraryItems.addedAt);
+  return await db.select().from(libraryItems).orderBy(libraryItems.addedAt);
 }
 
 // Get library items by library ID
@@ -112,13 +103,20 @@ export async function getLibraryItemsByLibraryId(libraryId: string): Promise<Lib
 
 // Get a single library item by ID
 export async function getLibraryItemById(id: string): Promise<LibraryItemRow | null> {
+  const result = await db.select().from(libraryItems).where(eq(libraryItems.id, id)).limit(1);
+
+  return result[0] || null;
+}
+
+// Check if a library item exists in the database
+export async function checkLibraryItemExists(id: string): Promise<boolean> {
   const result = await db
-    .select()
+    .select({ id: libraryItems.id })
     .from(libraryItems)
     .where(eq(libraryItems.id, id))
     .limit(1);
 
-  return result[0] || null;
+  return result.length > 0;
 }
 
 // Delete library items by library ID (useful when library is deleted)
@@ -134,7 +132,11 @@ export async function deleteAllLibraryItems(): Promise<void> {
 // Get library items that don't have full metadata yet (no author linkage since that's probably the only guaranteed linkage) (for background processing)
 export async function getLibraryItemsNeedingFullData(limit: number = 50): Promise<string[]> {
   const itemsWithFullData = await db
-    .select({ id: libraryItems.id, mediaMetadataId: mediaMetadata.id, mediaAuthorsId: mediaAuthors.authorId })
+    .select({
+      id: libraryItems.id,
+      mediaMetadataId: mediaMetadata.id,
+      mediaAuthorsId: mediaAuthors.authorId,
+    })
     .from(libraryItems)
     .innerJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
     .innerJoin(mediaAuthors, eq(mediaMetadata.id, mediaAuthors.mediaId));
@@ -143,13 +145,20 @@ export async function getLibraryItemsNeedingFullData(limit: number = 50): Promis
     .select({ id: libraryItems.id })
     .from(libraryItems)
     .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
-    .where(and(
-      eq(libraryItems.mediaType, 'book'),
-      not(inArray(mediaMetadata.id, itemsWithFullData.map(r => r.mediaMetadataId))),
-    ))
+    .where(
+      and(
+        eq(libraryItems.mediaType, "book"),
+        not(
+          inArray(
+            mediaMetadata.id,
+            itemsWithFullData.map((r) => r.mediaMetadataId)
+          )
+        )
+      )
+    )
     .limit(limit);
 
-  return itemsWithoutFullData.map(r => r.id);
+  return itemsWithoutFullData.map((r) => r.id);
 }
 
 // Get library items that might need full data refresh (alternative approach)
@@ -165,69 +174,77 @@ export async function getLibraryItemsNeedingRefresh(limit: number = 50): Promise
     .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
     .leftJoin(mediaAuthors, eq(mediaMetadata.id, mediaAuthors.mediaId))
     .leftJoin(audioFiles, eq(audioFiles.mediaId, mediaMetadata.id))
-    .where(eq(libraryItems.mediaType, 'book')) // Focus on books for now
+    .where(eq(libraryItems.mediaType, "book")) // Focus on books for now
     .limit(limit * 2); // Get more to filter from
 
   // Filter to items that need processing
-  const needsProcessing = results.filter(item => !item.hasMetadata || !item.hasAuthors || !item.hasAudioFiles);
+  const needsProcessing = results.filter(
+    (item) => !item.hasMetadata || !item.hasAuthors || !item.hasAudioFiles
+  );
 
-  return needsProcessing.slice(0, limit).map(r => r.id);
+  return needsProcessing.slice(0, limit).map((r) => r.id);
 }
-
 
 /**
  * Get library items filtered by author ID from local database
  */
-export async function getLibraryItemsByAuthor(libraryId: string, authorId: string): Promise<{
-  id: string;
-  libraryId: string;
-  mediaType: string | null;
-  addedAt: number | null;
-  updatedAt: number | null;
-  isMissing: boolean | null;
-  isInvalid: boolean | null;
-  title: string | null;
-  subtitle: string | null;
-  author: string | null;
-  authorName: string | null;
-  authorNameLF: string | null;
-  narrator: string | null;
-  releaseDate: string | null;
-  publishedDate: string | null;
-  publishedYear: string | null;
-  duration: number | null;
-  coverUri: string | undefined;
-  description: string | null;
-  language: string | null;
-  explicit: boolean | null;
-  seriesName: string | null;
-}[]> {
+export async function getLibraryItemsByAuthor(
+  libraryId: string,
+  authorId: string
+): Promise<
+  {
+    id: string;
+    libraryId: string;
+    mediaType: string | null;
+    addedAt: number | null;
+    updatedAt: number | null;
+    isMissing: boolean | null;
+    isInvalid: boolean | null;
+    title: string | null;
+    subtitle: string | null;
+    author: string | null;
+    authorName: string | null;
+    authorNameLF: string | null;
+    narrator: string | null;
+    releaseDate: string | null;
+    publishedDate: string | null;
+    publishedYear: string | null;
+    duration: number | null;
+    coverUri: string | undefined;
+    description: string | null;
+    language: string | null;
+    explicit: boolean | null;
+    seriesName: string | null;
+  }[]
+> {
   // Subquery to aggregate narrators
   const narratorsSubquery = db
     .select({
       mediaId: mediaNarrators.mediaId,
-      narratorNames: sql<string | null>`GROUP_CONCAT(${mediaNarrators.narratorName}, ', ')`.as('narrator_names'),
+      narratorNames: sql<string | null>`GROUP_CONCAT(${mediaNarrators.narratorName}, ', ')`.as(
+        "narrator_names"
+      ),
     })
     .from(mediaNarrators)
     .groupBy(mediaNarrators.mediaId)
-    .as('narrators_agg');
+    .as("narrators_agg");
 
   // Subquery to aggregate series names
   const seriesSubquery = db
     .select({
       mediaId: mediaSeries.mediaId,
-      seriesNames: sql<string | null>`GROUP_CONCAT(${series.name}, ', ')`.as('series_names'),
+      seriesNames: sql<string | null>`GROUP_CONCAT(${series.name}, ', ')`.as("series_names"),
     })
     .from(mediaSeries)
     .leftJoin(series, eq(mediaSeries.seriesId, series.id))
     .groupBy(mediaSeries.mediaId)
-    .as('series_agg');
+    .as("series_agg");
 
   const baseQuery = db
     .select({
       id: libraryItems.id,
       libraryId: libraryItems.libraryId,
-      mediaType: libraryItems.mediaType ?? '',
+      mediaType: libraryItems.mediaType ?? "",
       addedAt: libraryItems.addedAt,
       updatedAt: libraryItems.updatedAt,
       isMissing: libraryItems.isMissing,
@@ -258,12 +275,7 @@ export async function getLibraryItemsByAuthor(libraryId: string, authorId: strin
     .leftJoin(seriesSubquery, eq(mediaMetadata.id, seriesSubquery.mediaId));
 
   const rows = await baseQuery
-    .where(
-      and(
-        eq(libraryItems.libraryId, libraryId),
-        eq(mediaAuthors.authorId, authorId)
-      )
-    )
+    .where(and(eq(libraryItems.libraryId, libraryId), eq(mediaAuthors.authorId, authorId)))
     .orderBy(mediaMetadata.title);
 
   return rows.map(({ mediaId, ...row }) => ({
@@ -273,56 +285,60 @@ export async function getLibraryItemsByAuthor(libraryId: string, authorId: strin
 }
 
 // Get library items with full metadata for list display
-export async function getLibraryItemsForList(libraryId: string): Promise<{
-  id: string;
-  libraryId: string;
-  mediaType: string | null;
-  addedAt: number | null;
-  updatedAt: number | null;
-  isMissing: boolean | null;
-  isInvalid: boolean | null;
-  title: string | null;
-  subtitle: string | null;
-  author: string | null;
-  authorName: string | null;
-  authorNameLF: string | null;
-  narrator: string | null;
-  releaseDate: string | null;
-  publishedDate: string | null;
-  publishedYear: string | null;
-  duration: number | null;
-  coverUri: string | undefined;
-  description: string | null;
-  language: string | null;
-  explicit: boolean | null;
-  seriesName: string | null;
-}[]> {
+export async function getLibraryItemsForList(libraryId: string): Promise<
+  {
+    id: string;
+    libraryId: string;
+    mediaType: string | null;
+    addedAt: number | null;
+    updatedAt: number | null;
+    isMissing: boolean | null;
+    isInvalid: boolean | null;
+    title: string | null;
+    subtitle: string | null;
+    author: string | null;
+    authorName: string | null;
+    authorNameLF: string | null;
+    narrator: string | null;
+    releaseDate: string | null;
+    publishedDate: string | null;
+    publishedYear: string | null;
+    duration: number | null;
+    coverUri: string | undefined;
+    description: string | null;
+    language: string | null;
+    explicit: boolean | null;
+    seriesName: string | null;
+  }[]
+> {
   // Subquery to aggregate narrators
   const narratorsSubquery = db
     .select({
       mediaId: mediaNarrators.mediaId,
-      narratorNames: sql<string | null>`GROUP_CONCAT(${mediaNarrators.narratorName}, ', ')`.as('narrator_names'),
+      narratorNames: sql<string | null>`GROUP_CONCAT(${mediaNarrators.narratorName}, ', ')`.as(
+        "narrator_names"
+      ),
     })
     .from(mediaNarrators)
     .groupBy(mediaNarrators.mediaId)
-    .as('narrators_agg');
+    .as("narrators_agg");
 
   // Subquery to aggregate series names
   const seriesSubquery = db
     .select({
       mediaId: mediaSeries.mediaId,
-      seriesNames: sql<string | null>`GROUP_CONCAT(${series.name}, ', ')`.as('series_names'),
+      seriesNames: sql<string | null>`GROUP_CONCAT(${series.name}, ', ')`.as("series_names"),
     })
     .from(mediaSeries)
     .leftJoin(series, eq(mediaSeries.seriesId, series.id))
     .groupBy(mediaSeries.mediaId)
-    .as('series_agg');
+    .as("series_agg");
 
   const baseQuery = db
     .select({
       id: libraryItems.id,
       libraryId: libraryItems.libraryId,
-      mediaType: libraryItems.mediaType ?? '',
+      mediaType: libraryItems.mediaType ?? "",
       addedAt: libraryItems.addedAt,
       updatedAt: libraryItems.updatedAt,
       isMissing: libraryItems.isMissing,
@@ -364,8 +380,10 @@ export async function getLibraryItemsForList(libraryId: string): Promise<{
 /**
  * Transform database library items to display format for UI components
  */
-export function transformItemsToDisplayFormat(dbItems: Awaited<ReturnType<typeof getLibraryItemsForList>>): Array<LibraryItemDisplayRow> {
-  return dbItems.map(item => ({
+export function transformItemsToDisplayFormat(
+  dbItems: Awaited<ReturnType<typeof getLibraryItemsForList>>
+): Array<LibraryItemDisplayRow> {
+  return dbItems.map((item) => ({
     id: item.id,
     mediaType: item.mediaType,
     title: item.title,
