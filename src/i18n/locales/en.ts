@@ -161,6 +161,7 @@ export const en = {
   "settings.loading": "Loading settings...",
   "settings.error.saveFailed": "Failed to save setting",
   "settings.sections.librarySelection": "Library Selection",
+  "settings.sections.appearance": "Appearance",
   "settings.sections.playbackControls": "Playback Controls",
   "settings.sections.advanced": "Advanced",
   "settings.sections.developer": "Developer",
@@ -176,6 +177,19 @@ export const en = {
   "settings.autoReconnect": "Auto-reconnect Background Service",
   "settings.autoReconnectDescription":
     "Automatically reconnect the audio player background service when the app returns from background or after context recreation. Disable if experiencing issues with playback.",
+  "settings.tabBar.title": "Customize Tab Bar",
+  "settings.tabBar.subtitle": "Show, hide, and reorder tabs",
+  "settings.tabBar.description":
+    "Customize which tabs are shown in the tab bar and change their order. Use the arrow buttons to reorder tabs and the eye icon to show or hide them.",
+  "settings.tabBar.cannotHideAll.title": "Cannot Hide Tab",
+  "settings.tabBar.cannotHideAll.message": "You must have at least one visible tab.",
+  "settings.tabBar.cannotHideMore.title": "Cannot Hide More Tab",
+  "settings.tabBar.cannotHideMore.message":
+    "The More tab cannot be hidden as it contains important settings and app information.",
+  "settings.tabBar.reset.title": "Reset to Defaults",
+  "settings.tabBar.reset.message":
+    "Are you sure you want to reset the tab bar to the default order and show all tabs?",
+  "settings.tabBar.reset.confirm": "Reset",
 
   // Logger Settings
   "loggerSettings.title": "Logger Settings",

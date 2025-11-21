@@ -163,6 +163,7 @@ export const es = {
   "settings.loading": "Cargando configuración...",
   "settings.error.saveFailed": "Error al guardar la configuración",
   "settings.sections.librarySelection": "Selección de biblioteca",
+  "settings.sections.appearance": "Apariencia",
   "settings.sections.playbackControls": "Controles de reproducción",
   "settings.sections.advanced": "Avanzado",
   "settings.sections.developer": "Desarrollador",
@@ -178,6 +179,19 @@ export const es = {
   "settings.autoReconnect": "Reconexión automática del servicio en segundo plano",
   "settings.autoReconnectDescription":
     "Reconectar automáticamente el servicio del reproductor de audio en segundo plano cuando la aplicación vuelve del fondo o después de la recreación del contexto. Desactiva si experimentas problemas con la reproducción.",
+  "settings.tabBar.title": "Personalizar barra de pestañas",
+  "settings.tabBar.subtitle": "Mostrar, ocultar y reordenar pestañas",
+  "settings.tabBar.description":
+    "Personaliza qué pestañas se muestran en la barra de pestañas y cambia su orden. Usa los botones de flecha para reordenar las pestañas y el icono del ojo para mostrarlas u ocultarlas.",
+  "settings.tabBar.cannotHideAll.title": "No se puede ocultar la pestaña",
+  "settings.tabBar.cannotHideAll.message": "Debe haber al menos una pestaña visible.",
+  "settings.tabBar.cannotHideMore.title": "No se puede ocultar la pestaña Más",
+  "settings.tabBar.cannotHideMore.message":
+    "La pestaña Más no se puede ocultar ya que contiene configuraciones importantes e información de la aplicación.",
+  "settings.tabBar.reset.title": "Restablecer valores predeterminados",
+  "settings.tabBar.reset.message":
+    "¿Estás seguro de que quieres restablecer la barra de pestañas al orden predeterminado y mostrar todas las pestañas?",
+  "settings.tabBar.reset.confirm": "Restablecer",
 
   // Logger Settings
   "loggerSettings.title": "Configuración de registros",

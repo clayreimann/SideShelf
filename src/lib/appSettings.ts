@@ -13,6 +13,8 @@ const SETTINGS_KEYS = {
   enablePeriodicNowPlayingUpdates: "@app/enablePeriodicNowPlayingUpdates",
   homeLayout: "@app/homeLayout",
   enableDiagnostics: "@app/enableDiagnostics",
+  tabOrder: "@app/tabOrder",
+  hiddenTabs: "@app/hiddenTabs",
 } as const;
 
 // Default values
@@ -22,6 +24,8 @@ const DEFAULT_SMART_REWIND_ENABLED = true;
 const DEFAULT_PERIODIC_NOW_PLAYING_UPDATES_ENABLED = true;
 const DEFAULT_HOME_LAYOUT = "list" as const;
 const DEFAULT_DIAGNOSTICS_ENABLED = false;
+const DEFAULT_TAB_ORDER = ["home", "library", "series", "authors", "more"];
+const DEFAULT_HIDDEN_TABS: string[] = [];
 
 /**
  * Get jump forward interval in seconds
@@ -206,4 +210,60 @@ export function calculateSmartRewindTime(lastPlayedMs: number | null): number {
   if (timeSinceLastPlayed < 300) return 10; // 1m to 5m = rewind 10s
   if (timeSinceLastPlayed < 1800) return 20; // 5m to 30m = rewind 20s
   return 30; // 30m and up = rewind 30s
+}
+
+/**
+ * Get tab order preference
+ * Default: ["home", "library", "series", "authors", "more"]
+ */
+export async function getTabOrder(): Promise<string[]> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.tabOrder);
+    if (value === null) return DEFAULT_TAB_ORDER;
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : DEFAULT_TAB_ORDER;
+  } catch (error) {
+    console.error("[AppSettings] Failed to get tab order:", error);
+    return DEFAULT_TAB_ORDER;
+  }
+}
+
+/**
+ * Set tab order preference
+ */
+export async function setTabOrder(order: string[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.tabOrder, JSON.stringify(order));
+  } catch (error) {
+    console.error("[AppSettings] Failed to save tab order:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get hidden tabs preference
+ * Default: [] (no tabs hidden)
+ */
+export async function getHiddenTabs(): Promise<string[]> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.hiddenTabs);
+    if (value === null) return DEFAULT_HIDDEN_TABS;
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : DEFAULT_HIDDEN_TABS;
+  } catch (error) {
+    console.error("[AppSettings] Failed to get hidden tabs:", error);
+    return DEFAULT_HIDDEN_TABS;
+  }
+}
+
+/**
+ * Set hidden tabs preference
+ */
+export async function setHiddenTabs(hiddenTabs: string[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.hiddenTabs, JSON.stringify(hiddenTabs));
+  } catch (error) {
+    console.error("[AppSettings] Failed to save hidden tabs:", error);
+    throw error;
+  }
 }

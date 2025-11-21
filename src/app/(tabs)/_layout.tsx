@@ -126,7 +126,14 @@ export default function TabLayout() {
   const { tabs, isDark } = useThemedStyles();
   const errorCount = useAppStore((state) => state.logger.errorCount);
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
+  const tabOrder = useAppStore((state) => state.settings.tabOrder);
+  const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
   const showErrorBadge = errorCount > 0 && diagnosticsEnabled;
+
+  // Get ordered and filtered tabs based on user preferences
+  const visibleTabs = tabOrder
+    .map((name) => TAB_CONFIG.find((tab) => tab.name === name))
+    .filter((tab): tab is TabConfig => tab !== undefined && !hiddenTabs.includes(tab.name));
   useEffect(() => {
     if (initialized && !isAuthenticated) {
       router.push("/login");
@@ -163,7 +170,7 @@ export default function TabLayout() {
             },
           }}
         >
-          {TAB_CONFIG.map((tab) => {
+          {visibleTabs.map((tab) => {
             const label = translate(tab.titleKey);
             const isMoreTab = tab.name === "more";
             return (
@@ -207,7 +214,7 @@ export default function TabLayout() {
         rippleColor={tabs.rippleColor}
         indicatorColor={tabs.indicatorColor}
       >
-        {TAB_CONFIG.map((tab) => {
+        {visibleTabs.map((tab) => {
           const label = translate(tab.titleKey);
           const isMoreTab = tab.name === "more";
           return (
