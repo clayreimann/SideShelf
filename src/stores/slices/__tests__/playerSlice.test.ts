@@ -620,6 +620,27 @@ describe("PlayerSlice", () => {
       expect(state.player.currentPlaySessionId).toBe("session-123");
     });
 
+    it("should handle partial state restoration when some items are missing", async () => {
+      mockedAsyncStorage.getItem.mockImplementation((key: string) => {
+        switch (key) {
+          case ASYNC_KEYS.playbackRate:
+            return Promise.resolve(JSON.stringify(1.2));
+          case ASYNC_KEYS.volume:
+            return Promise.resolve(JSON.stringify(0.5));
+          default:
+            return Promise.resolve(null);
+        }
+      });
+
+      await store.getState().restorePersistedState();
+
+      const state = store.getState();
+      expect(state.player.playbackRate).toBe(1.2);
+      expect(state.player.volume).toBe(0.5);
+      expect(state.player.currentTrack).toBeNull();
+      expect(state.player.position).toBe(0);
+    });
+
     it("should set and clear isRestoringState flag", async () => {
       await store.getState().restorePersistedState();
 
@@ -752,6 +773,552 @@ describe("PlayerSlice", () => {
       expect(state.player.currentChapter).toBeNull();
       expect(state.player.currentTrack).toEqual(expectedRestoredTrack);
       expect(state.player.position).toBe(2000);
+    });
+
+    it("should skip DB reconciliation when username is missing", async () => {
+      getStoredUsername.mockResolvedValue(null);
+
+      await store.getState().restorePersistedState();
+
+      expect(getUserByUsername).not.toHaveBeenCalled();
+      expect(mockedProgressService.getCurrentSession).not.toHaveBeenCalled();
+    });
+
+    it("should skip DB reconciliation when user is not found", async () => {
+      getStoredUsername.mockResolvedValue("testuser");
+      getUserByUsername.mockResolvedValue(null);
+
+      await store.getState().restorePersistedState();
+
+      expect(getUserByUsername).toHaveBeenCalledWith("testuser");
+      expect(mockedProgressService.getCurrentSession).not.toHaveBeenCalled();
+    });
+
+    it("should skip DB reconciliation when no currentTrack is loaded", async () => {
+      getStoredUsername.mockResolvedValue("testuser");
+      getUserByUsername.mockResolvedValue({ id: "user-1" });
+      mockedAsyncStorage.getItem.mockResolvedValue(null);
+
+      await store.getState().restorePersistedState();
+
+      expect(mockedProgressService.getCurrentSession).not.toHaveBeenCalled();
+    });
+
+    it("should not update position when DB diff is <= 1 second", async () => {
+      // Pre-load track and set initial position
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(300);
+
+      mockedAsyncStorage.getItem
+        .mockResolvedValueOnce(null) // currentTrack
+        .mockResolvedValueOnce(null) // playbackRate
+        .mockResolvedValueOnce(null) // volume
+        .mockResolvedValueOnce(JSON.stringify(300)) // position
+        .mockResolvedValueOnce(null) // isPlaying
+        .mockResolvedValueOnce(null) // currentPlaySessionId
+        .mockResolvedValueOnce(null); // sleepTimer
+
+      const dbSession = {
+        sessionId: "session-db",
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        startTime: 0,
+        currentTime: 300.5, // Only 0.5s difference
+        duration: 3600,
+        isDownloaded: true,
+      };
+
+      mockedProgressService.getCurrentSession.mockResolvedValue(dbSession);
+
+      await store.getState().restorePersistedState();
+
+      const state = store.getState();
+      // Should keep AsyncStorage position since diff is small
+      expect(state.player.position).toBe(300);
+    });
+
+    it("should restore chapter-based sleep timer", async () => {
+      const sleepTimer = {
+        type: "chapter",
+        endTime: null,
+        chapterTarget: "next",
+      };
+
+      mockedAsyncStorage.getItem.mockImplementation((key: string) => {
+        if (key === ASYNC_KEYS.sleepTimer) {
+          return Promise.resolve(JSON.stringify(sleepTimer));
+        }
+        return Promise.resolve(null);
+      });
+
+      await store.getState().restorePersistedState();
+
+      const state = store.getState();
+      expect(state.player.sleepTimer.type).toBe("chapter");
+      expect(state.player.sleepTimer.chapterTarget).toBe("next");
+      expect(state.player.sleepTimer.endTime).toBeNull();
+    });
+
+    it("should apply restored position to TrackPlayer when queue is ready", async () => {
+      mockedAsyncStorage.getItem.mockImplementation((key: string) => {
+        if (key === ASYNC_KEYS.position) {
+          return Promise.resolve(JSON.stringify(500));
+        }
+        return Promise.resolve(null);
+      });
+
+      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "track-1", title: "Test" }]);
+
+      await store.getState().restorePersistedState();
+
+      expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(500);
+    });
+
+    it("should handle TrackPlayer seek failure gracefully", async () => {
+      mockedAsyncStorage.getItem.mockImplementation((key: string) => {
+        if (key === ASYNC_KEYS.position) {
+          return Promise.resolve(JSON.stringify(500));
+        }
+        return Promise.resolve(null);
+      });
+
+      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "track-1", title: "Test" }]);
+      mockedTrackPlayer.seekTo.mockRejectedValue(new Error("Seek failed"));
+
+      await expect(store.getState().restorePersistedState()).resolves.not.toThrow();
+    });
+  });
+
+  describe("Chapter Position Calculations", () => {
+    it("should calculate positionInChapter correctly", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(100);
+
+      const state = store.getState();
+      expect(state.player.currentChapter?.positionInChapter).toBe(100);
+      expect(state.player.currentChapter?.chapterDuration).toBe(1800);
+    });
+
+    it("should calculate positionInChapter for second chapter", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(2000);
+
+      const state = store.getState();
+      expect(state.player.currentChapter?.chapter.id).toBe("ch-2");
+      expect(state.player.currentChapter?.positionInChapter).toBe(200); // 2000 - 1800
+      expect(state.player.currentChapter?.chapterDuration).toBe(1800);
+    });
+
+    it("should handle position exactly on chapter boundary", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(1800); // Exactly at ch-2 start
+
+      const state = store.getState();
+      expect(state.player.currentChapter?.chapter.id).toBe("ch-2");
+      expect(state.player.currentChapter?.positionInChapter).toBe(0);
+    });
+
+    it("should clamp positionInChapter to chapter duration", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(10000); // Way past end
+
+      const state = store.getState();
+      expect(state.player.currentChapter?.chapter.id).toBe("ch-2");
+      // Position should be clamped to chapter duration
+      expect(state.player.currentChapter?.positionInChapter).toBeLessThanOrEqual(1800);
+    });
+
+    it("should handle negative positionInChapter by clamping to 0", () => {
+      const trackWithEarlyChapter: PlayerTrack = {
+        ...mockPlayerTrack,
+        chapters: [{ id: "ch-1", start: 100, end: 200, title: "Chapter 1" }],
+      };
+
+      store.getState()._setCurrentTrack(trackWithEarlyChapter);
+      store.getState().updatePosition(50); // Before chapter start
+
+      const state = store.getState();
+      expect(state.player.currentChapter?.positionInChapter).toBe(0);
+    });
+  });
+
+  describe("Volume Edge Cases", () => {
+    it("should handle volume exactly 0", () => {
+      store.getState()._setVolume(0);
+      expect(store.getState().player.volume).toBe(0);
+    });
+
+    it("should handle volume exactly 1", () => {
+      store.getState()._setVolume(1);
+      expect(store.getState().player.volume).toBe(1);
+    });
+
+    it("should clamp very large volumes", () => {
+      store.getState()._setVolume(100);
+      expect(store.getState().player.volume).toBe(1);
+    });
+
+    it("should clamp very negative volumes", () => {
+      store.getState()._setVolume(-100);
+      expect(store.getState().player.volume).toBe(0);
+    });
+  });
+
+  describe("Playback Rate", () => {
+    it("should handle various playback rates", () => {
+      const rates = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
+
+      rates.forEach((rate) => {
+        store.getState()._setPlaybackRate(rate);
+        expect(store.getState().player.playbackRate).toBe(rate);
+      });
+    });
+
+    it("should allow playback rate 0", () => {
+      store.getState()._setPlaybackRate(0);
+      expect(store.getState().player.playbackRate).toBe(0);
+    });
+
+    it("should allow very high playback rates", () => {
+      store.getState()._setPlaybackRate(5.0);
+      expect(store.getState().player.playbackRate).toBe(5.0);
+    });
+  });
+
+  describe("getSleepTimerRemaining Edge Cases", () => {
+    it("should return null when chapter target is next but no next chapter exists", () => {
+      const singleChapterTrack: PlayerTrack = {
+        ...mockPlayerTrack,
+        chapters: [{ id: "ch-1", start: 0, end: 1800, title: "Chapter 1" }],
+      };
+
+      store.getState()._setCurrentTrack(singleChapterTrack);
+      store.getState().updatePosition(100);
+      store.getState().player.sleepTimer = {
+        type: "chapter",
+        endTime: null,
+        chapterTarget: "next",
+      };
+
+      const remaining = store.getState().getSleepTimerRemaining();
+      expect(remaining).toBeNull();
+    });
+
+    it("should return null when chapter timer is set but no current chapter", () => {
+      store.getState().player.sleepTimer = {
+        type: "chapter",
+        endTime: null,
+        chapterTarget: "current",
+      };
+
+      const remaining = store.getState().getSleepTimerRemaining();
+      expect(remaining).toBeNull();
+    });
+
+    it("should handle zero remaining time for duration timer", () => {
+      const endTime = Date.now();
+      store.getState().player.sleepTimer = {
+        type: "duration",
+        endTime,
+        chapterTarget: null,
+      };
+
+      const remaining = store.getState().getSleepTimerRemaining();
+      expect(remaining).toBeLessThanOrEqual(1); // Should be very close to 0
+    });
+  });
+
+  describe("Integration Scenarios", () => {
+    it("should maintain consistency when switching tracks", () => {
+      const track1 = mockPlayerTrack;
+      const track2: PlayerTrack = {
+        ...mockPlayerTrack,
+        libraryItemId: "item-2",
+        title: "Second Book",
+        chapters: [{ id: "ch-3", start: 0, end: 900, title: "Chapter 3" }],
+      };
+
+      // Load first track and play
+      store.getState()._setCurrentTrack(track1);
+      store.getState().updatePosition(500);
+      store.getState().updatePlayingState(true);
+
+      expect(store.getState().player.currentChapter?.chapter.id).toBe("ch-1");
+
+      // Switch to second track
+      store.getState()._setCurrentTrack(track2);
+
+      const state = store.getState();
+      expect(state.player.currentTrack?.libraryItemId).toBe("item-2");
+      expect(state.player.position).toBe(500); // Position preserved
+      expect(state.player.currentChapter?.chapter.id).toBe("ch-3");
+    });
+
+    it("should handle complete playback lifecycle", () => {
+      // Initialize
+      store.getState().initializePlayerSlice();
+      expect(store.getState().player.initialized).toBe(true);
+
+      // Load track
+      store.getState()._setTrackLoading(true);
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState()._setTrackLoading(false);
+
+      // Start playback
+      store.getState().updatePlayingState(true);
+      store.getState().updatePosition(0);
+
+      // Progress through first chapter
+      store.getState().updatePosition(900);
+      expect(store.getState().player.currentChapter?.chapter.id).toBe("ch-1");
+
+      // Cross into second chapter
+      store.getState().updatePosition(1900);
+      expect(store.getState().player.currentChapter?.chapter.id).toBe("ch-2");
+
+      // Pause
+      store.getState().updatePlayingState(false);
+      const pauseTime = Date.now();
+      store.getState()._setLastPauseTime(pauseTime);
+      expect(store.getState().player.lastPauseTime).toBe(pauseTime);
+
+      // Resume
+      store.getState().updatePlayingState(true);
+    });
+
+    it("should handle seek operations with chapter updates", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(100);
+
+      // Seek within same chapter
+      store.getState()._setSeeking(true);
+      store.getState().updatePosition(200);
+      store.getState()._setSeeking(false);
+
+      expect(store.getState().player.currentChapter?.chapter.id).toBe("ch-1");
+
+      // Seek to different chapter
+      store.getState()._setSeeking(true);
+      store.getState().updatePosition(2000);
+      store.getState()._setSeeking(false);
+
+      expect(store.getState().player.currentChapter?.chapter.id).toBe("ch-2");
+    });
+
+    it("should handle sleep timer expiry during playback", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(100);
+      store.getState().updatePlayingState(true);
+
+      // Set sleep timer for 1 minute
+      store.getState().setSleepTimer(1);
+
+      let remaining = store.getState().getSleepTimerRemaining();
+      expect(remaining).toBeGreaterThan(55);
+
+      // Cancel timer
+      store.getState().cancelSleepTimer();
+      remaining = store.getState().getSleepTimerRemaining();
+      expect(remaining).toBeNull();
+    });
+
+    it("should handle chapter-based sleep timer with chapter transitions", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(100);
+
+      // Set to end of current chapter
+      store.getState().setSleepTimerChapter("current");
+      const remaining = store.getState().getSleepTimerRemaining();
+      expect(remaining).toBe(1700); // 1800 - 100
+
+      // Move to next chapter - timer adapts to track current chapter dynamically
+      store.getState().updatePosition(2000);
+
+      // Timer dynamically tracks "current" chapter, so now it targets ch-2's end
+      // Remaining = 3600 - 2000 = 1600
+      const newRemaining = store.getState().getSleepTimerRemaining();
+      expect(newRemaining).toBe(1600);
+      expect(newRemaining).toBeLessThan(remaining);
+    });
+  });
+
+  describe("Persistence Verification", () => {
+    it("should persist all stateful changes to AsyncStorage", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        ASYNC_KEYS.currentTrack,
+        expect.any(String)
+      );
+
+      store.getState().updatePosition(100);
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        ASYNC_KEYS.position,
+        expect.any(String)
+      );
+
+      store.getState().updatePlayingState(true);
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        ASYNC_KEYS.isPlaying,
+        expect.any(String)
+      );
+
+      store.getState()._setPlaybackRate(1.5);
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        ASYNC_KEYS.playbackRate,
+        expect.any(String)
+      );
+
+      store.getState()._setVolume(0.8);
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(ASYNC_KEYS.volume, expect.any(String));
+
+      store.getState()._setPlaySessionId("session-123");
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        ASYNC_KEYS.currentPlaySessionId,
+        expect.any(String)
+      );
+
+      store.getState().setSleepTimer(30);
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        ASYNC_KEYS.sleepTimer,
+        expect.any(String)
+      );
+    });
+
+    it("should not persist ephemeral state", () => {
+      const now = Date.now();
+      store.getState()._setLastPauseTime(now);
+
+      // Verify lastPauseTime is NOT persisted
+      const lastPauseTimeCalls = (mockedAsyncStorage.setItem as jest.Mock).mock.calls.filter(
+        (call) => {
+          const stringValue = call[1] as string;
+          return stringValue.includes(String(now));
+        }
+      );
+      expect(lastPauseTimeCalls.length).toBe(0);
+    });
+
+    it("should not persist UI-only state", () => {
+      store.getState().setModalVisible(true);
+      store.getState().setIsRestoringState(true);
+      store.getState()._setTrackLoading(true);
+      store.getState()._setSeeking(true);
+
+      // None of these should trigger AsyncStorage saves beyond existing ones
+      const modalCalls = (mockedAsyncStorage.setItem as jest.Mock).mock.calls.filter((call) => {
+        const stringValue = call[1] as string;
+        return stringValue.includes("isModalVisible") || stringValue.includes("isRestoringState");
+      });
+      expect(modalCalls.length).toBe(0);
+    });
+  });
+
+  describe("Error Handling", () => {
+    it("should handle TrackPlayer updateMetadataForTrack with null active track", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(100);
+
+      mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(null);
+
+      await expect(store.getState().updateNowPlayingMetadata()).resolves.not.toThrow();
+      expect(mockedTrackPlayer.updateMetadataForTrack).not.toHaveBeenCalled();
+    });
+
+    it("should handle TrackPlayer updateMetadataForTrack with negative index", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(100);
+
+      mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(-1);
+
+      await expect(store.getState().updateNowPlayingMetadata()).resolves.not.toThrow();
+      expect(mockedTrackPlayer.updateMetadataForTrack).not.toHaveBeenCalled();
+    });
+
+    it("should handle TrackPlayer updateMetadataForTrack with undefined index", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(100);
+
+      mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(undefined);
+
+      await expect(store.getState().updateNowPlayingMetadata()).resolves.not.toThrow();
+      expect(mockedTrackPlayer.updateMetadataForTrack).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Chapter Keep-Alive", () => {
+    it("should keep current chapter when position remains within bounds", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(100);
+
+      const initialChapter = store.getState().player.currentChapter;
+      expect(initialChapter?.chapter.id).toBe("ch-1");
+
+      // Update position within same chapter
+      store.getState().updatePosition(150);
+
+      const updatedChapter = store.getState().player.currentChapter;
+      expect(updatedChapter?.chapter.id).toBe("ch-1");
+    });
+
+    it("should update chapter when position crosses boundary", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState().updatePosition(1700);
+
+      expect(store.getState().player.currentChapter?.chapter.id).toBe("ch-1");
+
+      // Cross chapter boundary
+      store.getState().updatePosition(1850);
+
+      expect(store.getState().player.currentChapter?.chapter.id).toBe("ch-2");
+    });
+  });
+
+  describe("Track with Single Chapter", () => {
+    it("should handle track with single chapter", () => {
+      const singleChapterTrack: PlayerTrack = {
+        ...mockPlayerTrack,
+        chapters: [{ id: "ch-only", start: 0, end: 3600, title: "Only Chapter" }],
+      };
+
+      store.getState()._setCurrentTrack(singleChapterTrack);
+      store.getState().updatePosition(1800);
+
+      const state = store.getState();
+      expect(state.player.currentChapter?.chapter.id).toBe("ch-only");
+      expect(state.player.currentChapter?.positionInChapter).toBe(1800);
+      expect(state.player.currentChapter?.chapterDuration).toBe(3600);
+    });
+  });
+
+  describe("State Transitions", () => {
+    it("should handle modal visibility transitions", () => {
+      expect(store.getState().player.isModalVisible).toBe(false);
+
+      store.getState().setModalVisible(true);
+      expect(store.getState().player.isModalVisible).toBe(true);
+
+      store.getState().setModalVisible(false);
+      expect(store.getState().player.isModalVisible).toBe(false);
+    });
+
+    it("should handle loading state transitions", () => {
+      expect(store.getState().player.loading.isLoadingTrack).toBe(false);
+
+      store.getState()._setTrackLoading(true);
+      expect(store.getState().player.loading.isLoadingTrack).toBe(true);
+
+      store.getState()._setTrackLoading(false);
+      expect(store.getState().player.loading.isLoadingTrack).toBe(false);
+    });
+
+    it("should handle seeking state transitions", () => {
+      expect(store.getState().player.loading.isSeeking).toBe(false);
+
+      store.getState()._setSeeking(true);
+      expect(store.getState().player.loading.isSeeking).toBe(true);
+
+      store.getState()._setSeeking(false);
+      expect(store.getState().player.loading.isSeeking).toBe(false);
     });
   });
 });
