@@ -32,9 +32,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:report": "jest --coverage --json --outputFile=test-results.json && echo 'open test-report.html coverage/lcov-report/index.html'",
-    "abs:debug": "node scripts/abs-debug.mjs",
-    "drizzle:generate": "drizzle-kit generate --config=drizzle.config.ts",
-    "drizzle:push": "drizzle-kit push --config=drizzle.config.ts"
+    "drizzle:generate": "drizzle-kit generate --config=drizzle.config.ts"
   },
   "dependencies": {
     "@expo/config-plugins": "^54.0.1",
