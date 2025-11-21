@@ -96,6 +96,12 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         const user = username ? await getUserByUsername(username) : null;
         const userId = user?.id;
 
+        // Repair download status if needed (fixes iOS container path changes)
+        // This runs silently in the background and logs any repairs made
+        downloadService.repairDownloadStatus(itemId).catch((error) => {
+          console.error("[LibraryItemDetail] Download status repair failed:", error);
+        });
+
         // Fetch item details (uses cache if available)
         await fetchItemDetails(itemId, userId);
 

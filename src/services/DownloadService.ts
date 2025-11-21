@@ -491,6 +491,98 @@ export class DownloadService {
   }
 
   /**
+   * Repair download status for a library item
+   *
+   * This addresses an iOS issue where the application container path changes between
+   * app launches. When this happens, absolute file paths stored in the database become
+   * invalid even though the files still exist on disk.
+   *
+   * This function:
+   * 1. Checks all audio files marked as downloaded
+   * 2. Verifies each file exists at the stored path
+   * 3. If not, attempts to find the file using just the filename (relative to the downloads directory)
+   * 4. Updates the database with the corrected path if found
+   * 5. Clears the download status if the file truly doesn't exist
+   *
+   * @param libraryItemId The library item to repair
+   * @returns Number of files repaired
+   */
+  public async repairDownloadStatus(libraryItemId: string): Promise<number> {
+    log.info(`[DownloadService] Repairing download status for ${libraryItemId}...`);
+
+    try {
+      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
+      if (!metadata) {
+        log.info(`No metadata found for ${libraryItemId}`);
+        return 0;
+      }
+
+      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
+      if (audioFiles.length === 0) {
+        log.info(`No audio files found for ${libraryItemId}`);
+        return 0;
+      }
+
+      let repairedCount = 0;
+
+      for (const file of audioFiles) {
+        if (!file.downloadInfo?.isDownloaded) {
+          // Not marked as downloaded, skip
+          continue;
+        }
+
+        // Check if file exists at stored path
+        const existsAtStoredPath = await verifyFileExists(file.downloadInfo.downloadPath);
+
+        if (existsAtStoredPath) {
+          // File is fine, no repair needed
+          continue;
+        }
+
+        log.warn(
+          `[DownloadService] File marked as downloaded but missing at stored path: ${file.filename}`
+        );
+        log.warn(`  Stored path: ${file.downloadInfo.downloadPath}`);
+
+        // Try to find the file using the expected download path (current container)
+        const expectedPath = getDownloadPath(libraryItemId, file.filename);
+        const existsAtExpectedPath = await verifyFileExists(expectedPath);
+
+        if (existsAtExpectedPath) {
+          log.info(`  ✓ Found file at expected path: ${expectedPath}`);
+          log.info(`  Updating database with corrected path...`);
+
+          // Update the database with the corrected path
+          await markAudioFileAsDownloaded(file.id, expectedPath);
+          repairedCount++;
+
+          log.info(`  ✓ Repaired download path for ${file.filename}`);
+        } else {
+          log.warn(`  ✗ File not found at expected path either: ${expectedPath}`);
+          log.warn(`  File may have been deleted by iOS to free storage space`);
+          log.warn(`  Clearing download status...`);
+
+          // File truly doesn't exist, clear the download status
+          await clearAudioFileDownloadStatus(file.id);
+        }
+      }
+
+      if (repairedCount > 0) {
+        log.info(
+          `[DownloadService] Repaired ${repairedCount} file(s) for library item ${libraryItemId}`
+        );
+      } else {
+        log.info(`[DownloadService] No repairs needed for library item ${libraryItemId}`);
+      }
+
+      return repairedCount;
+    } catch (error) {
+      log.error(`Error repairing download status for ${libraryItemId}:`, error as Error);
+      return 0;
+    }
+  }
+
+  /**
    * Delete downloaded files for a library item
    */
   public async deleteDownloadedLibraryItem(libraryItemId: string): Promise<void> {
