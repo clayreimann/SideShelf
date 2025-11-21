@@ -5,7 +5,7 @@
  * Phase 1: Defined but not enforced (observer mode).
  */
 
-import { PlayerState, PlayerEvent } from "@/types/coordinator";
+import { PlayerEvent, PlayerState } from "@/types/coordinator";
 
 /**
  * State transition matrix
@@ -33,7 +33,6 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
 
   [PlayerState.READY]: {
     PLAY: PlayerState.PLAYING,
-    PAUSE: PlayerState.PAUSED, // Allow pause from ready state
     LOAD_TRACK: PlayerState.LOADING,
     STOP: PlayerState.IDLE,
     SEEK: PlayerState.SEEKING,
