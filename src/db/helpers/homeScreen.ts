@@ -192,7 +192,6 @@ export async function getListenAgainItems(userId: string, limit: number = 20): P
         authorName: item.authorName || undefined,
         seriesName: item.seriesName || undefined,
         imageUrl: item.imageUrl ? resolveAppPath(item.imageUrl) : undefined,
-        progress: item.progress || undefined,
         duration: item.duration || undefined,
         isFinished: item.isFinished || false,
         isDownloaded: false, // Will be updated if needed

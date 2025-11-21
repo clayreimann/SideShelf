@@ -43,7 +43,7 @@ interface MetadataSectionProps {
   narrator: string | null;
   series: string | null;
   duration: number | null | undefined;
-  publishedYear: number | null | undefined;
+  publishedYear: string | null | undefined;
   isDownloaded: boolean;
   authorId: string | null;
   seriesId: string | null;
@@ -119,9 +119,7 @@ export default function MetadataSection({
               }}
             >
               <NarratorIcon style={{ marginRight: 8 }} />
-              <Text style={[styles.text, { textAlign: "center", flexShrink: 1 }]}>
-                {narrator}
-              </Text>
+              <Text style={[styles.text, { textAlign: "center", flexShrink: 1 }]}>{narrator}</Text>
             </View>
           </>
         ) : null}

@@ -218,7 +218,7 @@ class ApiClientService {
       return true;
     } catch (error) {
       clearTimeout(timeoutId);
-      log.error("Token refresh error:", error);
+      log.error("Token refresh error:", error as Error);
       await this.clearTokens();
       return false;
     }
@@ -250,7 +250,7 @@ class ApiClientService {
    */
   createTimeoutSignal(customTimeout?: number): {
     controller: AbortController;
-    timeoutId: NodeJS.Timeout;
+    timeoutId: ReturnType<typeof setTimeout>;
   } {
     const timeout = customTimeout ?? this.timeout;
     const controller = new AbortController();

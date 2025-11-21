@@ -548,7 +548,12 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
         {/* Chapters */}
         <ChapterList
-          chapters={chapters}
+          chapters={chapters.map(ch => ({
+            id: ch.chapterId,
+            start: ch.start,
+            end: ch.end,
+            title: ch.title,
+          }))}
           currentPosition={currentTrack?.libraryItemId === itemId ? position : 0}
           libraryItemId={itemId}
           isCurrentlyPlaying={currentTrack?.libraryItemId === itemId}

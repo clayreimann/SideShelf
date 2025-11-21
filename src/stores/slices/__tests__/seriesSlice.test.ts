@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { DEFAULT_SERIES_SORT_CONFIG, STORAGE_KEYS } from "../../utils";
 import { createSeriesSlice, SeriesSlice } from "../seriesSlice";
 
@@ -22,7 +22,7 @@ jest.mock("@/db/helpers/series", () => ({
 }));
 
 describe("SeriesSlice", () => {
-  let store: ReturnType<typeof create<SeriesSlice>>;
+  let store: UseBoundStore<StoreApi<SeriesSlice>>;
 
   // Get mocked functions for type safety
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
@@ -39,17 +39,29 @@ describe("SeriesSlice", () => {
     {
       id: "series-1",
       name: "Series One",
-      numBooks: 5,
+      description: null,
+      addedAt: null,
+      updatedAt: null,
+      bookCount: 5,
+      firstBookCoverUrl: null,
     },
     {
       id: "series-2",
       name: "Series Two",
-      numBooks: 3,
+      description: null,
+      addedAt: null,
+      updatedAt: null,
+      bookCount: 3,
+      firstBookCoverUrl: null,
     },
     {
       id: "series-3",
       name: "Another Series",
-      numBooks: 8,
+      description: null,
+      addedAt: null,
+      updatedAt: null,
+      bookCount: 8,
+      firstBookCoverUrl: null,
     },
   ];
 
@@ -269,7 +281,7 @@ describe("SeriesSlice", () => {
 
     it("should handle storage errors gracefully", async () => {
       mockedAsyncStorage.setItem.mockRejectedValue(new Error("Storage error"));
-      const newSortConfig = { field: "numBooks" as const, direction: "desc" as const };
+      const newSortConfig = { field: "bookCount" as const, direction: "desc" as const };
 
       await expect(store.getState().setSeriesSortConfig(newSortConfig)).resolves.not.toThrow();
 
@@ -394,7 +406,7 @@ describe("SeriesSlice", () => {
       // Modify rawItems
       const modifiedRawItems = [
         ...mockDisplaySeries,
-        { id: "new-series", name: "New Series", numBooks: 1 },
+        { id: "new-series", name: "New Series", description: null, addedAt: null, updatedAt: null, bookCount: 1, firstBookCoverUrl: null },
       ];
       store.getState().series.rawItems = modifiedRawItems;
 

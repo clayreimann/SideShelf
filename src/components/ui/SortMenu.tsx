@@ -3,18 +3,18 @@ import React from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
 
 // Generic sort option type
-export interface SortOption<T = string> {
+export interface SortOption<T extends string | number = string> {
   field: T;
   label: string;
 }
 
 // Generic sort config type
-export interface GenericSortConfig<T = string> {
+export interface GenericSortConfig<T extends string | number = string> {
   field: T;
   direction: 'asc' | 'desc';
 }
 
-interface SortMenuProps<T = string> {
+interface SortMenuProps<T extends string | number = string> {
   visible: boolean;
   onClose: () => void;
   sortConfig: GenericSortConfig<T>;
@@ -24,7 +24,7 @@ interface SortMenuProps<T = string> {
   title?: string;
 }
 
-export default function SortMenu<T = string>({
+export default function SortMenu<T extends string | number = string>({
   visible,
   onClose,
   sortConfig,

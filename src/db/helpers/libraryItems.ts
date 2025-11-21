@@ -195,26 +195,26 @@ export async function getLibraryItemsByAuthor(
   {
     id: string;
     libraryId: string;
-    mediaType: string;
-    addedAt: number;
-    updatedAt: number;
-    isMissing: boolean;
-    isInvalid: boolean;
-    title: string;
-    subtitle: string;
-    author: string;
-    authorName: string;
-    authorNameLF: string;
-    narrator: string;
-    releaseDate: string;
-    publishedDate: string;
-    publishedYear: string;
-    duration: number;
-    coverUri: string;
-    description: string;
-    language: string;
-    explicit: boolean;
-    seriesName: string;
+    mediaType: string | null;
+    addedAt: number | null;
+    updatedAt: number | null;
+    isMissing: boolean | null;
+    isInvalid: boolean | null;
+    title: string | null;
+    subtitle: string | null;
+    author: string | null;
+    authorName: string | null;
+    authorNameLF: string | null;
+    narrator: string | null;
+    releaseDate: string | null;
+    publishedDate: string | null;
+    publishedYear: string | null;
+    duration: number | null;
+    coverUri: string | undefined;
+    description: string | null;
+    language: string | null;
+    explicit: boolean | null;
+    seriesName: string | null;
   }[]
 > {
   // Subquery to aggregate narrators
@@ -289,26 +289,26 @@ export async function getLibraryItemsForList(libraryId: string): Promise<
   {
     id: string;
     libraryId: string;
-    mediaType: string;
-    addedAt: number;
-    updatedAt: number;
-    isMissing: boolean;
-    isInvalid: boolean;
-    title: string;
-    subtitle: string;
-    author: string;
-    authorName: string;
-    authorNameLF: string;
-    narrator: string;
-    releaseDate: string;
-    publishedDate: string;
-    publishedYear: string;
-    duration: number;
-    coverUri: string;
-    description: string;
-    language: string;
-    explicit: boolean;
-    seriesName: string;
+    mediaType: string | null;
+    addedAt: number | null;
+    updatedAt: number | null;
+    isMissing: boolean | null;
+    isInvalid: boolean | null;
+    title: string | null;
+    subtitle: string | null;
+    author: string | null;
+    authorName: string | null;
+    authorNameLF: string | null;
+    narrator: string | null;
+    releaseDate: string | null;
+    publishedDate: string | null;
+    publishedYear: string | null;
+    duration: number | null;
+    coverUri: string | undefined;
+    description: string | null;
+    language: string | null;
+    explicit: boolean | null;
+    seriesName: string | null;
   }[]
 > {
   // Subquery to aggregate narrators
@@ -386,16 +386,16 @@ export function transformItemsToDisplayFormat(
   return dbItems.map((item) => ({
     id: item.id,
     mediaType: item.mediaType,
-    title: item.title || "Unknown Title",
-    author: item.author || item.authorName || "Unknown ApiAuthor",
-    authorName: item.authorName || null,
+    title: item.title,
+    author: item.author || item.authorName,
+    authorName: item.authorName,
     authorNameLF: item.authorNameLF,
-    narrator: item.narrator || null,
-    releaseDate: item.releaseDate || item.publishedDate || null,
+    narrator: item.narrator,
+    releaseDate: item.releaseDate || item.publishedDate,
     publishedYear: item.publishedYear,
     addedAt: item.addedAt,
-    duration: item.duration || 0,
-    coverUri: item.coverUri,
-    seriesName: item.seriesName || null,
+    duration: item.duration,
+    coverUri: item.coverUri ?? null,
+    seriesName: item.seriesName,
   }));
 }

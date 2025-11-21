@@ -16,6 +16,7 @@ import { getLibraryItemById } from "@/db/helpers/libraryItems";
 import { getActiveSession, getAllActiveSessionsForUser } from "@/db/helpers/localListeningSessions";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
+import { getUserByUsername } from "@/db/helpers/users";
 import { startPlaySession } from "@/lib/api/endpoints";
 import { apiClientService } from "@/services/ApiClientService";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
@@ -23,6 +24,7 @@ import { getCoverUri } from "@/lib/covers";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { getStoredUsername } from "@/lib/secureStore";
 import { applySmartRewind } from "@/lib/smartRewind";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { progressService } from "@/services/ProgressService";
@@ -30,7 +32,6 @@ import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
 import type { PlayerTrack } from "@/types/player";
-import { getCurrentUser, requireCurrentUser } from "@/utils/userHelpers";
 import { AppState } from "react-native";
 import TrackPlayer, {
   AndroidAudioContentType,
@@ -216,7 +217,17 @@ export class PlayerService {
       await this.printDebugInfo("playTrack::init");
       log.info(`Loading track for library item: ${libraryItemId}`);
 
-      const user = await requireCurrentUser();
+      // Get username from secure storage
+      const username = await getStoredUsername();
+      if (!username) {
+        throw new Error("No authenticated user found");
+      }
+
+      // Get user from database
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        throw new Error("User not found in database");
+      }
 
       // Check if already playing this item - if so, just resume
       const store = useAppStore.getState();
@@ -611,80 +622,83 @@ export class PlayerService {
     }
 
     try {
-      const user = await getCurrentUser();
-      if (user) {
-        const [activeSession, savedProgress] = await Promise.all([
-          getActiveSession(user.id, libraryItemId),
-          getMediaProgressForLibraryItem(libraryItemId, user.id),
-        ]);
+      const username = await getStoredUsername();
+      if (username) {
+        const user = await getUserByUsername(username);
+        if (user?.id) {
+          const [activeSession, savedProgress] = await Promise.all([
+            getActiveSession(user.id, libraryItemId),
+            getMediaProgressForLibraryItem(libraryItemId, user.id),
+          ]);
 
-        if (activeSession) {
-          const sessionPosition = activeSession.currentTime;
-          const sessionUpdatedAt = activeSession.updatedAt.getTime();
-          const savedPosition = savedProgress?.currentTime;
-          const savedLastUpdate = savedProgress?.lastUpdate?.getTime();
+          if (activeSession) {
+            const sessionPosition = activeSession.currentTime;
+            const sessionUpdatedAt = activeSession.updatedAt.getTime();
+            const savedPosition = savedProgress?.currentTime;
+            const savedLastUpdate = savedProgress?.lastUpdate?.getTime();
 
-          // Check if session position is implausibly small
-          if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
-            if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
-              log.warn(
-                `Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : "unknown"})`
-              );
-              position = savedPosition;
-              source = "savedProgress";
-              authoritativePosition = savedPosition;
-            } else if (asyncStoragePosition && asyncStoragePosition >= MIN_PLAUSIBLE_POSITION) {
-              log.warn(
-                `Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`
-              );
-              position = asyncStoragePosition;
-              source = "asyncStorage";
-              authoritativePosition = asyncStoragePosition;
+            // Check if session position is implausibly small
+            if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
+              if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
+                log.warn(
+                  `Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : "unknown"})`
+                );
+                position = savedPosition;
+                source = "savedProgress";
+                authoritativePosition = savedPosition;
+              } else if (asyncStoragePosition && asyncStoragePosition >= MIN_PLAUSIBLE_POSITION) {
+                log.warn(
+                  `Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`
+                );
+                position = asyncStoragePosition;
+                source = "asyncStorage";
+                authoritativePosition = asyncStoragePosition;
+              } else {
+                // Session position is small but no better alternative exists
+                position = sessionPosition;
+                source = "activeSession";
+                authoritativePosition = sessionPosition;
+                log.info(
+                  `Resume position from active session (small but no alternative): ${formatTime(position)}s`
+                );
+              }
+            } else if (savedPosition && savedLastUpdate) {
+              // Both exist - compare timestamps to determine which is more recent
+              const positionDiff = Math.abs(sessionPosition - savedPosition);
+
+              if (positionDiff > LARGE_DIFF_THRESHOLD) {
+                // Large discrepancy - prefer the more recent timestamp
+                const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
+                const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
+                const preferredSource = isSessionNewer ? "activeSession" : "savedProgress";
+
+                log.warn(
+                  `Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
+                );
+
+                position = preferredPosition;
+                source = preferredSource;
+                authoritativePosition = preferredPosition;
+              } else {
+                // Positions are close - use session (more frequently updated)
+                position = sessionPosition;
+                source = "activeSession";
+                authoritativePosition = sessionPosition;
+                log.info(`Resume position from active session: ${formatTime(position)}s`);
+              }
             } else {
-              // Session position is small but no better alternative exists
-              position = sessionPosition;
-              source = "activeSession";
-              authoritativePosition = sessionPosition;
-              log.info(
-                `Resume position from active session (small but no alternative): ${formatTime(position)}s`
-              );
-            }
-          } else if (savedPosition && savedLastUpdate) {
-            // Both exist - compare timestamps to determine which is more recent
-            const positionDiff = Math.abs(sessionPosition - savedPosition);
-
-            if (positionDiff > LARGE_DIFF_THRESHOLD) {
-              // Large discrepancy - prefer the more recent timestamp
-              const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
-              const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
-              const preferredSource = isSessionNewer ? "activeSession" : "savedProgress";
-
-              log.warn(
-                `Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
-              );
-
-              position = preferredPosition;
-              source = preferredSource;
-              authoritativePosition = preferredPosition;
-            } else {
-              // Positions are close - use session (more frequently updated)
+              // Normal case - use session position
               position = sessionPosition;
               source = "activeSession";
               authoritativePosition = sessionPosition;
               log.info(`Resume position from active session: ${formatTime(position)}s`);
             }
-          } else {
-            // Normal case - use session position
-            position = sessionPosition;
-            source = "activeSession";
-            authoritativePosition = sessionPosition;
-            log.info(`Resume position from active session: ${formatTime(position)}s`);
+          } else if (savedProgress?.currentTime) {
+            position = savedProgress.currentTime;
+            source = "savedProgress";
+            authoritativePosition = savedProgress.currentTime;
+            log.info(`Resume position from saved progress: ${formatTime(position)}s`);
           }
-        } else if (savedProgress?.currentTime) {
-          position = savedProgress.currentTime;
-          source = "savedProgress";
-          authoritativePosition = savedProgress.currentTime;
-          log.info(`Resume position from saved progress: ${formatTime(position)}s`);
         }
       }
     } catch (error) {
@@ -926,9 +940,15 @@ export class PlayerService {
    */
   async restorePlayerServiceFromSession(): Promise<void> {
     try {
-      const user = await getCurrentUser();
-      if (!user) {
-        log.info("No user found, skipping PlayerService restoration");
+      const username = await getStoredUsername();
+      if (!username) {
+        log.info("No username found, skipping PlayerService restoration");
+        return;
+      }
+
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        log.info("User not found, skipping PlayerService restoration");
         return;
       }
 
@@ -1106,17 +1126,20 @@ export class PlayerService {
       // Get DB session as source of truth for position (if we have libraryItemId)
       let dbPosition = store.player.position;
       let dbSessionUpdatedAt: Date | null = null;
-      const user = await getCurrentUser();
       if (store.player.currentTrack?.libraryItemId) {
         try {
-          if (user) {
-            const dbSession = await progressService.getCurrentSession(
-              user.id,
-              store.player.currentTrack.libraryItemId
-            );
-            if (dbSession) {
-              dbPosition = dbSession.currentTime;
-              dbSessionUpdatedAt = dbSession.updatedAt;
+          const username = await getStoredUsername();
+          if (username) {
+            const user = await getUserByUsername(username);
+            if (user?.id) {
+              const dbSession = await getActiveSession(
+                user.id,
+                store.player.currentTrack.libraryItemId
+              );
+              if (dbSession) {
+                dbPosition = dbSession.currentTime;
+                dbSessionUpdatedAt = dbSession.updatedAt;
+              }
             }
           }
         } catch (error) {
@@ -1130,25 +1153,29 @@ export class PlayerService {
         report.discrepanciesFound = true;
         // TrackPlayer has tracks but playerSlice doesn't - try to restore from DB
         try {
-          if (user) {
-            // Query DB for most recent active session
-            const activeSessions = await getAllActiveSessionsForUser(user.id);
-            if (activeSessions.length > 0) {
-              const mostRecent = activeSessions.sort(
-                (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-              )[0];
-              const dbSession = await progressService.getCurrentSession(
-                user.id,
-                mostRecent.libraryItemId
-              );
-              if (dbSession) {
-                // Try to restore track from DB session
-                const libraryItem = await getLibraryItemById(dbSession.libraryItemId);
-                if (libraryItem) {
-                  // Can't fully restore PlayerTrack here without more data, but we can note it
-                  report.actionsTaken.push(
-                    `Found DB session for ${dbSession.libraryItemId} but cannot restore track without metadata`
-                  );
+          const username = await getStoredUsername();
+          if (username) {
+            const user = await getUserByUsername(username);
+            if (user?.id) {
+              // Query DB for most recent active session
+              const activeSessions = await getAllActiveSessionsForUser(user.id);
+              if (activeSessions.length > 0) {
+                const mostRecent = activeSessions.sort(
+                  (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+                )[0];
+                const dbSession = await progressService.getCurrentSession(
+                  user.id,
+                  mostRecent.libraryItemId
+                );
+                if (dbSession) {
+                  // Try to restore track from DB session
+                  const libraryItem = await getLibraryItemById(dbSession.libraryItemId);
+                  if (libraryItem) {
+                    // Can't fully restore PlayerTrack here without more data, but we can note it
+                    report.actionsTaken.push(
+                      `Found DB session for ${dbSession.libraryItemId} but cannot restore track without metadata`
+                    );
+                  }
                 }
               }
             }
@@ -1165,7 +1192,7 @@ export class PlayerService {
         report.discrepanciesFound = true;
 
         const trackInfo = store.player.currentTrack
-          ? `track=${store.player.currentTrack?.id} item=${store.player.currentTrack?.libraryItemId}`
+          ? `mediaId=${store.player.currentTrack?.mediaId} item=${store.player.currentTrack?.libraryItemId}`
           : "track=none";
 
         // Determine which position is authoritative by checking staleness
@@ -1191,15 +1218,20 @@ export class PlayerService {
         );
 
         if (hasTracks) {
-          store.updatePosition(authoritativePosition);
-          // Only seek the track player if it's not currently playing to avoid jitter
+          // Don't seek TrackPlayer if actively playing to avoid stutters
+          // When playing, TrackPlayer position is ahead of DB due to 1-2s sync lag
           if (!tpIsPlaying) {
             await TrackPlayer.seekTo(authoritativePosition);
+            store.updatePosition(authoritativePosition);
             report.actionsTaken.push(
               `Adjusted TrackPlayer position to ${positionSource} value: ${formatTime(authoritativePosition)}s`
             );
           } else {
-            report.actionsTaken.push("Did not seek TrackPlayer because it's actively playing");
+            // Update store but don't seek TrackPlayer
+            store.updatePosition(authoritativePosition);
+            report.actionsTaken.push(
+              `Did not seek TrackPlayer because it's actively playing (would cause stutter). Updated store position to ${positionSource} value: ${formatTime(authoritativePosition)}s`
+            );
           }
         } else {
           const reason = store.player.currentTrack
@@ -1275,9 +1307,17 @@ export class PlayerService {
         return;
       }
 
-      const user = await getCurrentUser();
-      if (!user) {
-        log.warn("No user found, cannot sync position");
+      // Get username to fetch user
+      const username = await getStoredUsername();
+      if (!username) {
+        log.warn("No username found, cannot sync position");
+        return;
+      }
+
+      // Get user from database
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        log.warn("User not found in database, cannot sync position");
         return;
       }
 
@@ -1288,18 +1328,25 @@ export class PlayerService {
         return;
       }
 
-      // Update store position
+      // Check if TrackPlayer is actively playing
+      const playbackState = await TrackPlayer.getPlaybackState();
+      const isPlaying = playbackState.state === State.Playing;
+
+      // Update store position (for UI consistency)
       store.updatePosition(session.currentTime);
 
-      // Seek TrackPlayer to the new position if it's not currently playing
-      const state = await TrackPlayer.getPlaybackState();
-      if (state.state !== State.Playing) {
+      // Only seek TrackPlayer if NOT actively playing to avoid stutters
+      // When playing, TrackPlayer position is ahead of DB due to 1-2s sync lag
+      if (!isPlaying) {
         await TrackPlayer.seekTo(session.currentTime);
+        log.info(
+          `Position synced from database: ${formatTime(session.currentTime)}s for ${currentTrack.libraryItemId}`
+        );
+      } else {
+        log.info(
+          `Position updated from database in store: ${formatTime(session.currentTime)}s (TrackPlayer not seeked because actively playing)`
+        );
       }
-
-      log.info(
-        `Position synced from database: ${formatTime(session.currentTime)}s for ${currentTrack.libraryItemId}`
-      );
     } catch (error) {
       log.error("Error syncing position from database", error as Error);
       throw error;

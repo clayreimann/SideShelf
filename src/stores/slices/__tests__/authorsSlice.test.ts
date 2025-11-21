@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { DEFAULT_AUTHOR_SORT_CONFIG, STORAGE_KEYS } from "../../utils";
 import { createAuthorsSlice, AuthorsSlice } from "../authorsSlice";
 
@@ -27,7 +27,7 @@ jest.mock("@/lib/authorImages", () => ({
 }));
 
 describe("AuthorsSlice", () => {
-  let store: ReturnType<typeof create<AuthorsSlice>>;
+  let store: UseBoundStore<StoreApi<AuthorsSlice>>;
 
   // Get mocked functions for type safety
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;

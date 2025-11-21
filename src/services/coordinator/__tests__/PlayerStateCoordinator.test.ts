@@ -9,6 +9,7 @@ import { PlayerStateCoordinator } from "../PlayerStateCoordinator";
 import { playerEventBus } from "../eventBus";
 import { PlayerState } from "@/types/coordinator";
 import type { PlayerEvent, DiagnosticEvent } from "@/types/coordinator";
+import { State } from "react-native-track-player";
 
 // Mock logger
 jest.mock("@/lib/logger", () => ({
@@ -541,7 +542,7 @@ describe("PlayerStateCoordinator", () => {
       });
       await coordinator.dispatch({
         type: "NATIVE_STATE_CHANGED",
-        payload: { state: 3 }, // State.Playing
+        payload: { state: State.Playing },
       });
 
       await new Promise((resolve) => setTimeout(resolve, 50));

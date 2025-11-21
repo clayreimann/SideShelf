@@ -65,8 +65,9 @@ export default function BookmarksSection({
           // If playing, just seek to the bookmark time
           await playerService.seekTo(time);
         } else {
-          // If not playing, start playing from the bookmark time
-          await playerService.playTrack(libraryItemId, time);
+          // If not playing, start playing and then seek to the bookmark time
+          await playerService.playTrack(libraryItemId);
+          await playerService.seekTo(time);
         }
       } catch (error) {
         console.error("[BookmarksSection] Failed to jump to bookmark:", error);

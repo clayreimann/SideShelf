@@ -171,12 +171,12 @@ describe("PlayerService", () => {
 
   const mockStore = {
     player: {
-      currentTrack: null,
+      currentTrack: null as any,
       position: 0,
       isPlaying: false,
       playbackRate: 1.0,
       volume: 1.0,
-      currentPlaySessionId: null,
+      currentPlaySessionId: null as any,
       currentChapter: null,
     },
     _setCurrentTrack: jest.fn(),
@@ -217,8 +217,8 @@ describe("PlayerService", () => {
     mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.None });
     mockedTrackPlayer.getQueue.mockResolvedValue([]);
     mockedTrackPlayer.getProgress.mockResolvedValue({ position: 0, duration: 0, buffered: 0 });
-    mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(null);
-    mockedTrackPlayer.getActiveTrack.mockResolvedValue(null);
+    mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(undefined);
+    mockedTrackPlayer.getActiveTrack.mockResolvedValue(undefined);
     mockedTrackPlayer.getRate.mockResolvedValue(1.0);
     mockedTrackPlayer.getVolume.mockResolvedValue(1.0);
 

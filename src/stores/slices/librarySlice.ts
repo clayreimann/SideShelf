@@ -40,6 +40,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { LibraryItemDisplayRow } from "@/types/components";
 import type { SliceCreator, SortConfig } from "@/types/store";
+import type { ApiBook, ApiPodcast } from "@/types/api";
 import { DEFAULT_SORT_CONFIG, sortLibraryItems, STORAGE_KEYS } from "../utils";
 
 // Create cached sublogger for this slice
@@ -261,11 +262,11 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     }
 
     if (state.library.selectedLibraryId === libraryId && !fetchFromApi) {
-      log.info(" ApiLibrary already selected:", libraryId);
+      log.info(` ApiLibrary already selected: ${libraryId}`);
       return;
     }
 
-    log.info(" Selecting library:", libraryId, "fetchFromApi:", fetchFromApi);
+    log.info(` Selecting library: ${libraryId}, fetchFromApi: ${fetchFromApi}`);
 
     // Transition: IDLE → SELECTING_LIBRARY
     set((state: LibrarySlice) => ({
@@ -357,11 +358,11 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     }
 
     if (state.library.selectedLibraryId === libraryId) {
-      log.info(" ApiLibrary already selected:", libraryId);
+      log.info(` ApiLibrary already selected: ${libraryId}`);
       return;
     }
 
-    log.info(" Selecting library from cache:", libraryId);
+    log.info(` Selecting library from cache: ${libraryId}`);
 
     set((state: LibrarySlice) => ({
       ...state,
@@ -405,7 +406,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
       return;
     }
 
-    log.info(" Loading cached items for library:", selectedLibraryId);
+    log.info(` Loading cached items for library: ${selectedLibraryId}`);
 
     try {
       // Get items from database with full metadata for display
@@ -524,12 +525,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
     if (!isReady(state) || !selectedLibraryId || !selectedLibrary) {
       log.warn(
-        " Cannot refresh items: ready=",
-        isReady(state),
-        "selectedLibraryId=",
-        selectedLibraryId,
-        "selectedLibrary=",
-        selectedLibrary
+        ` Cannot refresh items: ready=${isReady(state)}, selectedLibraryId=${selectedLibraryId}, selectedLibrary=${!!selectedLibrary}`
       );
       return;
     }
@@ -545,10 +541,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
     try {
       log.info(
-        " Refreshing items for library:",
-        selectedLibraryId,
-        "type:",
-        selectedLibrary.mediaType
+        ` Refreshing items for library: ${selectedLibraryId}, type: ${selectedLibrary.mediaType}`
       );
 
       // Step 1: Fetch all simple item details across all pages (minified response includes basic metadata)
@@ -567,13 +560,13 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         // Minified response doesn't include libraryItemId in media object, so backfill it
         if (item.mediaType === "book") {
           const enrichedBook = {
-            ...item.media,
+            ...(item.media as ApiBook),
             libraryItemId: item.id,
           };
           await upsertBookMetadata(enrichedBook);
         } else if (item.mediaType === "podcast") {
           const enrichedPodcast = {
-            ...item.media,
+            ...(item.media as ApiPodcast),
             libraryItemId: item.id,
           };
           await upsertPodcastMetadata(enrichedPodcast);
@@ -675,7 +668,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
             `[Background] Finished processing all ${processedCount} items with full details and covers`
           );
         } catch (error) {
-          log.error(" [Background] Batch fetch failed:", error);
+          log.error(" [Background] Batch fetch failed:", error as Error);
         }
       })();
     } catch (error) {
@@ -705,15 +698,12 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
     if (!isReady(state) || !selectedLibraryId) {
       log.warn(
-        " Cannot check for new items: ready=",
-        isReady(state),
-        "selectedLibraryId=",
-        selectedLibraryId
+        ` Cannot check for new items: ready=${isReady(state)}, selectedLibraryId=${selectedLibraryId}`
       );
       return;
     }
 
-    log.info(" Checking for new items in library:", selectedLibraryId);
+    log.info(` Checking for new items in library: ${selectedLibraryId}`);
 
     // Transition to CHECKING_NEW_ITEMS
     set((state: LibrarySlice) => ({
@@ -838,7 +828,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
    * Update sort configuration and persist to storage
    */
   setSortConfig: async (config: SortConfig) => {
-    log.info(" Setting sort config:", config);
+    log.info(` Setting sort config: ${JSON.stringify(config)}`);
 
     set((state: LibrarySlice) => ({
       ...state,
@@ -852,7 +842,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.sortConfig, JSON.stringify(config));
     } catch (error) {
-      log.error(" Failed to save sort config:", error);
+      log.error(" Failed to save sort config:", error as Error);
     }
   },
 
@@ -883,16 +873,16 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
 
       if (storedLibraryId) {
         updates.selectedLibraryId = storedLibraryId;
-        log.info(" Loaded selected library ID from storage:", storedLibraryId);
+        log.info(` Loaded selected library ID from storage: ${storedLibraryId}`);
       }
 
       if (storedSortConfig) {
         try {
           const parsedSortConfig = JSON.parse(storedSortConfig) as SortConfig;
           updates.sortConfig = parsedSortConfig;
-          log.info(" Loaded sort config from storage:", parsedSortConfig);
+          log.info(` Loaded sort config from storage: ${JSON.stringify(parsedSortConfig)}`);
         } catch (parseError) {
-          log.error(" Failed to parse stored sort config:", parseError);
+          log.error(" Failed to parse stored sort config:", parseError as Error);
         }
       }
 
@@ -903,7 +893,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
         }));
       }
     } catch (error) {
-      log.error(" Failed to load from storage:", error);
+      log.error(" Failed to load from storage:", error as Error);
     }
   },
 

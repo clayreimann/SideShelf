@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import {
   mockLibrariesResponse,
   mockLibraryRow,
@@ -59,7 +59,7 @@ jest.mock("@/db/helpers/fullLibraryItems", () => ({
 
 describe("LibrarySlice", () => {
   let testDb: TestDatabase;
-  let store: ReturnType<typeof create<LibrarySlice>>;
+  let store: UseBoundStore<StoreApi<LibrarySlice>>;
 
   // Get mocked functions for type safety
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
@@ -333,7 +333,7 @@ describe("LibrarySlice", () => {
     });
 
     it("should update sort config and persist to storage", async () => {
-      const newSortConfig = { field: "author" as const, direction: "asc" as const };
+      const newSortConfig = { field: "authorName" as const, direction: "asc" as const };
 
       await store.getState().setSortConfig(newSortConfig);
 
@@ -347,7 +347,7 @@ describe("LibrarySlice", () => {
 
     it("should handle storage errors gracefully", async () => {
       mockedAsyncStorage.setItem.mockRejectedValue(new Error("Storage error"));
-      const newSortConfig = { field: "author" as const, direction: "asc" as const };
+      const newSortConfig = { field: "authorName" as const, direction: "asc" as const };
 
       await expect(store.getState().setSortConfig(newSortConfig)).resolves.not.toThrow();
 

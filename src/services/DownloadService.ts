@@ -294,8 +294,12 @@ export class DownloadService {
             });
 
             task.error((error) => {
-              const errorMessage = error.error;
-              log.error(`Error downloading ${audioFile.filename}: ${errorMessage}`);
+              const errorObj = error instanceof Error ? error : new Error(String(error));
+              log.error(`Error downloading ${audioFile.filename}:`, errorObj);
+              const errorMessage =
+                typeof error === "object" && error && "error" in error
+                  ? String(error.error)
+                  : String(error);
               reject(new Error(`Failed to download ${audioFile.filename}: ${errorMessage}`));
             });
           });
@@ -458,7 +462,8 @@ export class DownloadService {
 
       return isDownloaded;
     } catch (error) {
-      log.error(`Error checking download status for ${libraryItemId}:`, error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      log.error(`Error checking download status for ${libraryItemId}:`, errorObj);
       return false;
     }
   }
@@ -566,6 +571,13 @@ export class DownloadService {
     const downloadUrl = constructDownloadUrl(libraryItemId, audioFile.ino, serverUrl);
     log.info(`Starting background download: ${audioFile.filename} from ${downloadUrl}`);
 
+    const taskInfo: DownloadTaskInfo = {
+      task: null as any, // Will be set below
+      audioFileId: audioFile.id,
+      filename: audioFile.filename,
+      size: audioFile.size || 0,
+    };
+
     const task = RNBackgroundDownloader.download({
       id: `${libraryItemId}_${audioFile.id}`,
       url: downloadUrl,
@@ -580,10 +592,12 @@ export class DownloadService {
       },
     })
       .begin((data) => {
-        log.info(`Download begin: ${JSON.stringify(data)}`);
+        log.info(`Download begin for ${audioFile.filename}: ${JSON.stringify(data)}`);
       })
       .progress((data) => {
-        log.info(`Download progress: ${JSON.stringify(data)}`);
+        log.info(
+          `Download progress for ${audioFile.filename}: ${data.bytesDownloaded}/${data.bytesTotal}`
+        );
         const progressPercent = data.bytesDownloaded / data.bytesTotal;
 
         if (progressPercent >= 0.95) {
@@ -591,6 +605,9 @@ export class DownloadService {
             `*** NEAR COMPLETION *** ${data.bytesDownloaded}/${data.bytesTotal} (${(progressPercent * 100).toFixed(2)}%) - ${data.bytesTotal - data.bytesDownloaded} bytes remaining`
           );
         }
+
+        // Call the onProgress callback with taskInfo
+        onProgress?.(taskInfo, data.bytesDownloaded, data.bytesTotal);
       })
       .done((data) => {
         log.info(
@@ -601,18 +618,8 @@ export class DownloadService {
         log.info(`*** DOWNLOAD ERROR EVENT FIRED ***: ${JSON.stringify(data)}`);
       });
 
-    const taskInfo: DownloadTaskInfo = {
-      task,
-      audioFileId: audioFile.id,
-      filename: audioFile.filename,
-      size: audioFile.size || 0,
-    };
-
-    // Set up progress callback
-    task.progress((data) => {
-      log.info(`Download progress: ${JSON.stringify(data)}`);
-      onProgress?.(taskInfo, data.bytesDownloaded, data.bytesTotal);
-    });
+    // Now set the task reference in taskInfo
+    taskInfo.task = task;
 
     return task;
   }
