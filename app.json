@@ -68,7 +68,7 @@
         }
       ],
       "expo-web-browser",
-      "./expo-plugins/with-icloud-backup-exclusion.ts"
+      "./plugins/excludeFromBackup/withExcludeFromBackup.ts"
     ],
     "experiments": {
       "typedRoutes": true,
