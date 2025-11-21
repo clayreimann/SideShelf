@@ -28,4 +28,17 @@ module.exports = {
   ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "html", "json", "json-summary"],
+  reporters: [
+    "default",
+    [
+      "jest-html-reporter",
+      {
+        pageTitle: "Test Report",
+        outputPath: "test-report.html",
+        includeFailureMsg: true,
+        includeConsoleLog: true,
+        theme: "defaultTheme",
+      },
+    ],
+  ],
 };
