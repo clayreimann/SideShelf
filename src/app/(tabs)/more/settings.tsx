@@ -8,8 +8,9 @@ import Toggle from "@/components/ui/Toggle";
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useLibrary, useSettings } from "@/stores";
+import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useCallback } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
@@ -17,6 +18,7 @@ const INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90];
 
 export default function SettingsScreen() {
   const { colors, isDark } = useThemedStyles();
+  const router = useRouter();
   const {
     jumpForwardInterval,
     jumpBackwardInterval,
@@ -172,6 +174,52 @@ export default function SettingsScreen() {
             </View>
           </View>
         )}
+
+        {/* Appearance Section */}
+        <View style={{ padding: 16 }}>
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "600",
+              color: textSecondary,
+              marginBottom: 12,
+              textTransform: "uppercase",
+            }}
+          >
+            {translate("settings.sections.appearance")}
+          </Text>
+
+          {/* Tab Bar Settings */}
+          <Pressable
+            onPress={() => router.push("/more/tab-bar-settings")}
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+              borderRadius: 10,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  color: colors.textPrimary,
+                  fontWeight: "500",
+                  marginBottom: 4,
+                }}
+              >
+                {translate("settings.tabBar.title")}
+              </Text>
+              <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
+                {translate("settings.tabBar.subtitle")}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={textSecondary} />
+          </Pressable>
+        </View>
 
         {/* Playback Controls Section */}
         <View style={{ padding: 16 }}>

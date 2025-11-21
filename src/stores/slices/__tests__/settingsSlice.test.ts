@@ -13,11 +13,15 @@ jest.mock("@/lib/appSettings", () => ({
   getSmartRewindEnabled: jest.fn(),
   getHomeLayout: jest.fn(),
   getDiagnosticsEnabled: jest.fn(),
+  getTabOrder: jest.fn(),
+  getHiddenTabs: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
   setHomeLayout: jest.fn(),
   setDiagnosticsEnabled: jest.fn(),
+  setTabOrder: jest.fn(),
+  setHiddenTabs: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
 }));
@@ -37,11 +41,15 @@ describe("SettingsSlice", () => {
     getSmartRewindEnabled,
     getHomeLayout,
     getDiagnosticsEnabled,
+    getTabOrder,
+    getHiddenTabs,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
     setHomeLayout,
     setDiagnosticsEnabled,
+    setTabOrder,
+    setHiddenTabs,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
 
@@ -60,11 +68,15 @@ describe("SettingsSlice", () => {
     getSmartRewindEnabled.mockResolvedValue(true);
     getHomeLayout.mockResolvedValue("list");
     getDiagnosticsEnabled.mockResolvedValue(false);
+    getTabOrder.mockResolvedValue(["home", "library", "series", "authors", "more"]);
+    getHiddenTabs.mockResolvedValue([]);
     setJumpForwardInterval.mockResolvedValue();
     setJumpBackwardInterval.mockResolvedValue();
     setSmartRewindEnabled.mockResolvedValue();
     setHomeLayout.mockResolvedValue();
     setDiagnosticsEnabled.mockResolvedValue();
+    setTabOrder.mockResolvedValue();
+    setHiddenTabs.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
 
@@ -82,6 +94,8 @@ describe("SettingsSlice", () => {
         smartRewindEnabled: true,
         homeLayout: "list",
         diagnosticsEnabled: false,
+        tabOrder: ["home", "library", "series", "authors", "more"],
+        hiddenTabs: [],
         initialized: false,
         isLoading: false,
       });
@@ -95,6 +109,8 @@ describe("SettingsSlice", () => {
       getSmartRewindEnabled.mockResolvedValue(false);
       getHomeLayout.mockResolvedValue("cover");
       getDiagnosticsEnabled.mockResolvedValue(true);
+      getTabOrder.mockResolvedValue(["library", "home", "series", "authors", "more"]);
+      getHiddenTabs.mockResolvedValue(["authors"]);
 
       await store.getState().initializeSettings();
 
@@ -104,6 +120,8 @@ describe("SettingsSlice", () => {
       expect(state.settings.smartRewindEnabled).toBe(false);
       expect(state.settings.homeLayout).toBe("cover");
       expect(state.settings.diagnosticsEnabled).toBe(true);
+      expect(state.settings.tabOrder).toEqual(["library", "home", "series", "authors", "more"]);
+      expect(state.settings.hiddenTabs).toEqual(["authors"]);
       expect(state.settings.initialized).toBe(true);
       expect(state.settings.isLoading).toBe(false);
     });

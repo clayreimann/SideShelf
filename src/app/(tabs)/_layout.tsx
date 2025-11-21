@@ -7,11 +7,11 @@ import { useAuth } from "@/providers/AuthProvider";
 import { DownloadService } from "@/services/DownloadService";
 import { useAppStore } from "@/stores/appStore";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, useRouter, Stack } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import type { ComponentProps } from "react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Platform, View } from "react-native";
 import type { SFSymbol } from "sf-symbols-typescript";
 
@@ -126,7 +126,22 @@ export default function TabLayout() {
   const { tabs, isDark } = useThemedStyles();
   const errorCount = useAppStore((state) => state.logger.errorCount);
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
+  const settingsInitialized = useAppStore((state) => state.settings.initialized);
+  const tabOrder = useAppStore((state) => state.settings.tabOrder);
+  const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
   const showErrorBadge = errorCount > 0 && diagnosticsEnabled;
+
+  // Get ordered and filtered tabs based on user preferences
+  // Only filter tabs if settings are initialized to avoid flash of all tabs
+  // Memoize to prevent infinite re-render loops
+  const visibleTabs = useMemo(() => {
+    if (!settingsInitialized) {
+      return TAB_CONFIG; // Show all tabs while loading settings
+    }
+    return tabOrder
+      .map((name) => TAB_CONFIG.find((tab) => tab.name === name))
+      .filter((tab): tab is TabConfig => tab !== undefined && !hiddenTabs.includes(tab.name));
+  }, [settingsInitialized, tabOrder, hiddenTabs]);
   useEffect(() => {
     if (initialized && !isAuthenticated) {
       router.push("/login");
@@ -163,7 +178,9 @@ export default function TabLayout() {
             },
           }}
         >
-          {TAB_CONFIG.map((tab) => {
+          {/* Render tabs in user's preferred order */}
+          {/* First render visible tabs in the correct order */}
+          {visibleTabs.map((tab) => {
             const label = translate(tab.titleKey);
             const isMoreTab = tab.name === "more";
             return (
@@ -177,6 +194,23 @@ export default function TabLayout() {
                     color: tabs.badgeTextColor,
                     backgroundColor: tabs.badgeBackgroundColor,
                   },
+                  tabBarIcon: ({ focused, color, size }) => (
+                    <TabBarIcon config={tab} focused={focused} color={color} size={size} />
+                  ),
+                }}
+              />
+            );
+          })}
+          {/* Then render hidden tabs with href: null to prevent expo-router from showing them */}
+          {TAB_CONFIG.filter((tab) => !visibleTabs.some((t) => t.name === tab.name)).map((tab) => {
+            const label = translate(tab.titleKey);
+            return (
+              <Tabs.Screen
+                key={tab.name}
+                name={tab.name}
+                options={{
+                  title: label,
+                  href: null, // Hide this tab
                   tabBarIcon: ({ focused, color, size }) => (
                     <TabBarIcon config={tab} focused={focused} color={color} size={size} />
                   ),
@@ -207,7 +241,7 @@ export default function TabLayout() {
         rippleColor={tabs.rippleColor}
         indicatorColor={tabs.indicatorColor}
       >
-        {TAB_CONFIG.map((tab) => {
+        {visibleTabs.map((tab) => {
           const label = translate(tab.titleKey);
           const isMoreTab = tab.name === "more";
           return (
