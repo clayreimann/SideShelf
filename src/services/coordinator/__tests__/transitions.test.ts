@@ -55,9 +55,13 @@ describe("State Machine Transitions", () => {
     it("should define READY state transitions", () => {
       expect(transitions[PlayerState.READY]).toMatchObject({
         PLAY: PlayerState.PLAYING,
+        PAUSE: PlayerState.PAUSED,
         LOAD_TRACK: PlayerState.LOADING,
         STOP: PlayerState.IDLE,
         SEEK: PlayerState.SEEKING,
+        NATIVE_STATE_CHANGED: PlayerState.READY,
+        NATIVE_ERROR: PlayerState.ERROR,
+        NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
       });
     });
 
@@ -66,7 +70,10 @@ describe("State Machine Transitions", () => {
         PAUSE: PlayerState.PAUSED,
         STOP: PlayerState.STOPPING,
         SEEK: PlayerState.SEEKING,
+        LOAD_TRACK: PlayerState.LOADING,
         BUFFERING_STARTED: PlayerState.BUFFERING,
+        NATIVE_STATE_CHANGED: PlayerState.PLAYING,
+        NATIVE_TRACK_CHANGED: PlayerState.PLAYING,
         NATIVE_ERROR: PlayerState.ERROR,
         NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
         APP_BACKGROUNDED: PlayerState.PLAYING,
@@ -79,6 +86,10 @@ describe("State Machine Transitions", () => {
         STOP: PlayerState.STOPPING,
         SEEK: PlayerState.SEEKING,
         LOAD_TRACK: PlayerState.LOADING,
+        NATIVE_STATE_CHANGED: PlayerState.PAUSED,
+        NATIVE_TRACK_CHANGED: PlayerState.PAUSED,
+        NATIVE_ERROR: PlayerState.ERROR,
+        NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
       });
     });
 
@@ -114,7 +125,9 @@ describe("State Machine Transitions", () => {
     it("should return true for allowed transitions", () => {
       expect(isTransitionAllowed(PlayerState.IDLE, "LOAD_TRACK")).toBe(true);
       expect(isTransitionAllowed(PlayerState.READY, "PLAY")).toBe(true);
+      expect(isTransitionAllowed(PlayerState.READY, "PAUSE")).toBe(true);
       expect(isTransitionAllowed(PlayerState.PLAYING, "PAUSE")).toBe(true);
+      expect(isTransitionAllowed(PlayerState.PLAYING, "LOAD_TRACK")).toBe(true);
       expect(isTransitionAllowed(PlayerState.PAUSED, "PLAY")).toBe(true);
     });
 
@@ -122,7 +135,7 @@ describe("State Machine Transitions", () => {
       expect(isTransitionAllowed(PlayerState.IDLE, "PAUSE")).toBe(false);
       expect(isTransitionAllowed(PlayerState.IDLE, "PLAY")).toBe(false);
       expect(isTransitionAllowed(PlayerState.LOADING, "PLAY")).toBe(false);
-      expect(isTransitionAllowed(PlayerState.READY, "PAUSE")).toBe(false);
+      expect(isTransitionAllowed(PlayerState.BUFFERING, "LOAD_TRACK")).toBe(false);
     });
 
     it("should handle no-op events as allowed", () => {
