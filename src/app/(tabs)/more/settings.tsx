@@ -9,7 +9,7 @@ import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useLibrary, useSettings } from "@/stores";
 import { MenuView } from "@react-native-menu/menu";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useCallback } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
@@ -17,6 +17,7 @@ const INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90];
 
 export default function SettingsScreen() {
   const { colors, isDark } = useThemedStyles();
+  const router = useRouter();
   const {
     jumpForwardInterval,
     jumpBackwardInterval,
@@ -312,8 +313,10 @@ export default function SettingsScreen() {
               justifyContent: "space-between",
               alignItems: "center",
               paddingVertical: 14,
+              paddingHorizontal: 16,
               backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
               borderRadius: 10,
+              marginBottom: 12,
             }}
           >
             <View style={{ flex: 1, marginRight: 12 }}>
@@ -333,6 +336,37 @@ export default function SettingsScreen() {
             </View>
             <Toggle value={diagnosticsEnabled} onValueChange={toggleDiagnostics} />
           </View>
+
+          {/* Bundle Loader Link */}
+          <Pressable
+            onPress={() => router.push("/(tabs)/more/bundle-loader")}
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+              borderRadius: 10,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  color: colors.textPrimary,
+                  fontWeight: "500",
+                  marginBottom: 4,
+                }}
+              >
+                Bundle Loader
+              </Text>
+              <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
+                Load custom bundles from PR builds
+              </Text>
+            </View>
+            <Text style={{ color: primaryColor, fontSize: 16 }}>›</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </>

@@ -13,11 +13,13 @@ jest.mock("@/lib/appSettings", () => ({
   getSmartRewindEnabled: jest.fn(),
   getHomeLayout: jest.fn(),
   getDiagnosticsEnabled: jest.fn(),
+  getCustomUpdateUrl: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
   setHomeLayout: jest.fn(),
   setDiagnosticsEnabled: jest.fn(),
+  setCustomUpdateUrl: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
 }));
@@ -37,11 +39,13 @@ describe("SettingsSlice", () => {
     getSmartRewindEnabled,
     getHomeLayout,
     getDiagnosticsEnabled,
+    getCustomUpdateUrl,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
     setHomeLayout,
     setDiagnosticsEnabled,
+    setCustomUpdateUrl,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
 
@@ -60,11 +64,13 @@ describe("SettingsSlice", () => {
     getSmartRewindEnabled.mockResolvedValue(true);
     getHomeLayout.mockResolvedValue("list");
     getDiagnosticsEnabled.mockResolvedValue(false);
+    getCustomUpdateUrl.mockResolvedValue(null);
     setJumpForwardInterval.mockResolvedValue();
     setJumpBackwardInterval.mockResolvedValue();
     setSmartRewindEnabled.mockResolvedValue();
     setHomeLayout.mockResolvedValue();
     setDiagnosticsEnabled.mockResolvedValue();
+    setCustomUpdateUrl.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
 
@@ -82,6 +88,7 @@ describe("SettingsSlice", () => {
         smartRewindEnabled: true,
         homeLayout: "list",
         diagnosticsEnabled: false,
+        customUpdateUrl: null,
         initialized: false,
         isLoading: false,
       });
@@ -95,6 +102,7 @@ describe("SettingsSlice", () => {
       getSmartRewindEnabled.mockResolvedValue(false);
       getHomeLayout.mockResolvedValue("cover");
       getDiagnosticsEnabled.mockResolvedValue(true);
+      getCustomUpdateUrl.mockResolvedValue("https://example.com/bundle");
 
       await store.getState().initializeSettings();
 

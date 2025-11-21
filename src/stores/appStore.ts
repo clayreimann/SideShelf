@@ -810,6 +810,7 @@ export function useSettings() {
   const smartRewindEnabled = useAppStore((state) => state.settings.smartRewindEnabled);
   const homeLayout = useAppStore((state) => state.settings.homeLayout);
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
+  const customUpdateUrl = useAppStore((state) => state.settings.customUpdateUrl);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -820,6 +821,7 @@ export function useSettings() {
   const updateSmartRewindEnabled = useAppStore((state) => state.updateSmartRewindEnabled);
   const updateHomeLayout = useAppStore((state) => state.updateHomeLayout);
   const updateDiagnosticsEnabled = useAppStore((state) => state.updateDiagnosticsEnabled);
+  const updateCustomUpdateUrl = useAppStore((state) => state.updateCustomUpdateUrl);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -829,6 +831,7 @@ export function useSettings() {
       smartRewindEnabled,
       homeLayout,
       diagnosticsEnabled,
+      customUpdateUrl,
       initialized,
       isLoading,
       initializeSettings,
@@ -837,6 +840,7 @@ export function useSettings() {
       updateSmartRewindEnabled,
       updateHomeLayout,
       updateDiagnosticsEnabled,
+      updateCustomUpdateUrl,
       resetSettings,
     }),
     [
@@ -845,6 +849,7 @@ export function useSettings() {
       smartRewindEnabled,
       homeLayout,
       diagnosticsEnabled,
+      customUpdateUrl,
       initialized,
       isLoading,
       initializeSettings,
@@ -853,6 +858,7 @@ export function useSettings() {
       updateSmartRewindEnabled,
       updateHomeLayout,
       updateDiagnosticsEnabled,
+      updateCustomUpdateUrl,
       resetSettings,
     ]
   );

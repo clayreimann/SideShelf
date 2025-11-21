@@ -34,6 +34,10 @@ jobs:
         run: npm run lint:complexity
         continue-on-error: true
 
+      - name: Export JavaScript bundle
+        run: npx expo export --platform ios --platform android --output-dir dist
+        continue-on-error: true
+
       - name: Extract coverage summary
         id: coverage
         run: |
@@ -94,3 +98,79 @@ jobs:
             coverage/
             eslint-report.json
           retention-days: 30
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: js-bundle-pr-${{ github.event.pull_request.number }}
+          path: dist/
+          retention-days: 30
+
+      - name: Comment bundle download instructions
+        uses: actions/github-script@v7
+        if: success()
+        continue-on-error: true
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            const runId = context.runId;
+            const repo = context.repo;
+
+            const comment = `## 📦 JavaScript Bundle Available
+
+            A compiled JavaScript bundle for this PR is now available for testing in TestFlight builds.
+
+            ### Download the Bundle
+
+            You can download the bundle artifact from this workflow run:
+            - **Artifact Name:** \`js-bundle-pr-${prNumber}\`
+            - **Download URL:** https://github.com/${repo.owner}/${repo.repo}/actions/runs/${runId}
+
+            ### Load in TestFlight
+
+            1. Download the artifact and extract it
+            2. Host the bundle file somewhere accessible (e.g., GitHub Pages, your own server, or a temporary file hosting service)
+            3. In the SideShelf app:
+               - Go to **More → Settings → Bundle Loader**
+               - Enter the URL to your hosted bundle
+               - Tap "Check for Updates" to load the bundle
+               - Restart the app to apply changes
+
+            ### Requirements
+
+            - The TestFlight build must have expo-updates enabled
+            - The bundle must be built for the same runtime version as the installed app
+            - Updates only work in production/preview builds (not development builds)
+
+            ### Note on expo-updates
+
+            This feature requires expo-updates to be properly configured. The current implementation provides the infrastructure but requires expo-updates or a custom native bundle loader to actually apply the bundles at runtime.`;
+
+            // Find existing bundle comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: repo.owner,
+              repo: repo.repo,
+              issue_number: prNumber,
+            });
+
+            const bundleComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('JavaScript Bundle Available')
+            );
+
+            if (bundleComment) {
+              await github.rest.issues.updateComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                comment_id: bundleComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: prNumber,
+                body: comment
+              });
+            }
