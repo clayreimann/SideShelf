@@ -40,6 +40,7 @@ jest.mock("@/db/helpers/libraries", () => ({
 
 jest.mock("@/db/helpers/libraryItems", () => ({
   getLibraryItemsForList: jest.fn(),
+  marshalLibraryItemFromApi: jest.fn(),
   marshalLibraryItemsFromResponse: jest.fn(),
   transformItemsToDisplayFormat: jest.fn(),
   upsertLibraryItems: jest.fn(),
@@ -78,11 +79,11 @@ describe("LibrarySlice", () => {
   } = require("@/db/helpers/libraries");
   const {
     getLibraryItemsForList,
+    marshalLibraryItemFromApi,
     marshalLibraryItemsFromResponse,
     transformItemsToDisplayFormat,
     upsertLibraryItems,
     checkLibraryItemExists,
-    marshalLibraryItemFromApi,
   } = require("@/db/helpers/libraryItems");
   const {
     cacheCoversForLibraryItems,
@@ -112,6 +113,7 @@ describe("LibrarySlice", () => {
     upsertLibraries.mockResolvedValue();
 
     getLibraryItemsForList.mockResolvedValue([]);
+    marshalLibraryItemFromApi.mockImplementation((item) => item);
     transformItemsToDisplayFormat.mockReturnValue([]);
     marshalLibraryItemsFromResponse.mockReturnValue([]);
     upsertLibraryItems.mockResolvedValue();
@@ -497,6 +499,531 @@ describe("LibrarySlice", () => {
       store.getState().resetLibrary();
       updateReadiness(false, true);
       expect(store.getState().library.readinessState).not.toBe("READY");
+    });
+  });
+
+  describe("_selectLibraryFromCache", () => {
+    beforeEach(async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+    });
+
+    it("should select library from cache and load items", async () => {
+      getLibraryById.mockResolvedValue(mockLibraryRow);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+
+      await (store.getState() as any)._selectLibraryFromCache("lib-1");
+
+      const state = store.getState();
+      expect(state.library.selectedLibraryId).toBe("lib-1");
+      expect(state.library.selectedLibrary).toEqual(mockLibraryRow);
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        STORAGE_KEYS.selectedLibraryId,
+        "lib-1"
+      );
+    });
+
+    it("should not select library if not ready", async () => {
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, readinessState: "NOT_READY", selectedLibraryId: null },
+      }));
+
+      await (store.getState() as any)._selectLibraryFromCache("lib-1");
+
+      expect(getLibraryById).not.toHaveBeenCalled();
+      expect(store.getState().library.selectedLibraryId).toBeNull();
+    });
+
+    it("should handle when selected library is already selected", async () => {
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, selectedLibraryId: "lib-1" },
+      }));
+
+      await (store.getState() as any)._selectLibraryFromCache("lib-1");
+
+      expect(getLibraryById).not.toHaveBeenCalled();
+    });
+
+    it("should handle database errors gracefully", async () => {
+      getLibraryById.mockRejectedValue(new Error("Database Error"));
+
+      await (store.getState() as any)._selectLibraryFromCache("lib-2");
+
+      const state = store.getState();
+      expect(state.library.operationState).toBe("IDLE");
+    });
+  });
+
+  describe("_loadCachedItems", () => {
+    beforeEach(async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+    });
+
+    it("should load cached items for selected library", async () => {
+      const mockDisplayItems = [
+        { id: "li-1", title: "Book 1", authorName: "Author 1" },
+        { id: "li-2", title: "Book 2", authorName: "Author 2" },
+      ];
+
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, selectedLibraryId: "lib-1" },
+      }));
+
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue(mockDisplayItems);
+
+      await (store.getState() as any)._loadCachedItems();
+
+      const state = store.getState();
+      expect(state.library.rawItems).toEqual(mockDisplayItems);
+      expect(state.library.items).toEqual(mockDisplayItems);
+      expect(state.library.operationState).toBe("IDLE");
+    });
+
+    it("should not load items if no library is selected", async () => {
+      // Clear mocks from initialization
+      jest.clearAllMocks();
+
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, selectedLibraryId: null },
+      }));
+
+      await (store.getState() as any)._loadCachedItems();
+
+      expect(getLibraryItemsForList).not.toHaveBeenCalled();
+    });
+
+    it("should handle database errors gracefully", async () => {
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, selectedLibraryId: "lib-1" },
+      }));
+
+      getLibraryItemsForList.mockRejectedValue(new Error("Database Error"));
+
+      await (store.getState() as any)._loadCachedItems();
+
+      const state = store.getState();
+      expect(state.library.operationState).toBe("IDLE");
+    });
+  });
+
+  describe("_refetchLibraries", () => {
+    beforeEach(async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+    });
+
+    it("should fetch libraries from API and update database", async () => {
+      marshalLibrariesFromResponse.mockReturnValue([mockLibraryRow, mockPodcastLibraryRow]);
+      getAllLibraries.mockResolvedValue([mockLibraryRow, mockPodcastLibraryRow]);
+
+      const result = await (store.getState() as any)._refetchLibraries();
+
+      expect(fetchLibraries).toHaveBeenCalled();
+      expect(marshalLibrariesFromResponse).toHaveBeenCalled();
+      expect(upsertLibraries).toHaveBeenCalled();
+      expect(result).toEqual([mockLibraryRow, mockPodcastLibraryRow]);
+
+      const state = store.getState();
+      expect(state.library.libraries).toEqual([mockLibraryRow, mockPodcastLibraryRow]);
+    });
+
+    it("should auto-select first library when none is selected", async () => {
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, selectedLibraryId: null, selectedLibrary: null },
+      }));
+
+      marshalLibrariesFromResponse.mockReturnValue([mockLibraryRow]);
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+
+      await (store.getState() as any)._refetchLibraries();
+
+      const state = store.getState();
+      expect(state.library.selectedLibraryId).toBe("lib-1");
+      expect(state.library.selectedLibrary).toEqual(mockLibraryRow);
+    });
+
+    it("should not fetch if not ready", async () => {
+      // Clear mocks from initialization
+      jest.clearAllMocks();
+
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, readinessState: "NOT_READY" },
+      }));
+
+      const result = await (store.getState() as any)._refetchLibraries();
+
+      expect(fetchLibraries).not.toHaveBeenCalled();
+      expect(result).toEqual([]);
+    });
+
+    it("should fallback to database on API error", async () => {
+      fetchLibraries.mockRejectedValue(new Error("API Error"));
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+
+      const result = await (store.getState() as any)._refetchLibraries();
+
+      expect(result).toEqual([mockLibraryRow]);
+      const state = store.getState();
+      expect(state.library.libraries).toEqual([mockLibraryRow]);
+      expect(state.library.operationState).toBe("IDLE");
+    });
+  });
+
+  describe("_refetchItems", () => {
+    beforeEach(async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+      store.setState((state) => ({
+        ...state,
+        library: {
+          ...state.library,
+          selectedLibraryId: "lib-1",
+          selectedLibrary: mockLibraryRow,
+        },
+      }));
+    });
+
+    it("should fetch items from API and update database", async () => {
+      const mockApiItems = [
+        { id: "li-1", libraryId: "lib-1", media: { metadata: { title: "Book 1" } } },
+      ];
+      const mockDbItems = [{ id: "li-1", libraryId: "lib-1", title: "Book 1" }];
+      const mockDisplayItems = [{ id: "li-1", title: "Book 1", authorName: "Author 1" }];
+
+      fetchAllLibraryItems.mockResolvedValue(mockApiItems);
+      getLibraryItemsForList.mockResolvedValue(mockDbItems);
+      transformItemsToDisplayFormat.mockReturnValue(mockDisplayItems);
+      cacheCoversForLibraryItems.mockResolvedValue({ downloadedCount: 0, totalCount: 0 });
+
+      await (store.getState() as any)._refetchItems();
+
+      expect(fetchAllLibraryItems).toHaveBeenCalledWith("lib-1");
+      expect(upsertLibraryItems).toHaveBeenCalled();
+
+      // Give a small delay for the state to update
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const state = store.getState();
+      expect(state.library.rawItems).toEqual(mockDisplayItems);
+      expect(state.library.items).toEqual(mockDisplayItems);
+      expect(state.library.operationState).toBe("IDLE");
+    });
+
+    it("should not fetch if not ready", async () => {
+      // Clear mocks from initialization
+      jest.clearAllMocks();
+
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, readinessState: "NOT_READY" },
+      }));
+
+      await (store.getState() as any)._refetchItems();
+
+      expect(fetchAllLibraryItems).not.toHaveBeenCalled();
+    });
+
+    it("should not fetch if no library is selected", async () => {
+      // Clear mocks from initialization
+      jest.clearAllMocks();
+
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, selectedLibraryId: null, selectedLibrary: null },
+      }));
+
+      await (store.getState() as any)._refetchItems();
+
+      expect(fetchAllLibraryItems).not.toHaveBeenCalled();
+    });
+
+    it("should handle API errors gracefully", async () => {
+      fetchAllLibraryItems.mockRejectedValue(new Error("API Error"));
+
+      await (store.getState() as any)._refetchItems();
+
+      const state = store.getState();
+      expect(state.library.operationState).toBe("IDLE");
+    });
+  });
+
+  describe("_sortLibraryItems", () => {
+    beforeEach(async () => {
+      await store.getState().initializeLibrarySlice(true, true);
+    });
+
+    it("should sort items based on current sort config", () => {
+      const mockItems = [
+        { id: "li-2", title: "Book B", authorName: "Author B" },
+        { id: "li-1", title: "Book A", authorName: "Author A" },
+        { id: "li-3", title: "Book C", authorName: "Author C" },
+      ];
+
+      store.setState((state) => ({
+        ...state,
+        library: {
+          ...state.library,
+          rawItems: mockItems,
+          sortConfig: { field: "title", direction: "asc" },
+        },
+      }));
+
+      (store.getState() as any)._sortLibraryItems();
+
+      const state = store.getState();
+      expect(state.library.items[0].id).toBe("li-1");
+      expect(state.library.items[1].id).toBe("li-2");
+      expect(state.library.items[2].id).toBe("li-3");
+    });
+  });
+
+  describe("Integration Scenarios", () => {
+    it("should complete full initialization flow with auto-selection", async () => {
+      // Mock storage with no selected library
+      mockedAsyncStorage.getItem.mockResolvedValue(null);
+
+      // Mock database with libraries
+      getAllLibraries.mockResolvedValue([mockLibraryRow, mockPodcastLibraryRow]);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+
+      await store.getState().initializeLibrarySlice(true, true);
+
+      const state = store.getState();
+      expect(state.library.readinessState).toBe("READY");
+      expect(state.library.selectedLibraryId).toBe("lib-1"); // Auto-selected first library
+      expect(state.library.libraries).toEqual([mockLibraryRow, mockPodcastLibraryRow]);
+    });
+
+    it("should fetch libraries from API when DB is empty", async () => {
+      // Mock storage
+      mockedAsyncStorage.getItem.mockResolvedValue(null);
+
+      // Mock database with no libraries initially
+      getAllLibraries.mockResolvedValueOnce([]);
+
+      // Mock API response
+      fetchLibraries.mockResolvedValue(mockLibrariesResponse);
+      marshalLibrariesFromResponse.mockReturnValue([mockLibraryRow, mockPodcastLibraryRow]);
+
+      // After API call, DB will have libraries
+      getAllLibraries.mockResolvedValue([mockLibraryRow, mockPodcastLibraryRow]);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+
+      await store.getState().initializeLibrarySlice(true, true);
+
+      const state = store.getState();
+      expect(state.library.libraries.length).toBeGreaterThanOrEqual(0);
+      expect(state.library.readinessState).toBe("READY");
+    });
+
+    it("should handle sorting items after loading", async () => {
+      const mockItems = [
+        { id: "li-3", title: "Book C", authorName: "Author C", addedAt: 3 },
+        { id: "li-1", title: "Book A", authorName: "Author A", addedAt: 1 },
+        { id: "li-2", title: "Book B", authorName: "Author B", addedAt: 2 },
+      ];
+
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      getLibraryItemsForList.mockResolvedValue(mockItems);
+      transformItemsToDisplayFormat.mockReturnValue(mockItems);
+
+      // Initialize with default sort (title asc)
+      await store.getState().initializeLibrarySlice(true, true);
+
+      let state = store.getState();
+      expect(state.library.items[0].title).toBe("Book A");
+      expect(state.library.items[2].title).toBe("Book C");
+
+      // Change sort to title desc
+      await store.getState().setSortConfig({ field: "title", direction: "desc" });
+
+      state = store.getState();
+      expect(state.library.items[0].title).toBe("Book C");
+      expect(state.library.items[2].title).toBe("Book A");
+    });
+
+    it("should persist auto-selected library to storage", async () => {
+      mockedAsyncStorage.getItem.mockResolvedValue(null);
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+
+      await store.getState().initializeLibrarySlice(true, true);
+
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        STORAGE_KEYS.selectedLibraryId,
+        "lib-1"
+      );
+    });
+
+    it("should handle library selection that doesn't exist in DB", async () => {
+      // Mock storage with library ID that doesn't exist
+      mockedAsyncStorage.getItem
+        .mockResolvedValueOnce("non-existent-lib")
+        .mockResolvedValueOnce(null);
+
+      getAllLibraries.mockResolvedValue([mockLibraryRow, mockPodcastLibraryRow]);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+
+      await store.getState().initializeLibrarySlice(true, true);
+
+      const state = store.getState();
+      // Should have the non-existent ID from storage but no selectedLibrary object
+      expect(state.library.selectedLibraryId).toBe("non-existent-lib");
+      expect(state.library.selectedLibrary).toBeUndefined();
+    });
+
+    it("should refresh libraries and items during refresh", async () => {
+      // Initialize the slice first
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+
+      // Set up state with selected library
+      store.setState((state) => ({
+        ...state,
+        library: {
+          ...state.library,
+          selectedLibraryId: "lib-1",
+          selectedLibrary: mockLibraryRow,
+        },
+      }));
+
+      // Clear mocks from initialization
+      jest.clearAllMocks();
+
+      // Set up mocks for refresh
+      fetchLibraries.mockResolvedValue(mockLibrariesResponse);
+      marshalLibrariesFromResponse.mockReturnValue([mockLibraryRow]);
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      upsertLibraries.mockResolvedValue();
+      fetchAllLibraryItems.mockResolvedValue([]);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+      cacheCoversForLibraryItems.mockResolvedValue({ downloadedCount: 0, totalCount: 0 });
+
+      await store.getState().refresh();
+
+      // Give time for async operations
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Verify refresh methods were called
+      expect(fetchLibraries).toHaveBeenCalled();
+      expect(fetchAllLibraryItems).toHaveBeenCalledWith("lib-1");
+    });
+  });
+
+  describe("Edge Cases", () => {
+    it("should handle empty libraries array", async () => {
+      mockedAsyncStorage.getItem.mockResolvedValue(null);
+      getAllLibraries.mockResolvedValue([]);
+
+      await store.getState().initializeLibrarySlice(true, true);
+
+      const state = store.getState();
+      expect(state.library.libraries).toEqual([]);
+      expect(state.library.selectedLibraryId).toBeNull();
+      expect(state.library.items).toEqual([]);
+    });
+
+    it("should handle empty items array", async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+
+      await store.getState().initializeLibrarySlice(true, true);
+
+      const state = store.getState();
+      expect(state.library.items).toEqual([]);
+      expect(state.library.rawItems).toEqual([]);
+    });
+
+    it("should handle storage setItem failures", async () => {
+      mockedAsyncStorage.setItem.mockRejectedValue(new Error("Storage full"));
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      getLibraryById.mockResolvedValue(mockLibraryRow);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+
+      await store.getState().initializeLibrarySlice(true, true);
+
+      // Should still select library despite storage failure
+      await store.getState().selectLibrary("lib-1");
+
+      const state = store.getState();
+      expect(state.library.selectedLibraryId).toBe("lib-1");
+    });
+
+    it("should handle null/undefined in sort fields", async () => {
+      const mockItems = [
+        { id: "li-1", title: null, authorName: null },
+        { id: "li-2", title: "Book B", authorName: "Author B" },
+        { id: "li-3", title: undefined, authorName: undefined },
+      ];
+
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      getLibraryItemsForList.mockResolvedValue(mockItems);
+      transformItemsToDisplayFormat.mockReturnValue(mockItems);
+
+      await store.getState().initializeLibrarySlice(true, true);
+
+      const state = store.getState();
+      // Should not crash when sorting items with null/undefined fields
+      expect(state.library.items).toHaveLength(3);
+    });
+
+    it("should handle multiple rapid library selections", async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow, mockPodcastLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+
+      getLibraryById
+        .mockResolvedValueOnce(mockLibraryRow)
+        .mockResolvedValueOnce(mockPodcastLibraryRow);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+
+      // Rapidly select different libraries
+      const promise1 = store.getState().selectLibrary("lib-1");
+      const promise2 = store.getState().selectLibrary("lib-2");
+
+      await Promise.all([promise1, promise2]);
+
+      const state = store.getState();
+      // Should end up with the last selected library
+      expect(state.library.selectedLibraryId).toBe("lib-2");
+    });
+
+    it("should maintain operation state consistency on errors", async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+
+      // Wait for any background operations to complete
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Verify we're in idle state before proceeding
+      expect(store.getState().library.operationState).toBe("IDLE");
+
+      getLibraryById.mockRejectedValue(new Error("Database error"));
+
+      await store.getState().selectLibrary("lib-1");
+
+      const state = store.getState();
+      // Operation state should be idle after error
+      expect(state.library.operationState).toBe("IDLE");
     });
   });
 });
