@@ -333,7 +333,7 @@ describe("LibrarySlice", () => {
     });
 
     it("should update sort config and persist to storage", async () => {
-      const newSortConfig = { field: "author" as const, direction: "asc" as const };
+      const newSortConfig = { field: "authorName" as const, direction: "asc" as const };
 
       await store.getState().setSortConfig(newSortConfig);
 
@@ -347,7 +347,7 @@ describe("LibrarySlice", () => {
 
     it("should handle storage errors gracefully", async () => {
       mockedAsyncStorage.setItem.mockRejectedValue(new Error("Storage error"));
-      const newSortConfig = { field: "author" as const, direction: "asc" as const };
+      const newSortConfig = { field: "authorName" as const, direction: "asc" as const };
 
       await expect(store.getState().setSortConfig(newSortConfig)).resolves.not.toThrow();
 

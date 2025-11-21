@@ -13,6 +13,7 @@ import { clearAllSecureStorageExceptServerUrl } from "@/lib/secureStore";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { useDb } from "@/providers/DbProvider";
+import { apiClientService } from "@/services/ApiClientService";
 import * as Clipboard from "expo-clipboard";
 import { Stack } from "expo-router";
 import { useCallback } from "react";
@@ -31,9 +32,10 @@ type ActionItem = {
 
 export default function ActionsScreen() {
   const { styles, isDark } = useThemedStyles();
-  const { accessToken, logout } = useAuth();
+  const { logout } = useAuth();
   const { resetDatabase } = useDb();
   const floatingPlayerPadding = useFloatingPlayerPadding();
+  const accessToken = apiClientService.getAccessToken();
 
   const clearCoverCache = useCallback(async () => {
     try {

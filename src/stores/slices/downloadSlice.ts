@@ -163,8 +163,7 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
       log.info(`Verified ${downloadedItemIds.size} fully downloaded items`);
       if (partiallyDownloadedItems.length > 0) {
         log.warn(
-          `Found ${partiallyDownloadedItems.length} partially downloaded items (some files missing from disk):`,
-          partiallyDownloadedItems
+          `Found ${partiallyDownloadedItems.length} partially downloaded items (some files missing from disk): ${JSON.stringify(partiallyDownloadedItems)}`
         );
       }
 
@@ -203,12 +202,14 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
     try {
       // Start the download with a progress callback that handles all states
       await downloadService.startDownload(itemId, (progress) => {
-        log.info(`[DownloadSlice] Progress update for ${itemId}:`, {
-          status: progress.status,
-          totalProgress: progress.totalProgress,
-          downloadedFiles: progress.downloadedFiles,
-          totalFiles: progress.totalFiles,
-        });
+        log.info(
+          `[DownloadSlice] Progress update for ${itemId}: ${JSON.stringify({
+            status: progress.status,
+            totalProgress: progress.totalProgress,
+            downloadedFiles: progress.downloadedFiles,
+            totalFiles: progress.totalFiles,
+          })}`
+        );
 
         // Update progress in store
         get().updateDownloadProgress(itemId, progress);

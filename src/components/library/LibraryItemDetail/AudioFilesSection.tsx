@@ -1,7 +1,7 @@
 import { CollapsibleSection } from "@/components/ui";
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
-import { ApiAudioFile } from "@/types/api";
+import { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import React from "react";
 import { Text, View } from "react-native";
 
@@ -19,7 +19,7 @@ function formatTime(seconds: number): string {
 }
 
 interface AudioFilesSectionProps {
-  audioFiles: ApiAudioFile[];
+  audioFiles: AudioFileWithDownloadInfo[];
 }
 
 export default function AudioFilesSection({ audioFiles }: AudioFilesSectionProps) {
@@ -53,9 +53,7 @@ export default function AudioFilesSection({ audioFiles }: AudioFilesSectionProps
               </Text>
             )}
             {file.downloadInfo?.isDownloaded && (
-              <Text style={[styles.text, { fontSize: 12, color: "#007AFF" }]}>
-                ⬇ Downloaded
-              </Text>
+              <Text style={[styles.text, { fontSize: 12, color: "#007AFF" }]}>⬇ Downloaded</Text>
             )}
           </View>
         </View>
