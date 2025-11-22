@@ -68,7 +68,7 @@
         }
       ],
       "expo-web-browser",
-      "./plugins/excludeFromBackup/withExcludeFromBackup.ts"
+      "./plugins/excludeFromBackup/withExcludeFromBackup.js"
     ],
     "experiments": {
       "typedRoutes": true,

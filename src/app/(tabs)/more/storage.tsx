@@ -19,6 +19,10 @@ import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { clearAllCoverCache } from "@/lib/covers";
 import { formatBytes } from "@/lib/helpers/formatters";
+import {
+  isExcludedFromBackup,
+  isICloudBackupExclusionAvailable,
+} from "@/lib/iCloudBackupExclusion";
 import { useThemedStyles } from "@/lib/theme";
 import { type StorageEntry, useStatistics } from "@/stores";
 import { inArray } from "drizzle-orm";
@@ -37,13 +41,24 @@ type ActionItem = {
   label: string;
   onPress: () => void;
   disabled?: boolean;
-  columns?: [string, string, string];
+  columns?: [string, string, string] | [string, string, string, string];
   isHeader?: boolean;
+  isLegend?: boolean;
+  legendItems?: string[];
 };
 
 type StorageBucketStats = {
   count: number;
   size: number;
+};
+
+type BackupExclusionStatus = {
+  /** true = all excluded, false = none excluded, 'mixed' = some excluded */
+  status: boolean | "mixed" | undefined;
+  /** Number of files checked */
+  checkedCount: number;
+  /** Number of files that are excluded */
+  excludedCount: number;
 };
 
 const disabledOnPress = () => undefined;
@@ -72,6 +87,62 @@ function collectFileStats(paths: string[]): StorageBucketStats {
     },
     { count: 0, size: 0 }
   );
+}
+
+/**
+ * Check backup exclusion status for multiple file paths
+ * Returns a summary of exclusion status across all files
+ */
+async function checkBackupExclusionForPaths(paths: string[]): Promise<BackupExclusionStatus> {
+  if (!isICloudBackupExclusionAvailable()) {
+    return { status: undefined, checkedCount: 0, excludedCount: 0 };
+  }
+
+  if (!paths || paths.length === 0) {
+    return { status: undefined, checkedCount: 0, excludedCount: 0 };
+  }
+
+  let excludedCount = 0;
+  let checkedCount = 0;
+
+  // Check all files in parallel
+  await Promise.all(
+    paths.map(async (path) => {
+      if (!path) {
+        return;
+      }
+
+      try {
+        const file = new File(path);
+        if (!file.exists) {
+          return;
+        }
+
+        const result = await isExcludedFromBackup(path);
+        checkedCount++;
+        if (result.excluded) {
+          excludedCount++;
+        }
+      } catch (error) {
+        console.warn("[Storage] Failed to check backup exclusion for:", path, error);
+      }
+    })
+  );
+
+  // Determine overall status
+  if (checkedCount === 0) {
+    return { status: undefined, checkedCount, excludedCount };
+  }
+
+  if (excludedCount === checkedCount) {
+    return { status: true, checkedCount, excludedCount };
+  }
+
+  if (excludedCount === 0) {
+    return { status: false, checkedCount, excludedCount };
+  }
+
+  return { status: "mixed", checkedCount, excludedCount };
 }
 
 function getSQLiteDirectory(): Directory {
@@ -301,18 +372,38 @@ export default function StorageScreen() {
             title: group.title,
             count: stats.count,
             size: stats.size,
+            // Store all paths for backup exclusion checking
+            paths: group.paths,
+            excludedFromBackup: undefined as boolean | "mixed" | undefined,
           };
         })
         .filter((entry) => entry.count > 0)
         .sort((a, b) => a.title.localeCompare(b.title));
 
+      // Check backup exclusion status for download entries (iOS only)
+      if (isICloudBackupExclusionAvailable()) {
+        await Promise.all(
+          downloadEntries.map(async (entry) => {
+            if (entry.paths && entry.paths.length > 0) {
+              const backupStatus = await checkBackupExclusionForPaths(entry.paths);
+              entry.excludedFromBackup = backupStatus.status;
+            }
+          })
+        );
+      }
+
+      // Remove temporary paths property before adding to entries
+      const downloadEntriesClean: StorageEntry[] = downloadEntries.map(
+        ({ paths, ...entry }) => entry
+      );
+
       // Calculate total storage
       const totalSize =
         entries.reduce((sum, entry) => sum + entry.size, 0) +
-        downloadEntries.reduce((sum, entry) => sum + entry.size, 0);
+        downloadEntriesClean.reduce((sum, entry) => sum + entry.size, 0);
       const totalCount =
         entries.reduce((sum, entry) => sum + entry.count, 0) +
-        downloadEntries.reduce((sum, entry) => sum + entry.count, 0);
+        downloadEntriesClean.reduce((sum, entry) => sum + entry.count, 0);
 
       // Add total entry at the beginning
       const totalEntry: StorageEntry = {
@@ -324,7 +415,7 @@ export default function StorageScreen() {
 
       entries.unshift(totalEntry);
 
-      const allEntries = [...entries, ...downloadEntries];
+      const allEntries = [...entries, ...downloadEntriesClean];
       setStorageEntries(allEntries);
 
       // Update storage stats in the store
@@ -350,6 +441,9 @@ export default function StorageScreen() {
     void refreshStorageStats();
   }, [refreshStorageStats]);
 
+  // Determine if we should show the backup column
+  const showBackupColumn = isICloudBackupExclusionAvailable();
+
   const sections: Section[] = [
     {
       title: translate("advanced.sections.storage"),
@@ -358,23 +452,65 @@ export default function StorageScreen() {
           label: "storage-header",
           onPress: disabledOnPress,
           disabled: true,
-          columns: [
-            translate("advanced.storage.tableHeaders.item"),
-            translate("advanced.storage.tableHeaders.files"),
-            translate("advanced.storage.tableHeaders.size"),
-          ],
+          columns: showBackupColumn
+            ? [
+                translate("advanced.storage.tableHeaders.item"),
+                translate("advanced.storage.tableHeaders.files"),
+                translate("advanced.storage.tableHeaders.size"),
+                translate("advanced.storage.tableHeaders.willBackup"),
+              ]
+            : [
+                translate("advanced.storage.tableHeaders.item"),
+                translate("advanced.storage.tableHeaders.files"),
+                translate("advanced.storage.tableHeaders.size"),
+              ],
           isHeader: true,
         },
-        ...storageEntries.map((entry) => ({
-          label: entry.id,
-          onPress: disabledOnPress,
-          disabled: true,
-          columns: [entry.title, formatFileCount(entry.count), formatBytes(entry.size)] as [
-            string,
-            string,
-            string,
-          ],
-        })),
+        ...storageEntries.map((entry) => {
+          const backupStatus =
+            entry.excludedFromBackup === true
+              ? "✗"
+              : entry.excludedFromBackup === false
+                ? "✓"
+                : entry.excludedFromBackup === "mixed"
+                  ? "⚠"
+                  : "-";
+
+          return {
+            label: entry.id,
+            onPress: disabledOnPress,
+            disabled: true,
+            columns: showBackupColumn
+              ? ([
+                  entry.title,
+                  formatFileCount(entry.count),
+                  formatBytes(entry.size),
+                  backupStatus,
+                ] as [string, string, string, string])
+              : ([entry.title, formatFileCount(entry.count), formatBytes(entry.size)] as [
+                  string,
+                  string,
+                  string,
+                ]),
+          };
+        }),
+        // Add legend footer if backup column is shown
+        ...(showBackupColumn
+          ? [
+              {
+                label: "backup-legend",
+                onPress: disabledOnPress,
+                disabled: true,
+                isLegend: true,
+                legendItems: [
+                  translate("advanced.storage.legend.excluded"),
+                  translate("advanced.storage.legend.notExcluded"),
+                  translate("advanced.storage.legend.mixed"),
+                  translate("advanced.storage.legend.unknown"),
+                ],
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -405,7 +541,38 @@ export default function StorageScreen() {
           </View>
         )}
         renderItem={({ item }: { item: ActionItem }) => {
+          if (item.isLegend && item.legendItems) {
+            return (
+              <View
+                style={[
+                  styles.listItem,
+                  {
+                    paddingVertical: 12,
+                    backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.02)",
+                  },
+                ]}
+              >
+                {item.legendItems.map((legendItem, index) => (
+                  <Text
+                    key={index}
+                    style={[
+                      styles.text,
+                      {
+                        fontSize: 12,
+                        opacity: 0.7,
+                        marginBottom: index < item.legendItems!.length - 1 ? 4 : 0,
+                      },
+                    ]}
+                  >
+                    {legendItem}
+                  </Text>
+                ))}
+              </View>
+            );
+          }
+
           if (item.columns) {
+            const hasFourColumns = item.columns.length === 4;
             return (
               <View
                 style={[
@@ -432,12 +599,23 @@ export default function StorageScreen() {
                 <Text
                   style={[
                     styles.text,
-                    { width: 110, textAlign: "right" },
+                    { width: hasFourColumns ? 90 : 110, textAlign: "right" },
                     item.isHeader && { fontWeight: "600" },
                   ]}
                 >
                   {item.columns[2]}
                 </Text>
+                {hasFourColumns && (
+                  <Text
+                    style={[
+                      styles.text,
+                      { width: 50, textAlign: "center" },
+                      item.isHeader && { fontWeight: "600" },
+                    ]}
+                  >
+                    {item.columns[3]}
+                  </Text>
+                )}
               </View>
             );
           }
