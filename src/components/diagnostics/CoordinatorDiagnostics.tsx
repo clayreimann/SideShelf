@@ -16,8 +16,72 @@ import type {
   StateContext,
   TransitionHistoryEntry,
 } from "@/types/coordinator";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+
+/**
+ * Format timestamp with milliseconds
+ */
+function formatTimestampWithMs(timestamp: number): string {
+  const date = new Date(timestamp);
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  const seconds = date.getSeconds().toString().padStart(2, "0");
+  const ms = date.getMilliseconds().toString().padStart(3, "0");
+  return `${hours}:${minutes}:${seconds}.${ms}`;
+}
+
+/**
+ * Collapsed event group for display
+ */
+interface CollapsedEventGroup {
+  entry: TransitionHistoryEntry;
+  count: number;
+  firstTimestamp: number;
+  lastTimestamp: number;
+}
+
+/**
+ * Collapse consecutive repeated events in the transition history
+ */
+function collapseEvents(history: TransitionHistoryEntry[]): CollapsedEventGroup[] {
+  if (history.length === 0) return [];
+
+  const collapsed: CollapsedEventGroup[] = [];
+  let currentGroup: CollapsedEventGroup = {
+    entry: history[0],
+    count: 1,
+    firstTimestamp: history[0].timestamp,
+    lastTimestamp: history[0].timestamp,
+  };
+
+  for (let i = 1; i < history.length; i++) {
+    const entry = history[i];
+    const prev = currentGroup.entry;
+
+    // Check if this entry is the same type as the current group
+    if (
+      entry.event.type === prev.event.type &&
+      entry.fromState === prev.fromState &&
+      entry.toState === prev.toState &&
+      entry.allowed === prev.allowed
+    ) {
+      currentGroup.count++;
+      currentGroup.lastTimestamp = entry.timestamp;
+    } else {
+      collapsed.push(currentGroup);
+      currentGroup = {
+        entry: entry,
+        count: 1,
+        firstTimestamp: entry.timestamp,
+        lastTimestamp: entry.timestamp,
+      };
+    }
+  }
+
+  collapsed.push(currentGroup);
+  return collapsed;
+}
 
 export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: boolean }) {
   const { colors, isDark } = useThemedStyles();
@@ -34,6 +98,11 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
     setEventQueue(Array.from(coordinator.getEventQueue()));
     setTransitionHistory(Array.from(coordinator.getTransitionHistory()).reverse()); // Most recent first
   };
+
+  // Collapse consecutive repeated events for display
+  const collapsedHistory = useMemo(() => {
+    return collapseEvents(transitionHistory.slice(0, 20));
+  }, [transitionHistory]);
 
   useEffect(() => {
     const coordinator = getCoordinator();
@@ -152,7 +221,7 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
               label="Last Event"
               value={
                 metrics.lastEventTimestamp
-                  ? new Date(metrics.lastEventTimestamp).toLocaleTimeString()
+                  ? formatTimestampWithMs(metrics.lastEventTimestamp)
                   : "Never"
               }
               styles={styles}
@@ -215,7 +284,7 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
             />
             <MetricRow
               label="Time"
-              value={new Date(lastDiagnostic.timestamp).toLocaleTimeString()}
+              value={formatTimestampWithMs(lastDiagnostic.timestamp)}
               styles={styles}
             />
           </View>
@@ -231,7 +300,8 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
           {transitionHistory.length === 0 ? (
             <Text style={styles.emptyText}>No transitions recorded yet</Text>
           ) : (
-            transitionHistory.slice(0, 20).map((entry, index) => {
+            collapsedHistory.map((group, index) => {
+              const entry = group.entry;
               const stateChanged = entry.toState && entry.toState !== entry.fromState;
               return (
                 <View
@@ -250,9 +320,12 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
                       ]}
                     >
                       {entry.event.type}
+                      {group.count > 1 && ` (×${group.count})`}
                     </Text>
                     <Text style={styles.transitionTime}>
-                      {new Date(entry.timestamp).toLocaleTimeString()}
+                      {group.count > 1
+                        ? `${formatTimestampWithMs(group.firstTimestamp)} - ${formatTimestampWithMs(group.lastTimestamp)}`
+                        : formatTimestampWithMs(entry.timestamp)}
                     </Text>
                   </View>
                   <Text style={styles.transitionStates}>
