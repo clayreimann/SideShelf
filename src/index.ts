@@ -19,12 +19,14 @@ import {
   hasAppBeenUpdated,
   saveCurrentVersion,
 } from "@/lib/appVersion";
+import { performPeriodicCleanup } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
+import { getCurrentUser } from "@/utils/userHelpers";
 import TrackPlayer from "react-native-track-player";
 
 const log = logger.forTag("App");
@@ -136,6 +138,21 @@ async function handleAppUpdate(): Promise<void> {
     // React Native handles module hot-reloading differently than Node.js
     // Any update-specific logic can go here
     // For example: database migrations, cache cleanup, etc.
+
+    // Run file lifecycle cleanup (move stale items to Caches)
+    try {
+      const user = await getCurrentUser();
+      if (user) {
+        log.info("Running periodic file cleanup...");
+        const results = await performPeriodicCleanup(user.id);
+        log.info(
+          `File cleanup complete: ${results.movedItems.length} items moved to Caches, ${results.errors.length} errors`
+        );
+      }
+    } catch (error) {
+      log.error("Error running file cleanup:", error as Error);
+      // Continue - don't block app update on cleanup failure
+    }
 
     log.info("App update handling complete");
   } catch (error) {

@@ -50,3 +50,21 @@ export {
   type MockProgressService,
   type MockPlayerService,
 } from "./services";
+
+// Database helper mocks
+export {
+  createMockFileSystemHelpers,
+  createMockLocalDataHelpers,
+  createMockCombinedQueriesHelpers,
+  createMockMediaMetadataHelpers,
+  createMockMediaProgressHelpers,
+  createMockICloudBackupHelpers,
+  createFileLifecycleMocks,
+  type MockFileSystemHelpers,
+  type MockLocalDataHelpers,
+  type MockCombinedQueriesHelpers,
+  type MockMediaMetadataHelpers,
+  type MockMediaProgressHelpers,
+  type MockICloudBackupHelpers,
+  type FileLifecycleMocks,
+} from "./database";

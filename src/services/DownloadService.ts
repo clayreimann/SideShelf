@@ -16,6 +16,7 @@ import {
   getDownloadsDirectory,
   verifyFileExists,
 } from "@/lib/fileSystem";
+import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 import { logger } from "@/lib/logger";
 import { apiClientService } from "@/services/ApiClientService";
 import type {
@@ -275,10 +276,24 @@ export class DownloadService {
               log.info(
                 `*** TASK COMPLETION HANDLER CALLED *** ${audioFile.filename}: ${data.bytesDownloaded} bytes`
               );
-              const downloadPath = getDownloadPath(libraryItemId, audioFile.filename);
-              markAudioFileAsDownloaded(audioFile.id, downloadPath)
-                .then(() => {
-                  log.info(`File marked as downloaded, updating progress`);
+              const downloadPath = getDownloadPath(libraryItemId, audioFile.filename, "documents");
+              markAudioFileAsDownloaded(audioFile.id, downloadPath, "documents")
+                .then(async () => {
+                  log.info(`File marked as downloaded, applying iCloud exclusion`);
+
+                  // Apply iCloud backup exclusion
+                  try {
+                    await setExcludeFromBackup(downloadPath);
+                    log.info(`iCloud exclusion applied to ${audioFile.filename}`);
+                  } catch (error) {
+                    log.error(
+                      `Failed to set iCloud exclusion for ${audioFile.filename}:`,
+                      error as Error
+                    );
+                    // Continue anyway - file is downloaded, just not excluded from backup
+                  }
+
+                  log.info(`Updating progress`);
                   downloadedFiles++;
                   totalBytesDownloaded += data.bytesDownloaded;
                   updateProgress(
@@ -306,10 +321,19 @@ export class DownloadService {
         } catch (error) {
           if (error instanceof Error && error.message === "File already exists") {
             // File already downloaded, mark as complete
-            await markAudioFileAsDownloaded(
-              audioFile.id,
-              getDownloadPath(libraryItemId, audioFile.filename)
-            );
+            const downloadPath = getDownloadPath(libraryItemId, audioFile.filename, "documents");
+            await markAudioFileAsDownloaded(audioFile.id, downloadPath, "documents");
+
+            // Ensure iCloud exclusion is applied
+            try {
+              await setExcludeFromBackup(downloadPath);
+            } catch (excludeError) {
+              log.error(
+                `Failed to set iCloud exclusion for existing file ${audioFile.filename}:`,
+                excludeError as Error
+              );
+            }
+
             downloadedFiles++;
             totalBytesDownloaded += audioFile.size || 0;
             return;
@@ -495,10 +519,17 @@ export class DownloadService {
    */
   public async deleteDownloadedLibraryItem(libraryItemId: string): Promise<void> {
     try {
-      const dir = getDownloadsDirectory(libraryItemId);
-      if (dir.exists) {
-        await dir.delete();
-        log.info(`Deleted downloads for ${libraryItemId}`);
+      // Delete from both Documents and Caches directories
+      const docsDir = getDownloadsDirectory(libraryItemId, "documents");
+      if (docsDir.exists) {
+        await docsDir.delete();
+        log.info(`Deleted downloads from Documents for ${libraryItemId}`);
+      }
+
+      const cacheDir = getDownloadsDirectory(libraryItemId, "caches");
+      if (cacheDir.exists) {
+        await cacheDir.delete();
+        log.info(`Deleted downloads from Caches for ${libraryItemId}`);
       }
 
       // Update database to mark files as not downloaded
@@ -522,10 +553,7 @@ export class DownloadService {
    */
   public async getDownloadedSize(libraryItemId: string): Promise<number> {
     try {
-      const dir = getDownloadsDirectory(libraryItemId);
-      if (!dir.exists) return 0;
-
-      // Calculate from database
+      // Calculate from database (works regardless of storage location)
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) return 0;
 
@@ -553,11 +581,12 @@ export class DownloadService {
     if (!serverUrl || !token) {
       throw new Error("Server URL and access token are required for downloads");
     }
-    await ensureDownloadsDirectory(libraryItemId);
-    const destPath = getDownloadPath(libraryItemId, audioFile.filename);
+    // Download to Documents directory for persistence
+    await ensureDownloadsDirectory(libraryItemId, "documents");
+    const destPath = getDownloadPath(libraryItemId, audioFile.filename, "documents");
 
     // Check if file already exists and handle accordingly
-    if (downloadFileExists(libraryItemId, audioFile.filename)) {
+    if (downloadFileExists(libraryItemId, audioFile.filename, "documents")) {
       if (forceRedownload) {
         log.info(`Force redownload requested, removing existing file: ${audioFile.filename}`);
         // TODO: Delete existing file before redownloading
@@ -824,10 +853,23 @@ export class DownloadService {
           log.info(
             `*** TASK DONE EVENT FIRED *** ${taskInfo.filename}: ${data.bytesDownloaded} bytes`
           );
-          const downloadPath = getDownloadPath(libraryItemId, taskInfo.filename);
-          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPath)
-            .then(() => {
-              log.info(`File marked as downloaded, calling handleTaskCompletion`);
+          const downloadPath = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
+          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPath, "documents")
+            .then(async () => {
+              log.info(`File marked as downloaded, applying iCloud exclusion`);
+
+              // Apply iCloud backup exclusion
+              try {
+                await setExcludeFromBackup(downloadPath);
+                log.info(`iCloud exclusion applied to ${taskInfo.filename}`);
+              } catch (error) {
+                log.error(
+                  `Failed to set iCloud exclusion for ${taskInfo.filename}:`,
+                  error as Error
+                );
+              }
+
+              log.info(`Calling handleTaskCompletion`);
               this.handleTaskCompletion(libraryItemId, taskInfo, data.bytesDownloaded);
             })
             .catch((error: any) => {
