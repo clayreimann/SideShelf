@@ -115,27 +115,37 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
             <MetricRow
               label="Total Events Processed"
               value={metrics.totalEventsProcessed}
+              labelFlex={1}
+              valueFlex={1}
               styles={styles}
             />
             <MetricRow
               label="State Transitions"
               value={metrics.stateTransitionCount}
+              labelFlex={1}
+              valueFlex={1}
               styles={styles}
             />
             <MetricRow
               label="Rejected Transitions"
               value={metrics.rejectedTransitionCount}
               highlight={metrics.rejectedTransitionCount > 0}
+              labelFlex={1}
+              valueFlex={1}
               styles={styles}
             />
             <MetricRow
               label="Event Queue Length"
               value={metrics.eventQueueLength}
+              labelFlex={1}
+              valueFlex={1}
               styles={styles}
             />
             <MetricRow
               label="Avg Processing Time"
               value={`${metrics.avgEventProcessingTime.toFixed(2)}ms`}
+              labelFlex={1}
+              valueFlex={1}
               styles={styles}
             />
             <MetricRow
@@ -284,18 +294,32 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
 function MetricRow({
   label,
   value,
+  labelFlex,
+  valueFlex,
   highlight,
   styles,
 }: {
   label: string;
   value: string | number;
+  labelFlex?: number;
+  valueFlex?: number;
   highlight?: boolean;
   styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <View style={styles.metricRow}>
-      <Text style={styles.metricLabel}>{label}:</Text>
-      <Text style={[styles.metricValue, highlight && styles.metricHighlight]}>{value}</Text>
+      <Text style={[styles.metricLabel, labelFlex !== undefined && { flex: labelFlex }]}>
+        {label}:
+      </Text>
+      <Text
+        style={[
+          styles.metricValue,
+          highlight && styles.metricHighlight,
+          valueFlex !== undefined && { flex: valueFlex },
+        ]}
+      >
+        {value}
+      </Text>
     </View>
   );
 }

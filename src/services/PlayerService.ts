@@ -18,15 +18,16 @@ import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { startPlaySession } from "@/lib/api/endpoints";
-import { apiClientService } from "@/services/ApiClientService";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
 import { getCoverUri } from "@/lib/covers";
+import { ensureItemInDocuments } from "@/lib/fileLifecycleManager";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
 import { applySmartRewind } from "@/lib/smartRewind";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
+import { apiClientService } from "@/services/ApiClientService";
 import { progressService } from "@/services/ProgressService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { useAppStore } from "@/stores/appStore";
@@ -216,6 +217,15 @@ export class PlayerService {
       // Diagnostic: log current track, position, playing state before loading
       await this.printDebugInfo("playTrack::init");
       log.info(`Loading track for library item: ${libraryItemId}`);
+
+      // Ensure downloaded files are in Documents directory before playback
+      // This is a synchronous operation that will move files if needed
+      try {
+        await ensureItemInDocuments(libraryItemId);
+      } catch (error) {
+        // Log error but don't block playback - files might be in cache or streaming
+        log.warn(`Failed to ensure item in Documents, continuing with playback: ${error}`);
+      }
 
       // Get username from secure storage
       const username = await getStoredUsername();

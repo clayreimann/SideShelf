@@ -12,7 +12,7 @@ import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import type { CoordinatorMetrics, StateContext } from "@/types/coordinator";
 import { Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, SectionList, Switch, Text, View } from "react-native";
+import { Pressable, SectionList, Text, View } from "react-native";
 import TrackPlayer, { State, Track } from "react-native-track-player";
 
 type Section = {
@@ -68,7 +68,7 @@ export default function TrackPlayerScreen() {
   const floatingPlayerPadding = useFloatingPlayerPadding();
 
   // Auto-refresh state
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const autoRefresh = true;
 
   // TrackPlayer state
   const [trackPlayerState, setTrackPlayerState] = useState<{
@@ -191,21 +191,6 @@ export default function TrackPlayerScreen() {
   const hasTrack = trackPlayerState.currentTrack !== null;
 
   const sections: Section[] = [
-    // Auto-refresh toggle
-    {
-      title: "Settings",
-      data: [
-        {
-          label: `Auto-refresh`,
-          component: (
-            <Switch value={autoRefresh} onValueChange={() => setAutoRefresh(!autoRefresh)} />
-          ),
-          onPress: () => setAutoRefresh(!autoRefresh),
-          disabled: false,
-        },
-      ],
-    },
-
     // TrackPlayer State
     {
       title: translate("advanced.sections.trackPlayer"),

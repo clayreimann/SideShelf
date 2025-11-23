@@ -6,13 +6,15 @@
  * Handles comprehensive progress syncing using TrackPlayer events.
  */
 
+import { updateAudioFileLastAccessed } from "@/db/helpers/localData";
+import { getPeriodicNowPlayingUpdatesEnabled } from "@/lib/appSettings";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
-import { getCurrentUser } from "@/utils/userHelpers";
 import { applySmartRewind } from "@/lib/smartRewind";
 import { progressService } from "@/services/ProgressService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { useAppStore } from "@/stores/appStore";
+import { getCurrentUser } from "@/utils/userHelpers";
 import { AppState } from "react-native";
 import TrackPlayer, {
   Event,
@@ -34,6 +36,19 @@ const diagLog = logger.forDiagnostics("PlayerBackgroundService");
 
 // Generate a unique ID for this module instance to detect multiple instances
 const MODULE_INSTANCE_UUID = `BGS-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+// Track meaningful listening time per library item
+// Used to update lastAccessedAt after 2 minutes of cumulative playback
+const MEANINGFUL_LISTEN_THRESHOLD = 2 * 60; // 2 minutes in seconds
+const meaningfulListenTracker = new Map<
+  string,
+  {
+    startTime: number;
+    cumulativeTime: number;
+    lastUpdateTime: number;
+    hasUpdatedAccess: boolean;
+  }
+>();
 
 function describeRuntimeContext(): string {
   const parts: string[] = [];
@@ -126,6 +141,10 @@ async function handleRemoteStop(): Promise<void> {
   if (ids) {
     const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
     await progressService.endCurrentSession(ids.userId, ids.libraryItemId);
+
+    // Clear meaningful listen tracker on stop
+    meaningfulListenTracker.delete(ids.libraryItemId);
+
     if (session) {
       log.info(`Remote stop: session=${session.sessionId} item=${ids.libraryItemId}`);
     }
@@ -341,7 +360,7 @@ async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<vo
   try {
     // Phase 1: Dispatch to event bus
     dispatchPlayerEvent({
-      type: 'NATIVE_STATE_CHANGED',
+      type: "NATIVE_STATE_CHANGED",
       payload: { state: event.state },
     });
 
@@ -397,7 +416,7 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
   try {
     // Phase 1: Dispatch to event bus
     dispatchPlayerEvent({
-      type: 'NATIVE_PROGRESS_UPDATED',
+      type: "NATIVE_PROGRESS_UPDATED",
       payload: { position: event.position, duration: event.duration, buffered: event.buffered },
     });
 
@@ -456,7 +475,6 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
 
       // Periodic now playing metadata updates (gated by setting)
       // Throttle to every 2 seconds to avoid excessive updates
-      const { getPeriodicNowPlayingUpdatesEnabled } = await import("@/lib/appSettings");
       const periodicUpdatesEnabled = await getPeriodicNowPlayingUpdatesEnabled();
       if (periodicUpdatesEnabled && Math.floor(event.position) % 2 === 0) {
         await store.updateNowPlayingMetadata();
@@ -505,6 +523,44 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
           `Syncing to server: ${syncCheck.reason} appState=${AppState.currentState} session=${session?.sessionId || "none"} item=${ids.libraryItemId}`
         );
         await progressService.syncSessionToServer(ids.userId, ids.libraryItemId);
+      }
+
+      // Track meaningful listening time (≥2 minutes) for file lifecycle management
+      if (isPlaying) {
+        const tracker = meaningfulListenTracker.get(ids.libraryItemId);
+        const now = Date.now();
+
+        if (!tracker) {
+          // Start tracking for this item
+          meaningfulListenTracker.set(ids.libraryItemId, {
+            startTime: now,
+            cumulativeTime: 0,
+            lastUpdateTime: now,
+            hasUpdatedAccess: false,
+          });
+        } else if (!tracker.hasUpdatedAccess) {
+          // Update cumulative time (TrackPlayer fires this event every ~1 second)
+          const elapsed = (now - tracker.lastUpdateTime) / 1000; // Convert to seconds
+          tracker.cumulativeTime += elapsed;
+          tracker.lastUpdateTime = now;
+
+          // Check if we've reached meaningful listening threshold
+          if (tracker.cumulativeTime >= MEANINGFUL_LISTEN_THRESHOLD) {
+            log.info(
+              `Meaningful listening threshold reached (${tracker.cumulativeTime.toFixed(1)}s), updating lastAccessedAt for item=${ids.libraryItemId}`
+            );
+
+            try {
+              await updateAudioFileLastAccessed(ids.libraryItemId);
+              tracker.hasUpdatedAccess = true; // Only update once per session
+            } catch (error) {
+              log.error(
+                `Failed to update lastAccessedAt for item=${ids.libraryItemId}:`,
+                error as Error
+              );
+            }
+          }
+        }
       }
     } else if (currentTrack) {
       // No session - try to rehydrate from database if TrackPlayer has a track loaded
@@ -651,7 +707,7 @@ async function handleActiveTrackChanged(
     // Phase 1: Dispatch to event bus
     // Note: We pass null for track since we don't have PlayerTrack here
     dispatchPlayerEvent({
-      type: 'NATIVE_TRACK_CHANGED',
+      type: "NATIVE_TRACK_CHANGED",
       payload: { track: null },
     });
 
@@ -665,6 +721,13 @@ async function handleActiveTrackChanged(
     log.info(
       `Active track changed: ${event.track?.title || "unknown"} item=${currentTrack?.libraryItemId || "unknown"}`
     );
+
+    // Clear meaningful listen tracker for the previous track
+    // Note: We keep the tracker for the current track if it exists
+    const previousLibraryItemId = event.track?.id; // This might be the previous track
+    if (previousLibraryItemId && previousLibraryItemId !== currentTrack?.libraryItemId) {
+      meaningfulListenTracker.delete(previousLibraryItemId);
+    }
 
     if (currentTrack && user) {
       log.info(
@@ -896,6 +959,7 @@ export function reconnectBackgroundService(): void {
 export function shutdownBackgroundService(): void {
   log.info("Shutting down background service");
   cleanupEventListeners();
+  meaningfulListenTracker.clear(); // Clear all tracking state
   global.__playerBackgroundServiceSubscriptions = undefined;
   global.__playerBackgroundServiceInitializedAt = undefined;
 }
