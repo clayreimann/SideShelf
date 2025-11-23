@@ -3,11 +3,18 @@
  *
  * Event-driven state machine for coordinating player state.
  *
- * PHASE 1 IMPLEMENTATION:
- * - Observes events without modifying behavior
- * - Logs all events for diagnostic purposes
- * - Validates state machine logic
- * - Does NOT interfere with existing services
+ * PHASE 1 IMPLEMENTATION (Observer Mode):
+ * - Observes events without controlling execution
+ * - Services still execute independently (no execution control)
+ * - State machine validates transitions but doesn't block execution
+ * - Context updates from ALL events to reflect actual system state
+ * - Diagnostics UI can compare coordinator state vs actual behavior
+ * - Purpose: Validate state machine accurately models real system before Phase 2
+ *
+ * KEY DESIGN DECISION:
+ * Context (isPlaying, position, etc.) updates from ALL events including NATIVE_*
+ * to ensure diagnostics always show current reality. This is critical for Phase 1
+ * validation - we need to see that coordinator's view matches actual system state.
  *
  * Future phases will:
  * - Execute state transitions (Phase 2)
@@ -406,6 +413,30 @@ export class PlayerStateCoordinator extends EventEmitter {
       // Chapter changes
       case "CHAPTER_CHANGED":
         this.context.currentChapter = event.payload.chapter;
+        break;
+
+      // Native state changes (observer mode: track actual player state)
+      case "NATIVE_STATE_CHANGED":
+        // Update context to reflect actual native player state
+        // This is critical for Phase 1 validation - diagnostics UI needs accurate state
+        if (event.payload.state !== undefined) {
+          // Map native State enum to isPlaying boolean
+          // State values from react-native-track-player:
+          // None = 0, Ready = 1, Playing = 2, Paused = 3, Stopped = 4, Buffering = 6, Connecting = 8
+          const State = {
+            None: 0,
+            Ready: 1,
+            Playing: 2,
+            Paused: 3,
+            Stopped: 4,
+            Buffering: 6,
+            Connecting: 8,
+          };
+          this.context.isPlaying = event.payload.state === State.Playing;
+          log.debug(
+            `[Coordinator] Context updated from NATIVE_STATE_CHANGED: isPlaying=${this.context.isPlaying} (state=${event.payload.state})`
+          );
+        }
         break;
 
       // Error handling

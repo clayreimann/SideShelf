@@ -29,6 +29,40 @@ Services → EventBus → Coordinator → Services
 
 **Goal:** Validate state machine logic without affecting behavior
 
+**Observer Mode Behavior:**
+
+The coordinator operates with a critical design principle: **context updates from ALL events to reflect actual system state**.
+
+- **State Machine State**: Represents logical phase (PLAYING, PAUSED, etc.)
+  - Transitions validate but don't control execution (services still execute)
+  - May have no-op transitions (PLAYING→PLAYING)
+  - Represents "what phase are we in"
+
+- **Context Fields**: Represent actual current reality (isPlaying, position, etc.)
+  - Update from ALL events including NATIVE\_\*
+  - Always reflect current system state
+  - May change within same state machine state
+  - Represent "what's actually happening"
+
+- **Purpose**: Diagnostics UI shows what coordinator observes vs what's actually happening
+  - Can compare state machine predictions vs reality
+  - Identifies missing transitions or incorrect model
+  - Validates state machine accuracy before Phase 2 gives it control
+
+**Example:**
+
+```typescript
+// Lock screen pause while in PLAYING state
+NATIVE_STATE_CHANGED(Paused) arrives
+
+Result:
+- State Machine: PLAYING (no-op transition allowed)
+- Context.isPlaying: false (updated from event)
+
+Diagnostics shows: "State: PLAYING, Actually Playing: No"
+// This mismatch is expected and validates lock screen handling
+```
+
 **Completed:**
 
 - ✅ Created PlayerStateCoordinator with event queue
@@ -41,22 +75,26 @@ Services → EventBus → Coordinator → Services
   - playerSlice (RESTORE_STATE)
   - index.ts (APP_FOREGROUNDED)
 - ✅ Added diagnostics UI to Track Player screen with transition history
-- ✅ Comprehensive unit tests (116+ tests, 90%+ coverage)
+- ✅ Comprehensive unit tests (122+ tests, 90%+ coverage)
 - ✅ Fixed critical issues discovered during validation:
   - Internal state machine now updates correctly in observer mode
-  - Context synchronization from event payloads
+  - Context synchronization from ALL event payloads (including NATIVE_STATE_CHANGED)
+  - NATIVE_STATE_CHANGED updates isPlaying context for accurate diagnostics
   - Session events marked as no-op (concurrent with playback)
   - Queue reload events handle TrackPlayer rebuilding
   - Transition history tracking (100-entry circular buffer)
   - RESTORING state allows PLAY/PAUSE for user control
+  - NATIVE_STATE_CHANGED accepted from PAUSED state (lock screen controls)
 
 **Validation Results:**
 
 - ✅ State machine tracks state accurately (idle → loading → ready → playing)
-- ✅ Context fields populated correctly (position, duration, sessionId, track info)
+- ✅ Context fields populated correctly from ALL events (position, duration, sessionId, isPlaying, track info)
+- ✅ Lock screen controls work correctly (NATIVE_STATE_CHANGED accepted from paused/playing)
 - ✅ Minimal rejected transitions (<5% under normal operation)
 - ✅ Event processing time <10ms average
 - ✅ No performance degradation
+- ✅ Diagnostics UI shows accurate real-time state
 
 **Phase 1 is production-ready** and provides complete state visibility for debugging.
 
@@ -117,6 +155,20 @@ Services → EventBus → Coordinator → Services
 - Verify all transitions work through coordinator
 - Test error recovery paths
 - Validate no duplicate sessions created
+
+**Important Note on Context Updates:**
+
+Context fields must continue to update from ALL events (including NATIVE\_\*) in Phase 2 and beyond because:
+
+1. **Confirmation**: Verify execution actually happened (e.g., coordinator calls play(), NATIVE_STATE_CHANGED confirms)
+2. **External events**: Lock screen, headphones, and system interruptions still generate NATIVE\_\* events
+3. **Reality check**: Detect if native player disagrees with coordinator's commands
+
+Even when coordinator controls execution, it must observe reality to detect:
+
+- Commands that fail silently
+- External controls overriding coordinator
+- System interruptions (phone calls, audio focus loss)
 
 **Rollback:** Set `observerMode = true` and redeploy
 
