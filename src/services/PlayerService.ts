@@ -33,7 +33,7 @@ import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
 import type { PlayerTrack } from "@/types/player";
-import { AppState } from "react-native";
+import { Alert, AppState } from "react-native";
 import TrackPlayer, {
   AndroidAudioContentType,
   IOSCategory,
@@ -64,6 +64,24 @@ interface ResumePositionInfo {
   source: ResumeSource;
   authoritativePosition: number | null;
   asyncStoragePosition: number | null;
+  conflictDetected?: boolean;
+  conflictInfo?: ConflictInfo;
+}
+
+/**
+ * Information about a detected sync conflict between local and server progress
+ */
+interface ConflictInfo {
+  localPosition: number;
+  localTimestamp: Date;
+  localSource: "activeSession" | "savedProgress";
+  serverPosition: number;
+  serverTimestamp: Date;
+  positionDiff: number;
+  timeDiff: number; // milliseconds
+  resolvedPosition: number;
+  resolvedSource: "local" | "server";
+  reason: string;
 }
 
 /**
@@ -354,6 +372,60 @@ export class PlayerService {
         );
       }
 
+      // Handle sync conflict notification if detected
+      if (resumeInfo.conflictDetected && resumeInfo.conflictInfo) {
+        const conflict = resumeInfo.conflictInfo;
+        const alternativePosition =
+          conflict.resolvedSource === "local" ? conflict.serverPosition : conflict.localPosition;
+        const alternativeSource = conflict.resolvedSource === "local" ? "server" : "local";
+
+        // Show alert to user about the conflict
+        setTimeout(() => {
+          Alert.alert(
+            "Sync Conflict Detected",
+            `Your playback position differs across devices:\n\n` +
+              `• Device: ${formatTime(conflict.localPosition)} (${conflict.localTimestamp.toLocaleString()})\n` +
+              `• Server: ${formatTime(conflict.serverPosition)} (${conflict.serverTimestamp.toLocaleString()})\n\n` +
+              `Resuming from ${conflict.resolvedSource} position: ${formatTime(conflict.resolvedPosition)}\n\n` +
+              `${conflict.reason}`,
+            [
+              {
+                text: `Use ${alternativeSource} (${formatTime(alternativePosition)})`,
+                onPress: async () => {
+                  log.info(
+                    `User chose to use ${alternativeSource} position: ${formatTime(alternativePosition)}s`
+                  );
+                  await this.seekTo(alternativePosition);
+                  store.updatePosition(alternativePosition);
+
+                  // Update the session to reflect the user's choice
+                  try {
+                    const user = await getUserByUsername(username);
+                    if (user?.id) {
+                      await progressService.updateProgress(
+                        user.id,
+                        libraryItemId,
+                        alternativePosition,
+                        currentPlaybackRate,
+                        currentVolume,
+                        undefined,
+                        false
+                      );
+                    }
+                  } catch (error) {
+                    log.error("Failed to update progress after conflict resolution", error as Error);
+                  }
+                },
+              },
+              {
+                text: "OK",
+                style: "cancel",
+              },
+            ]
+          );
+        }, 500); // Delay to ensure player UI is ready
+      }
+
       // Seek to resume position first (if applicable)
       if (resumeInfo.position > 0) {
         store.updatePosition(resumeInfo.position);
@@ -563,6 +635,74 @@ export class PlayerService {
         );
       }
 
+      // Handle sync conflict notification if detected (during queue reload)
+      if (resumeInfo.conflictDetected && resumeInfo.conflictInfo) {
+        const conflict = resumeInfo.conflictInfo;
+        log.info(
+          `Conflict detected during queue reload - will notify user after playback resumes`
+        );
+
+        const alternativePosition =
+          conflict.resolvedSource === "local" ? conflict.serverPosition : conflict.localPosition;
+        const alternativeSource = conflict.resolvedSource === "local" ? "server" : "local";
+
+        // Show alert to user about the conflict (delayed to allow UI to be ready)
+        setTimeout(async () => {
+          try {
+            const username = await getStoredUsername();
+            if (!username) return;
+
+            Alert.alert(
+              "Sync Conflict Detected",
+              `Your playback position differs across devices:\n\n` +
+                `• Device: ${formatTime(conflict.localPosition)} (${conflict.localTimestamp.toLocaleString()})\n` +
+                `• Server: ${formatTime(conflict.serverPosition)} (${conflict.serverTimestamp.toLocaleString()})\n\n` +
+                `Resuming from ${conflict.resolvedSource} position: ${formatTime(conflict.resolvedPosition)}\n\n` +
+                `${conflict.reason}`,
+              [
+                {
+                  text: `Use ${alternativeSource} (${formatTime(alternativePosition)})`,
+                  onPress: async () => {
+                    log.info(
+                      `User chose to use ${alternativeSource} position: ${formatTime(alternativePosition)}s`
+                    );
+                    await this.seekTo(alternativePosition);
+                    const updatedStore = useAppStore.getState();
+                    updatedStore.updatePosition(alternativePosition);
+
+                    // Update the session to reflect the user's choice
+                    try {
+                      const user = await getUserByUsername(username);
+                      if (user?.id) {
+                        const playbackRate = await TrackPlayer.getRate();
+                        const volume = await TrackPlayer.getVolume();
+                        await progressService.updateProgress(
+                          user.id,
+                          track.libraryItemId,
+                          alternativePosition,
+                          playbackRate,
+                          volume,
+                          undefined,
+                          false
+                        );
+                      }
+                    } catch (error) {
+                      log.error("Failed to update progress after conflict resolution", error as Error);
+                    }
+                  },
+                },
+                {
+                  text: "OK",
+                  style: "cancel",
+                },
+              ]
+            );
+          } catch (error) {
+            log.error("Failed to show conflict alert", error as Error);
+          }
+        }, 1000); // Longer delay for queue reload scenario
+      }
+
       if (resumeInfo.position > 0) {
         await TrackPlayer.seekTo(resumeInfo.position);
         const updatedStore = useAppStore.getState();
@@ -677,18 +817,50 @@ export class PlayerService {
               const positionDiff = Math.abs(sessionPosition - savedPosition);
 
               if (positionDiff > LARGE_DIFF_THRESHOLD) {
-                // Large discrepancy - prefer the more recent timestamp
+                // Large discrepancy detected - this is a sync conflict
                 const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
+                const timeDiff = Math.abs(sessionUpdatedAt - savedLastUpdate);
+
+                // Determine which position to use based on timestamps (last-write-wins)
                 const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
                 const preferredSource = isSessionNewer ? "activeSession" : "savedProgress";
+                const resolvedSource: "local" | "server" = isSessionNewer ? "local" : "server";
+
+                // Create conflict information
+                const conflictInfo: ConflictInfo = {
+                  localPosition: sessionPosition,
+                  localTimestamp: new Date(sessionUpdatedAt),
+                  localSource: "activeSession",
+                  serverPosition: savedPosition,
+                  serverTimestamp: new Date(savedLastUpdate),
+                  positionDiff,
+                  timeDiff,
+                  resolvedPosition: preferredPosition,
+                  resolvedSource,
+                  reason: `Last-write-wins: ${resolvedSource} position is ${formatTime(timeDiff / 1000)}s newer`,
+                };
 
                 log.warn(
-                  `Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
+                  `[CONFLICT DETECTED] Position discrepancy for ${libraryItemId}:
+  Local (session): ${formatTime(sessionPosition)}s at ${new Date(sessionUpdatedAt).toISOString()}
+  Server (saved): ${formatTime(savedPosition)}s at ${new Date(savedLastUpdate).toISOString()}
+  Difference: ${formatTime(positionDiff)}s (position), ${formatTime(timeDiff / 1000)}s (time)
+  Resolution: Using ${resolvedSource} position ${formatTime(preferredPosition)}s (${conflictInfo.reason})`
                 );
 
                 position = preferredPosition;
                 source = preferredSource;
                 authoritativePosition = preferredPosition;
+
+                // Store conflict info in the return value for potential user notification
+                return {
+                  position,
+                  source,
+                  authoritativePosition,
+                  asyncStoragePosition,
+                  conflictDetected: true,
+                  conflictInfo,
+                };
               } else {
                 // Positions are close - use session (more frequently updated)
                 position = sessionPosition;

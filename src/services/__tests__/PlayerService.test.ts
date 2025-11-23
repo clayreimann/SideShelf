@@ -692,4 +692,229 @@ describe("PlayerService", () => {
       expect(mockedTrackPlayer.seekTo).not.toHaveBeenCalled();
     });
   });
+
+  describe("Conflict Resolution", () => {
+    it("should detect conflict when local and server positions differ significantly", async () => {
+      // Setup: Local session at 1000s, server progress at 2000s
+      const localSessionTime = 1000;
+      const serverProgressTime = 2000;
+      const localTimestamp = new Date(Date.now() - 10000); // 10 seconds ago
+      const serverTimestamp = new Date(); // Now (more recent)
+
+      getActiveSession.mockResolvedValue({
+        id: "session-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        currentTime: localSessionTime,
+        updatedAt: localTimestamp,
+        startTime: 0,
+        duration: 3600,
+      });
+
+      getMediaProgressForLibraryItem.mockResolvedValue({
+        id: "progress-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        currentTime: serverProgressTime,
+        lastUpdate: serverTimestamp,
+      });
+
+      // Access the private method through type assertion
+      const service = playerService as any;
+      const resumeInfo = await service.determineResumePosition("item-1");
+
+      // Should detect conflict
+      expect(resumeInfo.conflictDetected).toBe(true);
+      expect(resumeInfo.conflictInfo).toBeDefined();
+
+      // Should prefer server position (more recent timestamp)
+      expect(resumeInfo.position).toBe(serverProgressTime);
+      expect(resumeInfo.source).toBe("savedProgress");
+      expect(resumeInfo.conflictInfo?.resolvedSource).toBe("server");
+    });
+
+    it("should prefer local position when it has newer timestamp", async () => {
+      // Setup: Local session at 2000s, server progress at 1000s
+      const localSessionTime = 2000;
+      const serverProgressTime = 1000;
+      const localTimestamp = new Date(); // Now (more recent)
+      const serverTimestamp = new Date(Date.now() - 10000); // 10 seconds ago
+
+      getActiveSession.mockResolvedValue({
+        id: "session-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        currentTime: localSessionTime,
+        updatedAt: localTimestamp,
+        startTime: 0,
+        duration: 3600,
+      });
+
+      getMediaProgressForLibraryItem.mockResolvedValue({
+        id: "progress-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        currentTime: serverProgressTime,
+        lastUpdate: serverTimestamp,
+      });
+
+      // Access the private method through type assertion
+      const service = playerService as any;
+      const resumeInfo = await service.determineResumePosition("item-1");
+
+      // Should detect conflict
+      expect(resumeInfo.conflictDetected).toBe(true);
+      expect(resumeInfo.conflictInfo).toBeDefined();
+
+      // Should prefer local position (more recent timestamp)
+      expect(resumeInfo.position).toBe(localSessionTime);
+      expect(resumeInfo.source).toBe("activeSession");
+      expect(resumeInfo.conflictInfo?.resolvedSource).toBe("local");
+    });
+
+    it("should not detect conflict when positions are close (< 30s)", async () => {
+      // Setup: Positions differ by only 10 seconds
+      const localSessionTime = 1000;
+      const serverProgressTime = 1010;
+      const timestamp = new Date();
+
+      getActiveSession.mockResolvedValue({
+        id: "session-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        currentTime: localSessionTime,
+        updatedAt: timestamp,
+        startTime: 0,
+        duration: 3600,
+      });
+
+      getMediaProgressForLibraryItem.mockResolvedValue({
+        id: "progress-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        currentTime: serverProgressTime,
+        lastUpdate: timestamp,
+      });
+
+      // Access the private method through type assertion
+      const service = playerService as any;
+      const resumeInfo = await service.determineResumePosition("item-1");
+
+      // Should NOT detect conflict (positions are close)
+      expect(resumeInfo.conflictDetected).toBeUndefined();
+      expect(resumeInfo.conflictInfo).toBeUndefined();
+
+      // Should prefer local session (more frequently updated)
+      expect(resumeInfo.position).toBe(localSessionTime);
+      expect(resumeInfo.source).toBe("activeSession");
+    });
+
+    it("should include conflict details in conflictInfo", async () => {
+      // Setup: Significant difference with timestamps
+      const localSessionTime = 1000;
+      const serverProgressTime = 2000;
+      const localTimestamp = new Date(Date.now() - 5000); // 5 seconds ago
+      const serverTimestamp = new Date(); // Now
+
+      getActiveSession.mockResolvedValue({
+        id: "session-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        currentTime: localSessionTime,
+        updatedAt: localTimestamp,
+        startTime: 0,
+        duration: 3600,
+      });
+
+      getMediaProgressForLibraryItem.mockResolvedValue({
+        id: "progress-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        currentTime: serverProgressTime,
+        lastUpdate: serverTimestamp,
+      });
+
+      // Access the private method through type assertion
+      const service = playerService as any;
+      const resumeInfo = await service.determineResumePosition("item-1");
+
+      // Verify conflict info structure
+      expect(resumeInfo.conflictInfo).toMatchObject({
+        localPosition: localSessionTime,
+        localTimestamp: localTimestamp,
+        localSource: "activeSession",
+        serverPosition: serverProgressTime,
+        serverTimestamp: serverTimestamp,
+        positionDiff: Math.abs(localSessionTime - serverProgressTime),
+        resolvedPosition: serverProgressTime,
+        resolvedSource: "server",
+      });
+
+      expect(resumeInfo.conflictInfo?.timeDiff).toBeGreaterThan(0);
+      expect(resumeInfo.conflictInfo?.reason).toContain("Last-write-wins");
+    });
+
+    it("should not detect conflict when only local session exists", async () => {
+      // Setup: Only local session, no server progress
+      const localSessionTime = 1000;
+      const localTimestamp = new Date();
+
+      getActiveSession.mockResolvedValue({
+        id: "session-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        currentTime: localSessionTime,
+        updatedAt: localTimestamp,
+        startTime: 0,
+        duration: 3600,
+      });
+
+      getMediaProgressForLibraryItem.mockResolvedValue(null);
+
+      // Access the private method through type assertion
+      const service = playerService as any;
+      const resumeInfo = await service.determineResumePosition("item-1");
+
+      // Should NOT detect conflict (no comparison possible)
+      expect(resumeInfo.conflictDetected).toBeUndefined();
+      expect(resumeInfo.conflictInfo).toBeUndefined();
+
+      // Should use local session
+      expect(resumeInfo.position).toBe(localSessionTime);
+      expect(resumeInfo.source).toBe("activeSession");
+    });
+
+    it("should not detect conflict when only server progress exists", async () => {
+      // Setup: Only server progress, no local session
+      const serverProgressTime = 1000;
+      const serverTimestamp = new Date();
+
+      getActiveSession.mockResolvedValue(null);
+
+      getMediaProgressForLibraryItem.mockResolvedValue({
+        id: "progress-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        currentTime: serverProgressTime,
+        lastUpdate: serverTimestamp,
+      });
+
+      // Access the private method through type assertion
+      const service = playerService as any;
+      const resumeInfo = await service.determineResumePosition("item-1");
+
+      // Should NOT detect conflict (no comparison possible)
+      expect(resumeInfo.conflictDetected).toBeUndefined();
+      expect(resumeInfo.conflictInfo).toBeUndefined();
+
+      // Should use server progress
+      expect(resumeInfo.position).toBe(serverProgressTime);
+      expect(resumeInfo.source).toBe("savedProgress");
+    });
+  });
 });
