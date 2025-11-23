@@ -6,6 +6,7 @@ import DeviceInfo from "react-native-device-info";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 
 type ActionItem = {
   label: string;
@@ -45,11 +46,84 @@ export default function MoreScreen() {
     loadVersionInfo();
   }, []);
 
+  const openFeedback = () => {
+    Alert.alert(
+      translate("more.feedback"),
+      translate("more.feedbackPrompt"),
+      [
+        {
+          text: translate("more.bugReport"),
+          onPress: () => openBugReport(),
+        },
+        {
+          text: translate("more.featureRequest"),
+          onPress: () => openFeatureRequest(),
+        },
+        {
+          text: translate("common.cancel"),
+          style: "cancel",
+        },
+      ]
+    );
+  };
+
+  const openBugReport = async () => {
+    try {
+      const version = DeviceInfo.getVersion();
+      const buildNumber = DeviceInfo.getBuildNumber();
+      const systemVersion = DeviceInfo.getSystemVersion();
+      const deviceId = DeviceInfo.getDeviceId();
+      const brand = await DeviceInfo.getBrand();
+      const model = await DeviceInfo.getModel();
+
+      // Determine platform
+      const platform = DeviceInfo.isTablet()
+        ? `${DeviceInfo.getSystemName()} (Tablet)`
+        : DeviceInfo.getSystemName();
+
+      // Build device description
+      const device = `${brand} ${model}`;
+
+      // Build the bug report URL with pre-filled fields
+      const params = new URLSearchParams({
+        template: "bug_report.yml",
+        version: `${version} (${buildNumber})`,
+        platform: platform,
+        "os-version": `${DeviceInfo.getSystemName()} ${systemVersion}`,
+        device: device,
+      });
+
+      const url = `https://github.com/clayreimann/SideShelf/issues/new?${params.toString()}`;
+      await WebBrowser.openBrowserAsync(url);
+    } catch (error) {
+      console.error("[MoreScreen] Failed to open bug report:", error);
+    }
+  };
+
+  const openFeatureRequest = async () => {
+    try {
+      const version = DeviceInfo.getVersion();
+      const buildNumber = DeviceInfo.getBuildNumber();
+
+      // Build the feature request URL with pre-filled version
+      const params = new URLSearchParams({
+        template: "feature_request.yml",
+        version: `${version} (${buildNumber})`,
+      });
+
+      const url = `https://github.com/clayreimann/SideShelf/issues/new?${params.toString()}`;
+      await WebBrowser.openBrowserAsync(url);
+    } catch (error) {
+      console.error("[MoreScreen] Failed to open feature request:", error);
+    }
+  };
+
   const data = useMemo(() => {
     const items: ActionItem[] = [
       // { label: 'Collections', onPress: () => router.push('/more/collections') },
       { label: translate("more.aboutMe"), onPress: () => router.push("/more/me") },
       { label: translate("more.settings"), onPress: () => router.push("/more/settings") },
+      { label: translate("more.feedback"), onPress: openFeedback },
     ];
 
     // Conditionally add diagnostics screens
@@ -100,7 +174,7 @@ export default function MoreScreen() {
     });
 
     return items;
-  }, [router, logout, showErrorBadge, errorCount, diagnosticsEnabled]);
+  }, [router, logout, showErrorBadge, errorCount, diagnosticsEnabled, openFeedback]);
   return (
     <>
       <FlatList
