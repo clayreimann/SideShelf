@@ -28,6 +28,7 @@ import { getStoredUsername } from "@/lib/secureStore";
 import { applySmartRewind } from "@/lib/smartRewind";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { apiClientService } from "@/services/ApiClientService";
+import { downloadService } from "@/services/DownloadService";
 import { progressService } from "@/services/ProgressService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { useAppStore } from "@/stores/appStore";
@@ -225,6 +226,15 @@ export class PlayerService {
       } catch (error) {
         // Log error but don't block playback - files might be in cache or streaming
         log.warn(`Failed to ensure item in Documents, continuing with playback: ${error}`);
+      }
+
+      // Repair download paths to account for iOS container path changes
+      // This ensures buildTrackList() will find locally downloaded files
+      try {
+        await downloadService.repairDownloadStatus(libraryItemId);
+      } catch (error) {
+        // Log error but don't block playback - will fall back to streaming if needed
+        log.warn(`Failed to repair download status, continuing with playback: ${error}`);
       }
 
       // Get username from secure storage

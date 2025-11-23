@@ -110,6 +110,16 @@ jest.mock("@/services/ProgressService", () => ({
   },
 }));
 
+jest.mock("@/services/DownloadService", () => ({
+  downloadService: {
+    repairDownloadStatus: jest.fn(),
+  },
+}));
+
+jest.mock("@/lib/fileLifecycleManager", () => ({
+  ensureItemInDocuments: jest.fn(),
+}));
+
 jest.mock("@/lib/api/endpoints", () => ({
   startPlaySession: jest.fn(),
 }));
@@ -130,6 +140,8 @@ describe("PlayerService", () => {
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
   const { useAppStore } = require("@/stores/appStore");
   const { progressService } = require("@/services/ProgressService");
+  const { downloadService } = require("@/services/DownloadService");
+  const { ensureItemInDocuments } = require("@/lib/fileLifecycleManager");
   const { getActiveSession } = require("@/db/helpers/localListeningSessions");
   const { getMediaProgressForLibraryItem } = require("@/db/helpers/mediaProgress");
   const { getItem: getAsyncItem } = require("@/lib/asyncStore");
@@ -236,6 +248,8 @@ describe("PlayerService", () => {
     getActiveSession.mockResolvedValue(null);
     getMediaProgressForLibraryItem.mockResolvedValue(null);
     getAsyncItem.mockResolvedValue(null);
+    ensureItemInDocuments.mockResolvedValue(undefined);
+    downloadService.repairDownloadStatus.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -397,6 +411,44 @@ describe("PlayerService", () => {
       await expect(playerService.playTrack("item-1")).rejects.toThrow();
 
       expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
+    });
+
+    it("should call repairDownloadStatus before building track list", async () => {
+      await playerService.playTrack("item-1");
+
+      // Verify repairDownloadStatus was called with correct libraryItemId
+      expect(downloadService.repairDownloadStatus).toHaveBeenCalledWith("item-1");
+
+      // Verify it was called after ensureItemInDocuments
+      expect(ensureItemInDocuments).toHaveBeenCalledWith("item-1");
+
+      // Verify both were called before buildTrackList (which happens before TrackPlayer.add)
+      expect(mockedTrackPlayer.add).toHaveBeenCalled();
+    });
+
+    it("should continue playback if repairDownloadStatus fails", async () => {
+      downloadService.repairDownloadStatus.mockRejectedValueOnce(new Error("Repair failed"));
+
+      // Should not throw - should continue with playback
+      await expect(playerService.playTrack("item-1")).resolves.not.toThrow();
+
+      // Verify playback still happened
+      expect(mockedTrackPlayer.add).toHaveBeenCalled();
+      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+    });
+
+    it("should continue playback if ensureItemInDocuments fails", async () => {
+      ensureItemInDocuments.mockRejectedValueOnce(new Error("Move failed"));
+
+      // Should not throw - should continue with playback
+      await expect(playerService.playTrack("item-1")).resolves.not.toThrow();
+
+      // Verify repairDownloadStatus was still called
+      expect(downloadService.repairDownloadStatus).toHaveBeenCalledWith("item-1");
+
+      // Verify playback still happened
+      expect(mockedTrackPlayer.add).toHaveBeenCalled();
+      expect(mockedTrackPlayer.play).toHaveBeenCalled();
     });
   });
 

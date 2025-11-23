@@ -818,4 +818,263 @@ describe("PlayerStateCoordinator", () => {
       expect(context.sessionStartTime).toBeNull();
     });
   });
+
+  describe("Lock Screen Controls Integration", () => {
+    it("should allow NATIVE_STATE_CHANGED from PAUSED state (lock screen play)", async () => {
+      // Setup: Transition to playing, then pause
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Transition through READY to PLAYING
+      await coordinator.dispatch({
+        type: "QUEUE_RELOADED",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
+
+      // Simulate lock screen play button pressed
+      // Native player starts playing, sends NATIVE_STATE_CHANGED
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should accept the event (PAUSED -> PAUSED transition allowed)
+      const metrics = coordinator.getMetrics();
+      expect(metrics.rejectedTransitionCount).toBe(0);
+
+      // Observer mode: Context should reflect the native state change
+      // This allows diagnostics UI to show accurate state
+      const context = coordinator.getContext();
+      expect(context.isPlaying).toBe(true);
+
+      // State machine remains in PAUSED (no-op transition)
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
+    });
+
+    it("should allow NATIVE_STATE_CHANGED from PLAYING state (lock screen pause)", async () => {
+      // Setup: Transition to playing
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Transition through READY to PLAYING
+      await coordinator.dispatch({
+        type: "QUEUE_RELOADED",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Simulate lock screen pause button pressed
+      // Native player pauses, sends NATIVE_STATE_CHANGED
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Paused },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should accept the event (PLAYING -> PLAYING transition allowed)
+      const metrics = coordinator.getMetrics();
+      expect(metrics.rejectedTransitionCount).toBe(0);
+
+      // Observer mode: Context should reflect the native state change
+      // This allows diagnostics UI to show accurate state
+      const context = coordinator.getContext();
+      expect(context.isPlaying).toBe(false);
+
+      // State machine remains in PLAYING (no-op transition)
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+    });
+
+    it("should handle duplicate NATIVE_STATE_CHANGED events (UI + native)", async () => {
+      // Setup: Transition to playing
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Transition through READY to PLAYING
+      await coordinator.dispatch({
+        type: "QUEUE_RELOADED",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // User taps pause button in UI
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Native player confirms pause with NATIVE_STATE_CHANGED (duplicate)
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Paused },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Both events should be accepted (no rejections)
+      const metrics = coordinator.getMetrics();
+      expect(metrics.rejectedTransitionCount).toBe(0);
+
+      // Final state should be PAUSED
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
+    });
+
+    it("should track multiple lock screen interactions correctly", async () => {
+      // Setup: Load and play
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Transition through READY to PLAYING
+      await coordinator.dispatch({
+        type: "QUEUE_RELOADED",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Lock screen: pause
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Paused },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      let context = coordinator.getContext();
+      expect(context.isPlaying).toBe(false); // Context tracks native state
+
+      // Lock screen: play
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      context = coordinator.getContext();
+      expect(context.isPlaying).toBe(true); // Context tracks native state
+
+      // Lock screen: pause again
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Paused },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      context = coordinator.getContext();
+      expect(context.isPlaying).toBe(false); // Context tracks native state
+
+      // State machine stays in PLAYING (all NATIVE_STATE_CHANGED from PLAYING stay in PLAYING)
+      // But context accurately reflects what the native player is doing
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // All events should be accepted
+      const metrics = coordinator.getMetrics();
+      expect(metrics.rejectedTransitionCount).toBe(0);
+      expect(metrics.totalEventsProcessed).toBeGreaterThanOrEqual(6); // LOAD + QUEUE_RELOADED + PLAY + 3x NATIVE
+    });
+
+    it("should not reject NATIVE_STATE_CHANGED during SEEKING", async () => {
+      // Setup: Play then seek
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Transition through READY to PLAYING
+      await coordinator.dispatch({
+        type: "QUEUE_RELOADED",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await coordinator.dispatch({
+        type: "SEEK",
+        payload: { position: 1000 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.SEEKING);
+
+      // Native player sends state update during seek
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should accept (SEEKING -> SEEKING allowed)
+      const metrics = coordinator.getMetrics();
+      expect(metrics.rejectedTransitionCount).toBe(0);
+    });
+
+    it("should not reject NATIVE_STATE_CHANGED during BUFFERING", async () => {
+      // Setup: Load and play
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Transition through READY to PLAYING
+      await coordinator.dispatch({
+        type: "QUEUE_RELOADED",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Simulate buffering via BUFFERING_STARTED event
+      await coordinator.dispatch({ type: "BUFFERING_STARTED" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.BUFFERING);
+
+      // Native player recovers from buffering (NATIVE_STATE_CHANGED transitions BUFFERING -> PLAYING)
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should transition to PLAYING
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // No rejections
+      const metrics = coordinator.getMetrics();
+      expect(metrics.rejectedTransitionCount).toBe(0);
+    });
+  });
 });

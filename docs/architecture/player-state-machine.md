@@ -423,15 +423,115 @@ This ensures the coordinator has complete, accurate state for validation and dia
 
 ### Observer Mode Behavior
 
-In Phase 1 observer mode:
+In Phase 1 observer mode, the coordinator operates with a critical design principle: **context updates from ALL events to reflect actual system state**.
+
+#### Core Behavior
 
 - ✅ Events are queued and processed serially
 - ✅ State transitions are validated against transition matrix
 - ✅ Internal state machine updates (idle → loading → playing)
-- ✅ Context fields synchronized from event payloads
+- ✅ **Context fields update from ALL events (including NATIVE\_\*)**
 - ✅ Transition history tracked for audit trail
 - ❌ **No execution** - Coordinator doesn't call service methods
 - ❌ **No control** - Services continue to manage state independently
+
+#### State Machine State vs Context
+
+This distinction is critical for Phase 1 validation:
+
+**State Machine State** (e.g., PLAYING, PAUSED):
+
+- Represents the **logical phase** of playback
+- Changes through explicit transitions
+- Validates allowed transitions
+- May have no-op transitions (PLAYING→PLAYING)
+- Represents "what phase are we in"
+
+**Context Fields** (e.g., isPlaying, position):
+
+- Represent the **actual current reality**
+- Update from ALL events including NATIVE\_\*
+- Always reflect current system state
+- May change within same state machine state
+- Represent "what's actually happening"
+
+#### Example: Lock Screen Controls
+
+When user pauses via lock screen while state machine is in PLAYING:
+
+```typescript
+// NATIVE_STATE_CHANGED arrives from lock screen
+coordinator.dispatch({ type: 'NATIVE_STATE_CHANGED', payload: { state: State.Paused } });
+
+// Result:
+State Machine: PLAYING (no-op transition PLAYING→PLAYING allowed)
+Context: isPlaying = false (updated to reflect actual player state)
+
+// Diagnostics UI can show:
+// "State: PLAYING, Actually Playing: No"
+// This reveals the mismatch and validates state machine behavior
+```
+
+#### Why This Matters
+
+**Phase 1 Validation Goal:** Verify the state machine accurately models real system behavior before Phase 2 gives it control.
+
+With context updates from ALL events:
+
+- ✅ **Accurate Reality Tracking**: Context shows what's actually happening
+- ✅ **State Machine Comparison**: Can compare predictions vs reality
+- ✅ **Diagnostics Visibility**: UI shows both coordinator state AND actual state
+- ✅ **Mismatch Detection**: Identifies missing transitions or incorrect model
+
+Without context updates from NATIVE\_\* events:
+
+- ❌ Context would be stale
+- ❌ Can't see if coordinator's view matches reality
+- ❌ Can't validate state machine correctness
+- ❌ Phase 1 validation would be incomplete
+
+#### NATIVE_STATE_CHANGED Handler
+
+**Implementation:** `src/services/coordinator/PlayerStateCoordinator.ts:411-433`
+
+```typescript
+case "NATIVE_STATE_CHANGED":
+  // Update context to reflect actual native player state
+  // This is critical for Phase 1 validation - diagnostics UI needs accurate state
+  if (event.payload.state !== undefined) {
+    const State = {
+      None: 0, Ready: 1, Playing: 2, Paused: 3,
+      Stopped: 4, Buffering: 6, Connecting: 8,
+    };
+    this.context.isPlaying = event.payload.state === State.Playing;
+    log.debug(
+      `[Coordinator] Context updated from NATIVE_STATE_CHANGED: isPlaying=${this.context.isPlaying}`
+    );
+  }
+  break;
+```
+
+#### Transition to Phase 2
+
+In Phase 2, when coordinator starts controlling execution:
+
+**What Changes:**
+
+- Coordinator calls service methods (executes transitions)
+- State machine state drives behavior (not just observes)
+
+**What Stays the Same:**
+
+- Context still updates from ALL events
+- NATIVE\_\* events still update context
+- Diagnostics still show accurate state
+
+**Why Context Updates Persist:**
+Even in Phase 2+, context must update from NATIVE\_\* events because:
+
+1. **Confirmation**: Verify execution actually happened
+2. **External events**: Lock screen, headphones still generate NATIVE\_\* events
+3. **Reality check**: Detect if native player disagrees with coordinator
 
 The coordinator tracks state accurately to prepare for Phase 2, where it will begin executing transitions.
 
