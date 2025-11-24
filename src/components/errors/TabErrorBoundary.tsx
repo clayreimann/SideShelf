@@ -217,6 +217,7 @@ export class TabErrorBoundary extends Component<Props, State> {
     // Reset error state when tab changes (children change)
     // This allows the tab to recover when the user navigates away and back
     if (this.state.hasError && prevProps.children !== this.props.children) {
+      this.log.info(`Resetting error boundary for ${this.props.tabName} tab`);
       this.resetErrorBoundary();
     }
   }

@@ -165,6 +165,7 @@ export const en = {
   "settings.loading": "Loading settings...",
   "settings.error.saveFailed": "Failed to save setting",
   "settings.sections.librarySelection": "Library Selection",
+  "settings.sections.appearance": "Appearance",
   "settings.sections.playbackControls": "Playback Controls",
   "settings.sections.advanced": "Advanced",
   "settings.sections.developer": "Developer",
@@ -180,6 +181,25 @@ export const en = {
   "settings.autoReconnect": "Auto-reconnect Background Service",
   "settings.autoReconnectDescription":
     "Automatically reconnect the audio player background service when the app returns from background or after context recreation. Disable if experiencing issues with playback.",
+  "settings.tabBar.title": "Customize Tab Bar",
+  "settings.tabBar.subtitle": "Organize tabs and menu items",
+  "settings.tabBar.description":
+    "Move tabs between the tab bar and More menu. Use arrow buttons to reorder, (+) to add to tab bar, and (-) to move to More menu. Note: The More tab is always visible and always appears on the right.",
+  "settings.tabBar.sections.tabBar": "Tab Bar",
+  "settings.tabBar.sections.moreMenu": "More Menu",
+  "settings.tabBar.cannotHideAll.title": "Cannot Remove Tab",
+  "settings.tabBar.cannotHideAll.message":
+    "The tab bar must have at least one tab in addition to the More tab.",
+  "settings.tabBar.cannotHideMore.title": "Cannot Remove More Tab",
+  "settings.tabBar.cannotHideMore.message":
+    "The More tab cannot be removed as it contains settings and app information.",
+  "settings.tabBar.limitReached.title": "Tab Bar Full",
+  "settings.tabBar.limitReached.message":
+    "The tab bar can only show {max} tabs. Remove a tab first to add this one.",
+  "settings.tabBar.reset.title": "Reset to Defaults",
+  "settings.tabBar.reset.message":
+    "Are you sure you want to reset the tab bar to the default order and show all tabs?",
+  "settings.tabBar.reset.confirm": "Reset",
 
   // Logger Settings
   "loggerSettings.title": "Logger Settings",

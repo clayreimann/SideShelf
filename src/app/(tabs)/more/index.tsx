@@ -1,12 +1,12 @@
-import { translate } from "@/i18n";
+import { translate, type TranslationKey } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAppStore } from "@/stores/appStore";
-import DeviceInfo from "react-native-device-info";
 import { Stack, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View } from "react-native";
-import * as WebBrowser from "expo-web-browser";
+import DeviceInfo from "react-native-device-info";
 
 type ActionItem = {
   label: string;
@@ -14,6 +14,14 @@ type ActionItem = {
   badge?: number;
   styles?: { color?: string };
 };
+
+// Tab configuration with labels (matching tab-bar-settings.tsx)
+const ALL_TABS = [
+  { name: "home", titleKey: "tabs.home" as TranslationKey },
+  { name: "library", titleKey: "tabs.library" as TranslationKey },
+  { name: "series", titleKey: "tabs.series" as TranslationKey },
+  { name: "authors", titleKey: "tabs.authors" as TranslationKey },
+];
 
 export default function MoreScreen() {
   const { styles } = useThemedStyles();
@@ -24,12 +32,22 @@ export default function MoreScreen() {
     (state) => state.logger.errorsAcknowledgedTimestamp
   );
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
+  const tabOrder = useAppStore((state) => state.settings.tabOrder);
+  const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
   const [appVersion, setAppVersion] = useState<string>("");
 
   // Show badge if there are errors and they haven't been acknowledged (or new errors appeared since acknowledgment)
   // Badge only shows when diagnostics is enabled
   const showErrorBadge =
     errorCount > 0 && errorsAcknowledgedTimestamp === null && diagnosticsEnabled;
+
+  // Get hidden tabs in the correct order
+  const hiddenTabsData = useMemo(() => {
+    return tabOrder
+      .filter((tabName) => hiddenTabs.includes(tabName))
+      .map((tabName) => ALL_TABS.find((tab) => tab.name === tabName))
+      .filter((tab): tab is (typeof ALL_TABS)[number] => tab !== undefined);
+  }, [tabOrder, hiddenTabs]);
 
   useEffect(() => {
     // Load app version info
@@ -47,24 +65,20 @@ export default function MoreScreen() {
   }, []);
 
   const openFeedback = () => {
-    Alert.alert(
-      translate("more.feedback"),
-      translate("more.feedbackPrompt"),
-      [
-        {
-          text: translate("more.bugReport"),
-          onPress: () => openBugReport(),
-        },
-        {
-          text: translate("more.featureRequest"),
-          onPress: () => openFeatureRequest(),
-        },
-        {
-          text: translate("common.cancel"),
-          style: "cancel",
-        },
-      ]
-    );
+    Alert.alert(translate("more.feedback"), translate("more.feedbackPrompt"), [
+      {
+        text: translate("more.bugReport"),
+        onPress: () => openBugReport(),
+      },
+      {
+        text: translate("more.featureRequest"),
+        onPress: () => openFeatureRequest(),
+      },
+      {
+        text: translate("common.cancel"),
+        style: "cancel",
+      },
+    ]);
   };
 
   const openBugReport = async () => {
@@ -119,12 +133,22 @@ export default function MoreScreen() {
   };
 
   const data = useMemo(() => {
-    const items: ActionItem[] = [
-      // { label: 'Collections', onPress: () => router.push('/more/collections') },
+    const items: ActionItem[] = [];
+
+    // Add hidden tabs as navigation items
+    hiddenTabsData.forEach((tab) => {
+      items.push({
+        label: translate(tab.titleKey),
+        onPress: () => router.push(`/${tab.name}`),
+      });
+    });
+
+    // Add standard More menu items
+    items.push(
       { label: translate("more.aboutMe"), onPress: () => router.push("/more/me") },
       { label: translate("more.settings"), onPress: () => router.push("/more/settings") },
-      { label: translate("more.feedback"), onPress: openFeedback },
-    ];
+      { label: translate("more.feedback"), onPress: openFeedback }
+    );
 
     // Conditionally add diagnostics screens
     if (diagnosticsEnabled) {
@@ -174,7 +198,15 @@ export default function MoreScreen() {
     });
 
     return items;
-  }, [router, logout, showErrorBadge, errorCount, diagnosticsEnabled, openFeedback]);
+  }, [
+    router,
+    logout,
+    showErrorBadge,
+    errorCount,
+    diagnosticsEnabled,
+    openFeedback,
+    hiddenTabsData,
+  ]);
   return (
     <>
       <FlatList

@@ -810,6 +810,8 @@ export function useSettings() {
   const smartRewindEnabled = useAppStore((state) => state.settings.smartRewindEnabled);
   const homeLayout = useAppStore((state) => state.settings.homeLayout);
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
+  const tabOrder = useAppStore((state) => state.settings.tabOrder);
+  const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -820,6 +822,8 @@ export function useSettings() {
   const updateSmartRewindEnabled = useAppStore((state) => state.updateSmartRewindEnabled);
   const updateHomeLayout = useAppStore((state) => state.updateHomeLayout);
   const updateDiagnosticsEnabled = useAppStore((state) => state.updateDiagnosticsEnabled);
+  const updateTabOrder = useAppStore((state) => state.updateTabOrder);
+  const updateHiddenTabs = useAppStore((state) => state.updateHiddenTabs);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -829,6 +833,8 @@ export function useSettings() {
       smartRewindEnabled,
       homeLayout,
       diagnosticsEnabled,
+      tabOrder,
+      hiddenTabs,
       initialized,
       isLoading,
       initializeSettings,
@@ -837,6 +843,8 @@ export function useSettings() {
       updateSmartRewindEnabled,
       updateHomeLayout,
       updateDiagnosticsEnabled,
+      updateTabOrder,
+      updateHiddenTabs,
       resetSettings,
     }),
     [
@@ -845,6 +853,8 @@ export function useSettings() {
       smartRewindEnabled,
       homeLayout,
       diagnosticsEnabled,
+      tabOrder,
+      hiddenTabs,
       initialized,
       isLoading,
       initializeSettings,
@@ -853,6 +863,8 @@ export function useSettings() {
       updateSmartRewindEnabled,
       updateHomeLayout,
       updateDiagnosticsEnabled,
+      updateTabOrder,
+      updateHiddenTabs,
       resetSettings,
     ]
   );
