@@ -92,7 +92,7 @@ class BundleServiceImpl {
       const update = await Updates.checkForUpdateAsync();
 
       if (update.isAvailable && update.manifest) {
-        log.info("Update available:", update.manifest.id);
+        log.info(`Update available: ${update.manifest.id}`);
         return {
           isAvailable: true,
           manifest: update.manifest,
@@ -207,7 +207,7 @@ class BundleServiceImpl {
         throw new Error("Updates are not enabled in this build");
       }
 
-      log.info("Setting update request header overrides:", headers);
+      log.info(`Setting update request header overrides: ${JSON.stringify(headers)}`);
       await Updates.setUpdateRequestHeadersOverride(headers);
     } catch (error) {
       log.error("Failed to set update request headers", error as Error);
