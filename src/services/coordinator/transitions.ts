@@ -39,6 +39,9 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     NATIVE_STATE_CHANGED: PlayerState.READY, // Allow native state changes during ready
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
+    APP_FOREGROUNDED: PlayerState.READY, // No-op - app foregrounded while ready
+    RESTORE_STATE: PlayerState.READY, // No-op - already restored
+    RESTORE_COMPLETE: PlayerState.READY, // No-op - restoration complete
   },
 
   [PlayerState.PLAYING]: {
@@ -52,6 +55,9 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
     APP_BACKGROUNDED: PlayerState.PLAYING, // Continue in background
+    APP_FOREGROUNDED: PlayerState.PLAYING, // No-op - app foregrounded while playing
+    RESTORE_STATE: PlayerState.PLAYING, // No-op - already playing
+    RESTORE_COMPLETE: PlayerState.PLAYING, // No-op - restoration complete
   },
 
   [PlayerState.PAUSED]: {
@@ -63,6 +69,10 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     NATIVE_TRACK_CHANGED: PlayerState.PAUSED, // Allow track changes while paused
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
+    APP_FOREGROUNDED: PlayerState.PAUSED, // No-op - app foregrounded while paused
+    APP_BACKGROUNDED: PlayerState.PAUSED, // Continue in background
+    RESTORE_STATE: PlayerState.PAUSED, // No-op - already paused
+    RESTORE_COMPLETE: PlayerState.PAUSED, // No-op - restoration complete
   },
 
   [PlayerState.SEEKING]: {
@@ -80,6 +90,8 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
     PAUSE: PlayerState.PAUSED,
+    APP_FOREGROUNDED: PlayerState.BUFFERING, // No-op - app foregrounded while buffering
+    APP_BACKGROUNDED: PlayerState.BUFFERING, // Continue in background
   },
 
   [PlayerState.STOPPING]: {
@@ -111,6 +123,8 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     PLAY: PlayerState.PLAYING, // Retry
     LOAD_TRACK: PlayerState.LOADING, // Load different track
     STOP: PlayerState.IDLE,
+    APP_FOREGROUNDED: PlayerState.ERROR, // No-op - app foregrounded in error state
+    APP_BACKGROUNDED: PlayerState.ERROR, // Continue in background
   },
 
   [PlayerState.FATAL_ERROR]: {

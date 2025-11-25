@@ -323,186 +323,129 @@ export function getContextId(): string {
 - [ ] Add tests for context detection
 - [ ] Add logging for context awareness
 
-**4. Coordinator Base Class + Subclasses (2 days)**
+**4. Coordinator Architecture with Mixins (2 days)**
 
-Refactor to base class with UI and Headless subclasses for explicit separation:
+Refactor to use Mixins for code reuse between UI, Headless, and Unified coordinators:
 
 ```typescript
-// src/services/coordinator/PlayerStateCoordinator.ts (base class)
-export abstract class PlayerStateCoordinator {
+// src/services/coordinator/mixins.ts
+type Constructor<T = {}> = new (...args: any[]) => T;
+
+// Mixin: Adds store update capability
+export function WithStoreUpdates<TBase extends Constructor>(Base: TBase) {
+  return class extends Base {
+    updateStore(event: PlayerEvent, nextState: PlayerState) {
+      const store = useAppStore.getState();
+      switch (event.type) {
+        case "NATIVE_PROGRESS_UPDATED":
+          store.updatePosition(event.payload.position);
+          break;
+        case "PLAY":
+        case "NATIVE_STATE_CHANGED":
+          if (nextState === PlayerState.PLAYING) store.setPlaying(true);
+          break;
+        case "PAUSE":
+          store.setPlaying(false);
+          break;
+        // ... other store updates
+      }
+    }
+  };
+}
+
+// Mixin: Adds TrackPlayer execution capability
+export function WithTrackPlayerExecution<TBase extends Constructor>(Base: TBase) {
+  return class extends Base {
+    async executeTransition(event: PlayerEvent, nextState: PlayerState) {
+      const playerService = PlayerService.getInstance();
+      try {
+        // ... execution logic (load, play, pause, etc.)
+        switch (nextState) {
+          case PlayerState.PLAYING:
+            await playerService.executePlay();
+            break;
+          case PlayerState.PAUSED:
+            await playerService.executePause();
+            break;
+          // ...
+        }
+      } catch (error) {
+        log.error(`Execution error: ${event.type}`, error);
+      }
+    }
+  };
+}
+
+// src/services/coordinator/PlayerStateCoordinator.ts (Base)
+export abstract class BaseCoordinator {
   protected context: StateContext;
-  protected eventQueue: PlayerEvent[] = [];
 
   constructor(protected readonly contextId: string) {
-    log.info(`[${contextId}] Coordinator initialized`);
     playerEventBus.subscribe((event) => this.dispatch(event));
   }
 
-  // Shared state machine logic
   protected async handleEvent(event: PlayerEvent): Promise<void> {
     await this.updateContext(event);
-
     const nextState = this.validateTransition(event);
-    if (nextState) {
-      await this.onTransition(event, nextState);
-    }
+    if (nextState) await this.onTransition(event, nextState);
   }
 
-  // Subclasses implement their specific responsibilities
   protected abstract onTransition(event: PlayerEvent, nextState: PlayerState): Promise<void>;
 }
 
 // src/services/coordinator/UICoordinator.ts
-export class UICoordinator extends PlayerStateCoordinator {
-  private static instance: UICoordinator | null = null;
-
-  static getInstance(): UICoordinator {
-    if (!UICoordinator.instance) {
-      UICoordinator.instance = new UICoordinator();
-    }
-    return UICoordinator.instance;
-  }
-
-  private constructor() {
+class UICoordinator extends WithStoreUpdates(BaseCoordinator) {
+  constructor() {
     super("UI");
   }
 
-  // UI coordinator updates store, does NOT execute TrackPlayer
-  protected async onTransition(event: PlayerEvent, nextState: PlayerState): Promise<void> {
-    log.debug(`[UI] Updating store for: ${event.type} → ${nextState}`);
-    this.updateStore(event, nextState);
-  }
-
-  private updateStore(event: PlayerEvent, nextState: PlayerState): void {
-    const store = useAppStore.getState();
-
-    switch (event.type) {
-      case "NATIVE_PROGRESS_UPDATED":
-        store.updatePosition(event.payload.position);
-        break;
-      case "PLAY":
-      case "NATIVE_STATE_CHANGED":
-        if (nextState === PlayerState.PLAYING) {
-          store.setPlaying(true);
-        }
-        break;
-      case "PAUSE":
-        store.setPlaying(false);
-        break;
-      // ... other store updates
-    }
+  protected async onTransition(event: PlayerEvent, nextState: PlayerState) {
+    this.updateStore(event, nextState); // Only updates store
   }
 }
 
 // src/services/coordinator/HeadlessCoordinator.ts
-export class HeadlessCoordinator extends PlayerStateCoordinator {
-  private static instance: HeadlessCoordinator | null = null;
-
-  static getInstance(): HeadlessCoordinator {
-    if (!HeadlessCoordinator.instance) {
-      HeadlessCoordinator.instance = new HeadlessCoordinator();
-    }
-    return HeadlessCoordinator.instance;
-  }
-
-  private constructor() {
+class HeadlessCoordinator extends WithTrackPlayerExecution(BaseCoordinator) {
+  constructor() {
     super("HEADLESS");
   }
 
-  // Headless coordinator executes TrackPlayer, does NOT touch store
-  protected async onTransition(event: PlayerEvent, nextState: PlayerState): Promise<void> {
-    log.debug(`[HEADLESS] Executing: ${event.type} → ${nextState}`);
-    await this.executeTransition(event, nextState);
-  }
-
-  private async executeTransition(event: PlayerEvent, nextState: PlayerState): Promise<void> {
-    const playerService = PlayerService.getInstance();
-
-    try {
-      // Execute based on target state
-      switch (nextState) {
-        case PlayerState.LOADING:
-          if (event.type === "LOAD_TRACK") {
-            await playerService.executeLoadTrack(
-              event.payload.libraryItemId,
-              event.payload.episodeId
-            );
-          }
-          break;
-        case PlayerState.PLAYING:
-          await playerService.executePlay();
-          break;
-        case PlayerState.PAUSED:
-          await playerService.executePause();
-          break;
-        case PlayerState.IDLE:
-          if (event.type === "STOP") {
-            await playerService.executeStop();
-          }
-          break;
-      }
-
-      // Execute based on event type (non-state-changing)
-      switch (event.type) {
-        case "SEEK":
-          await playerService.executeSeek(event.payload.position);
-          break;
-        case "SET_RATE":
-          await playerService.executeSetRate(event.payload.rate);
-          break;
-        case "SET_VOLUME":
-          await playerService.executeSetVolume(event.payload.volume);
-          break;
-      }
-    } catch (error) {
-      log.error(`[HEADLESS] Execution error: ${event.type}`, error);
-    }
+  protected async onTransition(event: PlayerEvent, nextState: PlayerState) {
+    await this.executeTransition(event, nextState); // Only executes commands
   }
 }
 
-// src/services/coordinator/UnifiedCoordinator.ts (iOS only)
-export class UnifiedCoordinator extends PlayerStateCoordinator {
-  private static instance: UnifiedCoordinator | null = null;
-
-  static getInstance(): UnifiedCoordinator {
-    if (!UnifiedCoordinator.instance) {
-      UnifiedCoordinator.instance = new UnifiedCoordinator();
-    }
-    return UnifiedCoordinator.instance;
-  }
-
-  private constructor() {
+// src/services/coordinator/UnifiedCoordinator.ts (iOS)
+class UnifiedCoordinator extends WithStoreUpdates(WithTrackPlayerExecution(BaseCoordinator)) {
+  constructor() {
     super("UNIFIED");
   }
 
-  // iOS coordinator does BOTH: executes TrackPlayer AND updates store
-  protected async onTransition(event: PlayerEvent, nextState: PlayerState): Promise<void> {
-    log.debug(`[UNIFIED] Executing & Updating: ${event.type} → ${nextState}`);
-
-    // 1. Execute TrackPlayer command
-    await this.executeTransition(event, nextState);
-
-    // 2. Update Store
-    this.updateStore(event, nextState);
+  protected async onTransition(event: PlayerEvent, nextState: PlayerState) {
+    await this.executeTransition(event, nextState); // Execute first
+    this.updateStore(event, nextState); // Then update store
   }
-
-  // ... implements both executeTransition and updateStore logic
 }
 
-// src/services/coordinator/index.ts (factory)
-export function getCoordinator(): PlayerStateCoordinator {
-  // iOS: Single context, one coordinator does everything
-  if (Platform.OS === "ios") {
-    return UnifiedCoordinator.getInstance();
-  }
-
-  // Android: Split contexts
-  if (isHeadlessContext()) {
-    return HeadlessCoordinator.getInstance(); // Background: Execute only
-  }
-  return UICoordinator.getInstance(); // Foreground: Store only
+// src/services/coordinator/index.ts (Factory)
+export function getCoordinator(): BaseCoordinator {
+  if (Platform.OS === "ios") return UnifiedCoordinator.getInstance();
+  if (isHeadlessContext()) return HeadlessCoordinator.getInstance();
+  return UICoordinator.getInstance();
 }
 ```
+
+**Benefits:**
+
+- ✅ **Code Reuse**: `updateStore` and `executeTransition` logic written once
+- ✅ **Explicit Capabilities**: Mixins clearly define what each coordinator can do
+- ✅ **Platform Specifics**: iOS gets both capabilities, Android gets split
+- ✅ **Type Safety**: Mixins add methods to the class type
+
+- [ ] Create `mixins.ts` with `WithStoreUpdates` and `WithTrackPlayerExecution`
+- [ ] Refactor `PlayerStateCoordinator` to `BaseCoordinator`
+- [ ] Create `UICoordinator`, `HeadlessCoordinator`, `UnifiedCoordinator`
+- [ ] Update factory and tests
 
 **5. Track Metadata Synchronization**
 
@@ -549,30 +492,17 @@ dispatchPlayerEvent({
 
 ### Key Architectural Decisions
 
-**Q: Why two coordinators instead of one?**
-A: Headless context must handle remote controls when UI is backgrounded/terminated. Single UI-only coordinator would fail when user taps pause on lock screen.
-
-**Q: Why base class + subclasses instead of single class with mode flag?**
-A: Type safety and explicit separation. With subclasses:
-
-- Compiler prevents `HeadlessCoordinator` from calling `updateStore()`
-- Compiler prevents `UICoordinator` from calling `executeTransition()`
-- No runtime mode checks needed
-- Each class focused on one clear responsibility
+**Q: Why Mixins instead of just inheritance?**
+A: Code reuse! `UnifiedCoordinator` (iOS) needs BOTH `executeTransition` (from Headless) AND `updateStore` (from UI). Mixins allow us to compose these capabilities without duplicating code.
 
 **Q: How to prevent duplicate TrackPlayer calls?**
-A: Only `HeadlessCoordinator` has `executeTransition()` method. `UICoordinator` cannot call TrackPlayer (method doesn't exist on that class).
+A: Only `HeadlessCoordinator` and `UnifiedCoordinator` use `WithTrackPlayerExecution`. `UICoordinator` does not have this capability.
 
 **Q: How to prevent unsafe store access?**
-A: Only `UICoordinator` has `updateStore()` method. `HeadlessCoordinator` cannot access store (method doesn't exist on that class).
+A: Only `UICoordinator` and `UnifiedCoordinator` use `WithStoreUpdates`. `HeadlessCoordinator` does not have this capability.
 
 **Q: Do they stay synchronized?**
-A: Yes! Native bridge broadcasts ALL events to both contexts. Both coordinators:
-
-- Extend same base class with shared state machine logic
-- Maintain same internal state machine state
-- Update same context fields (position, isPlaying, etc.)
-- But implement `onTransition()` differently (store vs TrackPlayer)
+A: Yes! Native bridge broadcasts ALL events to both contexts. All coordinators extend `BaseCoordinator` which handles the state machine logic.
 
 ### Event Flow Examples
 

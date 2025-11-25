@@ -68,6 +68,7 @@
         }
       ],
       "expo-web-browser",
+      "./plugins/nativeEventBridge/withNativeEventBridge.js",
       "./plugins/excludeFromBackup/withExcludeFromBackup.js"
     ],
     "experiments": {
