@@ -4,12 +4,32 @@
  * Tests event processing, state machine, metrics, and integration
  */
 
+import type { DiagnosticEvent, PlayerEvent } from "@/types/coordinator";
+import { PlayerState } from "@/types/coordinator";
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { State } from "react-native-track-player";
 import { PlayerStateCoordinator } from "../PlayerStateCoordinator";
 import { playerEventBus } from "../eventBus";
-import { PlayerState } from "@/types/coordinator";
-import type { PlayerEvent, DiagnosticEvent } from "@/types/coordinator";
-import { State } from "react-native-track-player";
+
+// Mock PlayerService
+jest.mock("../../PlayerService", () => {
+  const { jest } = require("@jest/globals");
+  const mockInstance = {
+    executeLoadTrack: jest.fn(),
+    executePlay: jest.fn(),
+    executePause: jest.fn(),
+    executeStop: jest.fn(),
+    executeSeek: jest.fn(),
+    executeSetRate: jest.fn(),
+    executeSetVolume: jest.fn(),
+  };
+  return {
+    PlayerService: {
+      getInstance: jest.fn(() => mockInstance),
+      resetInstance: jest.fn(),
+    },
+  };
+});
 
 // Mock logger
 jest.mock("@/lib/logger", () => ({
@@ -21,6 +41,12 @@ jest.mock("@/lib/logger", () => ({
   },
   logger: {
     forTag: () => ({
+      info: jest.fn(),
+      debug: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    }),
+    forDiagnostics: () => ({
       info: jest.fn(),
       debug: jest.fn(),
       warn: jest.fn(),
@@ -58,8 +84,8 @@ describe("PlayerStateCoordinator", () => {
       expect(coordinator.getState()).toBe(PlayerState.IDLE);
     });
 
-    it("should initialize in observer mode", () => {
-      expect(coordinator.isObserverMode()).toBe(true);
+    it("should initialize in execution mode", () => {
+      expect(coordinator.isObserverMode()).toBe(false);
     });
   });
 
@@ -333,9 +359,9 @@ describe("PlayerStateCoordinator", () => {
       expect(diagnostics).toHaveProperty("observerMode");
     });
 
-    it("should indicate observer mode", () => {
+    it("should indicate execution mode", () => {
       const diagnostics = coordinator.exportDiagnostics();
-      expect(diagnostics.observerMode).toBe(true);
+      expect(diagnostics.observerMode).toBe(false);
     });
 
     it("should include all context fields", () => {
@@ -397,24 +423,32 @@ describe("PlayerStateCoordinator", () => {
     });
   });
 
-  describe("observer mode behavior", () => {
-    it("should be in observer mode", () => {
-      expect(coordinator.isObserverMode()).toBe(true);
+  describe("execution mode behavior", () => {
+    it("should be in execution mode", () => {
+      expect(coordinator.isObserverMode()).toBe(false);
     });
 
-    it("should log events without executing actions", async () => {
-      // In observer mode, events are logged but don't execute actions
-      await coordinator.dispatch({ type: "PLAY" });
+    it("should execute state transitions in execution mode", async () => {
+      // Verify execution mode is enabled
+      expect(coordinator.isObserverMode()).toBe(false);
 
+      // Load track - should transition to LOADING
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // Context should remain in IDLE (no state execution)
-      // This tests that observer mode doesn't execute transitions
-      const context = coordinator.getContext();
-      expect(context.currentState).toBe(PlayerState.IDLE);
+      // Verify state transition occurred
+      expect(coordinator.getState()).toBe(PlayerState.LOADING);
+      const metrics = coordinator.getMetrics();
+      expect(metrics.stateTransitionCount).toBeGreaterThan(0);
+
+      // Note: We can't easily verify PlayerService mock calls due to module resolution
+      // The important thing is that execution mode is enabled and transitions work
     });
 
-    it("should track metrics in observer mode", async () => {
+    it("should track metrics in execution mode", async () => {
       await coordinator.dispatch({ type: "PLAY" });
       await coordinator.dispatch({ type: "PAUSE" });
 
@@ -831,7 +865,7 @@ describe("PlayerStateCoordinator", () => {
       // Transition through READY to PLAYING
       await coordinator.dispatch({
         type: "QUEUE_RELOADED",
-        payload: { libraryItemId: "test-item" },
+        payload: { position: 0 },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -875,7 +909,7 @@ describe("PlayerStateCoordinator", () => {
       // Transition through READY to PLAYING
       await coordinator.dispatch({
         type: "QUEUE_RELOADED",
-        payload: { libraryItemId: "test-item" },
+        payload: { position: 0 },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -916,7 +950,7 @@ describe("PlayerStateCoordinator", () => {
       // Transition through READY to PLAYING
       await coordinator.dispatch({
         type: "QUEUE_RELOADED",
-        payload: { libraryItemId: "test-item" },
+        payload: { position: 0 },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -953,7 +987,7 @@ describe("PlayerStateCoordinator", () => {
       // Transition through READY to PLAYING
       await coordinator.dispatch({
         type: "QUEUE_RELOADED",
-        payload: { libraryItemId: "test-item" },
+        payload: { position: 0 },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -1011,7 +1045,7 @@ describe("PlayerStateCoordinator", () => {
       // Transition through READY to PLAYING
       await coordinator.dispatch({
         type: "QUEUE_RELOADED",
-        payload: { libraryItemId: "test-item" },
+        payload: { position: 0 },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -1049,7 +1083,7 @@ describe("PlayerStateCoordinator", () => {
       // Transition through READY to PLAYING
       await coordinator.dispatch({
         type: "QUEUE_RELOADED",
-        payload: { libraryItemId: "test-item" },
+        payload: { position: 0 },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 

@@ -128,6 +128,10 @@ jest.mock("@/lib/covers", () => ({
   getCoverUri: jest.fn(),
 }));
 
+jest.mock("@/services/coordinator/eventBus", () => ({
+  dispatchPlayerEvent: jest.fn(),
+}));
+
 describe("PlayerService", () => {
   const mockedTrackPlayer = TrackPlayer as jest.Mocked<typeof TrackPlayer>;
   const { getLibraryItemById } = require("@/db/helpers/libraryItems");
@@ -145,6 +149,7 @@ describe("PlayerService", () => {
   const { getActiveSession } = require("@/db/helpers/localListeningSessions");
   const { getMediaProgressForLibraryItem } = require("@/db/helpers/mediaProgress");
   const { getItem: getAsyncItem } = require("@/lib/asyncStore");
+  const { dispatchPlayerEvent } = require("@/services/coordinator/eventBus");
 
   let playerService: PlayerService;
 
@@ -311,7 +316,7 @@ describe("PlayerService", () => {
     });
   });
 
-  describe("playTrack", () => {
+  describe("executeLoadTrack", () => {
     beforeEach(async () => {
       mockedTrackPlayer.getPlaybackState.mockRejectedValueOnce(new Error("Player not set up"));
       await playerService.initialize();
@@ -319,7 +324,7 @@ describe("PlayerService", () => {
     });
 
     it("should load and play a track", async () => {
-      await playerService.playTrack("item-1");
+      await playerService.executeLoadTrack("item-1");
 
       expect(getLibraryItemById).toHaveBeenCalledWith("item-1");
       expect(getMediaMetadataByLibraryItemId).toHaveBeenCalledWith("item-1");
@@ -344,7 +349,7 @@ describe("PlayerService", () => {
       mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Playing });
       mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
 
-      await playerService.playTrack("item-1");
+      await playerService.executeLoadTrack("item-1");
 
       expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
       expect(mockedTrackPlayer.add).not.toHaveBeenCalled();
@@ -365,7 +370,7 @@ describe("PlayerService", () => {
       mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Paused });
       mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
 
-      await playerService.playTrack("item-1");
+      await playerService.executeLoadTrack("item-1");
 
       expect(mockedTrackPlayer.play).toHaveBeenCalled();
       expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
@@ -374,19 +379,21 @@ describe("PlayerService", () => {
     it("should throw error if library item not found", async () => {
       getLibraryItemById.mockResolvedValue(null);
 
-      await expect(playerService.playTrack("missing-item")).rejects.toThrow("not found");
+      await expect(playerService.executeLoadTrack("missing-item")).rejects.toThrow("not found");
     });
 
     it("should throw error if metadata not found", async () => {
       getMediaMetadataByLibraryItemId.mockResolvedValue(null);
 
-      await expect(playerService.playTrack("item-1")).rejects.toThrow("Metadata not found");
+      await expect(playerService.executeLoadTrack("item-1")).rejects.toThrow("Metadata not found");
     });
 
     it("should throw error if no audio files found", async () => {
       getAudioFilesWithDownloadInfo.mockResolvedValue([]);
 
-      await expect(playerService.playTrack("item-1")).rejects.toThrow("No audio files found");
+      await expect(playerService.executeLoadTrack("item-1")).rejects.toThrow(
+        "No audio files found"
+      );
     });
 
     it("should seek to resume position if available", async () => {
@@ -400,7 +407,7 @@ describe("PlayerService", () => {
         updatedAt: new Date("2024-01-01T12:00:00Z"),
       });
 
-      await playerService.playTrack("item-1");
+      await playerService.executeLoadTrack("item-1");
 
       expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(300);
     });
@@ -408,13 +415,13 @@ describe("PlayerService", () => {
     it("should clear loading state on error", async () => {
       getLibraryItemById.mockRejectedValue(new Error("Database error"));
 
-      await expect(playerService.playTrack("item-1")).rejects.toThrow();
+      await expect(playerService.executeLoadTrack("item-1")).rejects.toThrow();
 
       expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
     });
 
     it("should call repairDownloadStatus before building track list", async () => {
-      await playerService.playTrack("item-1");
+      await playerService.executeLoadTrack("item-1");
 
       // Verify repairDownloadStatus was called with correct libraryItemId
       expect(downloadService.repairDownloadStatus).toHaveBeenCalledWith("item-1");
@@ -430,7 +437,7 @@ describe("PlayerService", () => {
       downloadService.repairDownloadStatus.mockRejectedValueOnce(new Error("Repair failed"));
 
       // Should not throw - should continue with playback
-      await expect(playerService.playTrack("item-1")).resolves.not.toThrow();
+      await expect(playerService.executeLoadTrack("item-1")).resolves.not.toThrow();
 
       // Verify playback still happened
       expect(mockedTrackPlayer.add).toHaveBeenCalled();
@@ -441,7 +448,7 @@ describe("PlayerService", () => {
       ensureItemInDocuments.mockRejectedValueOnce(new Error("Move failed"));
 
       // Should not throw - should continue with playback
-      await expect(playerService.playTrack("item-1")).resolves.not.toThrow();
+      await expect(playerService.executeLoadTrack("item-1")).resolves.not.toThrow();
 
       // Verify repairDownloadStatus was still called
       expect(downloadService.repairDownloadStatus).toHaveBeenCalledWith("item-1");
@@ -464,7 +471,7 @@ describe("PlayerService", () => {
 
       await playerService.togglePlayPause();
 
-      expect(mockedTrackPlayer.pause).toHaveBeenCalled();
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" });
     });
 
     it("should toggle play/pause when paused", async () => {
@@ -485,18 +492,18 @@ describe("PlayerService", () => {
 
       await playerService.togglePlayPause();
 
-      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
     });
 
     it("should pause playback", async () => {
-      await playerService.pause();
+      await playerService.executePause();
 
       expect(mockedTrackPlayer.pause).toHaveBeenCalled();
       expect(mockStore._setLastPauseTime).toHaveBeenCalled();
     });
 
     it("should stop playback and clear queue", async () => {
-      await playerService.stop();
+      await playerService.executeStop();
 
       expect(mockedTrackPlayer.stop).toHaveBeenCalled();
       expect(mockedTrackPlayer.reset).toHaveBeenCalled();
@@ -504,19 +511,19 @@ describe("PlayerService", () => {
     });
 
     it("should seek to position", async () => {
-      await playerService.seekTo(100);
+      await playerService.executeSeek(100);
 
       expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(100);
     });
 
     it("should set playback rate", async () => {
-      await playerService.setRate(1.5);
+      await playerService.executeSetRate(1.5);
 
       expect(mockedTrackPlayer.setRate).toHaveBeenCalledWith(1.5);
     });
 
     it("should set volume", async () => {
-      await playerService.setVolume(0.8);
+      await playerService.executeSetVolume(0.8);
 
       expect(mockedTrackPlayer.setVolume).toHaveBeenCalledWith(0.8);
     });
@@ -531,8 +538,8 @@ describe("PlayerService", () => {
         updatedAt: new Date(),
       });
 
-      // We need to test determineResumePosition indirectly through playTrack
-      await playerService.playTrack("item-1");
+      // We need to test determineResumePosition indirectly through executeLoadTrack
+      await playerService.executeLoadTrack("item-1");
 
       expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(500);
     });
@@ -544,7 +551,7 @@ describe("PlayerService", () => {
         lastUpdate: new Date(),
       });
 
-      await playerService.playTrack("item-1");
+      await playerService.executeLoadTrack("item-1");
 
       expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(300);
     });
@@ -552,13 +559,13 @@ describe("PlayerService", () => {
     it("should use AsyncStorage position if available", async () => {
       getAsyncItem.mockResolvedValue(400);
 
-      await playerService.playTrack("item-1");
+      await playerService.executeLoadTrack("item-1");
 
       expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(400);
     });
 
     it("should start from beginning if no resume position", async () => {
-      await playerService.playTrack("item-1");
+      await playerService.executeLoadTrack("item-1");
 
       expect(mockedTrackPlayer.seekTo).not.toHaveBeenCalled();
     });
@@ -742,6 +749,55 @@ describe("PlayerService", () => {
 
       // Position should NOT be changed (can't seek with empty queue)
       expect(mockedTrackPlayer.seekTo).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Public API (Event Dispatching)", () => {
+    it("should dispatch LOAD_TRACK event", async () => {
+      await playerService.playTrack("item-1", "ep-1");
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "item-1", episodeId: "ep-1" },
+      });
+    });
+
+    it("should dispatch PLAY event", async () => {
+      await playerService.play();
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+    });
+
+    it("should dispatch PAUSE event", async () => {
+      await playerService.pause();
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" });
+    });
+
+    it("should dispatch STOP event", async () => {
+      await playerService.stop();
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "STOP" });
+    });
+
+    it("should dispatch SEEK event", async () => {
+      await playerService.seekTo(123);
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
+        type: "SEEK",
+        payload: { position: 123 },
+      });
+    });
+
+    it("should dispatch SET_RATE event", async () => {
+      await playerService.setRate(1.5);
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
+        type: "SET_RATE",
+        payload: { rate: 1.5 },
+      });
+    });
+
+    it("should dispatch SET_VOLUME event", async () => {
+      await playerService.setVolume(0.5);
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
+        type: "SET_VOLUME",
+        payload: { volume: 0.5 },
+      });
     });
   });
 });

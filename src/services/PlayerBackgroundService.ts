@@ -11,8 +11,9 @@ import { getPeriodicNowPlayingUpdatesEnabled } from "@/lib/appSettings";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { applySmartRewind } from "@/lib/smartRewind";
-import { progressService } from "@/services/ProgressService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
+import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
 import { getCurrentUser } from "@/utils/userHelpers";
 import { AppState } from "react-native";
@@ -36,6 +37,21 @@ const diagLog = logger.forDiagnostics("PlayerBackgroundService");
 
 // Generate a unique ID for this module instance to detect multiple instances
 const MODULE_INSTANCE_UUID = `BGS-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+/**
+ * HEADLESS JS ARCHITECTURE NOTE:
+ *
+ * On Android, this service runs in a SEPARATE JavaScript context from the main UI.
+ * This means:
+ * - There are TWO separate PlayerStateCoordinator instances (UI + background)
+ * - NO shared memory between contexts
+ * - Communication happens through: Native TrackPlayer state, Database, AsyncStorage
+ *
+ * The getCoordinator() call below ensures the background context has its own
+ * coordinator instance to receive events dispatched from this service.
+ * Both coordinators stay eventually consistent by observing the same native player.
+ */
+getCoordinator();
 
 // Track meaningful listening time per library item
 // Used to update lastAccessedAt after 2 minutes of cumulative playback
@@ -94,7 +110,7 @@ async function handleRemotePlay(): Promise<void> {
   const store = useAppStore.getState();
   store._setLastPauseTime(null);
 
-  await TrackPlayer.play();
+  dispatchPlayerEvent({ type: "PLAY" });
 }
 
 /**
@@ -106,7 +122,7 @@ async function handleRemotePause(): Promise<void> {
   const pauseTime = Date.now();
   store._setLastPauseTime(pauseTime);
   log.info(`Pausing playback at ${new Date(pauseTime).toISOString()}`);
-  await TrackPlayer.pause();
+  dispatchPlayerEvent({ type: "PAUSE" });
 }
 
 /**
@@ -135,7 +151,7 @@ async function getUserIdAndLibraryItemId(): Promise<{
  */
 async function handleRemoteStop(): Promise<void> {
   log.debug(`RemoteStop received (${describeRuntimeContext()})`);
-  await TrackPlayer.stop();
+  dispatchPlayerEvent({ type: "STOP" });
 
   const ids = await getUserIdAndLibraryItemId();
   if (ids) {
@@ -158,7 +174,11 @@ async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<v
   log.debug(`RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`);
   const progress = await TrackPlayer.getProgress();
   const newPosition = progress.position + event.interval;
-  await TrackPlayer.seekTo(newPosition);
+
+  dispatchPlayerEvent({
+    type: "SEEK",
+    payload: { position: newPosition },
+  });
 
   try {
     const ids = await getUserIdAndLibraryItemId();
@@ -203,7 +223,11 @@ async function handleRemoteJumpBackward(event: RemoteJumpBackwardEvent): Promise
   log.debug(`RemoteJumpBackward received interval=${event.interval} (${describeRuntimeContext()})`);
   const progress = await TrackPlayer.getProgress();
   const newPosition = Math.max(0, progress.position - event.interval);
-  await TrackPlayer.seekTo(newPosition);
+
+  dispatchPlayerEvent({
+    type: "SEEK",
+    payload: { position: newPosition },
+  });
 
   try {
     const ids = await getUserIdAndLibraryItemId();
@@ -262,7 +286,11 @@ async function handleRemotePrevious(): Promise<void> {
  */
 async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
   log.debug(`RemoteSeek received position=${event.position} (${describeRuntimeContext()})`);
-  await TrackPlayer.seekTo(event.position);
+
+  dispatchPlayerEvent({
+    type: "SEEK",
+    payload: { position: event.position },
+  });
 
   // Update progress immediately after seek
   try {
@@ -318,13 +346,13 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
         const pauseTime = Date.now();
         store._setLastPauseTime(pauseTime);
         log.info(`Pausing playback (permanent duck) at ${new Date(pauseTime).toISOString()}`);
-        await TrackPlayer.pause();
+        dispatchPlayerEvent({ type: "PAUSE" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else if (event.paused) {
         const pauseTime = Date.now();
         store._setLastPauseTime(pauseTime);
         log.info(`Pausing playback (duck) at ${new Date(pauseTime).toISOString()}`);
-        await TrackPlayer.pause();
+        dispatchPlayerEvent({ type: "PAUSE" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else {
         // Resuming from duck - apply smart rewind (checks enabled setting internally)
@@ -333,7 +361,7 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
         // Clear pause time since we're resuming
         store._setLastPauseTime(null);
 
-        await TrackPlayer.play();
+        dispatchPlayerEvent({ type: "PLAY" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, false);
       }
 
@@ -511,7 +539,7 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
           store.cancelSleepTimer();
           const pauseTime = Date.now();
           store._setLastPauseTime(pauseTime);
-          await TrackPlayer.pause();
+          dispatchPlayerEvent({ type: "PAUSE" });
         }
       }
 
