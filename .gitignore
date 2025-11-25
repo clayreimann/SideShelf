@@ -38,6 +38,7 @@ logs/
 
 # test coverage and reports
 coverage/
+!.github/coverage/
 eslint-report.json
 test-results.json
 test-report.html

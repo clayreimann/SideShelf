@@ -89,6 +89,52 @@ jobs:
           echo "**Overall Coverage:** ${STMT_COVERAGE} Statements (${STMT_RATIO}) | ${BRANCH_COVERAGE} Branches (${BRANCH_RATIO}) | ${FUNC_COVERAGE} Functions (${FUNC_RATIO}) | ${LINES_COVERAGE} Lines (${LINES_RATIO})" >> coverage-comment.md
           echo "" >> coverage-comment.md
 
+          # Compare with baseline if it exists
+          if [ -f .github/coverage/coverage-summary.json ]; then
+            echo "### Coverage Changes" >> coverage-comment.md
+            echo "" >> coverage-comment.md
+
+            BASE_STMT=$(node -e "const c = require('./.github/coverage/coverage-summary.json').total.statements; console.log(c.pct)")
+            BASE_BRANCH=$(node -e "const c = require('./.github/coverage/coverage-summary.json').total.branches; console.log(c.pct)")
+            BASE_FUNC=$(node -e "const c = require('./.github/coverage/coverage-summary.json').total.functions; console.log(c.pct)")
+            BASE_LINES=$(node -e "const c = require('./.github/coverage/coverage-summary.json').total.lines; console.log(c.pct)")
+
+            CURR_STMT=$(node -e "const c = require('./coverage/coverage-summary.json').total.statements; console.log(c.pct)")
+            CURR_BRANCH=$(node -e "const c = require('./coverage/coverage-summary.json').total.branches; console.log(c.pct)")
+            CURR_FUNC=$(node -e "const c = require('./coverage/coverage-summary.json').total.functions; console.log(c.pct)")
+            CURR_LINES=$(node -e "const c = require('./coverage/coverage-summary.json').total.lines; console.log(c.pct)")
+
+            STMT_DIFF=$(node -e "console.log((${CURR_STMT} - ${BASE_STMT}).toFixed(2))")
+            BRANCH_DIFF=$(node -e "console.log((${CURR_BRANCH} - ${BASE_BRANCH}).toFixed(2))")
+            FUNC_DIFF=$(node -e "console.log((${CURR_FUNC} - ${BASE_FUNC}).toFixed(2))")
+            LINES_DIFF=$(node -e "console.log((${CURR_LINES} - ${BASE_LINES}).toFixed(2))")
+
+            # Format with + or - and emoji
+            format_diff() {
+              local diff=$1
+              if [ "$diff" = "0.00" ]; then
+                echo "→ ${diff}%"
+              elif (( $(echo "$diff > 0" | bc -l) )); then
+                echo "📈 +${diff}%"
+              else
+                echo "📉 ${diff}%"
+              fi
+            }
+
+            STMT_INDICATOR=$(format_diff "$STMT_DIFF")
+            BRANCH_INDICATOR=$(format_diff "$BRANCH_DIFF")
+            FUNC_INDICATOR=$(format_diff "$FUNC_DIFF")
+            LINES_INDICATOR=$(format_diff "$LINES_DIFF")
+
+            echo "| Category | Base | Current | Change |" >> coverage-comment.md
+            echo "|----------|------|---------|--------|" >> coverage-comment.md
+            echo "| Statements | ${BASE_STMT}% | ${CURR_STMT}% | ${STMT_INDICATOR} |" >> coverage-comment.md
+            echo "| Branches | ${BASE_BRANCH}% | ${CURR_BRANCH}% | ${BRANCH_INDICATOR} |" >> coverage-comment.md
+            echo "| Functions | ${BASE_FUNC}% | ${CURR_FUNC}% | ${FUNC_INDICATOR} |" >> coverage-comment.md
+            echo "| Lines | ${BASE_LINES}% | ${CURR_LINES}% | ${LINES_INDICATOR} |" >> coverage-comment.md
+            echo "" >> coverage-comment.md
+          fi
+
           # Test results table
           echo "### Test Results" >> coverage-comment.md
           echo "" >> coverage-comment.md
