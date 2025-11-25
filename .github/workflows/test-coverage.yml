@@ -28,27 +28,144 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
-        run: npm run test:coverage 2>&1 | tee coverage-output.txt
+        id: test
+        run: |
+          npm run test:coverage 2>&1 | tee coverage-output.txt
+          exit ${PIPESTATUS[0]}
 
       - name: Run complexity check
         run: npm run lint:complexity
         continue-on-error: true
 
+      - name: Export JavaScript bundle
+        run: npx expo export --platform ios --platform android --output-dir dist
+        continue-on-error: true
+
       - name: Extract coverage summary
         id: coverage
+        if: always()
         run: |
+          # Extract coverage data from JSON summary
+          if [ -f coverage/coverage-summary.json ]; then
+            STMT_COVERAGE=$(node -e "const c = require('./coverage/coverage-summary.json').total.statements; console.log(c.pct + '%')")
+            STMT_RATIO=$(node -e "const c = require('./coverage/coverage-summary.json').total.statements; console.log(c.covered + '/' + c.total)")
+            BRANCH_COVERAGE=$(node -e "const c = require('./coverage/coverage-summary.json').total.branches; console.log(c.pct + '%')")
+            BRANCH_RATIO=$(node -e "const c = require('./coverage/coverage-summary.json').total.branches; console.log(c.covered + '/' + c.total)")
+            FUNC_COVERAGE=$(node -e "const c = require('./coverage/coverage-summary.json').total.functions; console.log(c.pct + '%')")
+            FUNC_RATIO=$(node -e "const c = require('./coverage/coverage-summary.json').total.functions; console.log(c.covered + '/' + c.total)")
+            LINES_COVERAGE=$(node -e "const c = require('./coverage/coverage-summary.json').total.lines; console.log(c.pct + '%')")
+            LINES_RATIO=$(node -e "const c = require('./coverage/coverage-summary.json').total.lines; console.log(c.covered + '/' + c.total)")
+          else
+            STMT_COVERAGE="0%"
+            STMT_RATIO="0/0"
+            BRANCH_COVERAGE="0%"
+            BRANCH_RATIO="0/0"
+            FUNC_COVERAGE="0%"
+            FUNC_RATIO="0/0"
+            LINES_COVERAGE="0%"
+            LINES_RATIO="0/0"
+          fi
+
+          # Extract test results
+          TEST_SUITES=$(grep "Test Suites:" coverage-output.txt || echo "Test Suites: unknown")
+          TESTS=$(grep "Tests:" coverage-output.txt || echo "Tests: unknown")
+          TIME=$(grep "Time:" coverage-output.txt || echo "Time: unknown")
+
+          # Parse test suite results
+          SUITES_PASSED=$(echo "$TEST_SUITES" | grep -o '[0-9]* passed' | grep -o '[0-9]*' || echo "0")
+          SUITES_FAILED=$(echo "$TEST_SUITES" | grep -o '[0-9]* failed' | grep -o '[0-9]*' || echo "0")
+          SUITES_TOTAL=$(echo "$TEST_SUITES" | grep -o '[0-9]* total' | grep -o '[0-9]*' || echo "0")
+
+          # Parse individual test results
+          TESTS_PASSED=$(echo "$TESTS" | grep -o '[0-9]* passed' | grep -o '[0-9]*' || echo "0")
+          TESTS_FAILED=$(echo "$TESTS" | grep -o '[0-9]* failed' | grep -o '[0-9]*' || echo "0")
+          TESTS_TOTAL=$(echo "$TESTS" | grep -o '[0-9]* total' | grep -o '[0-9]*' || echo "0")
+
+          # Create comment with formatted tables
           echo "## Test Coverage Summary" > coverage-comment.md
           echo "" >> coverage-comment.md
-          echo '```' >> coverage-comment.md
+
+          # Overall coverage at the top
+          echo "**Overall Coverage:** ${STMT_COVERAGE} Statements (${STMT_RATIO}) | ${BRANCH_COVERAGE} Branches (${BRANCH_RATIO}) | ${FUNC_COVERAGE} Functions (${FUNC_RATIO}) | ${LINES_COVERAGE} Lines (${LINES_RATIO})" >> coverage-comment.md
+          echo "" >> coverage-comment.md
+
+          # Compare with baseline if it exists
+          if [ -f .github/coverage/coverage-summary.json ]; then
+            echo "### Coverage Changes" >> coverage-comment.md
+            echo "" >> coverage-comment.md
+
+            BASE_STMT=$(node -e "const c = require('./.github/coverage/coverage-summary.json').total.statements; console.log(c.pct)")
+            BASE_BRANCH=$(node -e "const c = require('./.github/coverage/coverage-summary.json').total.branches; console.log(c.pct)")
+            BASE_FUNC=$(node -e "const c = require('./.github/coverage/coverage-summary.json').total.functions; console.log(c.pct)")
+            BASE_LINES=$(node -e "const c = require('./.github/coverage/coverage-summary.json').total.lines; console.log(c.pct)")
+
+            CURR_STMT=$(node -e "const c = require('./coverage/coverage-summary.json').total.statements; console.log(c.pct)")
+            CURR_BRANCH=$(node -e "const c = require('./coverage/coverage-summary.json').total.branches; console.log(c.pct)")
+            CURR_FUNC=$(node -e "const c = require('./coverage/coverage-summary.json').total.functions; console.log(c.pct)")
+            CURR_LINES=$(node -e "const c = require('./coverage/coverage-summary.json').total.lines; console.log(c.pct)")
+
+            STMT_DIFF=$(node -e "console.log((${CURR_STMT} - ${BASE_STMT}).toFixed(2))")
+            BRANCH_DIFF=$(node -e "console.log((${CURR_BRANCH} - ${BASE_BRANCH}).toFixed(2))")
+            FUNC_DIFF=$(node -e "console.log((${CURR_FUNC} - ${BASE_FUNC}).toFixed(2))")
+            LINES_DIFF=$(node -e "console.log((${CURR_LINES} - ${BASE_LINES}).toFixed(2))")
+
+            # Format with + or - and emoji
+            format_diff() {
+              local diff=$1
+              if [ "$diff" = "0.00" ]; then
+                echo "→ ${diff}%"
+              elif (( $(echo "$diff > 0" | bc -l) )); then
+                echo "📈 +${diff}%"
+              else
+                echo "📉 ${diff}%"
+              fi
+            }
+
+            STMT_INDICATOR=$(format_diff "$STMT_DIFF")
+            BRANCH_INDICATOR=$(format_diff "$BRANCH_DIFF")
+            FUNC_INDICATOR=$(format_diff "$FUNC_DIFF")
+            LINES_INDICATOR=$(format_diff "$LINES_DIFF")
+
+            echo "| Category | Base | Current | Change |" >> coverage-comment.md
+            echo "|----------|------|---------|--------|" >> coverage-comment.md
+            echo "| Statements | ${BASE_STMT}% | ${CURR_STMT}% | ${STMT_INDICATOR} |" >> coverage-comment.md
+            echo "| Branches | ${BASE_BRANCH}% | ${CURR_BRANCH}% | ${BRANCH_INDICATOR} |" >> coverage-comment.md
+            echo "| Functions | ${BASE_FUNC}% | ${CURR_FUNC}% | ${FUNC_INDICATOR} |" >> coverage-comment.md
+            echo "| Lines | ${BASE_LINES}% | ${CURR_LINES}% | ${LINES_INDICATOR} |" >> coverage-comment.md
+            echo "" >> coverage-comment.md
+          fi
+
+          # Test results table
+          echo "### Test Results" >> coverage-comment.md
+          echo "" >> coverage-comment.md
+          echo "| Metric | Passed | Failed | Total |" >> coverage-comment.md
+          echo "|--------|--------|--------|-------|" >> coverage-comment.md
+          echo "| Test Suites | ${SUITES_PASSED} | ${SUITES_FAILED} | ${SUITES_TOTAL} |" >> coverage-comment.md
+          echo "| Tests | ${TESTS_PASSED} | ${TESTS_FAILED} | ${TESTS_TOTAL} |" >> coverage-comment.md
+          echo "" >> coverage-comment.md
+          echo "**Duration:** ${TIME#Time:}" >> coverage-comment.md
+          echo "" >> coverage-comment.md
+
+          # Coverage summary table
+          echo "### Coverage Breakdown" >> coverage-comment.md
+          echo "" >> coverage-comment.md
+          echo "| Category | Percentage | Covered | Total |" >> coverage-comment.md
+          echo "|----------|-----------|---------|-------|" >> coverage-comment.md
+          echo "| Statements | ${STMT_COVERAGE} | ${STMT_RATIO%/*} | ${STMT_RATIO#*/} |" >> coverage-comment.md
+          echo "| Branches | ${BRANCH_COVERAGE} | ${BRANCH_RATIO%/*} | ${BRANCH_RATIO#*/} |" >> coverage-comment.md
+          echo "| Functions | ${FUNC_COVERAGE} | ${FUNC_RATIO%/*} | ${FUNC_RATIO#*/} |" >> coverage-comment.md
+          echo "| Lines | ${LINES_COVERAGE} | ${LINES_RATIO%/*} | ${LINES_RATIO#*/} |" >> coverage-comment.md
+          echo "" >> coverage-comment.md
+
+          # Detailed coverage table in collapsible section
+          echo "<details>" >> coverage-comment.md
+          echo "<summary>📊 Detailed File Coverage</summary>" >> coverage-comment.md
+          echo "" >> coverage-comment.md
+          echo "\`\`\`" >> coverage-comment.md
           # Extract coverage table from header to test results
           awk '/File.*% Stmts.*% Branch/,/^Test Suites:/' coverage-output.txt | head -n -1 >> coverage-comment.md
-          echo '```' >> coverage-comment.md
-          echo "" >> coverage-comment.md
-          # Add test results summary
-          echo "**Test Results:**" >> coverage-comment.md
-          grep "Test Suites:" coverage-output.txt >> coverage-comment.md || echo "Test results not found" >> coverage-comment.md
-          grep "Tests:" coverage-output.txt >> coverage-comment.md || true
-          grep "Time:" coverage-output.txt >> coverage-comment.md || true
+          echo "\`\`\`" >> coverage-comment.md
+          echo "</details>" >> coverage-comment.md
 
       - name: Post coverage comment
         uses: actions/github-script@v7
@@ -94,3 +211,79 @@ jobs:
             coverage/
             eslint-report.json
           retention-days: 30
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: js-bundle-pr-${{ github.event.pull_request.number }}
+          path: dist/
+          retention-days: 30
+
+      - name: Comment bundle download instructions
+        uses: actions/github-script@v7
+        if: success()
+        continue-on-error: true
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            const runId = context.runId;
+            const repo = context.repo;
+
+            const comment = `## 📦 JavaScript Bundle Available
+
+            A compiled JavaScript bundle for this PR is now available for testing in TestFlight builds.
+
+            ### Download the Bundle
+
+            You can download the bundle artifact from this workflow run:
+            - **Artifact Name:** \`js-bundle-pr-${prNumber}\`
+            - **Download URL:** https://github.com/${repo.owner}/${repo.repo}/actions/runs/${runId}
+
+            ### Load in TestFlight
+
+            1. Download the artifact and extract it
+            2. Host the bundle file somewhere accessible (e.g., GitHub Pages, your own server, or a temporary file hosting service)
+            3. In the SideShelf app:
+               - Go to **More → Settings → Bundle Loader**
+               - Enter the URL to your hosted bundle
+               - Tap "Check for Updates" to load the bundle
+               - Restart the app to apply changes
+
+            ### Requirements
+
+            - The TestFlight build must have expo-updates enabled
+            - The bundle must be built for the same runtime version as the installed app
+            - Updates only work in production/preview builds (not development builds)
+
+            ### Note on expo-updates
+
+            This feature requires expo-updates to be properly configured. The current implementation provides the infrastructure but requires expo-updates or a custom native bundle loader to actually apply the bundles at runtime.`;
+
+            // Find existing bundle comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: repo.owner,
+              repo: repo.repo,
+              issue_number: prNumber,
+            });
+
+            const bundleComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('JavaScript Bundle Available')
+            );
+
+            if (bundleComment) {
+              await github.rest.issues.updateComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                comment_id: bundleComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: repo.owner,
+                repo: repo.repo,
+                issue_number: prNumber,
+                body: comment
+              });
+            }

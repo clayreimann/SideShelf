@@ -1,0 +1,79 @@
+name: Update Coverage Baseline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update-baseline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        continue-on-error: true
+
+      - name: Check if coverage changed
+        id: check
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            mkdir -p .github/coverage
+
+            # Check if baseline exists and if coverage has changed
+            if [ -f .github/coverage/coverage-summary.json ]; then
+              if diff -q coverage/coverage-summary.json .github/coverage/coverage-summary.json > /dev/null; then
+                echo "changed=false" >> $GITHUB_OUTPUT
+                echo "Coverage unchanged, skipping commit"
+              else
+                echo "changed=true" >> $GITHUB_OUTPUT
+                echo "Coverage changed, will update baseline"
+              fi
+            else
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "No baseline exists, will create initial baseline"
+            fi
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No coverage data generated"
+          fi
+
+      - name: Update baseline coverage
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          cp coverage/coverage-summary.json .github/coverage/coverage-summary.json
+
+          # Extract coverage for commit message
+          STMT_PCT=$(node -e "console.log(require('./coverage/coverage-summary.json').total.statements.pct)")
+          BRANCH_PCT=$(node -e "console.log(require('./coverage/coverage-summary.json').total.branches.pct)")
+          FUNC_PCT=$(node -e "console.log(require('./coverage/coverage-summary.json').total.functions.pct)")
+          LINES_PCT=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
+
+          echo "COVERAGE_SUMMARY=Statements: ${STMT_PCT}% | Branches: ${BRANCH_PCT}% | Functions: ${FUNC_PCT}% | Lines: ${LINES_PCT}%" >> $GITHUB_ENV
+
+      - name: Commit baseline coverage
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/coverage/coverage-summary.json
+          git commit -m "chore: Update coverage baseline
+
+${{ env.COVERAGE_SUMMARY }}
+
+[skip ci]"
+          git push

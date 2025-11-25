@@ -1,0 +1,645 @@
+name: Publish Release Update
+
+# Triggers when a new version tag is pushed (e.g., v1.0.0, v2.1.3)
+# This workflow exports an Expo update bundle and publishes it to GitHub Pages
+# for versioned release builds.
+#
+# Usage:
+#   git tag v1.0.0
+#   git push origin v1.0.0
+#
+# The bundle will be available at:
+#   https://<username>.github.io/<repo>/updates/releases/v1.0.0/
+
+on:
+  push:
+    tags:
+      - 'v*.*.*-*'    # Match version tags with build numbers: v1.0.0-123, v2.1.3-456, etc.
+    branches:
+      - main  # Only publish from main branch
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to get tag info
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Extract version from tag (e.g., v1.0.0-123 -> 1.0.0-123)
+          # Tag format: vX.Y.Z-B where B is the iOS build number
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Validate tag is on main branch
+        run: |
+          # Ensure the tag points to a commit on main branch
+          git fetch origin main
+          if ! git merge-base --is-ancestor ${{ github.sha }} origin/main; then
+            echo "Error: Tag must be on main branch"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Export Expo update
+        run: |
+          # Export for iOS and Android
+          npx expo export --platform ios --platform android --output-dir dist
+
+          # Create metadata file for this release
+          cat > dist/release-metadata.json << EOF
+          {
+            "version": "${{ steps.version.outputs.version }}",
+            "tag": "${{ steps.version.outputs.tag }}",
+            "commitSha": "${{ github.sha }}",
+            "commitMessage": "$(git log -1 --pretty=%B | head -n 1)",
+            "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "branch": "main"
+          }
+          EOF
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: expo-update-${{ steps.version.outputs.tag }}
+          path: dist/
+          retention-days: 180  # Keep release artifacts for 6 months
+
+      - name: Deploy to GitHub Pages
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Fetch or create gh-pages branch
+          if git ls-remote --exit-code --heads origin gh-pages; then
+            echo "Fetching existing gh-pages branch..."
+            git fetch origin gh-pages:gh-pages
+            git checkout gh-pages
+          else
+            echo "Creating new gh-pages branch..."
+            git checkout --orphan gh-pages
+            git rm -rf . || true
+          fi
+
+          # Create release directory structure
+          mkdir -p updates/releases/${{ steps.version.outputs.tag }}
+
+          # Copy exported update to release directory
+          cp -r dist/* updates/releases/${{ steps.version.outputs.tag }}/
+
+          # Create index page for this release
+          cat > updates/releases/${{ steps.version.outputs.tag }}/index.html << 'HTMLEOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>SideShelf Release ${{ steps.version.outputs.tag }}</title>
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+              }
+              .container {
+                background: white;
+                border-radius: 12px;
+                padding: 40px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+              }
+              h1 {
+                color: #667eea;
+                margin-bottom: 10px;
+                font-size: 2.5em;
+              }
+              .version-badge {
+                display: inline-block;
+                background: #667eea;
+                color: white;
+                padding: 5px 15px;
+                border-radius: 20px;
+                font-size: 0.9em;
+                font-weight: 600;
+                margin-bottom: 30px;
+              }
+              .metadata {
+                background: #f8f9fa;
+                border-left: 4px solid #667eea;
+                padding: 15px 20px;
+                margin: 20px 0;
+                border-radius: 4px;
+              }
+              .metadata p {
+                margin: 8px 0;
+                font-size: 0.95em;
+              }
+              .metadata strong {
+                color: #667eea;
+                font-weight: 600;
+              }
+              code {
+                background: #f4f4f4;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-family: 'Monaco', 'Courier New', monospace;
+                font-size: 0.9em;
+                color: #e83e8c;
+              }
+              pre {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 6px;
+                overflow-x: auto;
+                border: 1px solid #e0e0e0;
+                font-size: 0.9em;
+                margin: 15px 0;
+              }
+              .button {
+                display: inline-block;
+                background: #667eea;
+                color: white;
+                padding: 15px 30px;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: 600;
+                margin: 20px 10px 20px 0;
+                transition: background 0.3s ease;
+                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+              }
+              .button:hover {
+                background: #5568d3;
+                box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+              }
+              .button.secondary {
+                background: white;
+                color: #667eea;
+                border: 2px solid #667eea;
+                box-shadow: none;
+              }
+              .button.secondary:hover {
+                background: #f8f9fa;
+              }
+              .instructions {
+                background: #fff9e6;
+                border-left: 4px solid #ffc107;
+                padding: 20px;
+                margin: 30px 0;
+                border-radius: 4px;
+              }
+              .instructions h2 {
+                color: #f57c00;
+                margin-bottom: 15px;
+                font-size: 1.3em;
+              }
+              .instructions ol {
+                padding-left: 25px;
+              }
+              .instructions li {
+                margin: 12px 0;
+                line-height: 1.8;
+              }
+              footer {
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #e0e0e0;
+                text-align: center;
+                color: #999;
+                font-size: 0.9em;
+              }
+              @media (max-width: 600px) {
+                body { padding: 10px; }
+                .container { padding: 20px; }
+                h1 { font-size: 1.8em; }
+                .button { display: block; text-align: center; margin: 10px 0; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>📦 SideShelf Release</h1>
+              <span class="version-badge">${{ steps.version.outputs.tag }}</span>
+
+              <div class="metadata">
+                <p><strong>Version:</strong> ${{ steps.version.outputs.version }}</p>
+                <p><strong>Commit:</strong> <code>${{ github.sha }}</code></p>
+                <p><strong>Branch:</strong> main</p>
+                <p><strong>Published:</strong> <span id="publish-date"></span></p>
+              </div>
+
+              <div style="margin: 30px 0;">
+                <a href="side-shelf://bundle-loader?url=ENCODED_URL_PLACEHOLDER" class="button">
+                  📱 Open in SideShelf
+                </a>
+                <a href="../../index.html" class="button secondary">
+                  ← Back to Index
+                </a>
+              </div>
+
+              <div class="instructions">
+                <h2>🔄 Loading This Release</h2>
+                <p><strong>Option 1: One-Tap Deep Link (Recommended)</strong></p>
+                <ol>
+                  <li>Open this page on your iOS device in Safari</li>
+                  <li>Tap the <strong>"Open in SideShelf"</strong> button above</li>
+                  <li>Confirm the URL in the dialog</li>
+                  <li>Tap <strong>"Check for Updates"</strong> in the app</li>
+                  <li>After download completes, tap <strong>"Reload App"</strong></li>
+                </ol>
+
+                <p style="margin-top: 20px;"><strong>Option 2: Manual Configuration</strong></p>
+                <ol>
+                  <li>Open SideShelf app</li>
+                  <li>Go to <strong>More → Bundle Loader</strong></li>
+                  <li>Enter the update URL:</li>
+                </ol>
+                <pre>https://REPO_OWNER_PLACEHOLDER.github.io/REPO_NAME_PLACEHOLDER/updates/releases/${{ steps.version.outputs.tag }}</pre>
+                <ol start="4">
+                  <li>Tap <strong>"Switch to This URL"</strong></li>
+                  <li>Close the app completely (swipe up from app switcher)</li>
+                  <li>Reopen the app</li>
+                  <li>Tap <strong>"Check for Updates"</strong></li>
+                  <li>After download, tap <strong>"Reload App"</strong></li>
+                </ol>
+              </div>
+
+              <div style="background: #e3f2fd; padding: 20px; border-radius: 6px; margin: 30px 0;">
+                <h3 style="color: #1976d2; margin-bottom: 10px;">⚠️ Important Notes</h3>
+                <ul style="padding-left: 20px; color: #555;">
+                  <li>Your app's runtime version must match this release's version</li>
+                  <li>After switching URLs, you must completely close and reopen the app</li>
+                  <li>This update only works with preview builds that have <code>disableAntiBrickingMeasures: true</code></li>
+                  <li>For production builds, rebuild with this version's update URL</li>
+                </ul>
+              </div>
+
+              <footer>
+                <p>🤖 Generated by GitHub Actions • <a href="https://github.com/REPO_OWNER_PLACEHOLDER/REPO_NAME_PLACEHOLDER" style="color: #667eea;">View Repository</a></p>
+              </footer>
+            </div>
+
+            <script>
+              // Format publish date
+              const metadata = METADATA_PLACEHOLDER;
+              const date = new Date(metadata.createdAt);
+              document.getElementById('publish-date').textContent = date.toLocaleString();
+            </script>
+          </body>
+          </html>
+          HTMLEOF
+
+          # Replace placeholders in the HTML
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          BUNDLE_URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/updates/releases/${{ steps.version.outputs.tag }}"
+          ENCODED_URL=$(node -e "console.log(encodeURIComponent('${BUNDLE_URL}'))")
+          METADATA=$(cat updates/releases/${{ steps.version.outputs.tag }}/release-metadata.json)
+
+          sed -i "s|ENCODED_URL_PLACEHOLDER|${ENCODED_URL}|g" updates/releases/${{ steps.version.outputs.tag }}/index.html
+          sed -i "s|REPO_OWNER_PLACEHOLDER|${REPO_OWNER}|g" updates/releases/${{ steps.version.outputs.tag }}/index.html
+          sed -i "s|REPO_NAME_PLACEHOLDER|${REPO_NAME}|g" updates/releases/${{ steps.version.outputs.tag }}/index.html
+          sed -i "s|METADATA_PLACEHOLDER|${METADATA}|g" updates/releases/${{ steps.version.outputs.tag }}/index.html
+
+          # Generate releases manifest (list all published releases)
+          echo "Generating releases manifest..."
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+
+            const releasesDir = 'updates/releases';
+            const releases = [];
+
+            if (fs.existsSync(releasesDir)) {
+              const dirs = fs.readdirSync(releasesDir);
+              for (const dir of dirs) {
+                const metadataPath = path.join(releasesDir, dir, 'release-metadata.json');
+                if (fs.existsSync(metadataPath)) {
+                  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+                  releases.push({
+                    ...metadata,
+                    url: \`https://${REPO_OWNER}.github.io/${REPO_NAME}/updates/releases/\${dir}\`
+                  });
+                }
+              }
+            }
+
+            // Sort by version (descending)
+            releases.sort((a, b) => {
+              const versionA = a.version.split('.').map(Number);
+              const versionB = b.version.split('.').map(Number);
+              for (let i = 0; i < 3; i++) {
+                if (versionA[i] !== versionB[i]) {
+                  return versionB[i] - versionA[i];
+                }
+              }
+              return 0;
+            });
+
+            fs.writeFileSync('updates/releases-manifest.json', JSON.stringify({ releases }, null, 2));
+          " || echo '{"releases":[]}' > updates/releases-manifest.json
+
+          # Regenerate main index.html to include releases
+          # Note: This will be more complex if you have both PRs and releases
+          # For now, create a simple index that lists both
+          cat > index.html << 'INDEXEOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>SideShelf OTA Updates</title>
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+              }
+              .container {
+                max-width: 1200px;
+                margin: 0 auto;
+              }
+              header {
+                background: white;
+                border-radius: 12px;
+                padding: 40px;
+                margin-bottom: 30px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+                text-align: center;
+              }
+              h1 {
+                color: #667eea;
+                font-size: 2.5em;
+                margin-bottom: 10px;
+              }
+              .subtitle {
+                color: #666;
+                font-size: 1.1em;
+              }
+              .section {
+                background: white;
+                border-radius: 12px;
+                padding: 30px;
+                margin-bottom: 20px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+              }
+              .section h2 {
+                color: #667eea;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #667eea;
+              }
+              .update-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                gap: 20px;
+                margin-top: 20px;
+              }
+              .update-card {
+                background: #f8f9fa;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 20px;
+                transition: all 0.3s ease;
+                cursor: pointer;
+              }
+              .update-card:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+                border-color: #667eea;
+              }
+              .update-card h3 {
+                color: #667eea;
+                margin-bottom: 10px;
+              }
+              .update-card p {
+                color: #666;
+                font-size: 0.9em;
+                margin: 5px 0;
+              }
+              .badge {
+                display: inline-block;
+                padding: 4px 12px;
+                border-radius: 12px;
+                font-size: 0.85em;
+                font-weight: 600;
+                margin-top: 10px;
+              }
+              .badge.release { background: #4caf50; color: white; }
+              .badge.pr { background: #2196f3; color: white; }
+              .empty-state {
+                text-align: center;
+                padding: 40px;
+                color: #999;
+              }
+              footer {
+                text-align: center;
+                color: white;
+                margin-top: 40px;
+                padding: 20px;
+              }
+              @media (max-width: 768px) {
+                .update-grid { grid-template-columns: 1fr; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <header>
+                <h1>📦 SideShelf OTA Updates</h1>
+                <p class="subtitle">Over-the-air JavaScript updates for TestFlight builds</p>
+              </header>
+
+              <div class="section">
+                <h2>🚀 Release Versions</h2>
+                <div id="releases-list" class="update-grid">
+                  <div class="empty-state">Loading releases...</div>
+                </div>
+              </div>
+
+              <div class="section">
+                <h2>🔧 Pull Request Previews</h2>
+                <div id="prs-list" class="update-grid">
+                  <div class="empty-state">Loading PRs...</div>
+                </div>
+              </div>
+
+              <footer>
+                <p>🤖 Generated by GitHub Actions</p>
+                <p><a href="https://github.com/REPO_OWNER_PLACEHOLDER/REPO_NAME_PLACEHOLDER" style="color: white;">View Repository</a></p>
+              </footer>
+            </div>
+
+            <script>
+              async function loadUpdates() {
+                try {
+                  // Load releases
+                  const releasesRes = await fetch('./updates/releases-manifest.json');
+                  if (releasesRes.ok) {
+                    const releasesData = await releasesRes.json();
+                    displayReleases(releasesData.releases);
+                  }
+                } catch (error) {
+                  document.getElementById('releases-list').innerHTML =
+                    '<div class="empty-state">No releases published yet</div>';
+                }
+
+                try {
+                  // Load PRs
+                  const prsRes = await fetch('./updates/manifest.json');
+                  if (prsRes.ok) {
+                    const prsData = await prsRes.json();
+                    displayPRs(prsData.updates);
+                  }
+                } catch (error) {
+                  document.getElementById('prs-list').innerHTML =
+                    '<div class="empty-state">No PR previews available</div>';
+                }
+              }
+
+              function displayReleases(releases) {
+                const container = document.getElementById('releases-list');
+                if (!releases || releases.length === 0) {
+                  container.innerHTML = '<div class="empty-state">No releases published yet</div>';
+                  return;
+                }
+
+                container.innerHTML = releases.map(release => \`
+                  <div class="update-card" onclick="window.location.href='./updates/releases/\${release.tag}/'">
+                    <h3>\${release.tag}</h3>
+                    <p><strong>Version:</strong> \${release.version}</p>
+                    <p><strong>Published:</strong> \${new Date(release.createdAt).toLocaleDateString()}</p>
+                    <p style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                      <strong>Commit:</strong> \${release.commitSha.substring(0, 7)}
+                    </p>
+                    <span class="badge release">Release</span>
+                  </div>
+                \`).join('');
+              }
+
+              function displayPRs(updates) {
+                const container = document.getElementById('prs-list');
+                if (!updates || updates.length === 0) {
+                  container.innerHTML = '<div class="empty-state">No PR previews available</div>';
+                  return;
+                }
+
+                container.innerHTML = updates.map(pr => \`
+                  <div class="update-card" onclick="window.location.href='./updates/pr-\${pr.prNumber}/'">
+                    <h3>PR #\${pr.prNumber}</h3>
+                    <p><strong>Title:</strong> \${pr.prTitle}</p>
+                    <p><strong>Branch:</strong> \${pr.branch}</p>
+                    <p><strong>Updated:</strong> \${new Date(pr.createdAt).toLocaleDateString()}</p>
+                    <span class="badge pr">Preview</span>
+                  </div>
+                \`).join('');
+              }
+
+              loadUpdates();
+            </script>
+          </body>
+          </html>
+          INDEXEOF
+
+          # Replace placeholders in index
+          sed -i "s|REPO_OWNER_PLACEHOLDER|${REPO_OWNER}|g" index.html
+          sed -i "s|REPO_NAME_PLACEHOLDER|${REPO_NAME}|g" index.html
+
+          # Stage all changes
+          git add updates/ index.html
+
+          # Commit and push with retry logic
+          git commit -m "Publish release update for ${{ steps.version.outputs.tag }}"
+
+          for i in {1..3}; do
+            if git push origin gh-pages; then
+              echo "Successfully pushed to gh-pages"
+              break
+            else
+              echo "Push failed, attempt $i of 3"
+              if [ $i -lt 3 ]; then
+                echo "Pulling latest changes and retrying..."
+                git pull --rebase origin gh-pages
+
+                # Re-apply changes after rebase
+                mkdir -p updates/releases/${{ steps.version.outputs.tag }}
+                cp -r dist/* updates/releases/${{ steps.version.outputs.tag }}/
+                git add updates/ index.html
+                git commit -m "Publish release update for ${{ steps.version.outputs.tag }}" || true
+              else
+                echo "Failed to push after 3 attempts"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          release_name: Release ${{ steps.version.outputs.tag }}
+          body: |
+            ## 📦 Release ${{ steps.version.outputs.tag }}
+
+            This release includes an OTA update bundle published to GitHub Pages.
+
+            **Version:** ${{ steps.version.outputs.version }}
+            **Build:** ${GITHUB_REF#refs/tags/v*.*.*-}
+
+            ### 🔗 Links
+            - **Bundle Page**: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/updates/releases/${{ steps.version.outputs.tag }}/
+            - **Deep Link**: `side-shelf://bundle-loader?url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/updates/releases/${{ steps.version.outputs.tag }}`
+
+            ### 📱 Loading This Release
+            1. Open the bundle page on your device
+            2. Tap "Open in SideShelf"
+            3. Confirm and check for updates
+
+            See the bundle page for detailed instructions.
+          draft: false
+          prerelease: false  # All tagged releases on main are production releases
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Release Published Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Bundle Page](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/updates/releases/${{ steps.version.outputs.tag }}/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [All Updates](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📱 Deep Link" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "side-shelf://bundle-loader?url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/updates/releases/${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

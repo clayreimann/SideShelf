@@ -15,6 +15,7 @@ jest.mock("@/lib/appSettings", () => ({
   getDiagnosticsEnabled: jest.fn(),
   getTabOrder: jest.fn(),
   getHiddenTabs: jest.fn(),
+  getCustomUpdateUrl: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
@@ -22,6 +23,7 @@ jest.mock("@/lib/appSettings", () => ({
   setDiagnosticsEnabled: jest.fn(),
   setTabOrder: jest.fn(),
   setHiddenTabs: jest.fn(),
+  setCustomUpdateUrl: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
 }));
@@ -43,6 +45,7 @@ describe("SettingsSlice", () => {
     getDiagnosticsEnabled,
     getTabOrder,
     getHiddenTabs,
+    getCustomUpdateUrl,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
@@ -50,6 +53,7 @@ describe("SettingsSlice", () => {
     setDiagnosticsEnabled,
     setTabOrder,
     setHiddenTabs,
+    setCustomUpdateUrl,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
 
@@ -70,6 +74,7 @@ describe("SettingsSlice", () => {
     getDiagnosticsEnabled.mockResolvedValue(false);
     getTabOrder.mockResolvedValue(["home", "library", "series", "authors", "more"]);
     getHiddenTabs.mockResolvedValue([]);
+    getCustomUpdateUrl.mockResolvedValue(null);
     setJumpForwardInterval.mockResolvedValue();
     setJumpBackwardInterval.mockResolvedValue();
     setSmartRewindEnabled.mockResolvedValue();
@@ -77,6 +82,7 @@ describe("SettingsSlice", () => {
     setDiagnosticsEnabled.mockResolvedValue();
     setTabOrder.mockResolvedValue();
     setHiddenTabs.mockResolvedValue();
+    setCustomUpdateUrl.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
 
@@ -96,6 +102,7 @@ describe("SettingsSlice", () => {
         diagnosticsEnabled: false,
         tabOrder: ["home", "library", "series", "authors", "more"],
         hiddenTabs: [],
+        customUpdateUrl: null,
         initialized: false,
         isLoading: false,
       });
@@ -111,6 +118,7 @@ describe("SettingsSlice", () => {
       getDiagnosticsEnabled.mockResolvedValue(true);
       getTabOrder.mockResolvedValue(["library", "home", "series", "authors", "more"]);
       getHiddenTabs.mockResolvedValue(["authors"]);
+      getCustomUpdateUrl.mockResolvedValue("https://example.com/bundle");
 
       await store.getState().initializeSettings();
 

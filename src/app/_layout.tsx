@@ -194,77 +194,105 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Handle deep links for logger configuration
+  // Handle deep links for logger configuration and bundle loader
   useEffect(() => {
     /**
-     * Parse logger configuration from URL query parameters
-     * Format: side-shelf://logger?level[TAG_NAME]=warn&level[TAG_NAME_3]=debug&enabled[TAG_NAME_2]=false
+     * Parse deep link URLs and handle different link types
+     * Supported formats:
+     * - side-shelf://logger?level[TAG_NAME]=warn&level[TAG_NAME_3]=debug&enabled[TAG_NAME_2]=false
+     * - side-shelf://bundle-loader?url=https://example.com/bundle
      */
     const handleDeepLink = async (url: string) => {
       try {
-        // Check if this is a logger configuration URL
-        if (!url.includes("://logger")) {
+        const urlObj = new URL(url);
+
+        // Handle bundle-loader deep links
+        if (url.includes("://bundle-loader")) {
+          log.info(`Processing bundle-loader deep link: ${url}`);
+
+          const bundleUrl = urlObj.searchParams.get("url");
+
+          if (bundleUrl) {
+            // Navigate to bundle-loader with URL pre-filled
+            router.push({
+              pathname: "/more/bundle-loader",
+              params: { url: bundleUrl },
+            });
+            log.info(`Navigating to bundle-loader with URL: ${bundleUrl}`);
+          } else {
+            log.warn("No URL parameter found in bundle-loader deep link");
+            // Still navigate to bundle-loader screen
+            router.push("/more/bundle-loader");
+          }
+
           return;
         }
 
-        log.info(`Processing logger deep link: ${url}`);
-        const urlObj = new URL(url);
+        // Handle logger configuration deep links
+        if (url.includes("://logger")) {
+          log.info(`Processing logger deep link: ${url}`);
 
-        // Parse query parameters with bracket notation
-        const tagLevels: Record<string, string> = {};
-        const tagEnabled: Record<string, string> = {};
+          // Parse query parameters with bracket notation
+          const tagLevels: Record<string, string> = {};
+          const tagEnabled: Record<string, string> = {};
 
-        urlObj.searchParams.forEach((value, key) => {
-          // Parse level[TAG_NAME]=warn format
-          const levelMatch = key.match(/^level\[(.+)\]$/);
-          if (levelMatch) {
-            const tagName = decodeURIComponent(levelMatch[1]);
-            tagLevels[tagName] = value;
+          urlObj.searchParams.forEach((value, key) => {
+            // Parse level[TAG_NAME]=warn format
+            const levelMatch = key.match(/^level\[(.+)\]$/);
+            if (levelMatch) {
+              const tagName = decodeURIComponent(levelMatch[1]);
+              tagLevels[tagName] = value;
+            }
+
+            // Parse enabled[TAG_NAME]=false format
+            const enabledMatch = key.match(/^enabled\[(.+)\]$/);
+            if (enabledMatch) {
+              const tagName = decodeURIComponent(enabledMatch[1]);
+              tagEnabled[tagName] = value;
+            }
+          });
+
+          // Apply logger configurations
+          let configApplied = false;
+
+          // Set log levels
+          for (const [tag, level] of Object.entries(tagLevels)) {
+            const logLevel = level.toLowerCase() as "debug" | "info" | "warn" | "error";
+            if (["debug", "info", "warn", "error"].includes(logLevel)) {
+              await logger.setTagLevel(tag, logLevel);
+              log.info(`Set log level for tag "${tag}" to ${logLevel}`);
+              configApplied = true;
+            }
           }
 
-          // Parse enabled[TAG_NAME]=false format
-          const enabledMatch = key.match(/^enabled\[(.+)\]$/);
-          if (enabledMatch) {
-            const tagName = decodeURIComponent(enabledMatch[1]);
-            tagEnabled[tagName] = value;
-          }
-        });
-
-        // Apply logger configurations
-        let configApplied = false;
-
-        // Set log levels
-        for (const [tag, level] of Object.entries(tagLevels)) {
-          const logLevel = level.toLowerCase() as "debug" | "info" | "warn" | "error";
-          if (["debug", "info", "warn", "error"].includes(logLevel)) {
-            await logger.setTagLevel(tag, logLevel);
-            log.info(`Set log level for tag "${tag}" to ${logLevel}`);
+          // Set enabled/disabled state
+          for (const [tag, enabledValue] of Object.entries(tagEnabled)) {
+            const isEnabled = enabledValue.toLowerCase() !== "false";
+            if (isEnabled) {
+              logger.enableTag(tag);
+              log.info(`Enabled tag "${tag}"`);
+            } else {
+              logger.disableTag(tag);
+              log.info(`Disabled tag "${tag}"`);
+            }
             configApplied = true;
           }
-        }
 
-        // Set enabled/disabled state
-        for (const [tag, enabledValue] of Object.entries(tagEnabled)) {
-          const isEnabled = enabledValue.toLowerCase() !== "false";
-          if (isEnabled) {
-            logger.enableTag(tag);
-            log.info(`Enabled tag "${tag}"`);
+          if (configApplied) {
+            // Navigate to logger settings screen
+            router.push("/more/logger-settings");
+            log.info("Logger configuration applied, navigating to logger settings");
           } else {
-            logger.disableTag(tag);
-            log.info(`Disabled tag "${tag}"`);
+            log.warn("No valid logger configuration found in deep link");
           }
-          configApplied = true;
+
+          return;
         }
 
-        if (configApplied) {
-          // Navigate to logger settings screen
-          router.push("/more/logger-settings");
-          log.info("Logger configuration applied, navigating to logger settings");
-        } else {
-          log.warn("No valid logger configuration found in deep link");
-        }
+        // Unknown deep link type
+        log.warn(`Unrecognized deep link format: ${url}`);
       } catch (error) {
-        log.error("Failed to process logger deep link", error as Error);
+        log.error("Failed to process deep link", error as Error);
       }
     };
 

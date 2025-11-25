@@ -812,6 +812,7 @@ export function useSettings() {
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
   const tabOrder = useAppStore((state) => state.settings.tabOrder);
   const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
+  const customUpdateUrl = useAppStore((state) => state.settings.customUpdateUrl);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -824,6 +825,7 @@ export function useSettings() {
   const updateDiagnosticsEnabled = useAppStore((state) => state.updateDiagnosticsEnabled);
   const updateTabOrder = useAppStore((state) => state.updateTabOrder);
   const updateHiddenTabs = useAppStore((state) => state.updateHiddenTabs);
+  const updateCustomUpdateUrl = useAppStore((state) => state.updateCustomUpdateUrl);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -835,6 +837,7 @@ export function useSettings() {
       diagnosticsEnabled,
       tabOrder,
       hiddenTabs,
+      customUpdateUrl,
       initialized,
       isLoading,
       initializeSettings,
@@ -845,6 +848,7 @@ export function useSettings() {
       updateDiagnosticsEnabled,
       updateTabOrder,
       updateHiddenTabs,
+      updateCustomUpdateUrl,
       resetSettings,
     }),
     [
@@ -855,6 +859,7 @@ export function useSettings() {
       diagnosticsEnabled,
       tabOrder,
       hiddenTabs,
+      customUpdateUrl,
       initialized,
       isLoading,
       initializeSettings,
@@ -865,6 +870,7 @@ export function useSettings() {
       updateDiagnosticsEnabled,
       updateTabOrder,
       updateHiddenTabs,
+      updateCustomUpdateUrl,
       resetSettings,
     ]
   );

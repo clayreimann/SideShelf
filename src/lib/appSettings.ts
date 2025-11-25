@@ -15,6 +15,7 @@ const SETTINGS_KEYS = {
   enableDiagnostics: "@app/enableDiagnostics",
   tabOrder: "@app/tabOrder",
   hiddenTabs: "@app/hiddenTabs",
+  customUpdateUrl: "@app/customUpdateUrl",
 } as const;
 
 // Default values
@@ -186,6 +187,36 @@ export async function setDiagnosticsEnabled(enabled: boolean): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.enableDiagnostics, enabled ? "true" : "false");
   } catch (error) {
     console.error("[AppSettings] Failed to save diagnostics setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get custom update URL for loading test bundles
+ * Default: null (no custom update URL)
+ */
+export async function getCustomUpdateUrl(): Promise<string | null> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.customUpdateUrl);
+    return value;
+  } catch (error) {
+    console.error("[AppSettings] Failed to get custom update URL:", error);
+    return null;
+  }
+}
+
+/**
+ * Set custom update URL for loading test bundles
+ */
+export async function setCustomUpdateUrl(url: string | null): Promise<void> {
+  try {
+    if (url === null || url === "") {
+      await AsyncStorage.removeItem(SETTINGS_KEYS.customUpdateUrl);
+    } else {
+      await AsyncStorage.setItem(SETTINGS_KEYS.customUpdateUrl, url);
+    }
+  } catch (error) {
+    console.error("[AppSettings] Failed to save custom update URL:", error);
     throw error;
   }
 }
