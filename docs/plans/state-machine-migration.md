@@ -174,6 +174,529 @@ Even when coordinator controls execution, it must observe reality to detect:
 
 ---
 
+## Phase 2.5: Native Event Bridge for Cross-Context Synchronization
+
+**Goal:** Implement native event bridge to synchronize UI and Headless JS coordinators
+
+**Status:** ⏳ Planned
+
+### Problem Statement
+
+On Android, `PlayerBackgroundService` runs in Headless JS (separate JavaScript context from UI). This creates critical issues:
+
+1. **Events don't cross contexts**: Background service events (progress updates, remote controls) don't reach UI coordinator
+2. **UI stays stale**: UI won't update position, chapters, or state from background playback
+3. **Remote controls break when backgrounded**: No coordinator to execute TrackPlayer commands when UI pauses
+
+### Solution: Dual Coordinators with Native Event Bridge
+
+**Architecture:**
+
+```
+UI Context (observerMode = true)
+├── Receives all events via native bridge
+├── Updates Zustand store
+├── Updates UI
+└── Does NOT execute TrackPlayer commands
+
+Headless Context (observerMode = false)
+├── Receives all events via native bridge
+├── Executes TrackPlayer commands
+├── Handles remote controls (always running)
+└── Does NOT update store (no React context)
+
+Native Event Bridge
+└── Broadcasts events to ALL JS contexts
+```
+
+**Responsibility Split:**
+
+| Coordinator  | Runs When           | Execution Mode      | Updates Store | Calls TrackPlayer |
+| ------------ | ------------------- | ------------------- | ------------- | ----------------- |
+| **UI**       | App foregrounded    | Observer (`true`)   | ✅ Yes        | ❌ No             |
+| **Headless** | Always (background) | Execution (`false`) | ❌ No         | ✅ Yes            |
+
+**Why This Works:**
+
+- ✅ Remote controls work when app backgrounded (Headless executes)
+- ✅ UI updates when app foregrounded (UI coordinator updates store)
+- ✅ No duplicate TrackPlayer calls (only Headless executes)
+- ✅ No unsafe store access (Headless doesn't touch store)
+- ✅ No handoff protocol needed (responsibilities don't overlap)
+
+### Implementation Tasks
+
+**1. Native Event Bridge Module (2-3 days)**
+
+Create Android and iOS modules to broadcast events across JS contexts:
+
+**Android (`ABSPlayerEventBridge.kt`):**
+
+```kotlin
+class ABSPlayerEventBridgeModule(reactContext: ReactApplicationContext)
+    : ReactContextBaseJavaModule(reactContext) {
+
+    @ReactMethod
+    fun dispatch(eventData: ReadableMap) {
+        reactContext
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            ?.emit("ABSPlayerEvent", eventData)
+    }
+}
+```
+
+**iOS (`ABSPlayerEventBridge.swift`):**
+
+```swift
+@objc(ABSPlayerEventBridge)
+class ABSPlayerEventBridge: RCTEventEmitter {
+    @objc
+    func dispatch(_ eventData: NSDictionary) {
+        sendEvent(withName: "ABSPlayerEvent", body: eventData)
+    }
+}
+```
+
+- [ ] Create Android native module
+- [ ] Create iOS native module
+- [ ] Add TypeScript bindings
+- [ ] Test cross-context event delivery
+
+**2. Event Bus Update (1 day)**
+
+Update `eventBus.ts` to use native bridge:
+
+```typescript
+import { NativeModules, NativeEventEmitter } from "react-native";
+
+const { ABSPlayerEventBridge } = NativeModules;
+const emitter = new NativeEventEmitter(ABSPlayerEventBridge);
+const CONTEXT_ID = `ctx-${Date.now()}-${Math.random()}`;
+
+export class PlayerEventBus {
+  constructor() {
+    // Listen for cross-context events
+    emitter.addListener("ABSPlayerEvent", (eventData) => {
+      if (eventData.__contextId === CONTEXT_ID) return; // Skip echo
+      this.notifyListeners(eventData);
+    });
+  }
+
+  dispatch(event: PlayerEvent): void {
+    // Broadcast to all contexts
+    ABSPlayerEventBridge.dispatch({
+      type: event.type,
+      payload: event.payload,
+      __contextId: CONTEXT_ID,
+    });
+  }
+}
+```
+
+- [ ] Add native bridge integration
+- [ ] Add context ID for echo prevention
+- [ ] Add fallback for non-native platforms
+- [ ] Update event bus tests
+
+**3. Context Detection Utility (1 day)**
+
+```typescript
+// src/services/coordinator/contextDetection.ts
+export function isHeadlessContext(): boolean {
+  // UI has window, Headless doesn't
+  if (typeof window !== "undefined") return false;
+
+  // Headless has __fbBatchedBridge but no window
+  if (typeof global !== "undefined" && typeof (global as any).__fbBatchedBridge !== "undefined") {
+    return true;
+  }
+
+  return false;
+}
+
+export function getContextId(): string {
+  return isHeadlessContext() ? "HEADLESS" : "UI";
+}
+```
+
+- [ ] Create context detection utility
+- [ ] Add tests for context detection
+- [ ] Add logging for context awareness
+
+**4. Coordinator Base Class + Subclasses (2 days)**
+
+Refactor to base class with UI and Headless subclasses for explicit separation:
+
+```typescript
+// src/services/coordinator/PlayerStateCoordinator.ts (base class)
+export abstract class PlayerStateCoordinator {
+  protected context: StateContext;
+  protected eventQueue: PlayerEvent[] = [];
+
+  constructor(protected readonly contextId: string) {
+    log.info(`[${contextId}] Coordinator initialized`);
+    playerEventBus.subscribe((event) => this.dispatch(event));
+  }
+
+  // Shared state machine logic
+  protected async handleEvent(event: PlayerEvent): Promise<void> {
+    await this.updateContext(event);
+
+    const nextState = this.validateTransition(event);
+    if (nextState) {
+      await this.onTransition(event, nextState);
+    }
+  }
+
+  // Subclasses implement their specific responsibilities
+  protected abstract onTransition(event: PlayerEvent, nextState: PlayerState): Promise<void>;
+}
+
+// src/services/coordinator/UICoordinator.ts
+export class UICoordinator extends PlayerStateCoordinator {
+  private static instance: UICoordinator | null = null;
+
+  static getInstance(): UICoordinator {
+    if (!UICoordinator.instance) {
+      UICoordinator.instance = new UICoordinator();
+    }
+    return UICoordinator.instance;
+  }
+
+  private constructor() {
+    super("UI");
+  }
+
+  // UI coordinator updates store, does NOT execute TrackPlayer
+  protected async onTransition(event: PlayerEvent, nextState: PlayerState): Promise<void> {
+    log.debug(`[UI] Updating store for: ${event.type} → ${nextState}`);
+    this.updateStore(event, nextState);
+  }
+
+  private updateStore(event: PlayerEvent, nextState: PlayerState): void {
+    const store = useAppStore.getState();
+
+    switch (event.type) {
+      case "NATIVE_PROGRESS_UPDATED":
+        store.updatePosition(event.payload.position);
+        break;
+      case "PLAY":
+      case "NATIVE_STATE_CHANGED":
+        if (nextState === PlayerState.PLAYING) {
+          store.setPlaying(true);
+        }
+        break;
+      case "PAUSE":
+        store.setPlaying(false);
+        break;
+      // ... other store updates
+    }
+  }
+}
+
+// src/services/coordinator/HeadlessCoordinator.ts
+export class HeadlessCoordinator extends PlayerStateCoordinator {
+  private static instance: HeadlessCoordinator | null = null;
+
+  static getInstance(): HeadlessCoordinator {
+    if (!HeadlessCoordinator.instance) {
+      HeadlessCoordinator.instance = new HeadlessCoordinator();
+    }
+    return HeadlessCoordinator.instance;
+  }
+
+  private constructor() {
+    super("HEADLESS");
+  }
+
+  // Headless coordinator executes TrackPlayer, does NOT touch store
+  protected async onTransition(event: PlayerEvent, nextState: PlayerState): Promise<void> {
+    log.debug(`[HEADLESS] Executing: ${event.type} → ${nextState}`);
+    await this.executeTransition(event, nextState);
+  }
+
+  private async executeTransition(event: PlayerEvent, nextState: PlayerState): Promise<void> {
+    const playerService = PlayerService.getInstance();
+
+    try {
+      // Execute based on target state
+      switch (nextState) {
+        case PlayerState.LOADING:
+          if (event.type === "LOAD_TRACK") {
+            await playerService.executeLoadTrack(
+              event.payload.libraryItemId,
+              event.payload.episodeId
+            );
+          }
+          break;
+        case PlayerState.PLAYING:
+          await playerService.executePlay();
+          break;
+        case PlayerState.PAUSED:
+          await playerService.executePause();
+          break;
+        case PlayerState.IDLE:
+          if (event.type === "STOP") {
+            await playerService.executeStop();
+          }
+          break;
+      }
+
+      // Execute based on event type (non-state-changing)
+      switch (event.type) {
+        case "SEEK":
+          await playerService.executeSeek(event.payload.position);
+          break;
+        case "SET_RATE":
+          await playerService.executeSetRate(event.payload.rate);
+          break;
+        case "SET_VOLUME":
+          await playerService.executeSetVolume(event.payload.volume);
+          break;
+      }
+    } catch (error) {
+      log.error(`[HEADLESS] Execution error: ${event.type}`, error);
+    }
+  }
+}
+
+// src/services/coordinator/UnifiedCoordinator.ts (iOS only)
+export class UnifiedCoordinator extends PlayerStateCoordinator {
+  private static instance: UnifiedCoordinator | null = null;
+
+  static getInstance(): UnifiedCoordinator {
+    if (!UnifiedCoordinator.instance) {
+      UnifiedCoordinator.instance = new UnifiedCoordinator();
+    }
+    return UnifiedCoordinator.instance;
+  }
+
+  private constructor() {
+    super("UNIFIED");
+  }
+
+  // iOS coordinator does BOTH: executes TrackPlayer AND updates store
+  protected async onTransition(event: PlayerEvent, nextState: PlayerState): Promise<void> {
+    log.debug(`[UNIFIED] Executing & Updating: ${event.type} → ${nextState}`);
+
+    // 1. Execute TrackPlayer command
+    await this.executeTransition(event, nextState);
+
+    // 2. Update Store
+    this.updateStore(event, nextState);
+  }
+
+  // ... implements both executeTransition and updateStore logic
+}
+
+// src/services/coordinator/index.ts (factory)
+export function getCoordinator(): PlayerStateCoordinator {
+  // iOS: Single context, one coordinator does everything
+  if (Platform.OS === "ios") {
+    return UnifiedCoordinator.getInstance();
+  }
+
+  // Android: Split contexts
+  if (isHeadlessContext()) {
+    return HeadlessCoordinator.getInstance(); // Background: Execute only
+  }
+  return UICoordinator.getInstance(); // Foreground: Store only
+}
+```
+
+**5. Track Metadata Synchronization**
+
+How does the UI know what track is playing if Headless loads it?
+
+1. **Headless/Unified Coordinator** receives `LOAD_TRACK` event
+2. Executes `TrackPlayer.load(track)`
+3. Native player emits `playback-track-changed`
+4. `PlayerBackgroundService` listens to native event
+5. Dispatches `NATIVE_TRACK_CHANGED` event via bridge
+6. **UI/Unified Coordinator** receives `NATIVE_TRACK_CHANGED`
+7. Updates `store.activeTrackId`
+8. UI components reactively update metadata from store
+
+**6. Remove Direct Store Access from Background Service (1 day)**
+
+```typescript
+// src/services/PlayerBackgroundService.ts
+
+// BEFORE (❌ Risky - direct store access in Headless)
+store.updatePosition(event.position);
+
+// AFTER (✅ Safe - dispatch event, UI coordinator updates store)
+dispatchPlayerEvent({
+  type: "NATIVE_PROGRESS_UPDATED",
+  payload: { position: event.position, duration: event.duration },
+});
+```
+
+- [ ] Remove all `store.updatePosition()` calls
+- [ ] Remove all `store.setPlaying()` calls
+- [ ] Replace with event dispatches
+- [ ] Verify no store access remains
+
+**6. Testing (2-3 days)**
+
+- [ ] Unit tests with native module mocks
+- [ ] Integration tests for cross-context events
+- [ ] Manual: UI updates from background events
+- [ ] Manual: Remote controls work when backgrounded
+- [ ] Manual: No duplicate TrackPlayer calls
+- [ ] Manual: Position/state stays synced
+- [ ] Performance: Event latency < 1ms
+
+### Key Architectural Decisions
+
+**Q: Why two coordinators instead of one?**
+A: Headless context must handle remote controls when UI is backgrounded/terminated. Single UI-only coordinator would fail when user taps pause on lock screen.
+
+**Q: Why base class + subclasses instead of single class with mode flag?**
+A: Type safety and explicit separation. With subclasses:
+
+- Compiler prevents `HeadlessCoordinator` from calling `updateStore()`
+- Compiler prevents `UICoordinator` from calling `executeTransition()`
+- No runtime mode checks needed
+- Each class focused on one clear responsibility
+
+**Q: How to prevent duplicate TrackPlayer calls?**
+A: Only `HeadlessCoordinator` has `executeTransition()` method. `UICoordinator` cannot call TrackPlayer (method doesn't exist on that class).
+
+**Q: How to prevent unsafe store access?**
+A: Only `UICoordinator` has `updateStore()` method. `HeadlessCoordinator` cannot access store (method doesn't exist on that class).
+
+**Q: Do they stay synchronized?**
+A: Yes! Native bridge broadcasts ALL events to both contexts. Both coordinators:
+
+- Extend same base class with shared state machine logic
+- Maintain same internal state machine state
+- Update same context fields (position, isPlaying, etc.)
+- But implement `onTransition()` differently (store vs TrackPlayer)
+
+### Event Flow Examples
+
+**Remote Control (Lock Screen Pause):**
+
+```
+1. User taps pause on lock screen
+2. handleRemotePause() in Headless JS
+3. dispatchPlayerEvent({ type: 'PAUSE' })
+4. Native bridge broadcasts to BOTH contexts
+5. Headless Coordinator: executeTransition() → TrackPlayer.pause() ✅
+6. UI Coordinator: updateStore() → store.setPlaying(false) ✅
+```
+
+**Progress Update:**
+
+```
+1. TrackPlayer fires progress event in Headless
+2. handlePlaybackProgressUpdated() dispatches NATIVE_PROGRESS_UPDATED
+3. Native bridge broadcasts to BOTH contexts
+4. Headless Coordinator: updates context.position (no execution needed)
+5. UI Coordinator: updates context.position + store.updatePosition() ✅
+```
+
+### Testing Strategy
+
+**Unit Tests:**
+
+- Mock `ABSPlayerEventBridge` module
+- Verify events dispatched via native bridge
+- Test echo prevention (context ID filtering)
+- Test context detection (window vs \_\_fbBatchedBridge)
+
+**Integration Tests:**
+
+- Simulate background service dispatching event
+- Verify UI coordinator receives and updates store
+- Simulate UI dispatching command
+- Verify Headless coordinator executes TrackPlayer call
+
+**Manual Tests:**
+
+- Background app during playback
+- Use lock screen controls (play/pause/seek)
+- Foreground app → verify UI updated
+- Monitor logs: verify only one TrackPlayer call per event
+- Monitor logs: verify no store access from Headless
+
+### Performance Impact
+
+**Per-Event Overhead:**
+
+- JS → Native: ~0.1-0.5ms
+- Native → JS broadcast: ~0.1-0.5ms
+- Total: < 1ms per event (negligible)
+
+**Event Frequency:**
+
+- Progress updates: 1/second
+- State changes: ~10/minute
+- User commands: sporadic
+
+**CPU Impact:** < 1% overhead
+**Memory Impact:** ~50KB for native module
+
+### Rollback Plan
+
+1. **Disable native bridge via feature flag**
+
+   ```typescript
+   const USE_NATIVE_BRIDGE = false;
+   ```
+
+2. **Fall back to local event bus**
+   - Events stay in their context
+   - Accept that UI may be stale during background
+   - Remote controls still work (background service calls TrackPlayer directly)
+
+3. **Staged rollback**
+   - Phase 6 → Phase 5 (re-enable direct store access in background)
+   - Phase 5 → Phase 4 (remove context-based mode split)
+   - Phase 4 → Phase 3 (revert event bus)
+   - Phase 3 → Phase 2 (remove context detection)
+   - Phase 2 → Phase 1 (remove native modules)
+
+### Success Criteria
+
+- ✅ UI updates correctly during background playback
+- ✅ Remote controls work when app backgrounded
+- ✅ No duplicate TrackPlayer calls (verify in logs)
+- ✅ No store access errors from Headless context
+- ✅ Position stays synchronized (drift < 1 second)
+- ✅ Event processing latency < 10ms average
+- ✅ No memory leaks (stable over 1hr playback)
+
+### Dependencies
+
+**Must complete Phase 2 first:**
+
+- Services must dispatch events (not direct execution)
+- `execute*` methods must exist on PlayerService
+- Coordinator must validate transitions
+
+**Enables future phases:**
+
+- Phase 3 (Position Logic) easier with synchronized state
+- Phase 4 (State Propagation) can use either coordinator's state
+- Phase 5 (Cleanup) can remove legacy dual-path code
+
+### Timeline
+
+**Total: 8-10 days**
+
+- Native modules: 2-3 days
+- Event bus update: 1 day
+- Context detection: 1 day
+- Base class + subclasses (UI/Headless/Unified): 2 days
+- Remove store access: 1 day
+- Testing: 2-3 days
+
+\*\*Rollback:
+
+---
+
 ## Phase 3: Centralize Position Logic
 
 **Goal:** Coordinator owns canonical position, reconciles all sources
