@@ -34,6 +34,8 @@ import {
 } from "@/types/coordinator";
 import AsyncLock from "async-lock";
 import EventEmitter from "eventemitter3";
+import { State } from "react-native-track-player";
+import { PlayerService } from "../PlayerService";
 import { playerEventBus } from "./eventBus";
 import { validateTransition } from "./transitions";
 
@@ -69,8 +71,8 @@ export class PlayerStateCoordinator extends EventEmitter {
   private transitionHistory: TransitionHistoryEntry[] = [];
   private readonly MAX_HISTORY_ENTRIES = 100;
 
-  // Phase 1: Observer mode flag
-  private readonly observerMode = true;
+  // Phase 2: Execution mode
+  private readonly observerMode = false;
 
   // Diagnostic logging interval
   private diagnosticInterval: NodeJS.Timeout | null = null;
@@ -255,7 +257,10 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.previousState = currentState;
         this.context.currentState = nextState;
       }
-      // Silent for no-op events
+      // Execute transition (Phase 2)
+      if (!this.observerMode) {
+        await this.executeTransition(event, nextState);
+      }
     } else {
       log.warn(
         `[Coordinator] Rejected: ${currentState} --[${event.type}]--> Reason: ${validation.reason || "unknown"}`
@@ -419,24 +424,12 @@ export class PlayerStateCoordinator extends EventEmitter {
       case "NATIVE_STATE_CHANGED":
         // Update context to reflect actual native player state
         // This is critical for Phase 1 validation - diagnostics UI needs accurate state
-        if (event.payload.state !== undefined) {
-          // Map native State enum to isPlaying boolean
-          // State values from react-native-track-player:
-          // None = 0, Ready = 1, Playing = 2, Paused = 3, Stopped = 4, Buffering = 6, Connecting = 8
-          const State = {
-            None: 0,
-            Ready: 1,
-            Playing: 2,
-            Paused: 3,
-            Stopped: 4,
-            Buffering: 6,
-            Connecting: 8,
-          };
-          this.context.isPlaying = event.payload.state === State.Playing;
-          log.debug(
-            `[Coordinator] Context updated from NATIVE_STATE_CHANGED: isPlaying=${this.context.isPlaying} (state=${event.payload.state})`
-          );
-        }
+        // Map native State enum to isPlaying boolean
+        this.context.isPlaying = event.payload.state === State.Playing;
+        log.debug(
+          `[Coordinator] Context updated from NATIVE_STATE_CHANGED: isPlaying=${this.context.isPlaying} (state=${event.payload.state})`
+        );
+
         break;
 
       // Error handling
@@ -566,6 +559,67 @@ export class PlayerStateCoordinator extends EventEmitter {
       transitionHistory: [...this.transitionHistory],
       observerMode: this.observerMode,
     };
+  }
+  /**
+   * Execute state transition
+   * This is where the actual side effects happen (calling PlayerService)
+   */
+  private async executeTransition(
+    event: PlayerEvent,
+    nextState: PlayerState | null
+  ): Promise<void> {
+    const playerService = PlayerService.getInstance();
+
+    try {
+      // Handle state transitions
+      if (nextState && nextState !== this.context.currentState) {
+        switch (nextState) {
+          case PlayerState.LOADING:
+            if (event.type === "LOAD_TRACK") {
+              await playerService.executeLoadTrack(
+                event.payload.libraryItemId,
+                event.payload.episodeId
+              );
+            }
+            break;
+
+          case PlayerState.PLAYING:
+            await playerService.executePlay();
+            break;
+
+          case PlayerState.PAUSED:
+            await playerService.executePause();
+            break;
+
+          case PlayerState.IDLE:
+            if (event.type === "STOP") {
+              await playerService.executeStop();
+            }
+            break;
+        }
+      }
+
+      // Handle events that don't necessarily change state but require action
+      switch (event.type) {
+        case "SEEK":
+          await playerService.executeSeek(event.payload.position);
+          break;
+
+        case "SET_RATE":
+          await playerService.executeSetRate(event.payload.rate);
+          break;
+
+        case "SET_VOLUME":
+          await playerService.executeSetVolume(event.payload.volume);
+          break;
+      }
+    } catch (error) {
+      log.error(
+        `[Coordinator] Error executing transition: ${event.type} -> ${nextState}`,
+        error as Error
+      );
+      // We might want to dispatch an error event here, but be careful of infinite loops
+    }
   }
 }
 

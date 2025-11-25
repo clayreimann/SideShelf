@@ -205,15 +205,23 @@ export class PlayerService {
    * @param libraryItemId - The library item ID to play
    * @param episodeId - Optional episode ID for podcast episodes (future use)
    */
+  /**
+   * Load and play a track (Public API - Dispatches Event)
+   * @param libraryItemId - The library item ID to play
+   * @param episodeId - Optional episode ID for podcast episodes
+   */
   async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
-    try {
-      // Phase 1: Notify coordinator (observer mode - doesn't affect behavior)
-      // Phase 1: Dispatch to event bus (prevents circular dependencies)
-      dispatchPlayerEvent({
-        type: "LOAD_TRACK",
-        payload: { libraryItemId, episodeId },
-      });
+    dispatchPlayerEvent({
+      type: "LOAD_TRACK",
+      payload: { libraryItemId, episodeId },
+    });
+  }
 
+  /**
+   * Execute track loading (Internal - Called by Coordinator)
+   */
+  async executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void> {
+    try {
       diagLog.info(`playTrack called for libraryItemId: ${libraryItemId}`);
       // Diagnostic: log current track, position, playing state before loading
       await this.printDebugInfo("playTrack::init");
@@ -426,12 +434,16 @@ export class PlayerService {
   }
 
   /**
-   * Pause playback
+   * Pause playback (Public API - Dispatches Event)
    */
   async pause(): Promise<void> {
-    // Phase 1: Dispatch to event bus
     dispatchPlayerEvent({ type: "PAUSE" });
+  }
 
+  /**
+   * Execute pause (Internal - Called by Coordinator)
+   */
+  async executePause(): Promise<void> {
     const store = useAppStore.getState();
     const pauseTime = Date.now();
     store._setLastPauseTime(pauseTime);
@@ -442,10 +454,17 @@ export class PlayerService {
   /**
    * Resume playback with optional smart rewind
    */
+  /**
+   * Resume playback (Public API - Dispatches Event)
+   */
   async play(): Promise<void> {
-    // Phase 1: Dispatch to event bus
     dispatchPlayerEvent({ type: "PLAY" });
+  }
 
+  /**
+   * Execute play (Internal - Called by Coordinator)
+   */
+  async executePlay(): Promise<void> {
     const prepared = await this.rebuildCurrentTrackIfNeeded();
     if (!prepared) {
       log.warn("Playback request ignored: no track available after restoration");
@@ -743,7 +762,20 @@ export class PlayerService {
   /**
    * Seek to position in seconds
    */
+  /**
+   * Seek to position in seconds (Public API - Dispatches Event)
+   */
   async seekTo(position: number): Promise<void> {
+    dispatchPlayerEvent({
+      type: "SEEK",
+      payload: { position },
+    });
+  }
+
+  /**
+   * Execute seek (Internal - Called by Coordinator)
+   */
+  async executeSeek(position: number): Promise<void> {
     await TrackPlayer.seekTo(position);
   }
 
@@ -757,24 +789,57 @@ export class PlayerService {
   /**
    * Set playback rate
    */
+  /**
+   * Set playback rate (Public API - Dispatches Event)
+   */
   async setRate(rate: number): Promise<void> {
+    dispatchPlayerEvent({
+      type: "SET_RATE",
+      payload: { rate },
+    });
+  }
+
+  /**
+   * Execute set rate (Internal - Called by Coordinator)
+   */
+  async executeSetRate(rate: number): Promise<void> {
     await TrackPlayer.setRate(rate);
   }
 
   /**
    * Set volume (0.0 to 1.0)
    */
+  /**
+   * Set volume (Public API - Dispatches Event)
+   */
   async setVolume(volume: number): Promise<void> {
+    dispatchPlayerEvent({
+      type: "SET_VOLUME",
+      payload: { volume },
+    });
+  }
+
+  /**
+   * Execute set volume (Internal - Called by Coordinator)
+   */
+  async executeSetVolume(volume: number): Promise<void> {
     await TrackPlayer.setVolume(volume);
   }
 
   /**
    * Stop playback and clear queue
    */
+  /**
+   * Stop playback (Public API - Dispatches Event)
+   */
   async stop(): Promise<void> {
-    // Phase 1: Dispatch to event bus
     dispatchPlayerEvent({ type: "STOP" });
+  }
 
+  /**
+   * Execute stop (Internal - Called by Coordinator)
+   */
+  async executeStop(): Promise<void> {
     // PlayerBackgroundService will handle ending the session
     await TrackPlayer.stop();
     await TrackPlayer.reset();
