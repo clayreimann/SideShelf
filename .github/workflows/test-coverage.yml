@@ -45,15 +45,26 @@ jobs:
         id: coverage
         if: always()
         run: |
-          # Extract coverage percentages
-          STMT_COVERAGE=$(grep -o 'Statements[^0-9]*[0-9.]*%' coverage-output.txt | grep -o '[0-9.]*%' | head -1 || echo "0%")
-          STMT_RATIO=$(grep -o 'Statements[^0-9]*[0-9.]*%[^0-9]*[0-9]*/[0-9]*' coverage-output.txt | grep -o '[0-9]*/[0-9]*' | head -1 || echo "0/0")
-          BRANCH_COVERAGE=$(grep -o 'Branches[^0-9]*[0-9.]*%' coverage-output.txt | grep -o '[0-9.]*%' | head -1 || echo "0%")
-          BRANCH_RATIO=$(grep -o 'Branches[^0-9]*[0-9.]*%[^0-9]*[0-9]*/[0-9]*' coverage-output.txt | grep -o '[0-9]*/[0-9]*' | head -1 || echo "0/0")
-          FUNC_COVERAGE=$(grep -o 'Functions[^0-9]*[0-9.]*%' coverage-output.txt | grep -o '[0-9.]*%' | head -1 || echo "0%")
-          FUNC_RATIO=$(grep -o 'Functions[^0-9]*[0-9.]*%[^0-9]*[0-9]*/[0-9]*' coverage-output.txt | grep -o '[0-9]*/[0-9]*' | head -1 || echo "0/0")
-          LINES_COVERAGE=$(grep -o 'Lines[^0-9]*[0-9.]*%' coverage-output.txt | grep -o '[0-9.]*%' | head -1 || echo "0%")
-          LINES_RATIO=$(grep -o 'Lines[^0-9]*[0-9.]*%[^0-9]*[0-9]*/[0-9]*' coverage-output.txt | grep -o '[0-9]*/[0-9]*' | head -1 || echo "0/0")
+          # Extract coverage data from JSON summary
+          if [ -f coverage/coverage-summary.json ]; then
+            STMT_COVERAGE=$(node -e "const c = require('./coverage/coverage-summary.json').total.statements; console.log(c.pct + '%')")
+            STMT_RATIO=$(node -e "const c = require('./coverage/coverage-summary.json').total.statements; console.log(c.covered + '/' + c.total)")
+            BRANCH_COVERAGE=$(node -e "const c = require('./coverage/coverage-summary.json').total.branches; console.log(c.pct + '%')")
+            BRANCH_RATIO=$(node -e "const c = require('./coverage/coverage-summary.json').total.branches; console.log(c.covered + '/' + c.total)")
+            FUNC_COVERAGE=$(node -e "const c = require('./coverage/coverage-summary.json').total.functions; console.log(c.pct + '%')")
+            FUNC_RATIO=$(node -e "const c = require('./coverage/coverage-summary.json').total.functions; console.log(c.covered + '/' + c.total)")
+            LINES_COVERAGE=$(node -e "const c = require('./coverage/coverage-summary.json').total.lines; console.log(c.pct + '%')")
+            LINES_RATIO=$(node -e "const c = require('./coverage/coverage-summary.json').total.lines; console.log(c.covered + '/' + c.total)")
+          else
+            STMT_COVERAGE="0%"
+            STMT_RATIO="0/0"
+            BRANCH_COVERAGE="0%"
+            BRANCH_RATIO="0/0"
+            FUNC_COVERAGE="0%"
+            FUNC_RATIO="0/0"
+            LINES_COVERAGE="0%"
+            LINES_RATIO="0/0"
+          fi
 
           # Extract test results
           TEST_SUITES=$(grep "Test Suites:" coverage-output.txt || echo "Test Suites: unknown")
