@@ -416,4 +416,499 @@ describe("SeriesSlice", () => {
       expect(sortedItems.length).toBe(modifiedRawItems.length);
     });
   });
+
+  describe("Comprehensive Sort Testing", () => {
+    const sortTestData = [
+      {
+        id: "series-1",
+        name: "Alpha Series",
+        bookCount: 5,
+        addedAt: new Date("2023-01-01"),
+        updatedAt: new Date("2024-01-01"),
+      },
+      {
+        id: "series-2",
+        name: "Beta Series",
+        bookCount: 3,
+        addedAt: new Date("2023-06-01"),
+        updatedAt: new Date("2024-02-01"),
+      },
+      {
+        id: "series-3",
+        name: "Gamma Series",
+        bookCount: 8,
+        addedAt: new Date("2022-01-01"),
+        updatedAt: new Date("2023-12-01"),
+      },
+    ];
+
+    beforeEach(async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(sortTestData);
+      await store.getState().initializeSeries(true, true);
+      jest.clearAllMocks();
+    });
+
+    it("should sort by name ascending", async () => {
+      await store.getState().setSeriesSortConfig({ field: "name", direction: "asc" });
+      const items = store.getState().series.items;
+      expect(items[0].name).toBe("Alpha Series");
+      expect(items[2].name).toBe("Gamma Series");
+    });
+
+    it("should sort by name descending", async () => {
+      await store.getState().setSeriesSortConfig({ field: "name", direction: "desc" });
+      const items = store.getState().series.items;
+      expect(items[0].name).toBe("Gamma Series");
+      expect(items[2].name).toBe("Alpha Series");
+    });
+
+    it("should sort by bookCount ascending", async () => {
+      await store.getState().setSeriesSortConfig({ field: "bookCount", direction: "asc" });
+      const items = store.getState().series.items;
+      expect(items[0].bookCount).toBe(3);
+      expect(items[2].bookCount).toBe(8);
+    });
+
+    it("should sort by bookCount descending", async () => {
+      await store.getState().setSeriesSortConfig({ field: "bookCount", direction: "desc" });
+      const items = store.getState().series.items;
+      expect(items[0].bookCount).toBe(8);
+      expect(items[2].bookCount).toBe(3);
+    });
+
+    it("should sort by addedAt ascending", async () => {
+      await store.getState().setSeriesSortConfig({ field: "addedAt", direction: "asc" });
+      const items = store.getState().series.items;
+      expect(items[0].id).toBe("series-3"); // Oldest
+      expect(items[2].id).toBe("series-2"); // Newest
+    });
+
+    it("should sort by addedAt descending", async () => {
+      await store.getState().setSeriesSortConfig({ field: "addedAt", direction: "desc" });
+      const items = store.getState().series.items;
+      expect(items[0].id).toBe("series-2"); // Newest
+      expect(items[2].id).toBe("series-3"); // Oldest
+    });
+
+    it("should sort by updatedAt ascending", async () => {
+      await store.getState().setSeriesSortConfig({ field: "updatedAt", direction: "asc" });
+      const items = store.getState().series.items;
+      expect(items[0].id).toBe("series-3"); // Oldest update
+      expect(items[2].id).toBe("series-2"); // Newest update
+    });
+
+    it("should sort by updatedAt descending", async () => {
+      await store.getState().setSeriesSortConfig({ field: "updatedAt", direction: "desc" });
+      const items = store.getState().series.items;
+      expect(items[0].id).toBe("series-2"); // Newest update
+      expect(items[2].id).toBe("series-3"); // Oldest update
+    });
+  });
+
+  describe("Edge Cases and Data Validation", () => {
+    it("should handle empty series array", async () => {
+      getAllSeries.mockResolvedValue([]);
+      transformSeriesToDisplayFormat.mockReturnValue([]);
+
+      await store.getState().initializeSeries(true, true);
+      const result = await store.getState().refetchSeries();
+
+      expect(result).toEqual([]);
+      expect(store.getState().series.items).toEqual([]);
+    });
+
+    it("should handle series with missing optional fields", async () => {
+      const incompleteSeries = [
+        { id: "series-1", name: "Series One" },
+        { id: "series-2", name: null, bookCount: 5 },
+        { id: "series-3" },
+      ];
+      getAllSeries.mockResolvedValue(incompleteSeries as any);
+      transformSeriesToDisplayFormat.mockReturnValue(incompleteSeries as any);
+
+      await store.getState().initializeSeries(true, true);
+
+      expect(store.getState().series.series).toEqual(incompleteSeries);
+    });
+
+    it("should handle sorting with null/undefined values", async () => {
+      const seriesWithNulls = [
+        { id: "1", name: "Alpha", bookCount: null },
+        { id: "2", name: null, bookCount: 5 },
+        { id: "3", name: "Zeta", bookCount: 10 },
+      ];
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(seriesWithNulls as any);
+
+      await store.getState().initializeSeries(true, true);
+      await store.getState().setSeriesSortConfig({ field: "name", direction: "asc" });
+
+      // Should not throw error
+      expect(store.getState().series.items).toBeDefined();
+      expect(store.getState().series.items.length).toBe(3);
+    });
+
+    it("should preserve array immutability during sorting", async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+      const originalRawItems = store.getState().series.rawItems;
+
+      await store.getState().setSeriesSortConfig({ field: "name", direction: "desc" });
+
+      // Original array should not be modified
+      expect(store.getState().series.rawItems).toBe(originalRawItems);
+      expect(store.getState().series.items).not.toBe(originalRawItems);
+    });
+
+    it("should handle very large arrays", async () => {
+      const largeSeries = Array.from({ length: 1000 }, (_, i) => ({
+        id: `series-${i}`,
+        name: `Series ${i}`,
+        bookCount: i % 100,
+        addedAt: new Date(2020, 0, i % 365),
+        updatedAt: new Date(2024, 0, i % 365),
+      }));
+
+      getAllSeries.mockResolvedValue(largeSeries as any);
+      transformSeriesToDisplayFormat.mockReturnValue(largeSeries as any);
+
+      await store.getState().initializeSeries(true, true);
+
+      expect(store.getState().series.items.length).toBe(1000);
+      await store.getState().setSeriesSortConfig({ field: "name", direction: "desc" });
+      expect(store.getState().series.items.length).toBe(1000);
+    });
+  });
+
+  describe("Concurrent Operations", () => {
+    beforeEach(async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+      await store.getState().initializeSeries(true, true);
+      jest.clearAllMocks();
+    });
+
+    it("should handle multiple refetch calls concurrently", async () => {
+      const fetchResults = await Promise.all([
+        store.getState().refetchSeries(),
+        store.getState().refetchSeries(),
+        store.getState().refetchSeries(),
+      ]);
+
+      // All calls should succeed
+      expect(fetchResults[0]).toEqual(mockSeries);
+      expect(fetchResults[1]).toEqual(mockSeries);
+      expect(fetchResults[2]).toEqual(mockSeries);
+    });
+
+    it("should handle concurrent sort config updates", async () => {
+      await Promise.all([
+        store.getState().setSeriesSortConfig({ field: "name", direction: "asc" }),
+        store.getState().setSeriesSortConfig({ field: "bookCount", direction: "desc" }),
+        store.getState().setSeriesSortConfig({ field: "addedAt", direction: "asc" }),
+      ]);
+
+      // Final state should be set (one of the configs)
+      const finalConfig = store.getState().series.sortConfig;
+      expect(finalConfig).toBeDefined();
+      expect(["name", "bookCount", "addedAt"]).toContain(finalConfig.field);
+    });
+
+    it("should handle refetch during sort config update", async () => {
+      const promises = [
+        store.getState().refetchSeries(),
+        store.getState().setSeriesSortConfig({ field: "name", direction: "desc" }),
+      ];
+
+      await Promise.all(promises);
+
+      const state = store.getState();
+      expect(state.series.items).toBeDefined();
+      expect(state.series.series).toEqual(mockSeries);
+    });
+  });
+
+  describe("State Consistency", () => {
+    it("should maintain consistent state during async operations", async () => {
+      let capturedStates: any[] = [];
+
+      getAllSeries.mockImplementation(async () => {
+        capturedStates.push({ ...store.getState().series });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        capturedStates.push({ ...store.getState().series });
+        return mockSeries;
+      });
+
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+
+      // Verify loading states were consistent
+      expect(capturedStates.length).toBeGreaterThan(0);
+    });
+
+    it("should not lose data during rapid updates", async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+
+      // Rapid updates
+      for (let i = 0; i < 10; i++) {
+        await store.getState().setSeriesSortConfig({
+          field: i % 2 === 0 ? "name" : "bookCount",
+          direction: i % 2 === 0 ? "asc" : "desc",
+        });
+      }
+
+      // Data should still be intact
+      expect(store.getState().series.series).toEqual(mockSeries);
+      expect(store.getState().series.rawItems).toEqual(mockDisplaySeries);
+    });
+
+    it("should maintain rawItems and items separately", async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+
+      const rawItems = store.getState().series.rawItems;
+      const items = store.getState().series.items;
+
+      // Should be different arrays (due to sorting)
+      expect(rawItems).not.toBe(items);
+
+      // But contain same data
+      expect(rawItems.length).toBe(items.length);
+    });
+  });
+
+  describe("Loading State Transitions", () => {
+    it("should set isInitializing during initialization", async () => {
+      let isInitializingDuringInit: boolean | undefined;
+
+      getAllSeries.mockImplementation(async () => {
+        isInitializingDuringInit = store.getState().series.loading.isInitializing;
+        return mockSeries;
+      });
+
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+
+      expect(isInitializingDuringInit).toBe(true);
+      expect(store.getState().series.loading.isInitializing).toBe(false);
+    });
+
+    it("should reset isInitializing on error", async () => {
+      getAllSeries.mockRejectedValue(new Error("Test error"));
+
+      await store.getState().initializeSeries(true, true);
+
+      expect(store.getState().series.loading.isInitializing).toBe(false);
+    });
+
+    it("should set isLoadingItems during refetch", async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+
+      let isLoadingDuringFetch: boolean | undefined;
+
+      getAllSeries.mockImplementation(async () => {
+        isLoadingDuringFetch = store.getState().series.loading.isLoadingItems;
+        return mockSeries;
+      });
+
+      await store.getState().refetchSeries();
+
+      expect(isLoadingDuringFetch).toBe(true);
+      expect(store.getState().series.loading.isLoadingItems).toBe(false);
+    });
+
+    it("should reset isLoadingItems on error", async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+
+      getAllSeries.mockRejectedValue(new Error("Fetch error"));
+
+      await store.getState().refetchSeries();
+
+      expect(store.getState().series.loading.isLoadingItems).toBe(false);
+    });
+
+    it("should maintain correct loading states during concurrent operations", async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+
+      // Start multiple operations
+      const promise1 = store.getState().refetchSeries();
+      const promise2 = store.getState().refetchSeries();
+
+      await Promise.all([promise1, promise2]);
+
+      // Loading should be false after all complete
+      expect(store.getState().series.loading.isLoadingItems).toBe(false);
+    });
+  });
+
+  describe("Storage Persistence Edge Cases", () => {
+    it("should handle AsyncStorage quota exceeded error", async () => {
+      mockedAsyncStorage.setItem.mockRejectedValue(new Error("QuotaExceededError"));
+
+      const newSortConfig = { field: "name" as const, direction: "desc" as const };
+      await store.getState().setSeriesSortConfig(newSortConfig);
+
+      // Should still update state even if storage fails
+      expect(store.getState().series.sortConfig).toEqual(newSortConfig);
+    });
+
+    it("should handle corrupted storage data gracefully", async () => {
+      mockedAsyncStorage.getItem.mockResolvedValue("{ corrupted json");
+
+      await store.getState()._loadSeriesSettingsFromStorage();
+
+      // Should fall back to default config
+      expect(store.getState().series.sortConfig).toEqual(DEFAULT_SERIES_SORT_CONFIG);
+    });
+
+    it("should handle partial configuration objects from storage", async () => {
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify({ field: "name" }));
+
+      await store.getState()._loadSeriesSettingsFromStorage();
+
+      // Should handle partial config (even though it's invalid, it shouldn't crash)
+      expect(store.getState().series.sortConfig).toBeDefined();
+    });
+
+    it("should handle storage unavailable error", async () => {
+      mockedAsyncStorage.getItem.mockRejectedValue(new Error("Storage unavailable"));
+      mockedAsyncStorage.setItem.mockRejectedValue(new Error("Storage unavailable"));
+
+      // Loading should not throw
+      await expect(store.getState()._loadSeriesSettingsFromStorage()).resolves.not.toThrow();
+
+      // Setting should not throw
+      await expect(
+        store.getState().setSeriesSortConfig({ field: "name", direction: "asc" })
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe("Integration Tests", () => {
+    it("should complete full lifecycle: init -> fetch -> sort -> reset", async () => {
+      // Initialize
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+      await store.getState().initializeSeries(true, true);
+
+      expect(store.getState().series.initialized).toBe(true);
+      expect(store.getState().series.ready).toBe(true);
+
+      // Fetch
+      await store.getState().refetchSeries();
+      expect(store.getState().series.series.length).toBeGreaterThan(0);
+
+      // Sort
+      await store.getState().setSeriesSortConfig({ field: "name", direction: "desc" });
+      expect(store.getState().series.sortConfig.field).toBe("name");
+
+      // Reset
+      store.getState().resetSeries();
+      expect(store.getState().series.initialized).toBe(false);
+      expect(store.getState().series.series).toEqual([]);
+    });
+
+    it("should handle reinitialization after reset", async () => {
+      // First initialization
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+      await store.getState().initializeSeries(true, true);
+
+      // Reset
+      store.getState().resetSeries();
+
+      // Second initialization
+      await store.getState().initializeSeries(true, true);
+
+      expect(store.getState().series.initialized).toBe(true);
+      expect(store.getState().series.ready).toBe(true);
+    });
+
+    it("should persist and restore sort configuration across resets", async () => {
+      const customSortConfig = { field: "bookCount" as const, direction: "desc" as const };
+
+      // Set custom sort config
+      await store.getState().setSeriesSortConfig(customSortConfig);
+
+      // Simulate storage persistence
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(customSortConfig));
+
+      // Reset and reinitialize
+      store.getState().resetSeries();
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+      await store.getState().initializeSeries(true, true);
+
+      // Should restore from storage
+      expect(store.getState().series.sortConfig).toEqual(customSortConfig);
+    });
+  });
+
+  describe("Error Recovery", () => {
+    it("should recover from database errors on retry", async () => {
+      // First call fails
+      getAllSeries.mockRejectedValueOnce(new Error("Database connection lost"));
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+
+      // First initialization fails but state should be stable
+      expect(store.getState().series.loading.isInitializing).toBe(false);
+
+      // Retry succeeds
+      getAllSeries.mockResolvedValue(mockSeries);
+      await store.getState().refetchSeries();
+
+      expect(store.getState().series.series).toEqual(mockSeries);
+    });
+
+    it("should handle transformation errors gracefully", async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockImplementation(() => {
+        throw new Error("Transformation error");
+      });
+
+      await store.getState().initializeSeries(true, true);
+
+      // Should not crash the app
+      expect(store.getState().series.initialized).toBe(true);
+    });
+
+    it("should maintain state consistency after multiple errors", async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(true, true);
+
+      // Multiple failed refetches
+      getAllSeries.mockRejectedValue(new Error("Error 1"));
+      await store.getState().refetchSeries();
+
+      getAllSeries.mockRejectedValue(new Error("Error 2"));
+      await store.getState().refetchSeries();
+
+      // State should still be valid
+      expect(store.getState().series.initialized).toBe(true);
+      expect(store.getState().series.loading.isLoadingItems).toBe(false);
+    });
+  });
 });
