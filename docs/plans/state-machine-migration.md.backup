@@ -4,10 +4,7 @@
 
 Migrate player synchronization from implicit state flags to an explicit event-driven state machine to eliminate race conditions and position drift.
 
-**Current Status:**
-- ✅ Phase 1 Complete (Observer Mode)
-- ✅ Phase 2 Complete (Execute Transitions - basic implementation)
-- ⏳ Phase 2.5 Partially Complete (Native Bridge implemented, mixin architecture pending)
+**Current Status:** ✅ Phase 1 Complete (Observer Mode)
 
 ## Architecture Summary
 
@@ -103,62 +100,61 @@ Diagnostics shows: "State: PLAYING, Actually Playing: No"
 
 ---
 
-## Phase 2: Execute Transitions ✅ COMPLETE
+## Phase 2: Execute Transitions
 
 **Goal:** Coordinator starts executing state transitions through services
 
-**Status:** ✅ Complete (Implemented via commit `74d8932`, execution mode enabled)
+**Tasks:**
 
-**Completed Tasks:**
-
-1. ✅ **Enable Execution Mode**
+1. **Enable Execution Mode**
 
    ```typescript
-   // src/services/coordinator/PlayerStateCoordinator.ts:75
-   private readonly observerMode = false; // ✅ Changed from true
+   // In PlayerStateCoordinator.ts
+   private readonly observerMode = false; // Change from true
    ```
 
-2. ✅ **Add Service Method Calls**
-
-   Implemented in `PlayerStateCoordinator.ts:567-623`:
+2. **Add Service Method Calls**
 
    ```typescript
-   private async executeTransition(event: PlayerEvent, nextState: PlayerState | null) {
-     const playerService = PlayerService.getInstance();
-     if (nextState && nextState !== this.context.currentState) {
-       switch (nextState) {
-         case PlayerState.LOADING:
-           await playerService.executeLoadTrack(/*...*/); // ✅ Implemented
-           break;
-         case PlayerState.PLAYING:
-           await playerService.executePlay(); // ✅ PlayerService.ts:467
-           break;
-         case PlayerState.PAUSED:
-           await playerService.executePause(); // ✅ PlayerService.ts:446
-           break;
-         case PlayerState.IDLE:
-           await playerService.executeStop(); // ✅ PlayerService.ts:842
-           break;
-       }
+   private async executeTransition(event: PlayerEvent, nextState: PlayerState) {
+     switch (nextState) {
+       case PlayerState.LOADING:
+         await PlayerService.loadTrack(event.payload);
+         break;
+       case PlayerState.PLAYING:
+         await PlayerService.play();
+         break;
+       case PlayerState.PAUSED:
+         await PlayerService.pause();
+         break;
+       // etc...
      }
-     // Also handles SEEK, SET_RATE, SET_VOLUME events
    }
    ```
 
-3. ✅ **Update Services to Check Coordinator First**
+3. **Update Services to Check Coordinator First**
 
-   Services now dispatch events instead of direct execution. The coordinator validates transitions before calling execute methods.
+   ```typescript
+   // In PlayerService.playTrack()
+   async playTrack(libraryItemId: string) {
+     // Dispatch event instead of direct execution
+     dispatchPlayerEvent({
+       type: 'LOAD_TRACK',
+       payload: { libraryItemId }
+     });
+   }
+   ```
 
-4. ✅ **Add Transition Guards**
-   - ✅ Prevent invalid transitions (validated via transition matrix)
-   - ✅ Add validation for track loading state
-   - ✅ Handle concurrent session creation (via serial event processing)
+4. **Add Transition Guards**
+   - Prevent invalid transitions (e.g., play when already playing)
+   - Add validation for track loading state
+   - Handle concurrent session creation
 
 **Testing:**
 
-- ✅ All transitions work through coordinator (129 tests passing)
-- ✅ Error recovery paths tested
-- ✅ No duplicate sessions created (validated in tests)
+- Verify all transitions work through coordinator
+- Test error recovery paths
+- Validate no duplicate sessions created
 
 **Important Note on Context Updates:**
 
@@ -182,11 +178,7 @@ Even when coordinator controls execution, it must observe reality to detect:
 
 **Goal:** Implement native event bridge to synchronize UI and Headless JS coordinators
 
-**Status:** ⏳ PARTIALLY COMPLETE
-- ✅ Tasks 1-3: Native Bridge Implementation (Complete)
-- ❌ Task 4: Mixin Architecture (Not Started)
-- ❓ Task 5: Track Metadata Sync (Status Unknown)
-- ❌ Task 6: Remove Direct Store Access (Not Started)
+**Status:** ⏳ Planned
 
 ### Problem Statement
 
@@ -234,9 +226,9 @@ Native Event Bridge
 
 ### Implementation Tasks
 
-**1. Native Event Bridge Module (2-3 days)** ✅ COMPLETE
+**1. Native Event Bridge Module (2-3 days)**
 
-Created Android and iOS modules to broadcast events across JS contexts:
+Create Android and iOS modules to broadcast events across JS contexts:
 
 **Android (`ABSPlayerEventBridge.kt`):**
 
@@ -265,12 +257,12 @@ class ABSPlayerEventBridge: RCTEventEmitter {
 }
 ```
 
-- [x] ✅ Create Android native module (`plugins/nativeEventBridge/android/ABSPlayerEventBridgeModule.kt`)
-- [x] ✅ Create iOS native module (`plugins/nativeEventBridge/ios/ABSPlayerEventBridge.swift`)
-- [x] ✅ Add TypeScript bindings (`src/services/nativeEventBridge.ts`)
-- [x] ✅ Test cross-context event delivery (tests passing)
+- [ ] Create Android native module
+- [ ] Create iOS native module
+- [ ] Add TypeScript bindings
+- [ ] Test cross-context event delivery
 
-**2. Event Bus Update (1 day)** ✅ COMPLETE
+**2. Event Bus Update (1 day)**
 
 Update `eventBus.ts` to use native bridge:
 
@@ -301,12 +293,12 @@ export class PlayerEventBus {
 }
 ```
 
-- [x] ✅ Add native bridge integration (`src/services/coordinator/nativeBridgeIntegrator.ts`)
-- [x] ✅ Add context ID for echo prevention (implemented with CONTEXT_ID)
-- [x] ✅ Add fallback for non-native platforms (Proxy with LINKING_ERROR)
-- [x] ✅ Update event bus tests (nativeBridgeIntegrator.test.ts passing)
+- [ ] Add native bridge integration
+- [ ] Add context ID for echo prevention
+- [ ] Add fallback for non-native platforms
+- [ ] Update event bus tests
 
-**3. Context Detection Utility (1 day)** ✅ COMPLETE
+**3. Context Detection Utility (1 day)**
 
 ```typescript
 // src/services/coordinator/contextDetection.ts
@@ -327,11 +319,11 @@ export function getContextId(): string {
 }
 ```
 
-- [x] ✅ Create context detection utility (`src/services/coordinator/contextDetection.ts`)
-- [x] ✅ Add tests for context detection (contextDetection.test.ts passing)
-- [x] ✅ Add logging for context awareness (implemented in nativeBridgeIntegrator.ts)
+- [ ] Create context detection utility
+- [ ] Add tests for context detection
+- [ ] Add logging for context awareness
 
-**4. Coordinator Architecture with Mixins (2 days)** ❌ NOT STARTED
+**4. Coordinator Architecture with Mixins (2 days)**
 
 Refactor to use Mixins for code reuse between UI, Headless, and Unified coordinators:
 
@@ -443,25 +435,19 @@ export function getCoordinator(): BaseCoordinator {
 }
 ```
 
-**Current Status:**
+**Benefits:**
 
-Currently using a single `PlayerStateCoordinator` with execution mode enabled. This works but doesn't split responsibilities by context.
+- ✅ **Code Reuse**: `updateStore` and `executeTransition` logic written once
+- ✅ **Explicit Capabilities**: Mixins clearly define what each coordinator can do
+- ✅ **Platform Specifics**: iOS gets both capabilities, Android gets split
+- ✅ **Type Safety**: Mixins add methods to the class type
 
-**Benefits of Mixin Architecture:**
+- [ ] Create `mixins.ts` with `WithStoreUpdates` and `WithTrackPlayerExecution`
+- [ ] Refactor `PlayerStateCoordinator` to `BaseCoordinator`
+- [ ] Create `UICoordinator`, `HeadlessCoordinator`, `UnifiedCoordinator`
+- [ ] Update factory and tests
 
-- **Code Reuse**: `updateStore` and `executeTransition` logic written once
-- **Explicit Capabilities**: Mixins clearly define what each coordinator can do
-- **Platform Specifics**: iOS gets both capabilities, Android gets split
-- **Type Safety**: Mixins add methods to the class type
-
-**Remaining Work:**
-
-- [ ] ❌ Create `mixins.ts` with `WithStoreUpdates` and `WithTrackPlayerExecution`
-- [ ] ❌ Refactor `PlayerStateCoordinator` to `BaseCoordinator`
-- [ ] ❌ Create `UICoordinator`, `HeadlessCoordinator`, `UnifiedCoordinator`
-- [ ] ❌ Update factory and tests
-
-**5. Track Metadata Synchronization** ❓ STATUS UNKNOWN
+**5. Track Metadata Synchronization**
 
 How does the UI know what track is playing if Headless loads it?
 
@@ -474,7 +460,7 @@ How does the UI know what track is playing if Headless loads it?
 7. Updates `store.activeTrackId`
 8. UI components reactively update metadata from store
 
-**6. Remove Direct Store Access from Background Service (1 day)** ❌ NOT STARTED
+**6. Remove Direct Store Access from Background Service (1 day)**
 
 ```typescript
 // src/services/PlayerBackgroundService.ts
@@ -489,27 +475,20 @@ dispatchPlayerEvent({
 });
 ```
 
-**Current Status:** PlayerBackgroundService still has 25+ direct store access calls:
-- `store.updatePosition()` - 15+ occurrences
-- `store.updatePlayingState()` - 1 occurrence
-- `store.updateNowPlayingMetadata()` - 2+ occurrences
+- [ ] Remove all `store.updatePosition()` calls
+- [ ] Remove all `store.setPlaying()` calls
+- [ ] Replace with event dispatches
+- [ ] Verify no store access remains
 
-**Remaining Work:**
+**6. Testing (2-3 days)**
 
-- [ ] ❌ Remove all `store.updatePosition()` calls
-- [ ] ❌ Remove all `store.setPlaying()` calls
-- [ ] ❌ Replace with event dispatches
-- [ ] ❌ Verify no store access remains
-
-**7. Testing (2-3 days)** ⏳ PARTIALLY COMPLETE
-
-- [x] ✅ Unit tests with native module mocks (nativeBridgeIntegrator.test.ts, contextDetection.test.ts)
-- [ ] ❌ Integration tests for cross-context events (requires mixin architecture)
-- [ ] ⏳ Manual: UI updates from background events (needs validation)
-- [ ] ⏳ Manual: Remote controls work when backgrounded (needs validation)
-- [ ] ⏳ Manual: No duplicate TrackPlayer calls (needs validation)
-- [ ] ⏳ Manual: Position/state stays synced (needs validation)
-- [ ] ⏳ Performance: Event latency < 1ms (needs measurement)
+- [ ] Unit tests with native module mocks
+- [ ] Integration tests for cross-context events
+- [ ] Manual: UI updates from background events
+- [ ] Manual: Remote controls work when backgrounded
+- [ ] Manual: No duplicate TrackPlayer calls
+- [ ] Manual: Position/state stays synced
+- [ ] Performance: Event latency < 1ms
 
 ### Key Architectural Decisions
 
@@ -648,11 +627,9 @@ A: Yes! Native bridge broadcasts ALL events to both contexts. All coordinators e
 
 ---
 
-## Phase 3: Centralize Position Logic ❌ NOT STARTED
+## Phase 3: Centralize Position Logic
 
 **Goal:** Coordinator owns canonical position, reconciles all sources
-
-**Status:** ❌ Not Started (Depends on Phase 2.5 completion)
 
 **Tasks:**
 
@@ -711,11 +688,9 @@ A: Yes! Native bridge broadcasts ALL events to both contexts. All coordinators e
 
 ---
 
-## Phase 4: State Propagation ❌ NOT STARTED
+## Phase 4: State Propagation
 
 **Goal:** Replace playerSlice with coordinator state subscriptions
-
-**Status:** ❌ Not Started (Depends on Phase 2.5 and Phase 3 completion)
 
 **Tasks:**
 
@@ -775,11 +750,9 @@ A: Yes! Native bridge broadcasts ALL events to both contexts. All coordinators e
 
 ---
 
-## Phase 5: Cleanup ❌ NOT STARTED
+## Phase 5: Cleanup
 
 **Goal:** Remove legacy code and simplify
-
-**Status:** ❌ Not Started (Final phase, depends on all previous phases)
 
 **Tasks:**
 
@@ -1035,81 +1008,3 @@ After each phase, evaluate:
 4. **State machine missing edge cases?** → Add transitions before proceeding
 
 Do not proceed to next phase until current phase is stable in production.
-
----
-
-## Current Implementation Status Summary
-
-**Last Updated:** 2025-11-27
-
-### ✅ Completed Phases
-
-**Phase 1: Observer Mode** - 100% Complete
-- Full event-driven state machine with validation
-- 129 tests passing (eventBus, transitions, coordinator, contextDetection, nativeBridgeIntegrator)
-- Diagnostics UI with transition history
-- Context updates from all events
-- File: `src/services/coordinator/PlayerStateCoordinator.ts`
-
-**Phase 2: Execute Transitions** - 100% Complete
-- Execution mode enabled (`observerMode = false`)
-- Execute methods implemented in PlayerService
-- Coordinator controls playback via event dispatch
-- Commit: `74d8932` "Begin transitioning control to the Coordinator"
-
-**Phase 2.5: Native Event Bridge** - 50% Complete (Tasks 1-3 done)
-
-Completed:
-- ✅ Native bridge modules (Android/iOS)
-- ✅ Context detection utility
-- ✅ Native bridge integrator with echo prevention
-- ✅ Unit tests passing
-- Files:
-  - `plugins/nativeEventBridge/android/ABSPlayerEventBridgeModule.kt`
-  - `plugins/nativeEventBridge/ios/ABSPlayerEventBridge.swift`
-  - `src/services/nativeEventBridge.ts`
-  - `src/services/coordinator/contextDetection.ts`
-  - `src/services/coordinator/nativeBridgeIntegrator.ts`
-
-### ⏳ In Progress
-
-**Phase 2.5: Remaining Tasks**
-
-Task 4 - Mixin Architecture (NOT STARTED):
-- Need to create `WithStoreUpdates` and `WithTrackPlayerExecution` mixins
-- Need to split `PlayerStateCoordinator` into `UICoordinator`, `HeadlessCoordinator`, `UnifiedCoordinator`
-- Currently using single coordinator with execution mode
-
-Task 5 - Track Metadata Sync (STATUS UNKNOWN):
-- Need to verify track metadata flows from Headless to UI
-
-Task 6 - Remove Direct Store Access (NOT STARTED):
-- `PlayerBackgroundService.ts` still has 25+ direct store calls
-- Needs refactoring to dispatch events instead
-
-Task 7 - Manual Testing (NEEDS VALIDATION):
-- Cross-context event flow
-- Background playback UI updates
-- Performance measurements
-
-### ❌ Not Started Phases
-
-- **Phase 3:** Centralize Position Logic
-- **Phase 4:** State Propagation (playerSlice replacement)
-- **Phase 5:** Cleanup
-
-### Next Steps
-
-1. **Complete Phase 2.5 Task 4** (Mixin Architecture)
-   - Highest priority for Android Headless JS support
-   - Prevents duplicate TrackPlayer calls
-   - Prevents unsafe store access from Headless context
-
-2. **Complete Phase 2.5 Task 6** (Remove Direct Store Access)
-   - Required for safe Headless operation
-   - 25+ call sites to refactor in PlayerBackgroundService
-
-3. **Validate Phase 2.5** (Manual Testing)
-   - Test background playback scenarios
-   - Verify cross-context synchronization
-   - Measure performance impact

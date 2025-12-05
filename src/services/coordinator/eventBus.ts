@@ -11,8 +11,8 @@
  * - NO circular dependency!
  */
 
-import { PlayerEvent } from "@/types/coordinator";
 import { logger } from "@/lib/logger";
+import { PlayerEvent } from "@/types/coordinator";
 
 const log = logger.forTag("PlayerEventBus");
 

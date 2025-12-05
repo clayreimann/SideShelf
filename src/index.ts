@@ -21,6 +21,7 @@ import {
 } from "@/lib/appVersion";
 import { performPeriodicCleanup } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
+import { initializeNativeBridge } from "@/services/coordinator";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { playerService } from "@/services/PlayerService";
@@ -34,6 +35,8 @@ const log = logger.forTag("App");
 // Ensure that the coordinator is initialized on app startup
 const coordinator = getCoordinator();
 export { coordinator };
+
+initializeNativeBridge();
 /**
  * Initialize all singleton services
  *
