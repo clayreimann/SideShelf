@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 16.24.1",
+    "version": ">= 18.0.1",
     "appVersionSource": "remote"
   },
   "build": {
@@ -16,20 +16,6 @@
     "production": {
       "autoIncrement": true,
       "channel": "production"
-    }
-  },
-  "update": {
-    "development": {
-      "channel": "development"
-    },
-    "preview": {
-      "channel": "preview"
-    },
-    "production": {
-      "channel": "production"
-    },
-    "pr": {
-      "channel": "pr"
     }
   },
   "submit": {

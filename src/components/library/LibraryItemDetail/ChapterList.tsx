@@ -29,7 +29,7 @@ export default function ChapterList({
   const chapterRows: ChapterRow[] = useMemo(() => {
     return chapters.map((ch) => ({
       id: `${ch.id}`,
-      mediaId: '', // Not needed for our comparison
+      mediaId: "", // Not needed for our comparison
       chapterId: ch.id,
       start: ch.start,
       end: ch.end,
@@ -87,7 +87,7 @@ export default function ChapterList({
       }
       await playerService.seekTo(chapterStart);
     } catch (error) {
-      console.error('[ChapterList] Failed to jump to chapter:', error);
+      console.error("[ChapterList] Failed to jump to chapter:", error);
     }
   };
 
@@ -100,7 +100,7 @@ export default function ChapterList({
           style={{
             paddingVertical: 12,
             paddingHorizontal: 16,
-            alignItems: 'center',
+            alignItems: "center",
             borderBottomWidth: 1,
             borderBottomColor: isDark ? "#444" : "#eee",
           }}
@@ -120,7 +120,7 @@ export default function ChapterList({
           style={{
             paddingVertical: 12,
             paddingHorizontal: 16,
-            alignItems: 'center',
+            alignItems: "center",
             borderBottomWidth: 1,
             borderBottomColor: isDark ? "#444" : "#eee",
           }}
@@ -153,12 +153,12 @@ export default function ChapterList({
                     fontWeight: "600",
                     marginBottom: 2,
                     opacity: isPlayed ? 0.5 : 1,
-                  }
+                  },
                 ]}
               >
                 {chapter.title}
               </Text>
-              <Text style={{ opacity: isPlayed ? 0.5 : 1 }}>
+              <Text style={[styles.text, { opacity: isPlayed ? 0.5 : 1 }]}>
                 {formatTime(chapterDuration)}
               </Text>
             </View>
@@ -168,7 +168,7 @@ export default function ChapterList({
                 {
                   fontSize: 12,
                   opacity: isPlayed ? 0.4 : 0.7,
-                }
+                },
               ]}
             >
               {formatTime(chapter.start)} - {formatTime(chapter.end)}
