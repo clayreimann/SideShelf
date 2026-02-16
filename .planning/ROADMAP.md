@@ -39,7 +39,13 @@ Phase 1 (observer mode) is complete and production-validated. This roadmap cover
 4. Setting `observerMode = true` reverts the coordinator to Phase 1 behavior without a code deploy
 5. NATIVE\_\* events (lock screen, external controls) continue to update coordinator context unconditionally, even when coordinator is executor
 6. All existing playback behaviors work without regression: resume position, chapter display, lock screen controls, background audio
-   **Plans**: TBD
+
+**Plans:** 2 plans
+
+Plans:
+
+- [ ] 02-01-PLAN.md — Fix executeTransition bug, observerMode runtime toggle, BGS duplicate side effect removal
+- [ ] 02-02-PLAN.md — Execution control contract tests (EXEC-01 through EXEC-06)
 
 ### Phase 3: Position Reconciliation
 
@@ -91,7 +97,7 @@ Phases execute in numeric order: 2 → 3 → 4 → 5
 | Phase                      | Plans Complete | Status      | Completed  |
 | -------------------------- | -------------- | ----------- | ---------- |
 | 1. Observer Mode           | -              | Complete    | 2026-02-16 |
-| 2. Execution Control       | 0/TBD          | Not started | -          |
+| 2. Execution Control       | 0/2            | Planned     | -          |
 | 3. Position Reconciliation | 0/TBD          | Not started | -          |
 | 4. State Propagation       | 0/TBD          | Not started | -          |
 | 5. Cleanup                 | 0/TBD          | Not started | -          |
