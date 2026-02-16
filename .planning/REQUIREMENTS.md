@@ -69,7 +69,7 @@ Deferred — not in current migration scope.
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+All 24 v1 requirements mapped to phases. Roadmap created 2026-02-16.
 
 | Requirement | Phase   | Status  |
 | ----------- | ------- | ------- |
@@ -102,9 +102,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 - v1 requirements: 24 total
 - Mapped to phases: 24
-- Unmapped: 0 ✓
+- Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-02-16_
-_Last updated: 2026-02-16 after initial definition_
+_Last updated: 2026-02-16 after roadmap creation_
