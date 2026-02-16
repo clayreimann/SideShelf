@@ -10,31 +10,31 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 2 of 5 (Execution Control)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-16 — Completed 02-01: fixed executeTransition bug, cleaned BGS remote handlers
+Plan: 2 of 2 in current phase (COMPLETE)
+Status: Phase 2 complete
+Last activity: 2026-02-16 — Completed 02-02: EXEC-01 through EXEC-05 contract tests, 3 coordinator bug fixes
 
-Progress: [===-------] 30% (Phase 1 complete; Phase 2 plan 1/2 complete)
+Progress: [====------] 40% (Phase 1 complete; Phase 2 complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 1 (Phase 2 started)
-- Average duration: 3 min
-- Total execution time: 3 min
+- Total plans completed: 2 (Phase 2 complete)
+- Average duration: 3.5 min
+- Total execution time: 7 min
 
 **By Phase:**
 
 | Phase             | Plans   | Total | Avg/Plan |
 | ----------------- | ------- | ----- | -------- |
 | 1. Observer Mode  | Shipped | -     | -        |
-| 2. Execution Ctrl | 1/2     | 3 min | 3 min    |
+| 2. Execution Ctrl | 2/2     | 7 min | 3.5 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 3 min
-- Trend: -
+- Last 5 plans: 3 min, 4 min
+- Trend: stable ~3-4 min/plan
 
 _Updated after each plan completion_
 
@@ -52,6 +52,9 @@ Recent decisions affecting current work:
 - [Phase 2 Plan 01]: Remove stale nextState !== currentState guard in executeTransition (simplest fix; validation already done in validateTransition)
 - [Phase 2 Plan 01]: Remove applySmartRewind import entirely from BGS — coordinator's executePlay handles it via PlayerService
 - [Phase 2 Plan 01]: BGS remote handlers are pure event dispatchers — side effects belong in coordinator's executeTransition
+- [Phase 2 Plan 02]: executePlay/executePause must guard on event.type (not just nextState) to avoid false firing for same-state no-ops
+- [Phase 2 Plan 02]: SET_RATE/SET_VOLUME belong in transition matrix as no-op transitions so validation gate allows executeTransition to call executeSetRate/executeSetVolume
+- [Phase 2 Plan 02]: executeStop fires on PlayerState.STOPPING case (not IDLE) — STOP from PLAYING goes PLAYING->STOPPING->IDLE via NATIVE_STATE_CHANGED
 
 ### Pending Todos
 
@@ -67,5 +70,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-16
-Stopped at: Completed 02-01-PLAN.md (executeTransition bug fix + BGS cleanup)
+Stopped at: Completed 02-02-PLAN.md (EXEC-01 to EXEC-05 contract tests + coordinator bug fixes)
 Resume file: None
