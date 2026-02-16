@@ -47,6 +47,8 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     SEEK: PlayerState.SEEKING,
     LOAD_TRACK: PlayerState.LOADING, // Allow switching tracks while playing
     BUFFERING_STARTED: PlayerState.BUFFERING,
+    SET_RATE: PlayerState.PLAYING, // No-op transition — rate change doesn't change state
+    SET_VOLUME: PlayerState.PLAYING, // No-op transition — volume change doesn't change state
     NATIVE_STATE_CHANGED: PlayerState.PLAYING, // Allow native state changes during playback
     NATIVE_TRACK_CHANGED: PlayerState.PLAYING, // Allow track changes during playback
     NATIVE_ERROR: PlayerState.ERROR,
@@ -59,6 +61,8 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     STOP: PlayerState.STOPPING,
     SEEK: PlayerState.SEEKING,
     LOAD_TRACK: PlayerState.LOADING,
+    SET_RATE: PlayerState.PAUSED, // No-op transition — rate change doesn't change state
+    SET_VOLUME: PlayerState.PAUSED, // No-op transition — volume change doesn't change state
     NATIVE_STATE_CHANGED: PlayerState.PAUSED, // Allow native state changes while paused
     NATIVE_TRACK_CHANGED: PlayerState.PAUSED, // Allow track changes while paused
     NATIVE_ERROR: PlayerState.ERROR,

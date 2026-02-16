@@ -598,11 +598,21 @@ export class PlayerStateCoordinator extends EventEmitter {
             break;
 
           case PlayerState.PLAYING:
-            await playerService.executePlay();
+            // Only call executePlay when actually transitioning into PLAYING (not same-state no-ops like SET_RATE)
+            if (event.type === "PLAY") {
+              await playerService.executePlay();
+            }
             break;
 
           case PlayerState.PAUSED:
-            await playerService.executePause();
+            // Only call executePause when actually transitioning into PAUSED (not same-state no-ops like SET_RATE)
+            if (event.type === "PAUSE") {
+              await playerService.executePause();
+            }
+            break;
+
+          case PlayerState.STOPPING:
+            await playerService.executeStop();
             break;
 
           case PlayerState.IDLE:
