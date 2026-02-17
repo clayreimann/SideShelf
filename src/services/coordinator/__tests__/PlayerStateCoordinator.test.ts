@@ -31,6 +31,36 @@ jest.mock("../../PlayerService", () => {
   };
 });
 
+// Mock DB helpers used by resolveCanonicalPosition
+jest.mock("@/db/helpers/localListeningSessions", () => ({
+  getActiveSession: jest.fn(),
+  getAllActiveSessionsForUser: jest.fn(),
+}));
+
+jest.mock("@/db/helpers/mediaProgress", () => ({
+  getMediaProgressForLibraryItem: jest.fn(),
+}));
+
+jest.mock("@/db/helpers/users", () => ({
+  getUserByUsername: jest.fn(),
+}));
+
+jest.mock("@/lib/secureStore", () => ({
+  getStoredUsername: jest.fn(),
+}));
+
+jest.mock("@/lib/asyncStore", () => ({
+  ASYNC_KEYS: { position: "position" },
+  getItem: jest.fn(),
+  saveItem: jest.fn(),
+}));
+
+jest.mock("@/stores/appStore", () => ({
+  useAppStore: {
+    getState: jest.fn(),
+  },
+}));
+
 // Mock logger
 jest.mock("@/lib/logger", () => ({
   log: {
@@ -1648,6 +1678,283 @@ describe("PlayerStateCoordinator", () => {
       // No rejections
       const metrics = coordinator.getMetrics();
       expect(metrics.rejectedTransitionCount).toBe(0);
+    });
+  });
+
+  // ============================================================================
+  // Position Reconciliation (POS-01 through POS-03)
+  // ============================================================================
+
+  describe("Position Reconciliation (POS-01 through POS-03)", () => {
+    const { getActiveSession } = require("@/db/helpers/localListeningSessions");
+    const { getMediaProgressForLibraryItem } = require("@/db/helpers/mediaProgress");
+    const { getUserByUsername } = require("@/db/helpers/users");
+    const { getStoredUsername } = require("@/lib/secureStore");
+    const { getItem: getAsyncItem } = require("@/lib/asyncStore");
+    const { useAppStore } = require("@/stores/appStore");
+
+    const mockStore = {
+      player: {
+        position: 0,
+      },
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      getStoredUsername.mockResolvedValue("testuser");
+      getUserByUsername.mockResolvedValue({ id: "user1" });
+      getActiveSession.mockResolvedValue(null);
+      getMediaProgressForLibraryItem.mockResolvedValue(null);
+      getAsyncItem.mockResolvedValue(null);
+      useAppStore.getState.mockReturnValue(mockStore);
+      mockStore.player.position = 0;
+    });
+
+    // --------------------------------------------------------------------------
+    // POS-01: Position priority chain
+    // --------------------------------------------------------------------------
+
+    describe("POS-01: position priority chain", () => {
+      it("should prefer active session position over saved progress", async () => {
+        getActiveSession.mockResolvedValue({
+          currentTime: 1800,
+          updatedAt: new Date("2024-01-01T12:00:00Z"),
+        });
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 900,
+          lastUpdate: new Date("2024-01-01T11:00:00Z"),
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("lib-item-1");
+
+        expect(result.position).toBe(1800);
+        expect(result.source).toBe("activeSession");
+      });
+
+      it("should prefer saved progress when no active session exists", async () => {
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 900,
+          lastUpdate: new Date("2024-01-01T11:00:00Z"),
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("lib-item-1");
+
+        expect(result.position).toBe(900);
+        expect(result.source).toBe("savedProgress");
+      });
+
+      it("should fall back to AsyncStorage when no DB sources exist", async () => {
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue(null);
+        getAsyncItem.mockResolvedValue(600);
+
+        const result = await coordinator.resolveCanonicalPosition("lib-item-1");
+
+        expect(result.position).toBe(600);
+        expect(result.source).toBe("asyncStorage");
+      });
+
+      it("should fall back to store position as last resort", async () => {
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue(null);
+        getAsyncItem.mockResolvedValue(null);
+        mockStore.player.position = 300;
+
+        const result = await coordinator.resolveCanonicalPosition("lib-item-1");
+
+        expect(result.position).toBe(300);
+        expect(result.source).toBe("store");
+      });
+
+      it("should prefer more recent timestamp when large discrepancy exists", async () => {
+        // Session has old timestamp and small position (100s)
+        // savedProgress has newer timestamp and large position (1800s)
+        getActiveSession.mockResolvedValue({
+          currentTime: 100,
+          updatedAt: new Date("2024-01-01T10:00:00Z"), // older
+        });
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 1800,
+          lastUpdate: new Date("2024-01-01T12:00:00Z"), // newer
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("lib-item-1");
+
+        // Large discrepancy (>30s), savedProgress is newer => use savedProgress
+        expect(result.position).toBe(1800);
+        expect(result.source).toBe("savedProgress");
+      });
+    });
+
+    // --------------------------------------------------------------------------
+    // POS-02: MIN_PLAUSIBLE_POSITION rejection
+    // --------------------------------------------------------------------------
+
+    describe("POS-02: MIN_PLAUSIBLE_POSITION rejection", () => {
+      it("should reject session position below MIN_PLAUSIBLE_POSITION when saved progress is available", async () => {
+        getActiveSession.mockResolvedValue({
+          currentTime: 3, // below 5s threshold
+          updatedAt: new Date(),
+        });
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 1800,
+          lastUpdate: new Date(),
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("lib-item-1");
+
+        expect(result.position).toBe(1800);
+        expect(result.source).toBe("savedProgress");
+      });
+
+      it("should reject session position below MIN_PLAUSIBLE_POSITION and fall back to AsyncStorage", async () => {
+        getActiveSession.mockResolvedValue({
+          currentTime: 2, // below 5s threshold
+          updatedAt: new Date(),
+        });
+        getMediaProgressForLibraryItem.mockResolvedValue(null);
+        getAsyncItem.mockResolvedValue(600);
+
+        const result = await coordinator.resolveCanonicalPosition("lib-item-1");
+
+        expect(result.position).toBe(600);
+        expect(result.source).toBe("asyncStorage");
+      });
+
+      it("should accept session position below MIN_PLAUSIBLE_POSITION when no better alternative", async () => {
+        getActiveSession.mockResolvedValue({
+          currentTime: 3, // below 5s threshold but no better option
+          updatedAt: new Date(),
+        });
+        getMediaProgressForLibraryItem.mockResolvedValue(null);
+        getAsyncItem.mockResolvedValue(null);
+
+        const result = await coordinator.resolveCanonicalPosition("lib-item-1");
+
+        // No better option, so session position is used despite being small
+        expect(result.position).toBe(3);
+        expect(result.source).toBe("activeSession");
+      });
+    });
+
+    // --------------------------------------------------------------------------
+    // POS-03: Native-0 guard during loading
+    // --------------------------------------------------------------------------
+
+    describe("POS-03: native-0 guard during loading", () => {
+      it("should not overwrite context.position with native 0 during loading", async () => {
+        // Enter LOADING state
+        await coordinator.dispatch({
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "test-item" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Manually set context position (simulating a resolved position)
+        // by dispatching a POSITION_RECONCILED event
+        await coordinator.dispatch({
+          type: "POSITION_RECONCILED",
+          payload: { position: 1800 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(coordinator.getContext().position).toBe(1800);
+
+        // Now dispatch NATIVE_PROGRESS_UPDATED with position=0 during loading
+        await coordinator.dispatch({
+          type: "NATIVE_PROGRESS_UPDATED",
+          payload: { position: 0, duration: 3600, buffered: 0 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Position should NOT have been overwritten to 0
+        expect(coordinator.getContext().position).toBe(1800);
+        // Duration IS updated even when position is guarded
+        expect(coordinator.getContext().duration).toBe(3600);
+      });
+
+      it("should accept native position > 0 during loading", async () => {
+        // Enter LOADING state
+        await coordinator.dispatch({
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "test-item" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Dispatch NATIVE_PROGRESS_UPDATED with non-zero position during loading
+        await coordinator.dispatch({
+          type: "NATIVE_PROGRESS_UPDATED",
+          payload: { position: 500, duration: 3600, buffered: 0 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Non-zero position IS accepted
+        expect(coordinator.getContext().position).toBe(500);
+      });
+
+      it("should accept native position 0 when NOT loading", async () => {
+        // Reach PLAYING state
+        await coordinator.dispatch({
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "test-item" },
+        });
+        await coordinator.dispatch({
+          type: "QUEUE_RELOADED",
+          payload: { position: 0 },
+        });
+        await coordinator.dispatch({ type: "PLAY" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Advance position first
+        await coordinator.dispatch({
+          type: "NATIVE_PROGRESS_UPDATED",
+          payload: { position: 1000, duration: 3600, buffered: 0 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Now send position=0 when PLAYING (not loading)
+        await coordinator.dispatch({
+          type: "NATIVE_PROGRESS_UPDATED",
+          payload: { position: 0, duration: 3600, buffered: 0 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Position 0 IS accepted when not in loading state
+        expect(coordinator.getContext().position).toBe(0);
+      });
+    });
+
+    // --------------------------------------------------------------------------
+    // POS-06: Android BGS coordinator isolation (documented as convention)
+    // --------------------------------------------------------------------------
+
+    describe("POS-06: Android BGS coordinator isolation", () => {
+      /**
+       * POS-06: Android BGS coordinator isolation is satisfied by convention.
+       *
+       * On Android, PlayerBackgroundService runs in a SEPARATE JavaScript context
+       * from the main UI. Both contexts call getCoordinator(), which returns an
+       * instance that is local to that JS context. Since there is NO shared memory
+       * between the main UI thread and the headless JS background service:
+       *
+       * - UI coordinator: Receives events from UI interactions
+       * - BGS coordinator: Receives events from TrackPlayer native events
+       * - Both coordinators read from the same DB (SQLite) and AsyncStorage
+       * - Neither coordinator writes to the other's in-memory state
+       *
+       * This is enforced by the platform (separate JS contexts) and verified by
+       * convention (getCoordinator() is module-local singleton per context).
+       *
+       * See: PlayerBackgroundService.ts lines 44-53 (HEADLESS JS ARCHITECTURE NOTE)
+       */
+      it.skip("POS-06 is a platform convention — no executable test required", () => {
+        // BGS creates its own coordinator via getCoordinator() at module load time.
+        // On Android, this is a completely separate JS context — no shared state.
+        // Both coordinators stay eventually consistent by reading from SQLite/AsyncStorage.
+        // This is verified by PlayerBackgroundService.ts architecture documentation,
+        // not by an executable unit test.
+      });
     });
   });
 });
