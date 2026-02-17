@@ -132,6 +132,24 @@ jest.mock("@/services/coordinator/eventBus", () => ({
   dispatchPlayerEvent: jest.fn(),
 }));
 
+// Mock coordinator so getCoordinator() returns a mock with resolveCanonicalPosition
+jest.mock("@/services/coordinator/PlayerStateCoordinator", () => {
+  const { jest } = require("@jest/globals");
+  const mockResolveCanonicalPosition = jest.fn();
+  const mockCoordinator = {
+    resolveCanonicalPosition: mockResolveCanonicalPosition,
+  };
+  return {
+    getCoordinator: jest.fn(() => mockCoordinator),
+    PlayerStateCoordinator: {
+      getInstance: jest.fn(() => mockCoordinator),
+      resetInstance: jest.fn(),
+    },
+    __mockCoordinator: mockCoordinator,
+    __mockResolveCanonicalPosition: mockResolveCanonicalPosition,
+  };
+});
+
 describe("PlayerService", () => {
   const mockedTrackPlayer = TrackPlayer as jest.Mocked<typeof TrackPlayer>;
   const { getLibraryItemById } = require("@/db/helpers/libraryItems");
@@ -150,6 +168,9 @@ describe("PlayerService", () => {
   const { getMediaProgressForLibraryItem } = require("@/db/helpers/mediaProgress");
   const { getItem: getAsyncItem } = require("@/lib/asyncStore");
   const { dispatchPlayerEvent } = require("@/services/coordinator/eventBus");
+  const {
+    __mockResolveCanonicalPosition,
+  } = require("@/services/coordinator/PlayerStateCoordinator");
 
   let playerService: PlayerService;
 
@@ -255,6 +276,14 @@ describe("PlayerService", () => {
     getAsyncItem.mockResolvedValue(null);
     ensureItemInDocuments.mockResolvedValue(undefined);
     downloadService.repairDownloadStatus.mockResolvedValue(undefined);
+
+    // Default: resolveCanonicalPosition returns position 0 (no resume)
+    __mockResolveCanonicalPosition.mockResolvedValue({
+      position: 0,
+      source: "store",
+      authoritativePosition: null,
+      asyncStoragePosition: null,
+    });
   });
 
   afterEach(() => {
@@ -402,14 +431,12 @@ describe("PlayerService", () => {
     });
 
     it("should seek to resume position if available", async () => {
-      getActiveSession.mockResolvedValue({
-        id: "session-1",
-        userId: "user-1",
-        libraryItemId: "item-1",
-        currentTime: 300,
-        startTime: 0,
-        duration: 3600,
-        updatedAt: new Date("2024-01-01T12:00:00Z"),
+      // resolveCanonicalPosition is now coordinator-owned; mock it to return a resume position
+      __mockResolveCanonicalPosition.mockResolvedValue({
+        position: 300,
+        source: "activeSession",
+        authoritativePosition: 300,
+        asyncStoragePosition: null,
       });
 
       await playerService.executeLoadTrack("item-1");
@@ -536,24 +563,25 @@ describe("PlayerService", () => {
 
   describe("Resume Position", () => {
     it("should use active session position", async () => {
-      getActiveSession.mockResolvedValue({
-        id: "session-1",
-        currentTime: 500,
-        startTime: 0,
-        updatedAt: new Date(),
+      // resolveCanonicalPosition is now owned by the coordinator; mock its result
+      __mockResolveCanonicalPosition.mockResolvedValue({
+        position: 500,
+        source: "activeSession",
+        authoritativePosition: 500,
+        asyncStoragePosition: null,
       });
 
-      // We need to test determineResumePosition indirectly through executeLoadTrack
       await playerService.executeLoadTrack("item-1");
 
       expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(500);
     });
 
     it("should use saved progress if no active session", async () => {
-      getActiveSession.mockResolvedValue(null);
-      getMediaProgressForLibraryItem.mockResolvedValue({
-        currentTime: 300,
-        lastUpdate: new Date(),
+      __mockResolveCanonicalPosition.mockResolvedValue({
+        position: 300,
+        source: "savedProgress",
+        authoritativePosition: 300,
+        asyncStoragePosition: null,
       });
 
       await playerService.executeLoadTrack("item-1");
@@ -562,7 +590,12 @@ describe("PlayerService", () => {
     });
 
     it("should use AsyncStorage position if available", async () => {
-      getAsyncItem.mockResolvedValue(400);
+      __mockResolveCanonicalPosition.mockResolvedValue({
+        position: 400,
+        source: "asyncStorage",
+        authoritativePosition: 400,
+        asyncStoragePosition: 400,
+      });
 
       await playerService.executeLoadTrack("item-1");
 
@@ -570,6 +603,7 @@ describe("PlayerService", () => {
     });
 
     it("should start from beginning if no resume position", async () => {
+      // Default mock already returns position 0
       await playerService.executeLoadTrack("item-1");
 
       expect(mockedTrackPlayer.seekTo).not.toHaveBeenCalled();
