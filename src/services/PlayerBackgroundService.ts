@@ -12,6 +12,7 @@ import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
+import { MIN_PLAUSIBLE_POSITION } from "@/types/coordinator";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
 import { getCurrentUser } from "@/utils/userHelpers";
@@ -741,7 +742,6 @@ async function handleActiveTrackChanged(
 
       // Get current position before starting session
       let startPosition = 0;
-      const MIN_PLAUSIBLE_POSITION = 5; // seconds
 
       try {
         const currentProgress = await TrackPlayer.getProgress();
