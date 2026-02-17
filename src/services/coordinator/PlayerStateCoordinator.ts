@@ -22,13 +22,24 @@
  * - Phase 4: Propagate state to subscribers
  */
 
+import { getActiveSession } from "@/db/helpers/localListeningSessions";
+import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
+import { getUserByUsername } from "@/db/helpers/users";
+import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
+import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { getStoredUsername } from "@/lib/secureStore";
+import { useAppStore } from "@/stores/appStore";
 import {
   CoordinatorMetrics,
   DiagnosticEvent,
   EventProcessingResult,
+  LARGE_DIFF_THRESHOLD,
+  MIN_PLAUSIBLE_POSITION,
   PlayerEvent,
   PlayerState,
+  ResumePositionInfo,
+  ResumeSource,
   StateContext,
   TransitionHistoryEntry,
 } from "@/types/coordinator";
@@ -36,7 +47,7 @@ import AsyncLock from "async-lock";
 import EventEmitter from "eventemitter3";
 import { State } from "react-native-track-player";
 import { PlayerService } from "../PlayerService";
-import { playerEventBus } from "./eventBus";
+import { dispatchPlayerEvent, playerEventBus } from "./eventBus";
 import { validateTransition } from "./transitions";
 
 const log = logger.forTag("PlayerStateCoordinator");
@@ -348,6 +359,16 @@ export class PlayerStateCoordinator extends EventEmitter {
 
       // Position and duration updates
       case "NATIVE_PROGRESS_UPDATED":
+        // POS-03: Do not overwrite valid position with native-0 during track load.
+        // After TrackPlayer.add(tracks), the native player briefly reports position 0
+        // before the seek to the resume position completes. If we write 0 here, we
+        // lose the position that resolveCanonicalPosition just resolved.
+        // Once isLoadingTrack is cleared (by QUEUE_RELOADED), native 0 is accepted.
+        if (this.context.isLoadingTrack && event.payload.position === 0) {
+          this.context.duration = event.payload.duration; // duration update is safe
+          this.context.lastPositionUpdate = Date.now();
+          break;
+        }
         this.context.position = event.payload.position;
         this.context.duration = event.payload.duration;
         this.context.lastPositionUpdate = Date.now();
@@ -463,6 +484,165 @@ export class PlayerStateCoordinator extends EventEmitter {
       default:
         break;
     }
+  }
+
+  // ============================================================================
+  // Position Reconciliation
+  // ============================================================================
+
+  /**
+   * Resolve the canonical resume position for the given library item.
+   *
+   * Implements the same priority chain as the former PlayerService.determineResumePosition():
+   *   1. Active DB local listening session (most authoritative)
+   *   2. Saved DB media progress (fallback if session is implausible)
+   *   3. AsyncStorage persisted position (final fallback)
+   *   4. Zustand store position (last resort)
+   *
+   * After resolving, this method:
+   *   - Updates context.position with the resolved value
+   *   - Dispatches POSITION_RECONCILED so the context update flows through the event bus
+   *   - Syncs AsyncStorage if authoritativePosition differs from asyncStoragePosition
+   *
+   * Public so PlayerService.executeLoadTrack() and reloadTrackPlayerQueue() can call it
+   * directly (Phase 02 will wire those callers).
+   */
+  async resolveCanonicalPosition(libraryItemId: string): Promise<ResumePositionInfo> {
+    const store = useAppStore.getState();
+    const asyncStoragePosition = (await getAsyncItem(ASYNC_KEYS.position)) as number | null;
+
+    let position = store.player.position;
+    let source: ResumeSource = "store";
+    let authoritativePosition: number | null = null;
+
+    if (asyncStoragePosition !== null && asyncStoragePosition !== undefined) {
+      position = asyncStoragePosition;
+      source = "asyncStorage";
+      authoritativePosition = asyncStoragePosition;
+    }
+
+    try {
+      const username = await getStoredUsername();
+      if (username) {
+        const user = await getUserByUsername(username);
+        if (user?.id) {
+          const [activeSession, savedProgress] = await Promise.all([
+            getActiveSession(user.id, libraryItemId),
+            getMediaProgressForLibraryItem(libraryItemId, user.id),
+          ]);
+
+          if (activeSession) {
+            const sessionPosition = activeSession.currentTime;
+            const sessionUpdatedAt = activeSession.updatedAt.getTime();
+            const savedPosition = savedProgress?.currentTime;
+            const savedLastUpdate = savedProgress?.lastUpdate?.getTime();
+
+            // Check if session position is implausibly small (native 0-before-loaded artifact)
+            if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
+              if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
+                log.warn(
+                  `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : "unknown"})`
+                );
+                position = savedPosition;
+                source = "savedProgress";
+                authoritativePosition = savedPosition;
+              } else if (asyncStoragePosition && asyncStoragePosition >= MIN_PLAUSIBLE_POSITION) {
+                log.warn(
+                  `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`
+                );
+                position = asyncStoragePosition;
+                source = "asyncStorage";
+                authoritativePosition = asyncStoragePosition;
+              } else {
+                // Session position is small but no better alternative exists
+                position = sessionPosition;
+                source = "activeSession";
+                authoritativePosition = sessionPosition;
+                log.info(
+                  `[Coordinator] Resume position from active session (small but no alternative): ${formatTime(position)}s`
+                );
+              }
+            } else if (savedPosition && savedLastUpdate) {
+              // Both exist — compare timestamps to determine which is more recent
+              const positionDiff = Math.abs(sessionPosition - savedPosition);
+
+              if (positionDiff > LARGE_DIFF_THRESHOLD) {
+                // Large discrepancy — prefer the more recently updated source
+                const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
+                const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
+                const preferredSource: ResumeSource = isSessionNewer
+                  ? "activeSession"
+                  : "savedProgress";
+
+                log.warn(
+                  `[Coordinator] Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
+                );
+
+                position = preferredPosition;
+                source = preferredSource;
+                authoritativePosition = preferredPosition;
+              } else {
+                // Positions are close — use session (more frequently updated)
+                position = sessionPosition;
+                source = "activeSession";
+                authoritativePosition = sessionPosition;
+                log.info(
+                  `[Coordinator] Resume position from active session: ${formatTime(position)}s`
+                );
+              }
+            } else {
+              // Normal case — use session position
+              position = sessionPosition;
+              source = "activeSession";
+              authoritativePosition = sessionPosition;
+              log.info(
+                `[Coordinator] Resume position from active session: ${formatTime(position)}s`
+              );
+            }
+          } else if (savedProgress?.currentTime) {
+            position = savedProgress.currentTime;
+            source = "savedProgress";
+            authoritativePosition = savedProgress.currentTime;
+            log.info(`[Coordinator] Resume position from saved progress: ${formatTime(position)}s`);
+          }
+        }
+      }
+    } catch (error) {
+      log.error("[Coordinator] Failed to determine resume position", error as Error);
+    }
+
+    if (source === "store") {
+      authoritativePosition = null;
+      if (position > 0) {
+        log.info(
+          `[Coordinator] Using in-memory store position for resume: ${formatTime(position)}s`
+        );
+      }
+    }
+
+    const result: ResumePositionInfo = {
+      position,
+      source,
+      authoritativePosition,
+      asyncStoragePosition,
+    };
+
+    // Update coordinator context with the resolved position
+    this.context.position = position;
+
+    // Dispatch POSITION_RECONCILED so the position flows through the event bus
+    dispatchPlayerEvent({ type: "POSITION_RECONCILED", payload: { position } });
+
+    // Sync AsyncStorage if the authoritative position differs from what was stored
+    if (authoritativePosition !== null && authoritativePosition !== asyncStoragePosition) {
+      await saveItem(ASYNC_KEYS.position, authoritativePosition);
+    }
+
+    log.info(
+      `[Coordinator] resolveCanonicalPosition(${libraryItemId}): position=${formatTime(position)}s source=${source}`
+    );
+
+    return result;
   }
 
   // ============================================================================
