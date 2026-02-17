@@ -25,6 +25,7 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
   [PlayerState.LOADING]: {
     NATIVE_TRACK_CHANGED: PlayerState.READY,
     QUEUE_RELOADED: PlayerState.READY,
+    PLAY: PlayerState.PLAYING, // executeLoadTrack dispatches PLAY after starting playback
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
     NATIVE_STATE_CHANGED: PlayerState.LOADING, // Allow state changes during loading

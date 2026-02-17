@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Phase 2 - Execution Control
+**Current focus:** Phase 3 - Position Reconciliation
 
 ## Current Position
 
-Phase: 2 of 5 (Execution Control)
-Plan: 2 of 2 in current phase (COMPLETE)
-Status: Phase 2 complete
-Last activity: 2026-02-16 — Completed 02-02: EXEC-01 through EXEC-05 contract tests, 3 coordinator bug fixes
+Phase: 3 of 5 (Position Reconciliation)
+Plan: 0 of TBD in current phase
+Status: Phase 2 complete and human-accepted; Phase 3 not yet planned
+Last activity: 2026-02-16 — Phase 2 accepted. Bug fix: executeLoadTrack early-return paths now dispatch PLAY through coordinator instead of calling TrackPlayer.play() directly
 
 Progress: [====------] 40% (Phase 1 complete; Phase 2 complete)
 
@@ -55,10 +55,12 @@ Recent decisions affecting current work:
 - [Phase 2 Plan 02]: executePlay/executePause must guard on event.type (not just nextState) to avoid false firing for same-state no-ops
 - [Phase 2 Plan 02]: SET_RATE/SET_VOLUME belong in transition matrix as no-op transitions so validation gate allows executeTransition to call executeSetRate/executeSetVolume
 - [Phase 2 Plan 02]: executeStop fires on PlayerState.STOPPING case (not IDLE) — STOP from PLAYING goes PLAYING->STOPPING->IDLE via NATIVE_STATE_CHANGED
+- [Phase 2 Bug Fix]: executeLoadTrack early returns (same libraryItemId) must dispatch PLAY — calling TrackPlayer.play() directly bypasses coordinator and leaves it stuck in LOADING/READY
+- [Phase 2 Bug Fix]: LOADING → PLAYING transition added to handle PLAY arriving before NATIVE_TRACK_CHANGED
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
@@ -70,5 +72,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-16
-Stopped at: Completed 02-02-PLAN.md (EXEC-01 to EXEC-05 contract tests + coordinator bug fixes)
+Stopped at: Phase 2 human-accepted. Ready to plan Phase 3.
 Resume file: None

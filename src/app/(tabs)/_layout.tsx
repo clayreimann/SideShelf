@@ -144,18 +144,18 @@ export default function TabLayout() {
   }, [settingsInitialized, tabOrder, hiddenTabs]);
   useEffect(() => {
     if (initialized && !isAuthenticated) {
-      router.push("/login");
+      router.replace("/login");
     }
   }, [initialized, isAuthenticated]);
   useEffect(() => {
     DownloadService.getInstance().initialize();
   }, []);
   useEffect(() => {
-    if (loginMessage) {
+    if (loginMessage && !isAuthenticated) {
       console.log(`[TabIndex] Redirecting to login due to loginMessage: ${loginMessage}`);
-      router.navigate("/login");
+      router.replace("/login");
     }
-  }, [loginMessage]);
+  }, [loginMessage, isAuthenticated]);
 
   if (!tabs.useNativeTabs) {
     return (

@@ -1,43 +1,64 @@
-import { translate } from '@/i18n';
-import { doPing } from '@/lib/api/endpoints';
-import { useThemedStyles } from '@/lib/theme';
-import { Stack, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useAuth } from '../providers/AuthProvider';
+import { translate } from "@/i18n";
+import { doPing } from "@/lib/api/endpoints";
+import { useThemedStyles } from "@/lib/theme";
+import { Stack, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useAuth } from "../providers/AuthProvider";
 
 export default function LoginModal() {
   const router = useRouter();
   const { colors } = useThemedStyles();
-  const { initialized, isAuthenticated, serverUrl, username: usernameFromAuth, loginMessage, login } = useAuth();
+  const {
+    initialized,
+    isAuthenticated,
+    serverUrl,
+    username: usernameFromAuth,
+    loginMessage,
+    login,
+  } = useAuth();
   const [didPing, setDidPing] = useState(false);
-  const [baseUrl, setBaseUrl] = useState(serverUrl ?? '');
-  const [username, setUsername] = useState(usernameFromAuth ?? '');
-  const [password, setPassword] = useState('');
+  const [baseUrl, setBaseUrl] = useState(serverUrl ?? "");
+  const [username, setUsername] = useState(usernameFromAuth ?? "");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const updateBaseUrl = useCallback((url: string) => {
-    if (url === baseUrl) return;
-    if (`${url}:13378` === baseUrl) {
-      setBaseUrl(url);
-    } else {
-      setBaseUrl(url);
-      setDidPing(false);
-    }
-  }, [baseUrl]);
+  const updateBaseUrl = useCallback(
+    (url: string) => {
+      if (url === baseUrl) return;
+      if (`${url}:13378` === baseUrl) {
+        setBaseUrl(url);
+      } else {
+        setBaseUrl(url);
+        setDidPing(false);
+      }
+    },
+    [baseUrl]
+  );
 
   const tryPing = useCallback(async () => {
     if (baseUrl) {
-      console.log('[login] Pinging', baseUrl);
-      const ping = await doPing({baseUrl});
+      console.log("[login] Pinging", baseUrl);
+      const ping = await doPing({ baseUrl });
       if (ping) {
         setDidPing(true);
         return;
       }
 
+      // Don't append default port if URL already contains a port number
+      if (/:\d+$/.test(baseUrl)) return;
       const withPort = `${baseUrl}:13378`;
-      const pingWithPort = await doPing({baseUrl: withPort});
+      const pingWithPort = await doPing({ baseUrl: withPort });
       if (pingWithPort) {
         setBaseUrl(withPort);
         setDidPing(true);
@@ -55,8 +76,8 @@ export default function LoginModal() {
 
   useEffect(() => {
     if (initialized && isAuthenticated) {
-      console.log('[login] Authenticated, redirecting to back');
-      router.replace('/');
+      console.log("[login] Authenticated, redirecting to back");
+      router.replace("/");
     }
   }, [initialized, isAuthenticated]);
 
@@ -69,30 +90,36 @@ export default function LoginModal() {
     setSubmitting(true);
     setError(null);
     try {
-      console.log('[login] Submitting login', { baseUrl, username: username ? '<provided>' : '<empty>' });
+      console.log("[login] Submitting login", {
+        baseUrl,
+        username: username ? "<provided>" : "<empty>",
+      });
       await login({ serverUrl: baseUrl, username, password });
-      console.log('[login] Success');
-      router.replace('/');
+      console.log("[login] Success");
+      router.replace("/");
     } catch (e: any) {
-      console.log('[login] Error', e);
-      setError(e?.message || translate('auth.loginFailed'));
+      console.log("[login] Error", e);
+      setError(e?.message || translate("auth.loginFailed"));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-      <Stack.Screen options={{ headerTitle: translate('auth.signIn') }} />
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.container}
+    >
+      <Stack.Screen options={{ headerTitle: translate("auth.signIn") }} />
       <View style={styles.content}>
-        <Text style={{...styles.title, color: colors.textPrimary }}>
-          {loginMessage ?? translate('auth.connectToAudiobookshelf')}
+        <Text style={{ ...styles.title, color: colors.textPrimary }}>
+          {loginMessage ?? translate("auth.connectToAudiobookshelf")}
         </Text>
         <TextInput
-          placeholder={translate('auth.serverUrlPlaceholder')}
+          placeholder={translate("auth.serverUrlPlaceholder")}
           autoCapitalize="none"
           autoCorrect={false}
-          style={{...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
+          style={{ ...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
           value={baseUrl}
           onChangeText={setBaseUrl}
           onBlur={tryPing}
@@ -100,20 +127,20 @@ export default function LoginModal() {
           textContentType="URL"
         />
         <TextInput
-          placeholder={translate('auth.usernamePlaceholder')}
+          placeholder={translate("auth.usernamePlaceholder")}
           autoCapitalize="none"
           autoCorrect={false}
-          style={{...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
+          style={{ ...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
           value={username}
           onChangeText={setUsername}
           textContentType="username"
         />
         <TextInput
-          placeholder={translate('auth.passwordPlaceholder')}
+          placeholder={translate("auth.passwordPlaceholder")}
           autoCapitalize="none"
           autoCorrect={false}
           secureTextEntry
-          style={{...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
+          style={{ ...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
           value={password}
           onSubmitEditing={onSubmit}
           onChangeText={setPassword}
@@ -121,17 +148,19 @@ export default function LoginModal() {
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {baseUrl ? (
-          <Text style={{ color: colors.textPrimary, textAlign: 'center' }}>
-            {didPing
-              ? translate('auth.connectedToServer')
-              : translate('auth.searchingForServer')}
+          <Text style={{ color: colors.textPrimary, textAlign: "center" }}>
+            {didPing ? translate("auth.connectedToServer") : translate("auth.searchingForServer")}
           </Text>
         ) : null}
-        <TouchableOpacity style={[styles.button, !canSubmit && styles.buttonDisabled]} onPress={onSubmit} disabled={!canSubmit}>
+        <TouchableOpacity
+          style={[styles.button, !canSubmit && styles.buttonDisabled]}
+          onPress={onSubmit}
+          disabled={!canSubmit}
+        >
           {submitting ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>{translate('auth.signIn')}</Text>
+            <Text style={styles.buttonText}>{translate("auth.signIn")}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -147,36 +176,36 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     gap: 12,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   title: {
     fontSize: 20,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   button: {
-    backgroundColor: '#007bff',
+    backgroundColor: "#007bff",
     paddingVertical: 12,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 8,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: "#fff",
+    fontWeight: "600",
   },
   error: {
-    color: 'red',
+    color: "red",
   },
 });
