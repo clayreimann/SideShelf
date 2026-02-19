@@ -2195,7 +2195,9 @@ describe("PlayerStateCoordinator", () => {
 
     describe("PROP-01: playerSlice receives all player state from coordinator", () => {
       it("should update store via bridge at each step of a full playback lifecycle", async () => {
-        // Step 1: LOAD_TRACK — coordinator bridge should call _setTrackLoading and _setCurrentTrack
+        // Step 1: LOAD_TRACK — coordinator bridge should call _setTrackLoading
+        // Note: _setCurrentTrack is NOT called by bridge on LOAD_TRACK - PlayerService
+        // retains responsibility for building and setting PlayerTrack (Plan 02 exception)
         await coordinator.dispatch({
           type: "LOAD_TRACK",
           payload: { libraryItemId: "prop-01-item" },
@@ -2203,7 +2205,6 @@ describe("PlayerStateCoordinator", () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
 
         expect(mockStore._setTrackLoading).toHaveBeenCalled();
-        expect(mockStore._setCurrentTrack).toHaveBeenCalled();
         expect(mockStore.updatePlayingState).toHaveBeenCalled();
 
         // Reset mocks for next step
@@ -2567,8 +2568,8 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Full sync path should have been called
+      // Note: _setCurrentTrack is NOT called during LOAD_TRACK - PlayerService handles it
       expect(mockStore._setTrackLoading).toHaveBeenCalled();
-      expect(mockStore._setCurrentTrack).toHaveBeenCalled();
       expect(mockStore.updatePlayingState).toHaveBeenCalled();
       expect(mockStore.updatePosition).toHaveBeenCalled();
     });

@@ -292,7 +292,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         if (event.type === "NATIVE_PROGRESS_UPDATED") {
           this.syncPositionToStore();
         } else {
-          this.syncStateToStore();
+          this.syncStateToStore(event);
         }
       }
     } else {
@@ -730,17 +730,25 @@ export class PlayerStateCoordinator extends EventEmitter {
    * isRestoringState (playerSlice-local guard), isModalVisible (UI-only),
    * initialized (lifecycle).
    *
+   * currentTrack exception: Only synced on STOP (to clear). PlayerService retains
+   * responsibility for building and setting PlayerTrack objects (Plan 02 documented
+   * exception - coordinator cannot build PlayerTrack).
+   *
    * After sync, if the current chapter changed, calls updateNowPlayingMetadata()
    * fire-and-forget (PROP-06: only on actual chapter change, not every structural sync).
    *
    * Guard: no-op when observerMode is true or when Zustand is unavailable (Android
    * BGS headless context, PROP-05).
    */
-  private syncStateToStore(): void {
+  private syncStateToStore(event: PlayerEvent): void {
     if (this.observerMode) return;
     try {
       const store = useAppStore.getState();
-      store._setCurrentTrack(this.context.currentTrack);
+      // Only sync currentTrack on STOP (to clear it). PlayerService retains
+      // responsibility for setting currentTrack when loading tracks.
+      if (event.type === "STOP") {
+        store._setCurrentTrack(this.context.currentTrack);
+      }
       store.updatePlayingState(this.context.isPlaying);
       store.updatePosition(this.context.position);
       store._setTrackLoading(this.context.isLoadingTrack);
