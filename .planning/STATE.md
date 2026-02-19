@@ -5,27 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Phase 3 - Position Reconciliation
+**Current focus:** Phase 4 - State Propagation
 
 ## Current Position
 
-Phase: 3 of 5 (Position Reconciliation)
-Plan: 2 of 2 in current phase (PHASE COMPLETE)
-Status: Phase 3 complete — coordinator owns all position resolution; both callers wired; POS-01 through POS-06 satisfied
-Last activity: 2026-02-17 — 03-02: callers wired to coordinator, determineResumePosition() deleted, shared constant unified, contract tests added
+Phase: 3.1 (Fix Coordinator Service Bugs) — COMPLETE
+Plan: 2 of 2 complete in current phase
+Status: 03.1-02 complete — Bug 2 (finished items resume from end) and Bug 3 (mark-as-unfinished position reset) fixed. Phase 3.1 complete.
+Last activity: 2026-02-18 — 03.1-02: isFinished guard in resolveCanonicalPosition + mark-as-unfinished resets currentTime/AsyncStorage to 0
 
-Progress: [======----] 60% (Phase 1 complete; Phase 2 complete; Phase 3 complete)
+Progress: [=======---] 70% (Phase 1 complete; Phase 2 complete; Phase 3 complete; Phase 3.1 complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2 (Phase 2 complete)
-- Average duration: 3.5 min
-- Total execution time: 7 min
-- Total plans completed: 4 (Phase 2 complete + Phase 3 complete)
-- Average duration: 3.4 min
-- Total execution time: 17 min
+- Total plans completed: 6 (Phase 2 complete + Phase 3 complete + Phase 3.1 complete)
+- Average duration: 4.2 min
+- Total execution time: 25 min
 
 **By Phase:**
 
@@ -34,11 +31,12 @@ Progress: [======----] 60% (Phase 1 complete; Phase 2 complete; Phase 3 complete
 | 1. Observer Mode  | Shipped | -      | -        |
 | 2. Execution Ctrl | 2/2     | 7 min  | 3.5 min  |
 | 3. Position Recon | 2/2     | 10 min | 5 min    |
+| 3.1 Bug Fixes     | 2/2     | 15 min | 7.5 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 3 min, 4 min, 2 min, 8 min
-- Trend: stable ~2-8 min/plan
+- Last 5 plans: 4 min, 2 min, 8 min, 12 min, 3 min
+- Trend: stable ~3-12 min/plan
 
 _Updated after each plan completion_
 
@@ -67,6 +65,18 @@ Recent decisions affecting current work:
 - [Phase 3 Plan 02]: Mock getCoordinator in PlayerService tests — real coordinator causes event bus subscribe errors in test context; mock returns simple object with resolveCanonicalPosition as jest.fn()
 - [Phase 3 Plan 02]: POS-06 documented as platform convention via it.skip with JSDoc — Android dual-coordinator isolation is a platform guarantee (separate JS contexts), not a unit-testable behavior
 - [Phase 3 Plan 02]: Module-level DB helper mocks in coordinator tests are safe — existing tests don't call these paths; beforeEach defaults (null/testuser) are inert
+- [Phase 3.1 Plan 01]: preSeekState captured in updateContextFromEvent BEFORE transition — at that point currentState is still the origin state (PLAYING/PAUSED)
+- [Phase 3.1 Plan 01]: Auto-PLAY dispatched via dispatchPlayerEvent in executeTransition READY case (not from PlayerService execute\*), so EXEC-03 feedback loop tests remain unaffected
+- [Phase 3.1 Plan 01]: isSeeking cleared in NATIVE_PROGRESS_UPDATED (real seek-completion signal) not only SEEK_COMPLETE (logical event)
+- [Phase 3.1 Plan 01]: shouldOpenOnLongPress on MenuView — single prop makes short press = skip action, long press = interval menu
+- [Phase 3.1 Plan 02]: isFinished guard placed BEFORE session position processing in the activeSession branch — finished items skip all session/timestamp comparison logic entirely
+- [Phase 3.1 Plan 02]: Both branches (activeSession and savedProgress) get the isFinished guard so whichever branch executes, finished items always return 0
+- [Phase 3.1 Plan 02]: AsyncStorage cleared at read time (coordinator) AND write time (UI component) — defense in depth
+- [Phase 3.1 Plan 02]: currentTime explicitly set to 0 (not preserved) when marking as unfinished — prevents API and DB divergence
+
+### Roadmap Evolution
+
+- Phase 03.1 inserted after Phase 3: Fix coordinator service bugs (URGENT)
 
 ### Pending Todos
 
@@ -79,6 +89,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-17
-Stopped at: Completed 03-02-PLAN.md — Phase 3 complete. Position reconciliation fully migrated to coordinator. Phase 4 next.
+Last session: 2026-02-18
+Stopped at: Completed 03.1-02-PLAN.md — Bug 2 (finished items position reset) and Bug 3 (mark-as-unfinished position reset) fixed. Phase 3.1 complete. Ready for Phase 4.
 Resume file: None

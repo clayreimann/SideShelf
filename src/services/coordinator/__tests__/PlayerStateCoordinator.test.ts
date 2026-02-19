@@ -1682,6 +1682,131 @@ describe("PlayerStateCoordinator", () => {
   });
 
   // ============================================================================
+  // Seek State Recovery (Bug 1)
+  // ============================================================================
+
+  describe("seek state recovery (Bug 1)", () => {
+    let mockPlayerService: {
+      executeLoadTrack: ReturnType<typeof jest.fn>;
+      executePlay: ReturnType<typeof jest.fn>;
+      executePause: ReturnType<typeof jest.fn>;
+      executeStop: ReturnType<typeof jest.fn>;
+      executeSeek: ReturnType<typeof jest.fn>;
+      executeSetRate: ReturnType<typeof jest.fn>;
+      executeSetVolume: ReturnType<typeof jest.fn>;
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      jest.clearAllMocks();
+    });
+
+    it("should resume PLAYING after seek while playing", async () => {
+      // Get to PLAYING state
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Seek while playing
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 60 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.SEEKING);
+
+      // Progress update arrives — seek is complete, coordinator should dispatch PLAY
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 60, duration: 300 },
+      });
+
+      // Wait for the auto-dispatched PLAY to be processed
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // PLAYING -> SEEKING -> READY -> PLAYING (via auto-dispatched PLAY)
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+    });
+
+    it("should remain in READY after seek while paused", async () => {
+      // Get to PAUSED state
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
+
+      // Clear mocks so we can assert executePlay is NOT called after seek
+      jest.clearAllMocks();
+
+      // Seek while paused
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 30 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Progress update arrives — seek is complete
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 30, duration: 300 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // PAUSED -> SEEKING -> READY (no auto-PLAY because preSeekState was PAUSED)
+      expect(coordinator.getState()).toBe(PlayerState.READY);
+      expect(mockPlayerService.executePlay).not.toHaveBeenCalled();
+    });
+
+    it("should clear isSeeking when NATIVE_PROGRESS_UPDATED arrives during SEEKING", async () => {
+      // Get to PLAYING state
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Seek — isSeeking should be true
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 60 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getContext().isSeeking).toBe(true);
+
+      // Progress update arrives — isSeeking should be cleared
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 60, duration: 300 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(coordinator.getContext().isSeeking).toBe(false);
+    });
+
+    it("should clear preSeekState after resume", async () => {
+      // Get to PLAYING state
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Seek while playing
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 60 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Progress update triggers resume — preSeekState should be cleared after use
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 60, duration: 300 },
+      });
+
+      // Wait for PLAY auto-dispatch to be processed
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(coordinator.getContext().preSeekState).toBeNull();
+    });
+  });
+
+  // ============================================================================
   // Position Reconciliation (POS-01 through POS-03)
   // ============================================================================
 
@@ -1922,6 +2047,71 @@ describe("PlayerStateCoordinator", () => {
 
         // Position 0 IS accepted when not in loading state
         expect(coordinator.getContext().position).toBe(0);
+      });
+    });
+
+    // --------------------------------------------------------------------------
+    // BUG-02: Finished items start from position 0
+    // --------------------------------------------------------------------------
+
+    describe("BUG-02: finished items start from position 0", () => {
+      it("should return position 0 when savedProgress.isFinished is true (no active session)", async () => {
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 294,
+          isFinished: true,
+          lastUpdate: new Date(),
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("item-1");
+
+        expect(result.position).toBe(0);
+        expect(result.source).toBe("savedProgress");
+      });
+
+      it("should return position 0 when savedProgress.isFinished is true (with active session)", async () => {
+        getActiveSession.mockResolvedValue({
+          currentTime: 294,
+          updatedAt: new Date(),
+        });
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 294,
+          isFinished: true,
+          lastUpdate: new Date(),
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("item-1");
+
+        expect(result.position).toBe(0);
+        expect(result.source).toBe("savedProgress");
+      });
+
+      it("should clear AsyncStorage when item is finished", async () => {
+        const { saveItem: mockSaveItem } = require("@/lib/asyncStore");
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 294,
+          isFinished: true,
+          lastUpdate: new Date(),
+        });
+
+        await coordinator.resolveCanonicalPosition("item-1");
+
+        expect(mockSaveItem).toHaveBeenCalledWith("position", null);
+      });
+
+      it("should NOT reset position when isFinished is false", async () => {
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 500,
+          isFinished: false,
+          lastUpdate: new Date(),
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("item-1");
+
+        expect(result.position).toBe(500);
+        expect(result.source).toBe("savedProgress");
       });
     });
 

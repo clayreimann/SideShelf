@@ -119,6 +119,8 @@ export interface StateContext {
   isPlaying: boolean;
   isBuffering: boolean;
   isSeeking: boolean;
+  /** State before seek started, used to restore playback after seek */
+  preSeekState: PlayerState | null;
   isLoadingTrack: boolean;
 
   // Sync state
