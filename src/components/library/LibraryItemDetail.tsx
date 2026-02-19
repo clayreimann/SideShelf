@@ -15,6 +15,7 @@ import { getUserByUsername } from "@/db/helpers/users";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { updateMediaProgress } from "@/lib/api/endpoints";
+import { ASYNC_KEYS, saveItem } from "@/lib/asyncStore";
 import { getCoverUri } from "@/lib/covers";
 import { spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
@@ -236,8 +237,8 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         libraryItemId: item.id,
         episodeId: effectiveProgress.episodeId || null,
         duration: effectiveProgress.duration || null,
-        progress: newIsFinished ? 1.0 : effectiveProgress.progress || 0,
-        currentTime: effectiveProgress.currentTime || null,
+        progress: newIsFinished ? 1.0 : 0,
+        currentTime: newIsFinished ? effectiveProgress.currentTime || null : 0,
         isFinished: newIsFinished,
         hideFromContinueListening: effectiveProgress.hideFromContinueListening || null,
         lastUpdate: now,
@@ -246,6 +247,11 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       };
 
       await upsertMediaProgress([updatedProgress]);
+
+      // Clear cached position when marking as unfinished so next load starts from 0
+      if (!newIsFinished) {
+        await saveItem(ASYNC_KEYS.position, null);
+      }
 
       // Update via API
       try {
@@ -554,7 +560,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
         {/* Chapters */}
         <ChapterList
-          chapters={chapters.map(ch => ({
+          chapters={chapters.map((ch) => ({
             id: ch.chapterId,
             start: ch.start,
             end: ch.end,
