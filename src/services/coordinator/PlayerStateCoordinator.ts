@@ -1,25 +1,25 @@
 /**
- * Player State Coordinator - Phase 1: Observer Mode
+ * Player State Coordinator - Phase 2: Execution Control
  *
  * Event-driven state machine for coordinating player state.
  *
- * PHASE 1 IMPLEMENTATION (Observer Mode):
- * - Observes events without controlling execution
- * - Services still execute independently (no execution control)
- * - State machine validates transitions but doesn't block execution
+ * PHASE 2 IMPLEMENTATION (Execution Control):
+ * - Executes state transitions by calling PlayerService execute* methods
+ * - Services respond to coordinator commands (not independent execution)
+ * - State machine validates transitions and blocks invalid ones
  * - Context updates from ALL events to reflect actual system state
- * - Diagnostics UI can compare coordinator state vs actual behavior
- * - Purpose: Validate state machine accurately models real system before Phase 2
+ * - observerMode=false by default; set true for instant Phase 1 rollback
  *
  * KEY DESIGN DECISION:
  * Context (isPlaying, position, etc.) updates from ALL events including NATIVE_*
- * to ensure diagnostics always show current reality. This is critical for Phase 1
- * validation - we need to see that coordinator's view matches actual system state.
+ * to ensure diagnostics always show current reality. When observerMode is false,
+ * the coordinator calls execute* methods on PlayerService to drive playback.
  *
- * Future phases will:
- * - Execute state transitions (Phase 2)
- * - Centralize position logic (Phase 3)
- * - Propagate state to subscribers (Phase 4)
+ * Phase history:
+ * - Phase 1 (Observer Mode): Validated state machine models real system
+ * - Phase 2 (Execution Control): Coordinator drives PlayerService
+ * - Phase 3: Centralize position logic
+ * - Phase 4: Propagate state to subscribers
  */
 
 import { logger } from "@/lib/logger";
@@ -72,7 +72,7 @@ export class PlayerStateCoordinator extends EventEmitter {
   private readonly MAX_HISTORY_ENTRIES = 100;
 
   // Phase 2: Execution mode
-  private readonly observerMode = false;
+  private observerMode = false;
 
   // Diagnostic logging interval
   private diagnosticInterval: NodeJS.Timeout | null = null;
@@ -83,7 +83,9 @@ export class PlayerStateCoordinator extends EventEmitter {
     this.startDiagnosticLogging();
     this.subscribeToEventBus();
 
-    log.info("[Coordinator] PlayerStateCoordinator initialized (Observer Mode)");
+    log.info(
+      `[Coordinator] PlayerStateCoordinator initialized (${this.observerMode ? "Observer Mode" : "Execution Mode"})`
+    );
   }
 
   /**
@@ -118,7 +120,8 @@ export class PlayerStateCoordinator extends EventEmitter {
   /**
    * Dispatch an event to the state machine.
    *
-   * In Phase 1: Events are queued and logged but don't modify behavior.
+   * Events are queued and processed serially. In execution mode (observerMode=false),
+   * valid transitions invoke the corresponding execute* method on PlayerService.
    */
   async dispatch(event: PlayerEvent): Promise<void> {
     this.eventQueue.push(event);
@@ -164,6 +167,16 @@ export class PlayerStateCoordinator extends EventEmitter {
     return this.observerMode;
   }
 
+  /**
+   * Set observer mode at runtime.
+   * When true, coordinator observes but does not execute (Phase 1 behavior).
+   * When false, coordinator calls service execute* methods (Phase 2+ behavior).
+   */
+  setObserverMode(enabled: boolean): void {
+    this.observerMode = enabled;
+    log.info(`[Coordinator] Observer mode ${enabled ? "enabled" : "disabled"}`);
+  }
+
   // ============================================================================
   // Event Processing
   // ============================================================================
@@ -192,9 +205,10 @@ export class PlayerStateCoordinator extends EventEmitter {
   }
 
   /**
-   * Handle a single event
+   * Handle a single event.
    *
-   * In Phase 1: Validate and log, but don't execute transitions.
+   * Validates the transition, updates context, and (when not in observer mode)
+   * calls executeTransition to invoke the appropriate execute* method on PlayerService.
    */
   private async handleEvent(event: PlayerEvent): Promise<void> {
     const startTime = Date.now();
@@ -268,7 +282,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       this.metrics.rejectedTransitionCount++;
     }
 
-    // Phase 1: Update metrics and internal state for accurate validation
+    // Update metrics and internal state for accurate validation
     this.metrics.totalEventsProcessed++;
     this.metrics.lastEventTimestamp = startTime;
 
@@ -572,7 +586,7 @@ export class PlayerStateCoordinator extends EventEmitter {
 
     try {
       // Handle state transitions
-      if (nextState && nextState !== this.context.currentState) {
+      if (nextState) {
         switch (nextState) {
           case PlayerState.LOADING:
             if (event.type === "LOAD_TRACK") {
@@ -584,11 +598,21 @@ export class PlayerStateCoordinator extends EventEmitter {
             break;
 
           case PlayerState.PLAYING:
-            await playerService.executePlay();
+            // Only call executePlay when actually transitioning into PLAYING (not same-state no-ops like SET_RATE)
+            if (event.type === "PLAY") {
+              await playerService.executePlay();
+            }
             break;
 
           case PlayerState.PAUSED:
-            await playerService.executePause();
+            // Only call executePause when actually transitioning into PAUSED (not same-state no-ops like SET_RATE)
+            if (event.type === "PAUSE") {
+              await playerService.executePause();
+            }
+            break;
+
+          case PlayerState.STOPPING:
+            await playerService.executeStop();
             break;
 
           case PlayerState.IDLE:

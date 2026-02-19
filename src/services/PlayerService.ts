@@ -266,11 +266,12 @@ export class PlayerService {
         // Only short-circuit if we actually have tracks in the queue
         if (queue.length > 0) {
           if (state.state === State.Playing) {
-            log.info("Already playing this item");
+            log.info("Already playing this item - syncing coordinator state");
+            dispatchPlayerEvent({ type: "PLAY" });
             return;
           } else if (state.state === State.Paused) {
-            log.info("Resuming paused playback");
-            await TrackPlayer.play();
+            log.info("Resuming paused playback via coordinator");
+            dispatchPlayerEvent({ type: "PLAY" });
             return;
           }
         } else {
@@ -395,11 +396,11 @@ export class PlayerService {
         log.info(`Applied volume from store: ${currentVolume}`);
       }
 
-      // Apply smart rewind, passing the resume position to avoid race condition
-      await applySmartRewind(resumeInfo.position);
-
-      // Start playback - background service will handle session tracking
-      await TrackPlayer.play();
+      // Dispatch PLAY so the coordinator transitions to PLAYING and calls executePlay().
+      // executePlay() owns smart rewind and TrackPlayer.play() — single responsibility.
+      // The coordinator accepts PLAY from both LOADING and READY states, so this is
+      // safe regardless of whether NATIVE_TRACK_CHANGED has already arrived.
+      dispatchPlayerEvent({ type: "PLAY" });
 
       // Update now playing metadata with chapter info after track loads
       this.updateNowPlayingMetadata().catch((error) => {
@@ -410,7 +411,7 @@ export class PlayerService {
 
       // Diagnostic: log current track, position, playing state after loading
       await this.printDebugInfo("playTrack::done");
-      log.info("Track loaded and playing");
+      log.info("Track loaded, PLAY dispatched to coordinator");
     } catch (error) {
       log.error(" Failed to load track:", error as Error);
       // Clear loading state on error

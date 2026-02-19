@@ -331,10 +331,11 @@ describe("PlayerService", () => {
       expect(getAudioFilesWithDownloadInfo).toHaveBeenCalled();
       expect(mockedTrackPlayer.reset).toHaveBeenCalled();
       expect(mockedTrackPlayer.add).toHaveBeenCalled();
-      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+      // executeLoadTrack dispatches PLAY to coordinator instead of calling TrackPlayer.play() directly
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
     });
 
-    it("should skip if already playing same item", async () => {
+    it("should skip reload and dispatch PLAY if already playing same item", async () => {
       mockStore.player.currentTrack = {
         libraryItemId: "item-1",
         mediaId: "media-1",
@@ -353,9 +354,11 @@ describe("PlayerService", () => {
 
       expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
       expect(mockedTrackPlayer.add).not.toHaveBeenCalled();
+      // Coordinator must be notified via PLAY event (not direct TrackPlayer.play)
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
     });
 
-    it("should resume if paused on same item", async () => {
+    it("should dispatch PLAY via coordinator if paused on same item", async () => {
       mockStore.player.currentTrack = {
         libraryItemId: "item-1",
         mediaId: "media-1",
@@ -372,8 +375,10 @@ describe("PlayerService", () => {
 
       await playerService.executeLoadTrack("item-1");
 
-      expect(mockedTrackPlayer.play).toHaveBeenCalled();
       expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
+      // Coordinator handles play via executePlay() — no direct TrackPlayer.play() call here
+      expect(mockedTrackPlayer.play).not.toHaveBeenCalled();
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
     });
 
     it("should throw error if library item not found", async () => {
@@ -439,9 +444,9 @@ describe("PlayerService", () => {
       // Should not throw - should continue with playback
       await expect(playerService.executeLoadTrack("item-1")).resolves.not.toThrow();
 
-      // Verify playback still happened
+      // Verify playback still happened (PLAY dispatched to coordinator)
       expect(mockedTrackPlayer.add).toHaveBeenCalled();
-      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
     });
 
     it("should continue playback if ensureItemInDocuments fails", async () => {
@@ -453,9 +458,9 @@ describe("PlayerService", () => {
       // Verify repairDownloadStatus was still called
       expect(downloadService.repairDownloadStatus).toHaveBeenCalledWith("item-1");
 
-      // Verify playback still happened
+      // Verify playback still happened (PLAY dispatched to coordinator)
       expect(mockedTrackPlayer.add).toHaveBeenCalled();
-      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
     });
   });
 

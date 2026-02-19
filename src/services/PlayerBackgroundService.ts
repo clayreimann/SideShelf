@@ -10,7 +10,6 @@ import { updateAudioFileLastAccessed } from "@/db/helpers/localData";
 import { getPeriodicNowPlayingUpdatesEnabled } from "@/lib/appSettings";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
-import { applySmartRewind } from "@/lib/smartRewind";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { progressService } from "@/services/ProgressService";
@@ -98,18 +97,7 @@ declare global {
  * Handle remote play command
  */
 async function handleRemotePlay(): Promise<void> {
-  const progress = await TrackPlayer.getProgress();
-  log.debug(
-    `RemotePlay received progress=${formatTime(progress.position)} (${describeRuntimeContext()})`
-  );
-
-  // Apply smart rewind (checks enabled setting internally)
-  await applySmartRewind(progress.position);
-
-  // Clear pause time since we're resuming
-  const store = useAppStore.getState();
-  store._setLastPauseTime(null);
-
+  log.debug(`RemotePlay received (${describeRuntimeContext()})`);
   dispatchPlayerEvent({ type: "PLAY" });
 }
 
@@ -118,10 +106,6 @@ async function handleRemotePlay(): Promise<void> {
  */
 async function handleRemotePause(): Promise<void> {
   log.debug(`RemotePause received (${describeRuntimeContext()})`);
-  const store = useAppStore.getState();
-  const pauseTime = Date.now();
-  store._setLastPauseTime(pauseTime);
-  log.info(`Pausing playback at ${new Date(pauseTime).toISOString()}`);
   dispatchPlayerEvent({ type: "PAUSE" });
 }
 
@@ -340,27 +324,16 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
   try {
     const ids = await getUserIdAndLibraryItemId();
     if (ids) {
-      const store = useAppStore.getState();
-
       if (event.permanent) {
-        const pauseTime = Date.now();
-        store._setLastPauseTime(pauseTime);
-        log.info(`Pausing playback (permanent duck) at ${new Date(pauseTime).toISOString()}`);
+        log.info(`Pausing playback (permanent duck)`);
         dispatchPlayerEvent({ type: "PAUSE" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else if (event.paused) {
-        const pauseTime = Date.now();
-        store._setLastPauseTime(pauseTime);
-        log.info(`Pausing playback (duck) at ${new Date(pauseTime).toISOString()}`);
+        log.info(`Pausing playback (duck)`);
         dispatchPlayerEvent({ type: "PAUSE" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else {
-        // Resuming from duck - apply smart rewind (checks enabled setting internally)
-        await applySmartRewind();
-
-        // Clear pause time since we're resuming
-        store._setLastPauseTime(null);
-
+        // Resuming from duck - coordinator's executePlay() handles applySmartRewind
         dispatchPlayerEvent({ type: "PLAY" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, false);
       }

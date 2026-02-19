@@ -133,7 +133,8 @@ describe("State Machine Transitions", () => {
     it("should return false for disallowed transitions", () => {
       expect(isTransitionAllowed(PlayerState.IDLE, "PAUSE")).toBe(false);
       expect(isTransitionAllowed(PlayerState.IDLE, "PLAY")).toBe(false);
-      expect(isTransitionAllowed(PlayerState.LOADING, "PLAY")).toBe(false);
+      // LOADING allows PLAY — executeLoadTrack dispatches PLAY to start playback via coordinator
+      expect(isTransitionAllowed(PlayerState.LOADING, "PLAY")).toBe(true);
       expect(isTransitionAllowed(PlayerState.BUFFERING, "LOAD_TRACK")).toBe(false);
     });
 
@@ -155,7 +156,8 @@ describe("State Machine Transitions", () => {
     it("should return null for invalid transitions", () => {
       expect(getNextState(PlayerState.IDLE, "PAUSE")).toBeNull();
       expect(getNextState(PlayerState.IDLE, "PLAY")).toBeNull();
-      expect(getNextState(PlayerState.LOADING, "PLAY")).toBeNull();
+      // LOADING → PLAY → PLAYING is now valid (executeLoadTrack dispatches PLAY)
+      expect(getNextState(PlayerState.LOADING, "PLAY")).toBe(PlayerState.PLAYING);
     });
 
     it("should handle same-state transitions", () => {
