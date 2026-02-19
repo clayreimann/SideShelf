@@ -16,7 +16,7 @@ Phase 1 (observer mode) is complete and production-validated. This roadmap cover
 - [x] **Phase 2: Execution Control** - Coordinator calls service methods; services stop executing independently — COMPLETE (human-accepted 2026-02-16)
 - [x] **Phase 3: Position Reconciliation** - Coordinator owns canonical position; single deterministic algorithm replaces three scattered ones — COMPLETE (2026-02-16)
 - [x] **Phase 03.1: Fix Coordinator Service Bugs** - Four runtime bugs fixed: seek state memory loss, completed items resuming from end, mark-as-unfinished not resetting position, skip button UX — COMPLETE (2026-02-18)
-- [ ] **Phase 4: State Propagation** - playerSlice becomes read-only proxy driven by coordinator bridge
+- [x] **Phase 4: State Propagation** - playerSlice becomes read-only proxy driven by coordinator bridge — COMPLETE (human-accepted 2026-02-19)
 - [ ] **Phase 5: Cleanup** - Legacy guard flags and reconciliation methods deleted; services simplified to thin execution layers
 
 ## Phase Details
@@ -114,5 +114,5 @@ Phases execute in numeric order: 2 → 3 → 4 → 5
 | 2. Execution Control       | 2/2            | Complete    | 2026-02-16 |
 | 3. Position Reconciliation | 2/2            | Complete    | 2026-02-16 |
 | 03.1. Bug Fixes            | 2/2            | Complete    | 2026-02-18 |
-| 4. State Propagation       | 0/3            | Planned     | -          |
+| 4. State Propagation       | 3/3            | Complete    | 2026-02-19 |
 | 5. Cleanup                 | 0/TBD          | Not started | -          |
