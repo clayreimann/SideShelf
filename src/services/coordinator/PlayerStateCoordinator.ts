@@ -359,6 +359,10 @@ export class PlayerStateCoordinator extends EventEmitter {
 
       // Position and duration updates
       case "NATIVE_PROGRESS_UPDATED":
+        // Clear isSeeking when progress update arrives during seek (seek is complete)
+        if (this.context.isSeeking) {
+          this.context.isSeeking = false;
+        }
         // POS-03: Do not overwrite valid position with native-0 during track load.
         // After TrackPlayer.add(tracks), the native player briefly reports position 0
         // before the seek to the resume position completes. If we write 0 here, we
@@ -375,6 +379,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         break;
 
       case "SEEK":
+        this.context.preSeekState = this.context.currentState; // capture BEFORE transition
         this.context.isSeeking = true;
         this.context.position = event.payload.position;
         break;
@@ -706,6 +711,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       isPlaying: false,
       isBuffering: false,
       isSeeking: false,
+      preSeekState: null,
       isLoadingTrack: false,
       lastServerSync: null,
       pendingSyncPosition: null,
@@ -774,6 +780,14 @@ export class PlayerStateCoordinator extends EventEmitter {
                 event.payload.libraryItemId,
                 event.payload.episodeId
               );
+            }
+            break;
+
+          case PlayerState.READY:
+            // Resume playback if seek interrupted PLAYING state
+            if (this.context.preSeekState === PlayerState.PLAYING) {
+              this.context.preSeekState = null; // clear after use
+              dispatchPlayerEvent({ type: "PLAY" });
             }
             break;
 
