@@ -2147,4 +2147,172 @@ describe("PlayerStateCoordinator", () => {
       });
     });
   });
+
+  // ============================================================================
+  // Store Bridge (Phase 4: State Propagation)
+  // ============================================================================
+
+  describe("Store Bridge (Phase 4)", () => {
+    const { useAppStore } = require("@/stores/appStore");
+
+    // Create a mock store with all playerSlice mutators as jest.fn() spies
+    const makeMockStore = () => ({
+      player: { position: 0 },
+      updatePosition: jest.fn(),
+      updatePlayingState: jest.fn(),
+      _setCurrentTrack: jest.fn(),
+      _setTrackLoading: jest.fn(),
+      _setSeeking: jest.fn(),
+      _setPlaybackRate: jest.fn(),
+      _setVolume: jest.fn(),
+      _setPlaySessionId: jest.fn(),
+      _setLastPauseTime: jest.fn(),
+      updateNowPlayingMetadata: jest.fn().mockResolvedValue(undefined),
+      setSleepTimer: jest.fn(),
+      cancelSleepTimer: jest.fn(),
+    });
+
+    let mockStore: ReturnType<typeof makeMockStore>;
+
+    beforeEach(() => {
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+      jest.clearAllMocks();
+      // Re-apply after clearAllMocks
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+    });
+
+    it("syncPositionToStore updates store position on NATIVE_PROGRESS_UPDATED", async () => {
+      // Reach PLAYING state first
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks to isolate the NATIVE_PROGRESS_UPDATED call
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Dispatch position update
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 42.5, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Position-only path: updatePosition called, _setCurrentTrack NOT called
+      expect(mockStore.updatePosition).toHaveBeenCalledWith(42.5);
+      expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
+    });
+
+    it("syncStateToStore updates all fields on structural transition (LOAD_TRACK)", async () => {
+      // Dispatch LOAD_TRACK — structural transition IDLE -> LOADING
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Full sync path should have been called
+      expect(mockStore._setTrackLoading).toHaveBeenCalled();
+      expect(mockStore._setCurrentTrack).toHaveBeenCalled();
+      expect(mockStore.updatePlayingState).toHaveBeenCalled();
+      expect(mockStore.updatePosition).toHaveBeenCalled();
+    });
+
+    it("syncToStore is skipped in observer mode", async () => {
+      coordinator.setObserverMode(true);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 99, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Store methods must not be called in observer mode
+      expect(mockStore.updatePosition).not.toHaveBeenCalled();
+      expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
+    });
+
+    it("syncToStore does not write sleepTimer or lastPauseTime during sync", async () => {
+      // Reach PLAYING state and dispatch several structural events
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await coordinator.dispatch({ type: "PAUSE" });
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 50, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // The bridge must never touch sleepTimer or lastPauseTime
+      expect(mockStore.setSleepTimer).not.toHaveBeenCalled();
+      expect(mockStore.cancelSleepTimer).not.toHaveBeenCalled();
+      expect(mockStore._setLastPauseTime).not.toHaveBeenCalled();
+    });
+
+    it("syncToStore calls updateNowPlayingMetadata on chapter change", async () => {
+      // Reach PLAYING state
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks to count only the chapter-change-triggered call
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Dispatch CHAPTER_CHANGED with a properly-structured CurrentChapter payload
+      const mockCurrentChapter: any = {
+        chapter: {
+          id: "ch-1",
+          chapterId: 1,
+          title: "Chapter 1",
+          start: 0,
+          end: 600,
+          mediaId: "m1",
+        },
+        positionInChapter: 0,
+        chapterDuration: 600,
+      };
+      await coordinator.dispatch({
+        type: "CHAPTER_CHANGED",
+        payload: { chapter: mockCurrentChapter },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // updateNowPlayingMetadata called once for the chapter change
+      expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+
+      // Dispatch another structural event that does NOT change the chapter
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch({ type: "SET_RATE", payload: { rate: 1.5 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // updateNowPlayingMetadata must NOT be called again (same chapter id)
+      expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+    });
+
+    it("syncToStore handles BGS context gracefully when getState throws", async () => {
+      // Mock getState to throw (simulates BGS headless context)
+      useAppStore.getState.mockImplementation(() => {
+        throw new Error("Zustand unavailable in BGS context");
+      });
+
+      // Dispatch NATIVE_PROGRESS_UPDATED — should not crash
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 123, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should complete without throwing — event still processed
+      const metrics = coordinator.getMetrics();
+      expect(metrics.totalEventsProcessed).toBeGreaterThan(0);
+    });
+  });
 });
