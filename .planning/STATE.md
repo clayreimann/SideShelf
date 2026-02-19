@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 4 of 5 (State Propagation)
-Plan: 2 of 3 in current phase (in progress)
-Status: Phase 4 Plan 02 complete — direct coordinator-owned store writes removed from PlayerService (~5) and PlayerBackgroundService (~16); coordinator bridge is now single write authority
-Last activity: 2026-02-19 — 04-02: service store write removal; RELOAD_QUEUE/NATIVE_STATE_CHANGED/NATIVE_PLAYBACK_ERROR coordinator context updates
+Plan: 3 of 3 in current phase (complete)
+Status: Phase 4 complete — PROP-01 through PROP-06 contract tests added; coordinator bridge proven as single write authority across all three service files
+Last activity: 2026-02-19 — 04-03: PROP contract tests; full lifecycle verification, sleep timer isolation, BGS graceful failure, chapter debounce
 
-Progress: [=========.] 78% (Phase 1 complete; Phase 2 complete; Phase 3 complete; Phase 4 Plans 01-02 complete)
+Progress: [==========] 89% (Phase 1 complete; Phase 2 complete; Phase 3 complete; Phase 4 complete)
 
 ## Performance Metrics
 
@@ -26,9 +26,9 @@ Progress: [=========.] 78% (Phase 1 complete; Phase 2 complete; Phase 3 complete
 - Total plans completed: 5 (Phase 4 Plan 01 complete)
 - Average duration: 3.2 min
 - Total execution time: 20 min
-- Total plans completed: 6 (Phase 4 Plan 02 complete)
-- Average duration: 3.5 min
-- Total execution time: 28 min
+- Total plans completed: 7 (Phase 4 complete)
+- Average duration: 3.7 min
+- Total execution time: 43 min
 
 **By Phase:**
 
@@ -38,7 +38,7 @@ Progress: [=========.] 78% (Phase 1 complete; Phase 2 complete; Phase 3 complete
 | 2. Execution Ctrl | 2/2     | 7 min  | 3.5 min  |
 | 3. Position Recon | 2/2     | 10 min | 5 min    |
 | 3.1 Bug Fixes     | 2/2     | 15 min | 7.5 min  |
-| 4. State Prop     | 2/3     | 11 min | 5.5 min  |
+| 4. State Prop     | 3/3     | 26 min | 8.7 min  |
 
 **Recent Trend:**
 
@@ -92,6 +92,9 @@ Recent decisions affecting current work:
 - [Phase 4 Plan 02]: NATIVE_STATE_CHANGED clears isLoadingTrack when state===Playing — mirrors removed BGS direct write
 - [Phase 4 Plan 02]: NATIVE_PLAYBACK_ERROR dispatched from BGS + clears isLoadingTrack in coordinator — enables bridge propagation (was direct store write)
 - [Phase 4 Plan 02]: BGS chapter-change updateNowPlayingMetadata RETAINED — CHAPTER_CHANGED never dispatched; bridge path dead (Phase 5 candidate)
+- [Phase 4 Plan 03]: PROP-02 documented as structurally satisfied (usePlayerState is a one-liner delegate to useAppStore(selector))
+- [Phase 4 Plan 03]: PROP-03 documented with manual verification command — mocked store prevents real Zustand selector reactivity testing in Jest
+- [Phase 4 Plan 03]: Task 2 required no code changes — PlayerService tests were already updated during Plan 02
 
 ### Pending Todos
 
@@ -99,10 +102,10 @@ None.
 
 ### Blockers/Concerns
 
-- [Phase 4]: React Profiler baseline render count measurement needed before any component migration (Plan 03)
+None.
 
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 04-02-PLAN.md — Phase 4 Plan 02 complete. Direct coordinator-owned store writes removed from PlayerService and PlayerBackgroundService. Plan 03 (component migration) is next.
+Stopped at: Completed 04-03-PLAN.md — Phase 4 complete. PROP-01 through PROP-06 contract tests prove coordinator bridge is correct and complete. Phase 5 (Component Migration) is next.
 Resume file: None
