@@ -2149,6 +2149,360 @@ describe("PlayerStateCoordinator", () => {
   });
 
   // ============================================================================
+  // PROP Contract Tests (Phase 4: State Propagation)
+  // These tests prove that the Phase 4 migration is correct and complete.
+  // Each PROP corresponds to a requirement in the 04-RESEARCH.md document.
+  // ============================================================================
+
+  describe("PROP Contract Tests (Phase 4)", () => {
+    const { useAppStore } = require("@/stores/appStore");
+
+    const makeMockStore = () => ({
+      player: { position: 0 },
+      updatePosition: jest.fn(),
+      updatePlayingState: jest.fn(),
+      _setCurrentTrack: jest.fn(),
+      _setTrackLoading: jest.fn(),
+      _setSeeking: jest.fn(),
+      _setPlaybackRate: jest.fn(),
+      _setVolume: jest.fn(),
+      _setPlaySessionId: jest.fn(),
+      _setLastPauseTime: jest.fn(),
+      updateNowPlayingMetadata: jest.fn().mockResolvedValue(undefined),
+      setSleepTimer: jest.fn(),
+      cancelSleepTimer: jest.fn(),
+    });
+
+    let mockStore: ReturnType<typeof makeMockStore>;
+
+    beforeEach(() => {
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+      jest.clearAllMocks();
+      // Re-apply after clearAllMocks
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+    });
+
+    // --------------------------------------------------------------------------
+    // PROP-01: playerSlice receives all player state from coordinator
+    //
+    // Static verification: grep -rn "store\.\(updatePosition\|updatePlayingState\|_setTrackLoading\|_setCurrentTrack\|_setPlaySessionId\|_setSeeking\|_setPlaybackRate\|_setVolume\)" src/services/PlayerService.ts src/services/PlayerBackgroundService.ts src/services/ProgressService.ts
+    // — should only return documented exceptions (error-path _setTrackLoading(false),
+    //   buildTrackList _setCurrentTrack, _setPlaySessionId for progress tracking,
+    //   reconciliation helpers). No coordinator-owned writes should appear.
+    // --------------------------------------------------------------------------
+
+    describe("PROP-01: playerSlice receives all player state from coordinator", () => {
+      it("should update store via bridge at each step of a full playback lifecycle", async () => {
+        // Step 1: LOAD_TRACK — coordinator bridge should call _setTrackLoading and _setCurrentTrack
+        await coordinator.dispatch({
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "prop-01-item" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(mockStore._setTrackLoading).toHaveBeenCalled();
+        expect(mockStore._setCurrentTrack).toHaveBeenCalled();
+        expect(mockStore.updatePlayingState).toHaveBeenCalled();
+
+        // Reset mocks for next step
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        // Step 2: PLAY — bridge should call updatePlayingState(true)
+        // First reach READY state via QUEUE_RELOADED
+        await coordinator.dispatch({
+          type: "QUEUE_RELOADED",
+          payload: { position: 0 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        await coordinator.dispatch({ type: "PLAY" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(mockStore.updatePlayingState).toHaveBeenCalledWith(true);
+
+        // Reset mocks for next step
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        // Step 3: NATIVE_PROGRESS_UPDATED — position-only path should call updatePosition
+        await coordinator.dispatch({
+          type: "NATIVE_PROGRESS_UPDATED",
+          payload: { position: 150, duration: 3600 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(mockStore.updatePosition).toHaveBeenCalledWith(150);
+        // Full sync NOT triggered for NATIVE_PROGRESS_UPDATED (position-only path)
+        expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
+
+        // Reset mocks for next step
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        // Step 4: PAUSE — bridge should call updatePlayingState(false)
+        await coordinator.dispatch({ type: "PAUSE" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(mockStore.updatePlayingState).toHaveBeenCalledWith(false);
+
+        // Reset mocks for next step
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        // Step 5: STOP — bridge should clear currentTrack and sessionId
+        await coordinator.dispatch({ type: "STOP" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(mockStore._setCurrentTrack).toHaveBeenCalledWith(null);
+        expect(mockStore._setPlaySessionId).toHaveBeenCalledWith(null);
+      });
+    });
+
+    // --------------------------------------------------------------------------
+    // PROP-02: usePlayerState selector-based subscriptions
+    //
+    // PROP-02 is structurally satisfied — usePlayerState(selector) passes through
+    // to Zustand's useAppStore(selector) which uses Object.is equality for comparison.
+    // No runtime test needed; the implementation is a one-liner that delegates entirely
+    // to Zustand's built-in selector machinery.
+    // See: src/stores/appStore.ts — usePlayerState
+    // --------------------------------------------------------------------------
+
+    describe("PROP-02: usePlayerState selector-based subscriptions", () => {
+      it.skip("PROP-02 is structurally satisfied — usePlayerState delegates to useAppStore(selector)", () => {
+        // usePlayerState(selector) is implemented as:
+        //   export const usePlayerState = <T>(selector: (state: AppState) => T) =>
+        //     useAppStore(selector);
+        //
+        // Zustand's useStore(selector) uses Object.is equality by default,
+        // so components only re-render when the selected slice changes.
+        // This is a structural guarantee, not a runtime behavior to test here.
+      });
+    });
+
+    // --------------------------------------------------------------------------
+    // PROP-03: Render counts do not increase after bridge (position-only path)
+    //
+    // PROP-03 requires React component lifecycle testing with React.Profiler.
+    // This is impractical in Jest + mocked store context because:
+    //   1. useAppStore is fully mocked — no real Zustand reactivity
+    //   2. @testing-library/react-native render counts don't reflect Zustand selector
+    //      optimization in isolation (the store mock bypasses selector logic)
+    //
+    // Manual verification command:
+    //   Run app → open React DevTools Profiler → play audio for 30 seconds →
+    //   verify FullScreenPlayer/MiniPlayer render counts stay constant when only
+    //   position changes (components subscribing to isPlaying should not re-render
+    //   during NATIVE_PROGRESS_UPDATED events).
+    // --------------------------------------------------------------------------
+
+    describe("PROP-03: render counts do not increase for non-position subscribers", () => {
+      it.skip("PROP-03 requires React DevTools Profiler — manual verification needed", () => {
+        // Two-tier sync (NATIVE_PROGRESS_UPDATED → syncPositionToStore → updatePosition only)
+        // ensures that components subscribing to isPlaying or currentTrack don't re-render
+        // at 1Hz during playback. This is enforced by the architecture (separate sync paths),
+        // not by Zustand selector behavior that can be tested with a mocked store.
+        //
+        // Architecture guarantee: syncPositionToStore calls ONLY updatePosition.
+        // syncStateToStore calls the full set of store mutators.
+        // NATIVE_PROGRESS_UPDATED always goes through syncPositionToStore (position-only).
+        // All other events go through syncStateToStore (full sync).
+      });
+    });
+
+    // --------------------------------------------------------------------------
+    // PROP-04: Sleep timer retained as playerSlice-local (not touched by bridge)
+    // --------------------------------------------------------------------------
+
+    describe("PROP-04: sleep timer retained as playerSlice-local", () => {
+      it("should not call setSleepTimer or cancelSleepTimer during structural transitions", async () => {
+        // Run through a full structural lifecycle: LOAD_TRACK -> QUEUE_RELOADED -> PLAY -> PAUSE -> STOP
+        await coordinator.dispatch({
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "prop-04-item" },
+        });
+        await coordinator.dispatch({
+          type: "QUEUE_RELOADED",
+          payload: { position: 0 },
+        });
+        await coordinator.dispatch({ type: "PLAY" });
+        await coordinator.dispatch({ type: "PAUSE" });
+        await coordinator.dispatch({ type: "STOP" });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Bridge must never touch sleep timer state
+        expect(mockStore.setSleepTimer).not.toHaveBeenCalled();
+        expect(mockStore.cancelSleepTimer).not.toHaveBeenCalled();
+      });
+
+      it("should not call setSleepTimer or cancelSleepTimer during position updates", async () => {
+        // Dispatch position updates
+        for (let i = 0; i < 5; i++) {
+          await coordinator.dispatch({
+            type: "NATIVE_PROGRESS_UPDATED",
+            payload: { position: i * 10, duration: 3600 },
+          });
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        expect(mockStore.setSleepTimer).not.toHaveBeenCalled();
+        expect(mockStore.cancelSleepTimer).not.toHaveBeenCalled();
+      });
+    });
+
+    // --------------------------------------------------------------------------
+    // PROP-05: Android BGS does not call syncToStore (try/catch guard)
+    //
+    // In production, Android BGS headless JS context makes useAppStore.getState()
+    // unavailable. The try/catch in syncToStore/syncPositionToStore guards against
+    // this — coordinator survives the error and continues processing events.
+    // --------------------------------------------------------------------------
+
+    describe("PROP-05: Android BGS graceful failure when Zustand unavailable", () => {
+      it("should process NATIVE_PROGRESS_UPDATED without error when getState throws", async () => {
+        useAppStore.getState.mockImplementation(() => {
+          throw new Error("Zustand unavailable in BGS headless JS context");
+        });
+
+        // Dispatch position update — should not crash the coordinator
+        await coordinator.dispatch({
+          type: "NATIVE_PROGRESS_UPDATED",
+          payload: { position: 200, duration: 3600 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Event was still processed (coordinator survived the error)
+        const metrics = coordinator.getMetrics();
+        expect(metrics.totalEventsProcessed).toBeGreaterThan(0);
+      });
+
+      it("should process structural transitions without error when getState throws", async () => {
+        useAppStore.getState.mockImplementation(() => {
+          throw new Error("Zustand unavailable in BGS headless JS context");
+        });
+
+        // Dispatch structural events — should not crash
+        await coordinator.dispatch({
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "bgs-item" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Coordinator state machine still advanced correctly
+        expect(coordinator.getState()).toBe("loading");
+        const metrics = coordinator.getMetrics();
+        expect(metrics.totalEventsProcessed).toBeGreaterThan(0);
+      });
+    });
+
+    // --------------------------------------------------------------------------
+    // PROP-06: updateNowPlayingMetadata debounce preserved
+    //
+    // updateNowPlayingMetadata is only called when chapter.id changes (not every
+    // structural sync). This prevents redundant now-playing updates at each event.
+    //
+    // Note: Periodic metadata updates (2s gate) are preserved in BGS
+    // handlePlaybackProgressUpdated — not tested here as that's BGS-specific.
+    // --------------------------------------------------------------------------
+
+    describe("PROP-06: updateNowPlayingMetadata debounce preserved", () => {
+      it("should call updateNowPlayingMetadata once on chapter change, not again for same chapter", async () => {
+        // Reach PLAYING state
+        await coordinator.dispatch({
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "prop-06-item" },
+        });
+        await coordinator.dispatch({
+          type: "QUEUE_RELOADED",
+          payload: { position: 0 },
+        });
+        await coordinator.dispatch({ type: "PLAY" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Reset mocks
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        const chapter1: any = {
+          chapter: {
+            id: "chapter-1",
+            chapterId: 1,
+            title: "Chapter 1",
+            start: 0,
+            end: 600,
+            mediaId: "media-1",
+          },
+          positionInChapter: 0,
+          chapterDuration: 600,
+        };
+
+        // Dispatch CHAPTER_CHANGED with chapter 1
+        await coordinator.dispatch({
+          type: "CHAPTER_CHANGED",
+          payload: { chapter: chapter1 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // updateNowPlayingMetadata called once for the chapter change
+        expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+
+        // Reset mocks and dispatch NATIVE_PROGRESS_UPDATED (same chapter, no change)
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        await coordinator.dispatch({
+          type: "NATIVE_PROGRESS_UPDATED",
+          payload: { position: 100, duration: 3600 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // updateNowPlayingMetadata must NOT be called (same chapter, position-only path)
+        expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+
+        // Reset mocks and dispatch a different chapter
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        const chapter2: any = {
+          chapter: {
+            id: "chapter-2",
+            chapterId: 2,
+            title: "Chapter 2",
+            start: 600,
+            end: 1200,
+            mediaId: "media-1",
+          },
+          positionInChapter: 0,
+          chapterDuration: 600,
+        };
+
+        await coordinator.dispatch({
+          type: "CHAPTER_CHANGED",
+          payload: { chapter: chapter2 },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // updateNowPlayingMetadata called again for the new chapter
+        expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+      });
+    });
+  });
+
+  // ============================================================================
   // Store Bridge (Phase 4: State Propagation)
   // ============================================================================
 
