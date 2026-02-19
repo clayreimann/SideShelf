@@ -85,6 +85,9 @@ export class PlayerStateCoordinator extends EventEmitter {
   // Phase 2: Execution mode
   private observerMode = false;
 
+  // Phase 4: Store bridge - track last synced chapter to debounce metadata updates
+  private lastSyncedChapterId: string | null = null;
+
   // Diagnostic logging interval
   private diagnosticInterval: NodeJS.Timeout | null = null;
 
@@ -285,6 +288,12 @@ export class PlayerStateCoordinator extends EventEmitter {
       // Execute transition (Phase 2)
       if (!this.observerMode) {
         await this.executeTransition(event, nextState);
+        // Sync coordinator state to Zustand store (Phase 4: State Propagation)
+        if (event.type === "NATIVE_PROGRESS_UPDATED") {
+          this.syncPositionToStore();
+        } else {
+          this.syncStateToStore();
+        }
       }
     } else {
       log.warn(
@@ -672,6 +681,71 @@ export class PlayerStateCoordinator extends EventEmitter {
     );
 
     return result;
+  }
+
+  // ============================================================================
+  // Store Bridge (Phase 4: State Propagation)
+  // ============================================================================
+
+  /**
+   * Lightweight position-only sync — called on every NATIVE_PROGRESS_UPDATED (1Hz).
+   *
+   * Only updates store.updatePosition() to avoid triggering expensive Zustand
+   * selector re-evaluations across the full player state on every tick (PROP-02/PROP-03).
+   *
+   * Guard: no-op when observerMode is true or when Zustand is unavailable (Android
+   * BGS headless context, PROP-05).
+   */
+  private syncPositionToStore(): void {
+    if (this.observerMode) return;
+    try {
+      const store = useAppStore.getState();
+      store.updatePosition(this.context.position);
+    } catch {
+      // BGS headless context: Zustand store may not be available (PROP-05)
+      return;
+    }
+  }
+
+  /**
+   * Full structural sync — called on all allowed transitions except NATIVE_PROGRESS_UPDATED.
+   *
+   * Syncs all coordinator context fields to their corresponding playerSlice mutators.
+   * Does NOT sync: lastPauseTime (service-ephemeral), sleepTimer (PROP-04 exception),
+   * isRestoringState (playerSlice-local guard), isModalVisible (UI-only),
+   * initialized (lifecycle).
+   *
+   * After sync, if the current chapter changed, calls updateNowPlayingMetadata()
+   * fire-and-forget (PROP-06: only on actual chapter change, not every structural sync).
+   *
+   * Guard: no-op when observerMode is true or when Zustand is unavailable (Android
+   * BGS headless context, PROP-05).
+   */
+  private syncStateToStore(): void {
+    if (this.observerMode) return;
+    try {
+      const store = useAppStore.getState();
+      store._setCurrentTrack(this.context.currentTrack);
+      store.updatePlayingState(this.context.isPlaying);
+      store.updatePosition(this.context.position);
+      store._setTrackLoading(this.context.isLoadingTrack);
+      store._setSeeking(this.context.isSeeking);
+      store._setPlaybackRate(this.context.playbackRate);
+      store._setVolume(this.context.volume);
+      store._setPlaySessionId(this.context.sessionId);
+
+      // PROP-06: Only call updateNowPlayingMetadata when chapter actually changes
+      const currentChapterId = this.context.currentChapter?.chapter?.id?.toString() ?? null;
+      if (currentChapterId !== null && currentChapterId !== this.lastSyncedChapterId) {
+        this.lastSyncedChapterId = currentChapterId;
+        store.updateNowPlayingMetadata().catch((err) => {
+          log.error("[Coordinator] Failed to update now playing metadata", err);
+        });
+      }
+    } catch {
+      // BGS headless context: Zustand store may not be available (PROP-05)
+      return;
+    }
   }
 
   // ============================================================================
