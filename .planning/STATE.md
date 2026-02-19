@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 ## Current Position
 
-Phase: 3 of 5 (Position Reconciliation)
-Plan: 2 of 2 in current phase (PHASE COMPLETE)
-Status: Phase 3 complete — coordinator owns all position resolution; both callers wired; POS-01 through POS-06 satisfied
-Last activity: 2026-02-17 — 03-02: callers wired to coordinator, determineResumePosition() deleted, shared constant unified, contract tests added
+Phase: 3.1 (Fix Coordinator Service Bugs)
+Plan: 1 of 2 complete in current phase
+Status: 03.1-01 complete — Bug 1 (seek READY stuck) and Bug 4 (skip button short-press) fixed
+Last activity: 2026-02-18 — 03.1-01: preSeekState seek recovery + shouldOpenOnLongPress skip button
 
-Progress: [======----] 60% (Phase 1 complete; Phase 2 complete; Phase 3 complete)
+Progress: [======----] 62% (Phase 1 complete; Phase 2 complete; Phase 3 complete; Phase 3.1 plan 1 complete)
 
 ## Performance Metrics
 
@@ -34,11 +34,12 @@ Progress: [======----] 60% (Phase 1 complete; Phase 2 complete; Phase 3 complete
 | 1. Observer Mode  | Shipped | -      | -        |
 | 2. Execution Ctrl | 2/2     | 7 min  | 3.5 min  |
 | 3. Position Recon | 2/2     | 10 min | 5 min    |
+| 3.1 Bug Fixes     | 1/2     | 12 min | -        |
 
 **Recent Trend:**
 
-- Last 5 plans: 3 min, 4 min, 2 min, 8 min
-- Trend: stable ~2-8 min/plan
+- Last 5 plans: 3 min, 4 min, 2 min, 8 min, 12 min
+- Trend: stable ~3-12 min/plan
 
 _Updated after each plan completion_
 
@@ -67,6 +68,14 @@ Recent decisions affecting current work:
 - [Phase 3 Plan 02]: Mock getCoordinator in PlayerService tests — real coordinator causes event bus subscribe errors in test context; mock returns simple object with resolveCanonicalPosition as jest.fn()
 - [Phase 3 Plan 02]: POS-06 documented as platform convention via it.skip with JSDoc — Android dual-coordinator isolation is a platform guarantee (separate JS contexts), not a unit-testable behavior
 - [Phase 3 Plan 02]: Module-level DB helper mocks in coordinator tests are safe — existing tests don't call these paths; beforeEach defaults (null/testuser) are inert
+- [Phase 3.1 Plan 01]: preSeekState captured in updateContextFromEvent BEFORE transition — at that point currentState is still the origin state (PLAYING/PAUSED)
+- [Phase 3.1 Plan 01]: Auto-PLAY dispatched via dispatchPlayerEvent in executeTransition READY case (not from PlayerService execute\*), so EXEC-03 feedback loop tests remain unaffected
+- [Phase 3.1 Plan 01]: isSeeking cleared in NATIVE_PROGRESS_UPDATED (real seek-completion signal) not only SEEK_COMPLETE (logical event)
+- [Phase 3.1 Plan 01]: shouldOpenOnLongPress on MenuView — single prop makes short press = skip action, long press = interval menu
+
+### Roadmap Evolution
+
+- Phase 03.1 inserted after Phase 3: Fix coordinator service bugs (URGENT)
 
 ### Pending Todos
 
@@ -79,6 +88,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-17
-Stopped at: Completed 03-02-PLAN.md — Phase 3 complete. Position reconciliation fully migrated to coordinator. Phase 4 next.
+Last session: 2026-02-18
+Stopped at: Completed 03.1-01-PLAN.md — Bug 1 (coordinator stuck in READY after seek) and Bug 4 (skip button short-press) fixed. 03.1-02 next.
 Resume file: None
