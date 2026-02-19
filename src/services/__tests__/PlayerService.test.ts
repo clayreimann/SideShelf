@@ -539,7 +539,10 @@ describe("PlayerService", () => {
 
       expect(mockedTrackPlayer.stop).toHaveBeenCalled();
       expect(mockedTrackPlayer.reset).toHaveBeenCalled();
-      expect(mockStore._setCurrentTrack).toHaveBeenCalledWith(null);
+      // _setCurrentTrack(null) and _setPlaySessionId(null) removed from executeStop:
+      // STOP event sets context.currentTrack=null and context.sessionId=null,
+      // coordinator bridge propagates via syncStateToStore (Phase 4: State Propagation)
+      expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
     });
 
     it("should seek to position", async () => {

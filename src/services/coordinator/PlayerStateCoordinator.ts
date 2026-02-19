@@ -358,6 +358,13 @@ export class PlayerStateCoordinator extends EventEmitter {
         }
         break;
 
+      case "RELOAD_QUEUE":
+        // Set isLoadingTrack so the bridge can propagate it; QUEUE_RELOADED clears it
+        // This allows store._setTrackLoading(true) to be removed from reloadTrackPlayerQueue()
+        this.context.isLoadingTrack = true;
+        log.debug(`[Coordinator] Context updated from RELOAD_QUEUE: isLoadingTrack=true`);
+        break;
+
       case "QUEUE_RELOADED":
         this.context.isLoadingTrack = false;
         this.context.position = event.payload.position;
