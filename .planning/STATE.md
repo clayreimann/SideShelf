@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 4 of 5 (State Propagation)
-Plan: 1 of 3 in current phase (in progress)
-Status: Phase 4 Plan 01 complete — coordinator-to-store bridge implemented; syncPositionToStore and syncStateToStore wired into handleEvent; 6 bridge tests green
-Last activity: 2026-02-19 — 04-01: coordinator-to-store bridge with two-tier sync, observer mode and BGS guards, chapter-change debounce
+Plan: 2 of 3 in current phase (in progress)
+Status: Phase 4 Plan 02 complete — direct coordinator-owned store writes removed from PlayerService (~5) and PlayerBackgroundService (~16); coordinator bridge is now single write authority
+Last activity: 2026-02-19 — 04-02: service store write removal; RELOAD_QUEUE/NATIVE_STATE_CHANGED/NATIVE_PLAYBACK_ERROR coordinator context updates
 
-Progress: [========--] 72% (Phase 1 complete; Phase 2 complete; Phase 3 complete; Phase 4 Plan 01 complete)
+Progress: [=========.] 78% (Phase 1 complete; Phase 2 complete; Phase 3 complete; Phase 4 Plans 01-02 complete)
 
 ## Performance Metrics
 
@@ -26,6 +26,9 @@ Progress: [========--] 72% (Phase 1 complete; Phase 2 complete; Phase 3 complete
 - Total plans completed: 5 (Phase 4 Plan 01 complete)
 - Average duration: 3.2 min
 - Total execution time: 20 min
+- Total plans completed: 6 (Phase 4 Plan 02 complete)
+- Average duration: 3.5 min
+- Total execution time: 28 min
 
 **By Phase:**
 
@@ -35,11 +38,11 @@ Progress: [========--] 72% (Phase 1 complete; Phase 2 complete; Phase 3 complete
 | 2. Execution Ctrl | 2/2     | 7 min  | 3.5 min  |
 | 3. Position Recon | 2/2     | 10 min | 5 min    |
 | 3.1 Bug Fixes     | 2/2     | 15 min | 7.5 min  |
-| 4. State Prop     | 1/3     | 3 min  | 3 min    |
+| 4. State Prop     | 2/3     | 11 min | 5.5 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 4 min, 2 min, 8 min, 12 min, 3 min, 3 min
+- Last 5 plans: 4 min, 2 min, 8 min, 12 min, 3 min, 3 min, 8 min
 - Trend: stable ~3-12 min/plan
 
 _Updated after each plan completion_
@@ -85,6 +88,10 @@ Recent decisions affecting current work:
 - [Phase 4 Plan 01]: Chapter change debounce via lastSyncedChapterId — updateNowPlayingMetadata only fires on actual chapter.id change, not every structural sync (PROP-06)
 - [Phase 4 Plan 01]: BGS guard is try/catch (not null-check) — catches Zustand throwing entirely in Android headless JS context (PROP-05)
 - [Phase 4 Plan 01]: Sync calls placed inside existing !observerMode block after executeTransition — context and state already advanced, side effects complete before propagation
+- [Phase 4 Plan 02]: RELOAD_QUEUE case added to coordinator updateContextFromEvent — enables removal of direct store.\_setTrackLoading(true) from reloadTrackPlayerQueue
+- [Phase 4 Plan 02]: NATIVE_STATE_CHANGED clears isLoadingTrack when state===Playing — mirrors removed BGS direct write
+- [Phase 4 Plan 02]: NATIVE_PLAYBACK_ERROR dispatched from BGS + clears isLoadingTrack in coordinator — enables bridge propagation (was direct store write)
+- [Phase 4 Plan 02]: BGS chapter-change updateNowPlayingMetadata RETAINED — CHAPTER_CHANGED never dispatched; bridge path dead (Phase 5 candidate)
 
 ### Pending Todos
 
@@ -92,11 +99,10 @@ None.
 
 ### Blockers/Concerns
 
-- [Phase 4]: Sleep timer write path decision (coordinator context vs. retained local write) must be resolved before Plan 02 begins
-- [Phase 4]: React Profiler baseline render count measurement needed before any component migration
+- [Phase 4]: React Profiler baseline render count measurement needed before any component migration (Plan 03)
 
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 04-01-PLAN.md — Phase 4 Plan 01 complete. Coordinator-to-store bridge implemented. Plan 02 (service store write removal) is next.
+Stopped at: Completed 04-02-PLAN.md — Phase 4 Plan 02 complete. Direct coordinator-owned store writes removed from PlayerService and PlayerBackgroundService. Plan 03 (component migration) is next.
 Resume file: None
