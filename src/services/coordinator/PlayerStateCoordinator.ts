@@ -42,6 +42,7 @@ import {
   ResumeSource,
   StateContext,
   TransitionHistoryEntry,
+  CompactHistoryEntry,
 } from "@/types/coordinator";
 import AsyncLock from "async-lock";
 import EventEmitter from "eventemitter3";
@@ -81,9 +82,16 @@ export class PlayerStateCoordinator extends EventEmitter {
   // Transition history for diagnostics
   private transitionHistory: TransitionHistoryEntry[] = [];
   private readonly MAX_HISTORY_ENTRIES = 100;
+  private historyMetadata = {
+    lastClearedAt: null as number | null,
+    totalClears: 0,
+  };
 
   // Phase 2: Execution mode
   private observerMode = false;
+
+  // Phase 4: Store bridge - track last synced chapter to debounce metadata updates
+  private lastSyncedChapterId: string | null = null;
 
   // Diagnostic logging interval
   private diagnosticInterval: NodeJS.Timeout | null = null;
@@ -285,6 +293,12 @@ export class PlayerStateCoordinator extends EventEmitter {
       // Execute transition (Phase 2)
       if (!this.observerMode) {
         await this.executeTransition(event, nextState);
+        // Sync coordinator state to Zustand store (Phase 4: State Propagation)
+        if (event.type === "NATIVE_PROGRESS_UPDATED") {
+          this.syncPositionToStore();
+        } else {
+          this.syncStateToStore(event);
+        }
       }
     } else {
       log.warn(
@@ -347,6 +361,13 @@ export class PlayerStateCoordinator extends EventEmitter {
         if (event.payload.track) {
           this.context.duration = event.payload.track.duration;
         }
+        break;
+
+      case "RELOAD_QUEUE":
+        // Set isLoadingTrack so the bridge can propagate it; QUEUE_RELOADED clears it
+        // This allows store._setTrackLoading(true) to be removed from reloadTrackPlayerQueue()
+        this.context.isLoadingTrack = true;
+        log.debug(`[Coordinator] Context updated from RELOAD_QUEUE: isLoadingTrack=true`);
         break;
 
       case "QUEUE_RELOADED":
@@ -466,6 +487,11 @@ export class PlayerStateCoordinator extends EventEmitter {
         // This is critical for Phase 1 validation - diagnostics UI needs accurate state
         // Map native State enum to isPlaying boolean
         this.context.isPlaying = event.payload.state === State.Playing;
+        // Clear isLoadingTrack when playback actually starts — mirrors BGS behavior
+        // that was removed in Phase 4 (store._setTrackLoading(false) was only in Playing case)
+        if (event.payload.state === State.Playing) {
+          this.context.isLoadingTrack = false;
+        }
         log.debug(
           `[Coordinator] Context updated from NATIVE_STATE_CHANGED: isPlaying=${this.context.isPlaying} (state=${event.payload.state})`
         );
@@ -479,6 +505,9 @@ export class PlayerStateCoordinator extends EventEmitter {
 
       case "NATIVE_PLAYBACK_ERROR":
         this.context.lastError = new Error(`${event.payload.code}: ${event.payload.message}`);
+        // Clear loading state on playback error so the bridge can propagate it
+        // (BGS handlePlaybackError's store._setTrackLoading(false) removed in Phase 4)
+        this.context.isLoadingTrack = false;
         break;
 
       case "SESSION_SYNC_FAILED":
@@ -675,6 +704,79 @@ export class PlayerStateCoordinator extends EventEmitter {
   }
 
   // ============================================================================
+  // Store Bridge (Phase 4: State Propagation)
+  // ============================================================================
+
+  /**
+   * Lightweight position-only sync — called on every NATIVE_PROGRESS_UPDATED (1Hz).
+   *
+   * Only updates store.updatePosition() to avoid triggering expensive Zustand
+   * selector re-evaluations across the full player state on every tick (PROP-02/PROP-03).
+   *
+   * Guard: no-op when observerMode is true or when Zustand is unavailable (Android
+   * BGS headless context, PROP-05).
+   */
+  private syncPositionToStore(): void {
+    if (this.observerMode) return;
+    try {
+      const store = useAppStore.getState();
+      store.updatePosition(this.context.position);
+    } catch {
+      // BGS headless context: Zustand store may not be available (PROP-05)
+      return;
+    }
+  }
+
+  /**
+   * Full structural sync — called on all allowed transitions except NATIVE_PROGRESS_UPDATED.
+   *
+   * Syncs all coordinator context fields to their corresponding playerSlice mutators.
+   * Does NOT sync: lastPauseTime (service-ephemeral), sleepTimer (PROP-04 exception),
+   * isRestoringState (playerSlice-local guard), isModalVisible (UI-only),
+   * initialized (lifecycle).
+   *
+   * currentTrack exception: Only synced on STOP (to clear). PlayerService retains
+   * responsibility for building and setting PlayerTrack objects (Plan 02 documented
+   * exception - coordinator cannot build PlayerTrack).
+   *
+   * After sync, if the current chapter changed, calls updateNowPlayingMetadata()
+   * fire-and-forget (PROP-06: only on actual chapter change, not every structural sync).
+   *
+   * Guard: no-op when observerMode is true or when Zustand is unavailable (Android
+   * BGS headless context, PROP-05).
+   */
+  private syncStateToStore(event: PlayerEvent): void {
+    if (this.observerMode) return;
+    try {
+      const store = useAppStore.getState();
+      // Only sync currentTrack on STOP (to clear it). PlayerService retains
+      // responsibility for setting currentTrack when loading tracks.
+      if (event.type === "STOP") {
+        store._setCurrentTrack(this.context.currentTrack);
+      }
+      store.updatePlayingState(this.context.isPlaying);
+      store.updatePosition(this.context.position);
+      store._setTrackLoading(this.context.isLoadingTrack);
+      store._setSeeking(this.context.isSeeking);
+      store._setPlaybackRate(this.context.playbackRate);
+      store._setVolume(this.context.volume);
+      store._setPlaySessionId(this.context.sessionId);
+
+      // PROP-06: Only call updateNowPlayingMetadata when chapter actually changes
+      const currentChapterId = this.context.currentChapter?.chapter?.id?.toString() ?? null;
+      if (currentChapterId !== null && currentChapterId !== this.lastSyncedChapterId) {
+        this.lastSyncedChapterId = currentChapterId;
+        store.updateNowPlayingMetadata().catch((err) => {
+          log.error("[Coordinator] Failed to update now playing metadata", err);
+        });
+      }
+    } catch {
+      // BGS headless context: Zustand store may not be available (PROP-05)
+      return;
+    }
+  }
+
+  // ============================================================================
   // Event Bus Integration
   // ============================================================================
 
@@ -765,24 +867,79 @@ export class PlayerStateCoordinator extends EventEmitter {
   }
 
   /**
-   * Export diagnostic data
+   * Clear transition history (useful for reducing diagnostic output size)
    */
-  exportDiagnostics(): {
+  clearTransitionHistory(): void {
+    this.transitionHistory = [];
+    this.historyMetadata.lastClearedAt = Date.now();
+    this.historyMetadata.totalClears++;
+    log.info("[Coordinator] Transition history cleared");
+  }
+
+  /**
+   * Export diagnostic data
+   * @param compact If true, returns abbreviated output optimized for token efficiency
+   */
+  exportDiagnostics(compact = false): {
     context: StateContext;
     metrics: CoordinatorMetrics;
     eventQueue: PlayerEvent[];
-    processingTimes: number[];
-    transitionHistory: TransitionHistoryEntry[];
+    processingTimes?: number[];
+    transitionHistory: TransitionHistoryEntry[] | CompactHistoryEntry[];
+    historyMetadata: { lastClearedAt: number | null; totalClears: number };
     observerMode: boolean;
   } {
+    const history = compact ? this.compactHistory() : [...this.transitionHistory];
+
     return {
       context: { ...this.context },
       metrics: { ...this.metrics },
       eventQueue: [...this.eventQueue],
-      processingTimes: [...this.processingTimes],
-      transitionHistory: [...this.transitionHistory],
+      ...(compact ? {} : { processingTimes: [...this.processingTimes] }),
+      transitionHistory: history,
+      historyMetadata: { ...this.historyMetadata },
       observerMode: this.observerMode,
     };
+  }
+
+  /**
+   * Compact transition history for token efficiency
+   * - Abbreviates field names
+   * - Rounds numeric values
+   * - Omits redundant data
+   */
+  private compactHistory(): CompactHistoryEntry[] {
+    return this.transitionHistory.map((entry) => ({
+      ts: entry.timestamp,
+      evt: entry.event.type,
+      ...(entry.event.payload ? { pay: this.compactPayload(entry.event.payload) } : {}),
+      from: entry.fromState,
+      to: entry.toState || entry.fromState,
+      ok: entry.allowed,
+      ...(entry.reason ? { why: entry.reason } : {}),
+      ms: entry.processingTime,
+    }));
+  }
+
+  /**
+   * Compact event payload (round numbers, limit precision)
+   */
+  private compactPayload(payload: any): any {
+    if (typeof payload === "number") {
+      return Math.round(payload * 100) / 100; // 2 decimals
+    }
+    if (typeof payload === "object" && payload !== null) {
+      const compact: any = {};
+      for (const [key, value] of Object.entries(payload)) {
+        if (typeof value === "number") {
+          compact[key] = Math.round(value * 100) / 100;
+        } else {
+          compact[key] = value;
+        }
+      }
+      return compact;
+    }
+    return payload;
   }
   /**
    * Execute state transition

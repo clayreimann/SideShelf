@@ -22,6 +22,7 @@
   "homepage": "https://github.com/your-username/abs-react-native#readme",
   "scripts": {
     "start": "expo start",
+    "build-testflight": "npm i && npx eas-cli build --platform ios --profile production --local --non-interactive",
     "android": "expo run:android",
     "ios": "expo prebuild --clean && expo run:ios",
     "ios:device": "expo prebuild --clean && expo run:ios --device",

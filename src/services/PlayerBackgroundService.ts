@@ -182,9 +182,7 @@ async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<v
         state.state === State.Playing
       );
 
-      const store = useAppStore.getState();
-      store.updatePosition(newPosition);
-
+      // store.updatePosition removed: SEEK event → coordinator → syncStateToStore bridge
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
         log.info(
@@ -231,9 +229,7 @@ async function handleRemoteJumpBackward(event: RemoteJumpBackwardEvent): Promise
         state.state === State.Playing
       );
 
-      const store = useAppStore.getState();
-      store.updatePosition(newPosition);
-
+      // store.updatePosition removed: SEEK event → coordinator → syncStateToStore bridge
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
         log.info(
@@ -295,10 +291,7 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
         state.state === State.Playing
       );
 
-      // Update the store with new position after seek
-      const store = useAppStore.getState();
-      store.updatePosition(event.position);
-
+      // store.updatePosition removed: SEEK event → coordinator → syncStateToStore bridge
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
         log.info(
@@ -366,11 +359,9 @@ async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<vo
       payload: { state: event.state },
     });
 
-    // Clear loading state when playback actually starts
-    if (event.state === State.Playing) {
-      const store = useAppStore.getState();
-      store._setTrackLoading(false);
-    }
+    // isLoadingTrack(false), updatePosition, and updatePlayingState removed:
+    // NATIVE_STATE_CHANGED event → coordinator → syncStateToStore bridge handles all three
+    // (isLoadingTrack cleared when state===Playing via coordinator context update)
 
     const ids = await getUserIdAndLibraryItemId();
     if (ids) {
@@ -378,11 +369,6 @@ async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<vo
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
       const isPlaying = event.state === State.Playing;
-
-      // Update the store with current position and playing state
-      const store = useAppStore.getState();
-      store.updatePosition(progress.position);
-      store.updatePlayingState(isPlaying);
 
       await progressService.updateProgress(
         ids.userId,
@@ -455,20 +441,18 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
       // Sync store position from session (DB is source of truth after updateProgress)
       const updatedSession = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
 
-      if (updatedSession) {
-        // Use session position as source of truth, not TrackPlayer position directly
-        // Position is always absolute (book position), not chapter-relative
-        store.updatePosition(updatedSession.currentTime);
-      } else {
-        // Fallback to TrackPlayer position if session not found
-        // Position is absolute (book position)
-        store.updatePosition(event.position);
+      // store.updatePosition calls removed: NATIVE_PROGRESS_UPDATED event → coordinator →
+      // syncPositionToStore bridge handles position propagation (PROP-02/PROP-03 two-tier sync)
+      if (!updatedSession) {
+        log.debug(`No session found after updateProgress, position=${formatTime(event.position)}s`);
       }
 
       // Check if chapter changed (non-gated update)
       const currentChapter = store.player.currentChapter;
       if (previousChapter?.chapter.id !== currentChapter?.chapter.id && currentChapter) {
-        // Chapter changed - update now playing metadata immediately (non-gated)
+        // RETAINED: CHAPTER_CHANGED event is not dispatched by any service — bridge cannot
+        // handle chapter-change metadata yet (Phase 5 candidate). This is the ONLY path
+        // that updates lock screen chapter titles on chapter transitions.
         log.info(
           `Chapter changed from ${previousChapter?.chapter.id || "none"} to ${currentChapter.chapter.id}, updating now playing metadata`
         );
@@ -476,6 +460,7 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
       }
 
       // Periodic now playing metadata updates (gated by setting)
+      // RETAINED: coordinator bridge doesn't replicate periodic metadata updates
       // Throttle to every 2 seconds to avoid excessive updates
       const periodicUpdatesEnabled = await getPeriodicNowPlayingUpdatesEnabled();
       if (periodicUpdatesEnabled && Math.floor(event.position) % 2 === 0) {
@@ -604,8 +589,11 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
             rehydratedIds.userId,
             rehydratedIds.libraryItemId
           );
-          if (updatedSession) {
-            store.updatePosition(updatedSession.currentTime);
+          // store.updatePosition removed: coordinator bridge handles position via NATIVE_PROGRESS_UPDATED
+          if (!updatedSession) {
+            log.debug(
+              `No session after rehydration update, position=${formatTime(event.position)}s`
+            );
           }
         } else if (isPlaying) {
           // Rehydration failed but playback is active - start a new session
@@ -643,43 +631,33 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
                   isPlaying
                 );
 
-                // Sync store position from new session
-                const newSession = await progressService.getCurrentSession(
-                  newIds.userId,
-                  newIds.libraryItemId
-                );
-                if (newSession) {
-                  store.updatePosition(newSession.currentTime);
-                }
+                // store.updatePosition removed: coordinator bridge handles position via
+                // NATIVE_PROGRESS_UPDATED → syncPositionToStore
               }
             } catch (error) {
               log.error(
                 `Failed to start new session after stale session cleared: ${(error as Error).message} item=${currentTrack.libraryItemId}`
               );
-              // Fallback: update store from TrackPlayer position
-              store.updatePosition(event.position);
+              // store.updatePosition(event.position) removed: coordinator bridge handles it
             }
           } else {
             log.warn(
               `No username available, cannot start new session item=${currentTrack.libraryItemId}`
             );
-            store.updatePosition(event.position);
+            // store.updatePosition(event.position) removed: coordinator bridge handles it
           }
         } else {
           log.warn(
             `Failed to rehydrate session, and playback is not active item=${currentTrack.libraryItemId}`
           );
-          // Fallback: update store from TrackPlayer position if no session
-          store.updatePosition(event.position);
+          // store.updatePosition(event.position) removed: coordinator bridge handles it
         }
       } else {
         log.info(`No current track in playerSlice, cannot rehydrate or start session`);
-        // Fallback: update store from TrackPlayer position if no session
-        store.updatePosition(event.position);
+        // store.updatePosition(event.position) removed: coordinator bridge handles it
       }
     } else {
-      // No track and no IDs - just update position from TrackPlayer
-      store.updatePosition(event.position);
+      // No track and no IDs — coordinator bridge handles position via NATIVE_PROGRESS_UPDATED
     }
   } catch (error) {
     const ids = await getUserIdAndLibraryItemId();
@@ -818,6 +796,12 @@ async function handleActiveTrackChanged(
  */
 async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
   try {
+    // Dispatch to coordinator so isLoadingTrack is cleared via syncStateToStore bridge
+    dispatchPlayerEvent({
+      type: "NATIVE_PLAYBACK_ERROR",
+      payload: { code: event.code, message: event.message },
+    });
+
     const ids = await getUserIdAndLibraryItemId();
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
@@ -834,8 +818,8 @@ async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
       await progressService.endCurrentSession(ids.userId, ids.libraryItemId);
     }
 
-    // Clear loading state
-    store._setTrackLoading(false);
+    // store._setTrackLoading(false) removed: NATIVE_PLAYBACK_ERROR event sets
+    // coordinator context.isLoadingTrack=false, bridge propagates via syncStateToStore
   } catch (error) {
     const ids = await getUserIdAndLibraryItemId();
     const store = useAppStore.getState();

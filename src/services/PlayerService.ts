@@ -345,9 +345,9 @@ export class PlayerService {
         throw new Error(errorMessage);
       }
 
-      // Update store with new track (this also sets loading state)
+      // Update store with current track — RETAINED: coordinator cannot build PlayerTrack
+      // isLoadingTrack is now set via LOAD_TRACK event → coordinator → syncStateToStore bridge
       store._setCurrentTrack(track);
-      store._setTrackLoading(true);
 
       // Add tracks to queue
       await TrackPlayer.add(tracks);
@@ -356,8 +356,8 @@ export class PlayerService {
       const resumeInfo = await coordinator.resolveCanonicalPosition(libraryItemId);
 
       // Seek to resume position first (if applicable)
+      // store.updatePosition removed: POSITION_RECONCILED event → coordinator → syncStateToStore bridge
       if (resumeInfo.position > 0) {
-        store.updatePosition(resumeInfo.position);
         await TrackPlayer.seekTo(resumeInfo.position);
         log.info(
           `Resuming playback from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
@@ -536,10 +536,8 @@ export class PlayerService {
    * Prepare TrackPlayer queue based on the current track stored in playerSlice
    */
   private async reloadTrackPlayerQueue(track: PlayerTrack): Promise<boolean> {
-    const store = useAppStore.getState();
-    store._setTrackLoading(true);
-
-    // Dispatch RELOAD_QUEUE event to state machine
+    // Dispatch RELOAD_QUEUE event to state machine — coordinator sets isLoadingTrack=true,
+    // bridge propagates via syncStateToStore. Direct store._setTrackLoading(true) removed.
     dispatchPlayerEvent({
       type: "RELOAD_QUEUE",
       payload: { libraryItemId: track.libraryItemId },
@@ -569,13 +567,15 @@ export class PlayerService {
 
       if (resumeInfo.position > 0) {
         await TrackPlayer.seekTo(resumeInfo.position);
-        const updatedStore = useAppStore.getState();
-        updatedStore.updatePosition(resumeInfo.position);
+        // store.updatePosition removed: POSITION_RECONCILED event → coordinator → syncStateToStore bridge
         log.info(
           `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
         );
 
         // Clear isRestoringState and update chapter with correct position
+        // RETAINED: _updateCurrentChapter — chapter calculation lives in playerSlice, not coordinator
+        // RETAINED: setIsRestoringState — playerSlice-local guard
+        const updatedStore = useAppStore.getState();
         updatedStore._updateCurrentChapter(resumeInfo.position);
         updatedStore.setIsRestoringState?.(false);
       } else {
@@ -699,10 +699,10 @@ export class PlayerService {
     // PlayerBackgroundService will handle ending the session
     await TrackPlayer.stop();
     await TrackPlayer.reset();
-
-    const store = useAppStore.getState();
-    store._setCurrentTrack(null);
-    store._setPlaySessionId(null); // Clear the session ID when stopping
+    // store._setCurrentTrack(null) removed: STOP event sets context.currentTrack=null,
+    //   coordinator bridge syncs via syncStateToStore
+    // store._setPlaySessionId(null) removed: STOP event sets context.sessionId=null,
+    //   coordinator bridge syncs via syncStateToStore
   }
 
   /**

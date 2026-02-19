@@ -233,6 +233,20 @@ export interface TransitionHistoryEntry {
   processingTime: number;
 }
 
+/**
+ * Compact transition history entry (token-optimized for diagnostics)
+ */
+export interface CompactHistoryEntry {
+  ts: number; // timestamp
+  evt: string; // event type
+  pay?: any; // event payload (optional)
+  from: PlayerState; // fromState
+  to: PlayerState; // toState
+  ok: boolean; // allowed
+  why?: string; // reason (optional)
+  ms: number; // processingTime
+}
+
 // ============================================================================
 // Position Reconciliation Constants and Types
 // ============================================================================

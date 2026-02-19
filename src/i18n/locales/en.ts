@@ -151,7 +151,7 @@ export const en = {
   "more.advanced": "Advanced",
   "more.libraryStats": "Library Stats",
   "more.storage": "Storage",
-  "more.trackPlayer": "Track Player",
+  "more.trackPlayer": "Track Player & Coordinator",
   "more.logs": "Logs",
   "more.loggerSettings": "Logger Settings",
   "more.actions": "Actions",
