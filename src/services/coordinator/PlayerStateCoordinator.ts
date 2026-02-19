@@ -482,6 +482,11 @@ export class PlayerStateCoordinator extends EventEmitter {
         // This is critical for Phase 1 validation - diagnostics UI needs accurate state
         // Map native State enum to isPlaying boolean
         this.context.isPlaying = event.payload.state === State.Playing;
+        // Clear isLoadingTrack when playback actually starts — mirrors BGS behavior
+        // that was removed in Phase 4 (store._setTrackLoading(false) was only in Playing case)
+        if (event.payload.state === State.Playing) {
+          this.context.isLoadingTrack = false;
+        }
         log.debug(
           `[Coordinator] Context updated from NATIVE_STATE_CHANGED: isPlaying=${this.context.isPlaying} (state=${event.payload.state})`
         );
@@ -495,6 +500,9 @@ export class PlayerStateCoordinator extends EventEmitter {
 
       case "NATIVE_PLAYBACK_ERROR":
         this.context.lastError = new Error(`${event.payload.code}: ${event.payload.message}`);
+        // Clear loading state on playback error so the bridge can propagate it
+        // (BGS handlePlaybackError's store._setTrackLoading(false) removed in Phase 4)
+        this.context.isLoadingTrack = false;
         break;
 
       case "SESSION_SYNC_FAILED":
