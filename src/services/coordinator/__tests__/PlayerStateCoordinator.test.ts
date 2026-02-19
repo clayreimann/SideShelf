@@ -2051,6 +2051,71 @@ describe("PlayerStateCoordinator", () => {
     });
 
     // --------------------------------------------------------------------------
+    // BUG-02: Finished items start from position 0
+    // --------------------------------------------------------------------------
+
+    describe("BUG-02: finished items start from position 0", () => {
+      it("should return position 0 when savedProgress.isFinished is true (no active session)", async () => {
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 294,
+          isFinished: true,
+          lastUpdate: new Date(),
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("item-1");
+
+        expect(result.position).toBe(0);
+        expect(result.source).toBe("savedProgress");
+      });
+
+      it("should return position 0 when savedProgress.isFinished is true (with active session)", async () => {
+        getActiveSession.mockResolvedValue({
+          currentTime: 294,
+          updatedAt: new Date(),
+        });
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 294,
+          isFinished: true,
+          lastUpdate: new Date(),
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("item-1");
+
+        expect(result.position).toBe(0);
+        expect(result.source).toBe("savedProgress");
+      });
+
+      it("should clear AsyncStorage when item is finished", async () => {
+        const { saveItem: mockSaveItem } = require("@/lib/asyncStore");
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 294,
+          isFinished: true,
+          lastUpdate: new Date(),
+        });
+
+        await coordinator.resolveCanonicalPosition("item-1");
+
+        expect(mockSaveItem).toHaveBeenCalledWith("position", null);
+      });
+
+      it("should NOT reset position when isFinished is false", async () => {
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue({
+          currentTime: 500,
+          isFinished: false,
+          lastUpdate: new Date(),
+        });
+
+        const result = await coordinator.resolveCanonicalPosition("item-1");
+
+        expect(result.position).toBe(500);
+        expect(result.source).toBe("savedProgress");
+      });
+    });
+
+    // --------------------------------------------------------------------------
     // POS-06: Android BGS coordinator isolation (documented as convention)
     // --------------------------------------------------------------------------
 
