@@ -59,7 +59,13 @@ Plans:
 3. Native position reports of 0 during track queue loading do not overwrite a valid prior position stored in the coordinator
 4. `PlayerService.determineResumePosition()` no longer exists — position reconciliation has exactly one home in the coordinator
 5. On Android, the background service coordinator does not conflict with the UI coordinator; DB session remains the cross-context source of truth
-   **Plans**: TBD
+
+**Plans:** 2 plans
+
+Plans:
+
+- [ ] 03-01-PLAN.md — Extract shared constants, create coordinator resolveCanonicalPosition method, add native-0 guard
+- [ ] 03-02-PLAN.md — Wire PlayerService callers, remove determineResumePosition, update BGS constant, POS contract tests
 
 ### Phase 4: State Propagation
 
@@ -98,6 +104,6 @@ Phases execute in numeric order: 2 → 3 → 4 → 5
 | -------------------------- | -------------- | ----------- | ---------- |
 | 1. Observer Mode           | -              | Complete    | 2026-02-16 |
 | 2. Execution Control       | 2/2            | Complete    | 2026-02-16 |
-| 3. Position Reconciliation | 0/TBD          | Not started | -          |
+| 3. Position Reconciliation | 0/2            | Planned     | -          |
 | 4. State Propagation       | 0/TBD          | Not started | -          |
 | 5. Cleanup                 | 0/TBD          | Not started | -          |

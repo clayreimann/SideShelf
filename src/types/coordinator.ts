@@ -230,3 +230,54 @@ export interface TransitionHistoryEntry {
   reason?: string;
   processingTime: number;
 }
+
+// ============================================================================
+// Position Reconciliation Constants and Types
+// ============================================================================
+
+/**
+ * Minimum position (seconds) considered plausible when resuming playback.
+ *
+ * Positions below this threshold may indicate a "not yet loaded" state from
+ * the native player (native TrackPlayer reports position 0 briefly after
+ * TrackPlayer.add() before the seek to the resume position completes), not
+ * actual progress at the start of the media.
+ */
+export const MIN_PLAUSIBLE_POSITION = 5; // seconds
+
+/**
+ * Threshold (seconds) for treating a position discrepancy as "large".
+ *
+ * When the active DB session and saved media progress differ by more than this
+ * amount, we prefer the source with the more recently updated timestamp rather
+ * than assuming the session position is always authoritative.
+ */
+export const LARGE_DIFF_THRESHOLD = 30; // seconds
+
+/**
+ * Source that provided the canonical resume position.
+ *
+ * Priority order (most to least authoritative):
+ * - "activeSession" — DB local listening session
+ * - "savedProgress" — DB media progress record
+ * - "asyncStorage" — AsyncStorage persisted position
+ * - "store" — Zustand in-memory store (last resort)
+ */
+export type ResumeSource = "activeSession" | "savedProgress" | "asyncStorage" | "store";
+
+/**
+ * Result of position reconciliation across multiple sources.
+ */
+export interface ResumePositionInfo {
+  /** The resolved resume position in seconds */
+  position: number;
+  /** The source that provided the canonical position */
+  source: ResumeSource;
+  /**
+   * The authoritative position from DB (session or savedProgress), if found.
+   * Null when source is "store" (no DB record available).
+   */
+  authoritativePosition: number | null;
+  /** The position found in AsyncStorage, if any */
+  asyncStoragePosition: number | null;
+}

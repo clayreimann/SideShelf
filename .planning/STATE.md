@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 3 of 5 (Position Reconciliation)
-Plan: 0 of TBD in current phase
-Status: Phase 2 complete and human-accepted; Phase 3 not yet planned
-Last activity: 2026-02-16 — Phase 2 accepted. Bug fix: executeLoadTrack early-return paths now dispatch PLAY through coordinator instead of calling TrackPlayer.play() directly
+Plan: 2 of 2 in current phase (PHASE COMPLETE)
+Status: Phase 3 complete — coordinator owns all position resolution; both callers wired; POS-01 through POS-06 satisfied
+Last activity: 2026-02-17 — 03-02: callers wired to coordinator, determineResumePosition() deleted, shared constant unified, contract tests added
 
-Progress: [====------] 40% (Phase 1 complete; Phase 2 complete)
+Progress: [======----] 60% (Phase 1 complete; Phase 2 complete; Phase 3 complete)
 
 ## Performance Metrics
 
@@ -23,18 +23,22 @@ Progress: [====------] 40% (Phase 1 complete; Phase 2 complete)
 - Total plans completed: 2 (Phase 2 complete)
 - Average duration: 3.5 min
 - Total execution time: 7 min
+- Total plans completed: 4 (Phase 2 complete + Phase 3 complete)
+- Average duration: 3.4 min
+- Total execution time: 17 min
 
 **By Phase:**
 
-| Phase             | Plans   | Total | Avg/Plan |
-| ----------------- | ------- | ----- | -------- |
-| 1. Observer Mode  | Shipped | -     | -        |
-| 2. Execution Ctrl | 2/2     | 7 min | 3.5 min  |
+| Phase             | Plans   | Total  | Avg/Plan |
+| ----------------- | ------- | ------ | -------- |
+| 1. Observer Mode  | Shipped | -      | -        |
+| 2. Execution Ctrl | 2/2     | 7 min  | 3.5 min  |
+| 3. Position Recon | 2/2     | 10 min | 5 min    |
 
 **Recent Trend:**
 
-- Last 5 plans: 3 min, 4 min
-- Trend: stable ~3-4 min/plan
+- Last 5 plans: 3 min, 4 min, 2 min, 8 min
+- Trend: stable ~2-8 min/plan
 
 _Updated after each plan completion_
 
@@ -57,6 +61,12 @@ Recent decisions affecting current work:
 - [Phase 2 Plan 02]: executeStop fires on PlayerState.STOPPING case (not IDLE) — STOP from PLAYING goes PLAYING->STOPPING->IDLE via NATIVE_STATE_CHANGED
 - [Phase 2 Bug Fix]: executeLoadTrack early returns (same libraryItemId) must dispatch PLAY — calling TrackPlayer.play() directly bypasses coordinator and leaves it stuck in LOADING/READY
 - [Phase 2 Bug Fix]: LOADING → PLAYING transition added to handle PLAY arriving before NATIVE_TRACK_CHANGED
+- [Phase 3 Plan 01]: Export MIN_PLAUSIBLE_POSITION and LARGE_DIFF_THRESHOLD from types/coordinator.ts — coordinator owns position, constants co-located there
+- [Phase 3 Plan 01]: resolveCanonicalPosition is public so Plan 02's PlayerService callers invoke it directly without indirection
+- [Phase 3 Plan 01]: Native-0 guard: skip position=0 update only when isLoadingTrack=true; duration is always safe to update
+- [Phase 3 Plan 02]: Mock getCoordinator in PlayerService tests — real coordinator causes event bus subscribe errors in test context; mock returns simple object with resolveCanonicalPosition as jest.fn()
+- [Phase 3 Plan 02]: POS-06 documented as platform convention via it.skip with JSDoc — Android dual-coordinator isolation is a platform guarantee (separate JS contexts), not a unit-testable behavior
+- [Phase 3 Plan 02]: Module-level DB helper mocks in coordinator tests are safe — existing tests don't call these paths; beforeEach defaults (null/testuser) are inert
 
 ### Pending Todos
 
@@ -64,13 +74,11 @@ None.
 
 ### Blockers/Concerns
 
-- [Phase 3]: Position reconciliation algorithm needs design spike before implementation — "native position 0 before queue loaded" vs. "native position 0 due to failure" distinction is not yet designed
-- [Phase 3]: Android dual-coordinator context enforcement mechanism (convention vs. guard code) not yet decided
 - [Phase 4]: Sleep timer write path decision (coordinator context vs. retained local write) must be resolved before Phase 4 begins
 - [Phase 4]: React Profiler baseline render count measurement needed before any component migration
 
 ## Session Continuity
 
-Last session: 2026-02-16
-Stopped at: Phase 2 human-accepted. Ready to plan Phase 3.
+Last session: 2026-02-17
+Stopped at: Completed 03-02-PLAN.md — Phase 3 complete. Position reconciliation fully migrated to coordinator. Phase 4 next.
 Resume file: None

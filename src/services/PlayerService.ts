@@ -15,10 +15,8 @@ import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getLibraryItemById } from "@/db/helpers/libraryItems";
 import { getActiveSession, getAllActiveSessionsForUser } from "@/db/helpers/localListeningSessions";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
-import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { startPlaySession } from "@/lib/api/endpoints";
-import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
 import { getCoverUri } from "@/lib/covers";
 import { ensureItemInDocuments } from "@/lib/fileLifecycleManager";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
@@ -30,6 +28,7 @@ import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { apiClientService } from "@/services/ApiClientService";
 import { downloadService } from "@/services/DownloadService";
 import { progressService } from "@/services/ProgressService";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
@@ -56,15 +55,6 @@ interface ReconciliationReport {
   positionMismatch: boolean;
   rateMismatch: boolean;
   volumeMismatch: boolean;
-}
-
-type ResumeSource = "activeSession" | "savedProgress" | "asyncStorage" | "store";
-
-interface ResumePositionInfo {
-  position: number;
-  source: ResumeSource;
-  authoritativePosition: number | null;
-  asyncStoragePosition: number | null;
 }
 
 /**
@@ -362,16 +352,8 @@ export class PlayerService {
       // Add tracks to queue
       await TrackPlayer.add(tracks);
 
-      const resumeInfo = await this.determineResumePosition(libraryItemId);
-      if (
-        resumeInfo.authoritativePosition !== null &&
-        resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition
-      ) {
-        await saveItem(ASYNC_KEYS.position, resumeInfo.authoritativePosition);
-        log.info(
-          `Synced AsyncStorage position to authoritative value: ${formatTime(resumeInfo.authoritativePosition)}s`
-        );
-      }
+      const coordinator = getCoordinator();
+      const resumeInfo = await coordinator.resolveCanonicalPosition(libraryItemId);
 
       // Seek to resume position first (if applicable)
       if (resumeInfo.position > 0) {
@@ -582,16 +564,8 @@ export class PlayerService {
 
       await TrackPlayer.add(tracks);
 
-      const resumeInfo = await this.determineResumePosition(track.libraryItemId);
-      if (
-        resumeInfo.authoritativePosition !== null &&
-        resumeInfo.asyncStoragePosition !== resumeInfo.authoritativePosition
-      ) {
-        await saveItem(ASYNC_KEYS.position, resumeInfo.authoritativePosition);
-        log.info(
-          `Synced AsyncStorage position to authoritative value: ${formatTime(resumeInfo.authoritativePosition)}s`
-        );
-      }
+      const coordinator = getCoordinator();
+      const resumeInfo = await coordinator.resolveCanonicalPosition(track.libraryItemId);
 
       if (resumeInfo.position > 0) {
         await TrackPlayer.seekTo(resumeInfo.position);
@@ -639,125 +613,6 @@ export class PlayerService {
         updatedStore._setTrackLoading(false);
       }
     }
-  }
-
-  /**
-   * Determine resume position using DB session, saved progress, or stored values
-   */
-  private async determineResumePosition(libraryItemId: string): Promise<ResumePositionInfo> {
-    const store = useAppStore.getState();
-    const asyncStoragePosition = (await getAsyncItem(ASYNC_KEYS.position)) as number | null;
-
-    let position = store.player.position;
-    let source: ResumeSource = "store";
-    let authoritativePosition: number | null = null;
-
-    const MIN_PLAUSIBLE_POSITION = 5; // seconds
-    const LARGE_DIFF_THRESHOLD = 30; // seconds
-
-    if (asyncStoragePosition !== null && asyncStoragePosition !== undefined) {
-      position = asyncStoragePosition;
-      source = "asyncStorage";
-      authoritativePosition = asyncStoragePosition;
-    }
-
-    try {
-      const username = await getStoredUsername();
-      if (username) {
-        const user = await getUserByUsername(username);
-        if (user?.id) {
-          const [activeSession, savedProgress] = await Promise.all([
-            getActiveSession(user.id, libraryItemId),
-            getMediaProgressForLibraryItem(libraryItemId, user.id),
-          ]);
-
-          if (activeSession) {
-            const sessionPosition = activeSession.currentTime;
-            const sessionUpdatedAt = activeSession.updatedAt.getTime();
-            const savedPosition = savedProgress?.currentTime;
-            const savedLastUpdate = savedProgress?.lastUpdate?.getTime();
-
-            // Check if session position is implausibly small
-            if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
-              if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
-                log.warn(
-                  `Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : "unknown"})`
-                );
-                position = savedPosition;
-                source = "savedProgress";
-                authoritativePosition = savedPosition;
-              } else if (asyncStoragePosition && asyncStoragePosition >= MIN_PLAUSIBLE_POSITION) {
-                log.warn(
-                  `Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`
-                );
-                position = asyncStoragePosition;
-                source = "asyncStorage";
-                authoritativePosition = asyncStoragePosition;
-              } else {
-                // Session position is small but no better alternative exists
-                position = sessionPosition;
-                source = "activeSession";
-                authoritativePosition = sessionPosition;
-                log.info(
-                  `Resume position from active session (small but no alternative): ${formatTime(position)}s`
-                );
-              }
-            } else if (savedPosition && savedLastUpdate) {
-              // Both exist - compare timestamps to determine which is more recent
-              const positionDiff = Math.abs(sessionPosition - savedPosition);
-
-              if (positionDiff > LARGE_DIFF_THRESHOLD) {
-                // Large discrepancy - prefer the more recent timestamp
-                const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
-                const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
-                const preferredSource = isSessionNewer ? "activeSession" : "savedProgress";
-
-                log.warn(
-                  `Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
-                );
-
-                position = preferredPosition;
-                source = preferredSource;
-                authoritativePosition = preferredPosition;
-              } else {
-                // Positions are close - use session (more frequently updated)
-                position = sessionPosition;
-                source = "activeSession";
-                authoritativePosition = sessionPosition;
-                log.info(`Resume position from active session: ${formatTime(position)}s`);
-              }
-            } else {
-              // Normal case - use session position
-              position = sessionPosition;
-              source = "activeSession";
-              authoritativePosition = sessionPosition;
-              log.info(`Resume position from active session: ${formatTime(position)}s`);
-            }
-          } else if (savedProgress?.currentTime) {
-            position = savedProgress.currentTime;
-            source = "savedProgress";
-            authoritativePosition = savedProgress.currentTime;
-            log.info(`Resume position from saved progress: ${formatTime(position)}s`);
-          }
-        }
-      }
-    } catch (error) {
-      log.error("Failed to determine resume position", error as Error);
-    }
-
-    if (source === "store") {
-      authoritativePosition = null;
-      if (position > 0) {
-        log.info(`Using in-memory store position for resume: ${formatTime(position)}s`);
-      }
-    }
-
-    return {
-      position,
-      source,
-      authoritativePosition,
-      asyncStoragePosition,
-    };
   }
 
   /**
