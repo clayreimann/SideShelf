@@ -42,6 +42,7 @@ import {
   ResumeSource,
   StateContext,
   TransitionHistoryEntry,
+  CompactHistoryEntry,
 } from "@/types/coordinator";
 import AsyncLock from "async-lock";
 import EventEmitter from "eventemitter3";
@@ -81,6 +82,10 @@ export class PlayerStateCoordinator extends EventEmitter {
   // Transition history for diagnostics
   private transitionHistory: TransitionHistoryEntry[] = [];
   private readonly MAX_HISTORY_ENTRIES = 100;
+  private historyMetadata = {
+    lastClearedAt: null as number | null,
+    totalClears: 0,
+  };
 
   // Phase 2: Execution mode
   private observerMode = false;
@@ -862,24 +867,79 @@ export class PlayerStateCoordinator extends EventEmitter {
   }
 
   /**
-   * Export diagnostic data
+   * Clear transition history (useful for reducing diagnostic output size)
    */
-  exportDiagnostics(): {
+  clearTransitionHistory(): void {
+    this.transitionHistory = [];
+    this.historyMetadata.lastClearedAt = Date.now();
+    this.historyMetadata.totalClears++;
+    log.info("[Coordinator] Transition history cleared");
+  }
+
+  /**
+   * Export diagnostic data
+   * @param compact If true, returns abbreviated output optimized for token efficiency
+   */
+  exportDiagnostics(compact = false): {
     context: StateContext;
     metrics: CoordinatorMetrics;
     eventQueue: PlayerEvent[];
-    processingTimes: number[];
-    transitionHistory: TransitionHistoryEntry[];
+    processingTimes?: number[];
+    transitionHistory: TransitionHistoryEntry[] | CompactHistoryEntry[];
+    historyMetadata: { lastClearedAt: number | null; totalClears: number };
     observerMode: boolean;
   } {
+    const history = compact ? this.compactHistory() : [...this.transitionHistory];
+
     return {
       context: { ...this.context },
       metrics: { ...this.metrics },
       eventQueue: [...this.eventQueue],
-      processingTimes: [...this.processingTimes],
-      transitionHistory: [...this.transitionHistory],
+      ...(compact ? {} : { processingTimes: [...this.processingTimes] }),
+      transitionHistory: history,
+      historyMetadata: { ...this.historyMetadata },
       observerMode: this.observerMode,
     };
+  }
+
+  /**
+   * Compact transition history for token efficiency
+   * - Abbreviates field names
+   * - Rounds numeric values
+   * - Omits redundant data
+   */
+  private compactHistory(): CompactHistoryEntry[] {
+    return this.transitionHistory.map((entry) => ({
+      ts: entry.timestamp,
+      evt: entry.event.type,
+      ...(entry.event.payload ? { pay: this.compactPayload(entry.event.payload) } : {}),
+      from: entry.fromState,
+      to: entry.toState || entry.fromState,
+      ok: entry.allowed,
+      ...(entry.reason ? { why: entry.reason } : {}),
+      ms: entry.processingTime,
+    }));
+  }
+
+  /**
+   * Compact event payload (round numbers, limit precision)
+   */
+  private compactPayload(payload: any): any {
+    if (typeof payload === "number") {
+      return Math.round(payload * 100) / 100; // 2 decimals
+    }
+    if (typeof payload === "object" && payload !== null) {
+      const compact: any = {};
+      for (const [key, value] of Object.entries(payload)) {
+        if (typeof value === "number") {
+          compact[key] = Math.round(value * 100) / 100;
+        } else {
+          compact[key] = value;
+        }
+      }
+      return compact;
+    }
+    return payload;
   }
   /**
    * Execute state transition

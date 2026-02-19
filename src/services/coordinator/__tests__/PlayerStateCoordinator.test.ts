@@ -2670,4 +2670,65 @@ describe("PlayerStateCoordinator", () => {
       expect(metrics.totalEventsProcessed).toBeGreaterThan(0);
     });
   });
+
+  describe("Diagnostic Utilities", () => {
+    it("clearTransitionHistory should clear history and update metadata", async () => {
+      // Generate some history
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Verify history exists
+      const beforeClear = coordinator.exportDiagnostics();
+      expect(beforeClear.transitionHistory.length).toBeGreaterThan(0);
+      expect(beforeClear.historyMetadata.totalClears).toBe(0);
+      expect(beforeClear.historyMetadata.lastClearedAt).toBeNull();
+
+      // Clear history
+      coordinator.clearTransitionHistory();
+
+      // Verify cleared
+      const afterClear = coordinator.exportDiagnostics();
+      expect(afterClear.transitionHistory.length).toBe(0);
+      expect(afterClear.historyMetadata.totalClears).toBe(1);
+      expect(afterClear.historyMetadata.lastClearedAt).toBeGreaterThan(0);
+    });
+
+    it("exportDiagnostics with compact=true should return abbreviated format", async () => {
+      // Generate some history with payloads
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test" } });
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 123.456789, duration: 600.123456 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Export full format
+      const full = coordinator.exportDiagnostics(false);
+      expect(full.transitionHistory.length).toBeGreaterThan(0);
+      expect(full.processingTimes).toBeDefined();
+      expect((full.transitionHistory[0] as any).timestamp).toBeDefined();
+
+      // Export compact format
+      const compact = coordinator.exportDiagnostics(true);
+      expect(compact.transitionHistory.length).toBeGreaterThan(0);
+      expect(compact.processingTimes).toBeUndefined(); // omitted in compact mode
+      const compactEntry = compact.transitionHistory[0] as any;
+      expect(compactEntry.ts).toBeDefined(); // abbreviated timestamp
+      expect(compactEntry.evt).toBeDefined(); // abbreviated event type
+      expect(compactEntry.from).toBeDefined();
+      expect(compactEntry.to).toBeDefined();
+      expect(compactEntry.ok).toBeDefined();
+      expect(compactEntry.ms).toBeDefined();
+
+      // Verify payload rounding
+      const progressEntry = compact.transitionHistory.find(
+        (e: any) => e.evt === "NATIVE_PROGRESS_UPDATED"
+      );
+      if (progressEntry && (progressEntry as any).pay) {
+        expect((progressEntry as any).pay.position).toBe(123.46); // rounded to 2 decimals
+        expect((progressEntry as any).pay.duration).toBe(600.12); // rounded to 2 decimals
+      }
+    });
+  });
 });
