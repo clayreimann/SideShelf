@@ -162,6 +162,29 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
     });
   };
 
+  const clearHistory = () => {
+    Alert.alert(
+      "Clear Transition History",
+      "This will clear all transition history entries. Current state and metrics will be preserved. Continue?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: () => {
+            const coordinator = getCoordinator();
+            coordinator.clearTransitionHistory();
+            refreshData();
+            Alert.alert("Success", "Transition history cleared");
+          },
+        },
+      ]
+    );
+  };
+
   const styles = createStyles(colors, isDark);
 
   return (
@@ -173,6 +196,9 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
         </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={exportDiagnostics}>
           <Text style={styles.buttonText}>Export</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.button, styles.buttonDanger]} onPress={clearHistory}>
+          <Text style={styles.buttonText}>Clear History</Text>
         </TouchableOpacity>
       </View>
 
@@ -427,6 +453,9 @@ function createStyles(colors: ReturnType<typeof useThemedStyles>["colors"], isDa
     },
     buttonActive: {
       backgroundColor: "#4CAF50",
+    },
+    buttonDanger: {
+      backgroundColor: isDark ? "#5a2a2a" : "#ffcccc",
     },
     buttonText: {
       color: colors.textPrimary,

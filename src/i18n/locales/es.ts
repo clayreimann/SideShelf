@@ -153,7 +153,7 @@ export const es = {
   "more.advanced": "Avanzado",
   "more.libraryStats": "Estadísticas de biblioteca",
   "more.storage": "Almacenamiento",
-  "more.trackPlayer": "Reproductor de pistas",
+  "more.trackPlayer": "Reproductor y Coordinador",
   "more.logs": "Registros",
   "more.loggerSettings": "Configuración de registros",
   "more.actions": "Acciones",
