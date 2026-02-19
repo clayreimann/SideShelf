@@ -122,6 +122,7 @@ export default function SkipButton({
         onJump(jumpSeconds);
       }}
       actions={menuActions}
+      shouldOpenOnLongPress
     >
       {buttonContent}
     </MenuView>
