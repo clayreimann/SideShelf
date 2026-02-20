@@ -683,12 +683,28 @@ export class PlayerStateCoordinator extends EventEmitter {
    * Only updates store.updatePosition() to avoid triggering expensive Zustand
    * selector re-evaluations across the full player state on every tick (PROP-02/PROP-03).
    *
+   * Also detects chapter boundary crossings and calls updateNowPlayingMetadata() when
+   * chapter.id changes (CLEAN-03). updatePosition() triggers _updateCurrentChapter
+   * synchronously via Zustand set, so store.player.currentChapter reflects the
+   * updated chapter by the time the comparison runs.
+   *
+   * Debounced by lastSyncedChapterId (mirrors PROP-06 in syncStateToStore).
+   *
    * Guard: no-op when Zustand is unavailable (Android BGS headless context, PROP-05).
    */
   private syncPositionToStore(): void {
     try {
       const store = useAppStore.getState();
-      store.updatePosition(this.context.position);
+      store.updatePosition(this.context.position); // triggers _updateCurrentChapter synchronously
+
+      // Detect chapter boundary crossings; debounced by lastSyncedChapterId (mirrors PROP-06)
+      const currentChapterId = store.player.currentChapter?.chapter?.id?.toString() ?? null;
+      if (currentChapterId !== null && currentChapterId !== this.lastSyncedChapterId) {
+        this.lastSyncedChapterId = currentChapterId;
+        store.updateNowPlayingMetadata().catch((err) => {
+          log.error("[Coordinator] Failed to update now playing metadata on chapter change", err);
+        });
+      }
     } catch {
       // BGS headless context: Zustand store may not be available (PROP-05)
       return;
