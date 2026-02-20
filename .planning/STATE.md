@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 5 of 5 (Cleanup)
-Plan: 5 of 6 in current phase
-Status: Plan 05-05 complete — full lifecycle integration test added (LOAD->PLAY->PAUSE->SEEK->PLAY->STOP); auto-PLAY-after-SEEK-from-PLAYING verified; coordinator 92.83% coverage, playerSlice 91.62%
-Last activity: 2026-02-20 — 05-05: added Full lifecycle integration (CLEAN-05) tests to PlayerStateCoordinator.test.ts
+Plan: 6 of 6 in current phase
+Status: Plan 05-06 complete — startSessionLocks mutex removed from ProgressService (37 lines); CLEAN-04 complete; Phase 5 all CLEAN requirements satisfied
+Last activity: 2026-02-20 — 05-06: removed startSessionLocks mutex from ProgressService; all 6 CLEAN requirements met
 
-Progress: [==========] 97% (Phase 1-4 complete; Phase 5 in progress: 05-01 done, 05-02 done, 05-03 done, 05-04 done, 05-05 done)
+Progress: [==========] 100% (All phases complete: Phase 1-4 complete; Phase 5 complete: 05-01 through 05-06 done)
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ _Updated after each plan completion_
 
 | Phase 05 P04 | 7 min | 2 tasks | 6 files |
 | Phase 05 P05 | 4 min | 2 tasks | 1 file |
+| Phase 05 P06 | 2 min | 2 tasks | 1 file |
 
 ## Accumulated Context
 
@@ -91,6 +92,7 @@ Recent decisions affecting current work:
 - [Phase 05]: isRestoringState replaced by coordinator-managed loading.isLoadingTrack in \_updateCurrentChapter (CLEAN-03)
 - [Phase 05]: PlayerService.ts duplicate JSDoc blocks removed; 6 duplicate comments + 2 verbose JSDoc condensed, bringing file from 1140 to 1097 lines
 - [Phase 05, Plan 05]: Full lifecycle integration test gates Plan 06 (session mutex removal); seek from PAUSED uses NATIVE_PROGRESS_UPDATED as seek completion signal; coverage targets met for coordinator (92.83%) and playerSlice (91.62%)
+- [Phase 05, Plan 06]: startSessionLocks mutex removed from ProgressService — coordinator serial queue + BGS existingSession guard (line 729) provide equivalent duplicate-session protection; 37 lines removed, file 1215 → 1178 lines; CLEAN-04 complete; Phase 5 all 6 plans done
 
 ### Roadmap Evolution
 
@@ -118,5 +120,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 05-05-PLAN.md — Full lifecycle integration test added; auto-PLAY-after-SEEK verified; coordinator 92.83%, playerSlice 91.62% coverage. Plan 05-06 remains.
+Stopped at: Completed 05-06-PLAN.md — startSessionLocks mutex removed from ProgressService; Phase 5 complete; all 6 CLEAN requirements satisfied.
 Resume file: None

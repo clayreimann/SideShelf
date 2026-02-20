@@ -39,7 +39,7 @@ Requirements for completing the migration (Phases 2–5). Phase 1 (observer mode
 - [x] **CLEAN-01**: Implicit state flags removed: `isLoading`, `isPreparing`, `sessionCreationInProgress` in services
 - [x] **CLEAN-02**: `PlayerService.ts` reduced from ~1640 lines to under 1100 lines
 - [x] **CLEAN-03**: `isRestoringState` removed last, only after BGS chapter updates route through coordinator
-- [ ] **CLEAN-04**: ProgressService session mutex removed after coordinator serial queue is confirmed as the effective guard
+- [x] **CLEAN-04**: ProgressService session mutex removed after coordinator serial queue is confirmed as the effective guard
 - [x] **CLEAN-05**: Integration tests cover full playback flow through coordinator (load → play → pause → seek → stop)
 - [x] **CLEAN-06**: 90%+ test coverage maintained across all modified files
 
@@ -94,7 +94,7 @@ All 24 v1 requirements mapped to phases. Roadmap created 2026-02-16.
 | CLEAN-01    | Phase 5 | Complete |
 | CLEAN-02    | Phase 5 | Complete |
 | CLEAN-03    | Phase 5 | Complete |
-| CLEAN-04    | Phase 5 | Pending  |
+| CLEAN-04    | Phase 5 | Complete |
 | CLEAN-05    | Phase 5 | Complete |
 | CLEAN-06    | Phase 5 | Complete |
 
