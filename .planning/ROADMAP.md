@@ -101,7 +101,17 @@ Plans:
 3. `isRestoringState` is removed only after BGS chapter updates route through the coordinator — the removal is the last flag removed, in dependency order
 4. `ProgressService` session mutex is removed and no duplicate session creation is observable in a complete load-play-pause-seek-stop integration test run
 5. An integration test exercises the full playback flow (load → play → pause → seek → stop) end-to-end through the coordinator, and 90%+ test coverage is maintained across all modified files
-   **Plans**: TBD
+
+**Plans:** 6 plans
+
+Plans:
+
+- [ ] 05-01-PLAN.md — Remove observerMode flag and scaffolding from coordinator and coordinator tests
+- [ ] 05-02-PLAN.md — Delete dead PlayerService methods (reconcileTrackPlayerState, verifyTrackPlayerConsistency, syncStoreWithTrackPlayer, dead accessors, updateNowPlayingMetadata wrapper) and update \_layout.tsx/index.ts callers
+- [ ] 05-03-PLAN.md — Move chapter detection to coordinator syncPositionToStore; remove BGS NowPlaying writes
+- [ ] 05-04-PLAN.md — Remove isRestoringState from playerSlice and PlayerService; update backgroundRestoration test to use isLoadingTrack
+- [ ] 05-05-PLAN.md — Full lifecycle integration test (LOAD→PLAY→PAUSE→SEEK→PLAY→STOP) and 90%+ coverage verification
+- [ ] 05-06-PLAN.md — Remove startSessionLocks mutex from ProgressService after integration test gate passes
 
 ## Progress
 
@@ -115,4 +125,4 @@ Phases execute in numeric order: 2 → 3 → 4 → 5
 | 3. Position Reconciliation | 2/2            | Complete    | 2026-02-16 |
 | 03.1. Bug Fixes            | 2/2            | Complete    | 2026-02-18 |
 | 4. State Propagation       | 3/3            | Complete    | 2026-02-19 |
-| 5. Cleanup                 | 0/TBD          | Not started | -          |
+| 5. Cleanup                 | 0/6            | Not started | -          |
