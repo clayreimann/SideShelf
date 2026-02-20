@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 5 of 5 (Cleanup)
-Plan: 4 of 6 in current phase
-Status: Plan 05-04 complete — isRestoringState removed from playerSlice and PlayerService; \_updateCurrentChapter now uses coordinator-managed loading.isLoadingTrack; PlayerService.ts at 1,097 lines
-Last activity: 2026-02-20 — 05-04: removed isRestoringState flag, replaced with isLoadingTrack guard, removed duplicate JSDoc blocks from PlayerService
+Plan: 5 of 6 in current phase
+Status: Plan 05-05 complete — full lifecycle integration test added (LOAD->PLAY->PAUSE->SEEK->PLAY->STOP); auto-PLAY-after-SEEK-from-PLAYING verified; coordinator 92.83% coverage, playerSlice 91.62%
+Last activity: 2026-02-20 — 05-05: added Full lifecycle integration (CLEAN-05) tests to PlayerStateCoordinator.test.ts
 
-Progress: [==========] 96% (Phase 1-4 complete; Phase 5 in progress: 05-01 done, 05-02 done, 05-03 done, 05-04 done)
+Progress: [==========] 97% (Phase 1-4 complete; Phase 5 in progress: 05-01 done, 05-02 done, 05-03 done, 05-04 done, 05-05 done)
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Progress: [==========] 96% (Phase 1-4 complete; Phase 5 in progress: 05-01 done,
 _Updated after each plan completion_
 
 | Phase 05 P04 | 7 min | 2 tasks | 6 files |
+| Phase 05 P05 | 4 min | 2 tasks | 1 file |
 
 ## Accumulated Context
 
@@ -89,6 +90,7 @@ Recent decisions affecting current work:
 - [Phase 05, Plan 03]: lastSyncedChapterId shared between syncPositionToStore and syncStateToStore — whichever fires first on a chapter transition sets the debounce, preventing double calls
 - [Phase 05]: isRestoringState replaced by coordinator-managed loading.isLoadingTrack in \_updateCurrentChapter (CLEAN-03)
 - [Phase 05]: PlayerService.ts duplicate JSDoc blocks removed; 6 duplicate comments + 2 verbose JSDoc condensed, bringing file from 1140 to 1097 lines
+- [Phase 05, Plan 05]: Full lifecycle integration test gates Plan 06 (session mutex removal); seek from PAUSED uses NATIVE_PROGRESS_UPDATED as seek completion signal; coverage targets met for coordinator (92.83%) and playerSlice (91.62%)
 
 ### Roadmap Evolution
 
@@ -116,5 +118,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 05-04-PLAN.md — Removed isRestoringState from playerSlice and PlayerService; PlayerService.ts now 1,097 lines. Plans 05-05 and 05-06 remain.
+Stopped at: Completed 05-05-PLAN.md — Full lifecycle integration test added; auto-PLAY-after-SEEK verified; coordinator 92.83%, playerSlice 91.62% coverage. Plan 05-06 remains.
 Resume file: None
