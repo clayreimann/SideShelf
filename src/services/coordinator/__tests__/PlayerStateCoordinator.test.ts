@@ -2595,6 +2595,156 @@ describe("PlayerStateCoordinator", () => {
     });
   });
 
+  // ============================================================================
+  // Full Lifecycle Integration (CLEAN-05)
+  // ============================================================================
+
+  describe("Full lifecycle integration (CLEAN-05)", () => {
+    let mockPlayerService: {
+      executeLoadTrack: ReturnType<typeof jest.fn>;
+      executePlay: ReturnType<typeof jest.fn>;
+      executePause: ReturnType<typeof jest.fn>;
+      executeStop: ReturnType<typeof jest.fn>;
+      executeSeek: ReturnType<typeof jest.fn>;
+      executeSetRate: ReturnType<typeof jest.fn>;
+      executeSetVolume: ReturnType<typeof jest.fn>;
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      jest.clearAllMocks();
+    });
+
+    it("should call execute* methods in correct order across full playback lifecycle", async () => {
+      // Phase 1: Load track (IDLE -> LOADING)
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "lifecycle-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("lifecycle-item", undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
+      expect(coordinator.getState()).toBe(PlayerState.LOADING);
+
+      // Phase 2: Queue reloaded (LOADING -> READY)
+      await coordinator.dispatch({
+        type: "QUEUE_RELOADED",
+        payload: { position: 100 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.READY);
+
+      // Phase 3: Play (READY -> PLAYING)
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(1);
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Phase 4: Progress ticks (PLAYING -> PLAYING, position-only)
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 105, duration: 3600 },
+      });
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 110, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Phase 5: Pause (PLAYING -> PAUSED)
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executePause).toHaveBeenCalledTimes(1);
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
+
+      // Phase 6: Seek from PAUSED (preSeekState=PAUSED — no auto-PLAY after seek)
+      // PAUSED -> SEEKING -> READY
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 200 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executeSeek).toHaveBeenCalledWith(200);
+      expect(coordinator.getState()).toBe(PlayerState.SEEKING);
+
+      // Seek completes: SEEKING -> READY (no auto-PLAY since preSeekState=PAUSED)
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 200, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(coordinator.getState()).toBe(PlayerState.READY);
+      // executePlay NOT called again yet (seek from PAUSED doesn't auto-resume)
+      expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(1);
+
+      // Phase 7: Play after seek (READY -> PLAYING, second executePlay call)
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(2);
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Phase 8: Stop (PLAYING -> STOPPING -> IDLE)
+      await coordinator.dispatch({ type: "STOP" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executeStop).toHaveBeenCalledTimes(1);
+
+      // Final assertions: verify all execute* called expected number of times
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
+      expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(2); // play + play-after-seek
+      expect(mockPlayerService.executePause).toHaveBeenCalledTimes(1);
+      expect(mockPlayerService.executeSeek).toHaveBeenCalledWith(200);
+      expect(mockPlayerService.executeStop).toHaveBeenCalledTimes(1);
+    });
+
+    it("should auto-dispatch PLAY after SEEK when preSeekState was PLAYING", async () => {
+      // Get to PLAYING state first
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "seek-resume-item" },
+      });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Record executePlay call count before seek
+      const executePlayCallsBefore = mockPlayerService.executePlay.mock.calls.length;
+      expect(executePlayCallsBefore).toBe(1);
+
+      // Seek from PLAYING (preSeekState = PLAYING)
+      // PLAYING -> SEEKING
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 300 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.SEEKING);
+
+      // Progress update arrives — seek complete
+      // SEEKING -> READY -> auto-dispatched PLAY -> PLAYING
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 300, duration: 3600 },
+      });
+
+      // Wait for the auto-dispatched PLAY to be processed by the async queue
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // PLAY should have been auto-dispatched and coordinator should be back in PLAYING
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+      expect(mockPlayerService.executePlay.mock.calls.length).toBeGreaterThan(
+        executePlayCallsBefore
+      );
+    });
+  });
+
   describe("Diagnostic Utilities", () => {
     it("clearTransitionHistory should clear history and update metadata", async () => {
       // Generate some history
