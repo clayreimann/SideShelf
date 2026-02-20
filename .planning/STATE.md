@@ -2,65 +2,30 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-16)
+See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Phase 5 - Cleanup
+**Current focus:** Milestone v1.1 — Bug Fixes & Polish (not started — defining requirements)
 
 ## Current Position
 
-Phase: 5 of 5 (Cleanup)
-Plan: 6 of 6 in current phase
-Status: Plan 05-06 complete — startSessionLocks mutex removed from ProgressService (37 lines); CLEAN-04 complete; Phase 5 all CLEAN requirements satisfied
-Last activity: 2026-02-20 — 05-06: removed startSessionLocks mutex from ProgressService; all 6 CLEAN requirements met
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-20 — Milestone v1.1 started
 
-Progress: [==========] 100% (All phases complete: Phase 1-4 complete; Phase 5 complete: 05-01 through 05-06 done)
-
-## Performance Metrics
-
-**Velocity:**
-
-- Total plans completed: 6 (Phase 2 complete + Phase 3 complete + Phase 3.1 complete)
-- Average duration: 4.2 min
-- Total execution time: 25 min
-- Total plans completed: 5 (Phase 4 Plan 01 complete)
-- Average duration: 3.2 min
-- Total execution time: 20 min
-- Total plans completed: 7 (Phase 4 complete)
-- Average duration: 3.7 min
-- Total execution time: 43 min
-
-**By Phase:**
-
-| Phase             | Plans   | Total  | Avg/Plan |
-| ----------------- | ------- | ------ | -------- |
-| 1. Observer Mode  | Shipped | -      | -        |
-| 2. Execution Ctrl | 2/2     | 7 min  | 3.5 min  |
-| 3. Position Recon | 2/2     | 10 min | 5 min    |
-| 3.1 Bug Fixes     | 2/2     | 15 min | 7.5 min  |
-| 4. State Prop     | 3/3     | 26 min | 8.7 min  |
-
-**Recent Trend:**
-
-- Last 5 plans: 4 min, 2 min, 8 min, 12 min, 3 min, 3 min, 8 min
-- Trend: stable ~3-12 min/plan
-
-_Updated after each plan completion_
-
-| Phase 05 P04 | 7 min | 2 tasks | 6 files |
-| Phase 05 P05 | 4 min | 2 tasks | 1 file |
-| Phase 05 P06 | 2 min | 2 tasks | 1 file |
+Progress: [░░░░░░░░░░] 0%
 
 ## Accumulated Context
 
-### Decisions
+### Decisions (v1.0)
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+Context carried forward from v1.0 migration:
 
 - [Phase 1]: Keep custom FSM over XState — production-validated, XState adds 16.7 kB with no functional gain
 - [Phase 1]: observerMode flag preserved as instant rollback for Phase 2+
-- [Phase 1]: playerSlice stays as Zustand/React integration layer; becomes read-only proxy in Phase 4
+- [Phase 1]: playerSlice stays as Zustand/React integration layer; became read-only proxy in Phase 4
 - [All phases]: YOLO rollback posture — 122+ tests + Phase 1 production validation is sufficient confidence
 - [Phase 2 Plan 01]: Remove stale nextState !== currentState guard in executeTransition (simplest fix; validation already done in validateTransition)
 - [Phase 2 Plan 01]: Remove applySmartRewind import entirely from BGS — coordinator's executePlay handles it via PlayerService
@@ -75,11 +40,10 @@ Recent decisions affecting current work:
 - [Phase 3 Plan 01]: Native-0 guard: skip position=0 update only when isLoadingTrack=true; duration is always safe to update
 - [Phase 3 Plan 02]: Mock getCoordinator in PlayerService tests — real coordinator causes event bus subscribe errors in test context; mock returns simple object with resolveCanonicalPosition as jest.fn()
 - [Phase 3 Plan 02]: POS-06 documented as platform convention via it.skip with JSDoc — Android dual-coordinator isolation is a platform guarantee (separate JS contexts), not a unit-testable behavior
-- [Phase 3 Plan 02]: Module-level DB helper mocks in coordinator tests are safe — existing tests don't call these paths; beforeEach defaults (null/testuser) are inert
 - [Phase 3.1 Plan 01]: preSeekState captured in updateContextFromEvent BEFORE transition — at that point currentState is still the origin state (PLAYING/PAUSED)
 - [Phase 3.1 Plan 01]: Auto-PLAY dispatched via dispatchPlayerEvent in executeTransition READY case (not from PlayerService execute\*), so EXEC-03 feedback loop tests remain unaffected
 - [Phase 3.1 Plan 01]: isSeeking cleared in NATIVE_PROGRESS_UPDATED (real seek-completion signal) not only SEEK_COMPLETE (logical event)
-- [Phase 3.1 Plan 01]: shouldOpenOnLongPress on MenuView — single prop makes short press = skip action, long press = interval menu
+- [Phase 3.1 Plan 01]: shouldOpenOnLongPress on MenuView — single prop makes short press = skip action, long press = interval menu (appearance only; skip action itself untested — SKIP-01 in v1.1)
 - [Phase 3.1 Plan 02]: isFinished guard placed BEFORE session position processing in the activeSession branch — finished items skip all session/timestamp comparison logic entirely
 - [Phase 3.1 Plan 02]: Both branches (activeSession and savedProgress) get the isFinished guard so whichever branch executes, finished items always return 0
 - [Phase 3.1 Plan 02]: AsyncStorage cleared at read time (coordinator) AND write time (UI component) — defense in depth
@@ -94,21 +58,6 @@ Recent decisions affecting current work:
 - [Phase 05, Plan 05]: Full lifecycle integration test gates Plan 06 (session mutex removal); seek from PAUSED uses NATIVE_PROGRESS_UPDATED as seek completion signal; coverage targets met for coordinator (92.83%) and playerSlice (91.62%)
 - [Phase 05, Plan 06]: startSessionLocks mutex removed from ProgressService — coordinator serial queue + BGS existingSession guard (line 729) provide equivalent duplicate-session protection; 37 lines removed, file 1215 → 1178 lines; CLEAN-04 complete; Phase 5 all 6 plans done
 
-### Roadmap Evolution
-
-- Phase 03.1 inserted after Phase 3: Fix coordinator service bugs (URGENT)
-- [Phase 4 Plan 01]: Two-tier sync: NATIVE_PROGRESS_UPDATED uses syncPositionToStore (position only); all other events use syncStateToStore (full state) — prevents 1Hz Zustand selector storms
-- [Phase 4 Plan 01]: Chapter change debounce via lastSyncedChapterId — updateNowPlayingMetadata only fires on actual chapter.id change, not every structural sync (PROP-06)
-- [Phase 4 Plan 01]: BGS guard is try/catch (not null-check) — catches Zustand throwing entirely in Android headless JS context (PROP-05)
-- [Phase 4 Plan 01]: Sync calls placed inside existing !observerMode block after executeTransition — context and state already advanced, side effects complete before propagation
-- [Phase 4 Plan 02]: RELOAD_QUEUE case added to coordinator updateContextFromEvent — enables removal of direct store.\_setTrackLoading(true) from reloadTrackPlayerQueue
-- [Phase 4 Plan 02]: NATIVE_STATE_CHANGED clears isLoadingTrack when state===Playing — mirrors removed BGS direct write
-- [Phase 4 Plan 02]: NATIVE_PLAYBACK_ERROR dispatched from BGS + clears isLoadingTrack in coordinator — enables bridge propagation (was direct store write)
-- [Phase 4 Plan 02]: BGS chapter-change updateNowPlayingMetadata RETAINED — CHAPTER_CHANGED never dispatched; bridge path dead (Phase 5 candidate)
-- [Phase 4 Plan 03]: PROP-02 documented as structurally satisfied (usePlayerState is a one-liner delegate to useAppStore(selector))
-- [Phase 4 Plan 03]: PROP-03 documented with manual verification command — mocked store prevents real Zustand selector reactivity testing in Jest
-- [Phase 4 Plan 03]: Task 2 required no code changes — PlayerService tests were already updated during Plan 02
-
 ### Pending Todos
 
 None.
@@ -120,5 +69,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed 05-06-PLAN.md — startSessionLocks mutex removed from ProgressService; Phase 5 complete; all 6 CLEAN requirements satisfied.
+Stopped at: v1.1 milestone initialized — defining requirements
 Resume file: None
