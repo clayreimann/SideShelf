@@ -113,10 +113,6 @@ describe("PlayerStateCoordinator", () => {
     it("should initialize in IDLE state", () => {
       expect(coordinator.getState()).toBe(PlayerState.IDLE);
     });
-
-    it("should initialize in execution mode", () => {
-      expect(coordinator.isObserverMode()).toBe(false);
-    });
   });
 
   describe("dispatch", () => {
@@ -386,12 +382,6 @@ describe("PlayerStateCoordinator", () => {
       expect(diagnostics).toHaveProperty("metrics");
       expect(diagnostics).toHaveProperty("eventQueue");
       expect(diagnostics).toHaveProperty("processingTimes");
-      expect(diagnostics).toHaveProperty("observerMode");
-    });
-
-    it("should indicate execution mode", () => {
-      const diagnostics = coordinator.exportDiagnostics();
-      expect(diagnostics.observerMode).toBe(false);
     });
 
     it("should include all context fields", () => {
@@ -454,14 +444,7 @@ describe("PlayerStateCoordinator", () => {
   });
 
   describe("execution mode behavior", () => {
-    it("should be in execution mode", () => {
-      expect(coordinator.isObserverMode()).toBe(false);
-    });
-
-    it("should execute state transitions in execution mode", async () => {
-      // Verify execution mode is enabled
-      expect(coordinator.isObserverMode()).toBe(false);
-
+    it("should execute state transitions", async () => {
       // Load track - should transition to LOADING
       await coordinator.dispatch({
         type: "LOAD_TRACK",
@@ -473,12 +456,9 @@ describe("PlayerStateCoordinator", () => {
       expect(coordinator.getState()).toBe(PlayerState.LOADING);
       const metrics = coordinator.getMetrics();
       expect(metrics.stateTransitionCount).toBeGreaterThan(0);
-
-      // Note: We can't easily verify PlayerService mock calls due to module resolution
-      // The important thing is that execution mode is enabled and transitions work
     });
 
-    it("should track metrics in execution mode", async () => {
+    it("should track metrics", async () => {
       await coordinator.dispatch({ type: "PLAY" });
       await coordinator.dispatch({ type: "PAUSE" });
 
@@ -1157,86 +1137,7 @@ describe("PlayerStateCoordinator", () => {
   });
 
   // ============================================================================
-  // EXEC-04: Observer mode rollback — runtime toggle
-  // ============================================================================
-
-  describe("observer mode rollback (EXEC-04)", () => {
-    let mockPlayerService: {
-      executeLoadTrack: ReturnType<typeof jest.fn>;
-      executePlay: ReturnType<typeof jest.fn>;
-      executePause: ReturnType<typeof jest.fn>;
-      executeStop: ReturnType<typeof jest.fn>;
-      executeSeek: ReturnType<typeof jest.fn>;
-      executeSetRate: ReturnType<typeof jest.fn>;
-      executeSetVolume: ReturnType<typeof jest.fn>;
-    };
-
-    beforeEach(() => {
-      const { PlayerService } = require("../../PlayerService");
-      mockPlayerService = PlayerService.getInstance();
-      jest.clearAllMocks();
-    });
-
-    it("should default to execution mode (observerMode = false)", () => {
-      expect(coordinator.isObserverMode()).toBe(false);
-    });
-
-    it("should switch to observer mode at runtime via setObserverMode(true)", () => {
-      coordinator.setObserverMode(true);
-      expect(coordinator.isObserverMode()).toBe(true);
-    });
-
-    it("should NOT call execute* methods when observer mode is enabled", async () => {
-      coordinator.setObserverMode(true);
-
-      // Transition to READY in observer mode
-      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
-      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      jest.clearAllMocks();
-
-      // Dispatch PLAY — state machine should validate and transition, but execute* not called
-      await coordinator.dispatch({ type: "PLAY" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(mockPlayerService.executePlay).not.toHaveBeenCalled();
-      // State machine still transitions (coordinator tracks state in both modes)
-      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
-    });
-
-    it("should resume calling execute* methods when observer mode is disabled", async () => {
-      coordinator.setObserverMode(true);
-
-      // Transition to READY in observer mode
-      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
-      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Re-enable execution mode
-      coordinator.setObserverMode(false);
-      jest.clearAllMocks();
-
-      // Now PLAY should trigger executePlay
-      await coordinator.dispatch({ type: "PLAY" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(1);
-    });
-
-    it("should still update context in observer mode (state tracking)", async () => {
-      coordinator.setObserverMode(true);
-
-      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Context tracks state even in observer mode
-      expect(coordinator.getContext().isLoadingTrack).toBe(true);
-      expect(coordinator.getState()).toBe(PlayerState.LOADING);
-    });
-  });
-
-  // ============================================================================
-  // EXEC-05: NATIVE_* events update context unconditionally (both modes)
+  // EXEC-05: NATIVE_* events update context unconditionally
   // ============================================================================
 
   describe("NATIVE_* context updates (EXEC-05)", () => {
@@ -1244,7 +1145,7 @@ describe("PlayerStateCoordinator", () => {
       jest.clearAllMocks();
     });
 
-    it("should update isPlaying from NATIVE_STATE_CHANGED in execution mode", async () => {
+    it("should update isPlaying from NATIVE_STATE_CHANGED", async () => {
       // Reach PLAYING state
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
       await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
@@ -1263,26 +1164,7 @@ describe("PlayerStateCoordinator", () => {
       expect(coordinator.getContext().isPlaying).toBe(false);
     });
 
-    it("should update isPlaying from NATIVE_STATE_CHANGED in observer mode", async () => {
-      coordinator.setObserverMode(true);
-
-      // Dispatch LOAD_TRACK to transition to LOADING
-      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Native reports playing state — context should update in observer mode
-      await coordinator.dispatch({
-        type: "NATIVE_STATE_CHANGED",
-        payload: { state: State.Playing },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(coordinator.getContext().isPlaying).toBe(true);
-    });
-
-    it("should update position from NATIVE_PROGRESS_UPDATED in observer mode", async () => {
-      coordinator.setObserverMode(true);
-
+    it("should update position from NATIVE_PROGRESS_UPDATED", async () => {
       await coordinator.dispatch({
         type: "NATIVE_PROGRESS_UPDATED",
         payload: { position: 456, duration: 3600 },
@@ -1292,9 +1174,7 @@ describe("PlayerStateCoordinator", () => {
       expect(coordinator.getContext().position).toBe(456);
     });
 
-    it("should update lastError from NATIVE_ERROR in observer mode", async () => {
-      coordinator.setObserverMode(true);
-
+    it("should update lastError from NATIVE_ERROR", async () => {
       await coordinator.dispatch({
         type: "NATIVE_ERROR",
         payload: { error: new Error("test error") },
@@ -2562,6 +2442,53 @@ describe("PlayerStateCoordinator", () => {
       expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
     });
 
+    it("syncPositionToStore triggers updateNowPlayingMetadata on chapter change (CLEAN-03)", async () => {
+      // Reach PLAYING state first
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks to isolate chapter detection behavior
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Set up chapter 1 on the mock store player object
+      const chapter1: any = {
+        chapter: { id: "ch-1", chapterId: 1, title: "Chapter 1", start: 0, end: 600 },
+        positionInChapter: 0,
+        chapterDuration: 600,
+      };
+      mockStore.player = { ...mockStore.player, currentChapter: chapter1 };
+
+      // Dispatch NATIVE_PROGRESS_UPDATED — coordinator reads store.player.currentChapter
+      // after updatePosition() runs; detects chapter-1 is new → calls updateNowPlayingMetadata
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Assert updateNowPlayingMetadata called once for the chapter change
+      expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+
+      // Reset mocks — dispatch again with SAME chapter (no change expected)
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      mockStore.player = { ...mockStore.player, currentChapter: chapter1 };
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 200, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Debounce: same chapter id — updateNowPlayingMetadata must NOT be called again
+      expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+    });
+
     it("syncStateToStore updates all fields on structural transition (LOAD_TRACK)", async () => {
       // Dispatch LOAD_TRACK — structural transition IDLE -> LOADING
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
@@ -2574,18 +2501,15 @@ describe("PlayerStateCoordinator", () => {
       expect(mockStore.updatePosition).toHaveBeenCalled();
     });
 
-    it("syncToStore is skipped in observer mode", async () => {
-      coordinator.setObserverMode(true);
-
+    it("syncToStore always updates store (coordinator always in execution mode)", async () => {
       await coordinator.dispatch({
         type: "NATIVE_PROGRESS_UPDATED",
         payload: { position: 99, duration: 3600 },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // Store methods must not be called in observer mode
-      expect(mockStore.updatePosition).not.toHaveBeenCalled();
-      expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
+      // Store position is always updated — execution mode is always active
+      expect(mockStore.updatePosition).toHaveBeenCalledWith(99);
     });
 
     it("syncToStore does not write sleepTimer or lastPauseTime during sync", async () => {
@@ -2668,6 +2592,156 @@ describe("PlayerStateCoordinator", () => {
       // Should complete without throwing — event still processed
       const metrics = coordinator.getMetrics();
       expect(metrics.totalEventsProcessed).toBeGreaterThan(0);
+    });
+  });
+
+  // ============================================================================
+  // Full Lifecycle Integration (CLEAN-05)
+  // ============================================================================
+
+  describe("Full lifecycle integration (CLEAN-05)", () => {
+    let mockPlayerService: {
+      executeLoadTrack: ReturnType<typeof jest.fn>;
+      executePlay: ReturnType<typeof jest.fn>;
+      executePause: ReturnType<typeof jest.fn>;
+      executeStop: ReturnType<typeof jest.fn>;
+      executeSeek: ReturnType<typeof jest.fn>;
+      executeSetRate: ReturnType<typeof jest.fn>;
+      executeSetVolume: ReturnType<typeof jest.fn>;
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      jest.clearAllMocks();
+    });
+
+    it("should call execute* methods in correct order across full playback lifecycle", async () => {
+      // Phase 1: Load track (IDLE -> LOADING)
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "lifecycle-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("lifecycle-item", undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
+      expect(coordinator.getState()).toBe(PlayerState.LOADING);
+
+      // Phase 2: Queue reloaded (LOADING -> READY)
+      await coordinator.dispatch({
+        type: "QUEUE_RELOADED",
+        payload: { position: 100 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.READY);
+
+      // Phase 3: Play (READY -> PLAYING)
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(1);
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Phase 4: Progress ticks (PLAYING -> PLAYING, position-only)
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 105, duration: 3600 },
+      });
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 110, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Phase 5: Pause (PLAYING -> PAUSED)
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executePause).toHaveBeenCalledTimes(1);
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
+
+      // Phase 6: Seek from PAUSED (preSeekState=PAUSED — no auto-PLAY after seek)
+      // PAUSED -> SEEKING -> READY
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 200 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executeSeek).toHaveBeenCalledWith(200);
+      expect(coordinator.getState()).toBe(PlayerState.SEEKING);
+
+      // Seek completes: SEEKING -> READY (no auto-PLAY since preSeekState=PAUSED)
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 200, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(coordinator.getState()).toBe(PlayerState.READY);
+      // executePlay NOT called again yet (seek from PAUSED doesn't auto-resume)
+      expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(1);
+
+      // Phase 7: Play after seek (READY -> PLAYING, second executePlay call)
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(2);
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Phase 8: Stop (PLAYING -> STOPPING -> IDLE)
+      await coordinator.dispatch({ type: "STOP" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockPlayerService.executeStop).toHaveBeenCalledTimes(1);
+
+      // Final assertions: verify all execute* called expected number of times
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
+      expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(2); // play + play-after-seek
+      expect(mockPlayerService.executePause).toHaveBeenCalledTimes(1);
+      expect(mockPlayerService.executeSeek).toHaveBeenCalledWith(200);
+      expect(mockPlayerService.executeStop).toHaveBeenCalledTimes(1);
+    });
+
+    it("should auto-dispatch PLAY after SEEK when preSeekState was PLAYING", async () => {
+      // Get to PLAYING state first
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "seek-resume-item" },
+      });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Record executePlay call count before seek
+      const executePlayCallsBefore = mockPlayerService.executePlay.mock.calls.length;
+      expect(executePlayCallsBefore).toBe(1);
+
+      // Seek from PLAYING (preSeekState = PLAYING)
+      // PLAYING -> SEEKING
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 300 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getState()).toBe(PlayerState.SEEKING);
+
+      // Progress update arrives — seek complete
+      // SEEKING -> READY -> auto-dispatched PLAY -> PLAYING
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 300, duration: 3600 },
+      });
+
+      // Wait for the auto-dispatched PLAY to be processed by the async queue
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // PLAY should have been auto-dispatched and coordinator should be back in PLAYING
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+      expect(mockPlayerService.executePlay.mock.calls.length).toBeGreaterThan(
+        executePlayCallsBefore
+      );
     });
   });
 

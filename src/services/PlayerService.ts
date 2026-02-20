@@ -13,7 +13,7 @@ import { getChaptersForMedia } from "@/db/helpers/chapters";
 import type { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getLibraryItemById } from "@/db/helpers/libraryItems";
-import { getActiveSession, getAllActiveSessionsForUser } from "@/db/helpers/localListeningSessions";
+import { getAllActiveSessionsForUser } from "@/db/helpers/localListeningSessions";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { getUserByUsername } from "@/db/helpers/users";
 import { startPlaySession } from "@/lib/api/endpoints";
@@ -44,18 +44,6 @@ import TrackPlayer, {
 
 const log = logger.forTag("PlayerService"); // Cached sublogger
 const diagLog = logger.forDiagnostics("PlayerService"); // Diagnostic logger
-
-/**
- * Reconciliation report interface
- */
-interface ReconciliationReport {
-  discrepanciesFound: boolean;
-  actionsTaken: string[];
-  trackMismatch: boolean;
-  positionMismatch: boolean;
-  rateMismatch: boolean;
-  volumeMismatch: boolean;
-}
 
 /**
  * Track player service class
@@ -190,11 +178,6 @@ export class PlayerService {
     }
   }
 
-  /**
-   * Load and play a track
-   * @param libraryItemId - The library item ID to play
-   * @param episodeId - Optional episode ID for podcast episodes (future use)
-   */
   /**
    * Load and play a track (Public API - Dispatches Event)
    * @param libraryItemId - The library item ID to play
@@ -384,13 +367,6 @@ export class PlayerService {
       // safe regardless of whether NATIVE_TRACK_CHANGED has already arrived.
       dispatchPlayerEvent({ type: "PLAY" });
 
-      // Update now playing metadata with chapter info after track loads
-      this.updateNowPlayingMetadata().catch((error) => {
-        log.warn(
-          `Failed to update now playing metadata on track load: ${error instanceof Error ? error.message : String(error)}`
-        );
-      });
-
       // Diagnostic: log current track, position, playing state after loading
       await this.printDebugInfo("playTrack::done");
       log.info("Track loaded, PLAY dispatched to coordinator");
@@ -434,9 +410,6 @@ export class PlayerService {
     await TrackPlayer.pause();
   }
 
-  /**
-   * Resume playback with optional smart rewind
-   */
   /**
    * Resume playback (Public API - Dispatches Event)
    */
@@ -546,17 +519,11 @@ export class PlayerService {
     let success = false;
 
     try {
-      // Set isRestoringState to prevent chapter updates during queue rebuild
-      // This prevents the UI from showing "Opening Credits" when tracks are added at position 0
-      const tempStore = useAppStore.getState();
-      tempStore.setIsRestoringState?.(true);
-
       await TrackPlayer.reset();
 
       const tracks = await this.buildTrackList(track);
       if (tracks.length === 0) {
         log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
-        tempStore.setIsRestoringState?.(false);
         return false;
       }
 
@@ -572,16 +539,12 @@ export class PlayerService {
           `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
         );
 
-        // Clear isRestoringState and update chapter with correct position
         // RETAINED: _updateCurrentChapter — chapter calculation lives in playerSlice, not coordinator
-        // RETAINED: setIsRestoringState — playerSlice-local guard
+        // isLoadingTrack is still set (via RELOAD_QUEUE) so this call will be skipped;
+        // chapter will be correctly set when QUEUE_RELOADED clears isLoadingTrack via bridge
         const updatedStore = useAppStore.getState();
         updatedStore._updateCurrentChapter(resumeInfo.position);
-        updatedStore.setIsRestoringState?.(false);
       } else {
-        // Clear isRestoringState even when starting from beginning
-        const updatedStore = useAppStore.getState();
-        updatedStore.setIsRestoringState?.(false);
         log.info("Prepared queue with no resume position (starting from beginning)");
       }
 
@@ -616,9 +579,6 @@ export class PlayerService {
   }
 
   /**
-   * Seek to position in seconds
-   */
-  /**
    * Seek to position in seconds (Public API - Dispatches Event)
    */
   async seekTo(position: number): Promise<void> {
@@ -635,16 +595,6 @@ export class PlayerService {
     await TrackPlayer.seekTo(position);
   }
 
-  /**
-   * Update now playing metadata with chapter information
-   */
-  async updateNowPlayingMetadata(): Promise<void> {
-    await useAppStore.getState().updateNowPlayingMetadata();
-  }
-
-  /**
-   * Set playback rate
-   */
   /**
    * Set playback rate (Public API - Dispatches Event)
    */
@@ -663,9 +613,6 @@ export class PlayerService {
   }
 
   /**
-   * Set volume (0.0 to 1.0)
-   */
-  /**
    * Set volume (Public API - Dispatches Event)
    */
   async setVolume(volume: number): Promise<void> {
@@ -682,9 +629,6 @@ export class PlayerService {
     await TrackPlayer.setVolume(volume);
   }
 
-  /**
-   * Stop playback and clear queue
-   */
   /**
    * Stop playback (Public API - Dispatches Event)
    */
@@ -837,38 +781,6 @@ export class PlayerService {
   }
 
   /**
-   * Get the current play session ID (for progress tracking)
-   */
-  getCurrentPlaySessionId(): string | null {
-    const store = useAppStore.getState();
-    return store.player.currentPlaySessionId;
-  }
-
-  /**
-   * Clear the current play session ID
-   */
-  clearPlaySessionId(): void {
-    const store = useAppStore.getState();
-    store._setPlaySessionId(null);
-  }
-
-  /**
-   * Get the current track (for PlayerBackgroundService)
-   */
-  getCurrentTrack(): PlayerTrack | null {
-    const store = useAppStore.getState();
-    return store.player.currentTrack;
-  }
-
-  /**
-   * Get the current library item ID (for session rehydration)
-   */
-  getCurrentLibraryItemId(): string | null {
-    const store = useAppStore.getState();
-    return store.player.currentTrack?.libraryItemId || null;
-  }
-
-  /**
    * Get the initialization timestamp (for detecting context recreation)
    */
   getInitializationTimestamp(): number {
@@ -976,263 +888,6 @@ export class PlayerService {
   }
 
   /**
-   * Verify that TrackPlayer state matches store state
-   */
-  async verifyTrackPlayerConsistency(): Promise<boolean> {
-    try {
-      const store = useAppStore.getState();
-      const [state, currentTrack, progress] = await Promise.all([
-        TrackPlayer.getPlaybackState(),
-        TrackPlayer.getActiveTrack(),
-        TrackPlayer.getProgress(),
-      ]);
-
-      // Check if track matches
-      const trackMatches =
-        (!currentTrack && !store.player.currentTrack) ||
-        (currentTrack as any)?.id.startsWith(store.player.currentTrack?.mediaId || "");
-
-      // Check if position is roughly the same (within 5 seconds)
-      const positionMatches =
-        !store.player.position || Math.abs(progress.position - store.player.position) < 5;
-
-      // Check if playing state matches
-      const playingMatches = (state.state === State.Playing) === store.player.isPlaying;
-
-      const isConnected = trackMatches && positionMatches && playingMatches;
-
-      if (!isConnected) {
-        log.warn(
-          `Connection mismatch - Track: ${trackMatches ? "match" : "mismatch"}, Position: ${positionMatches ? "match" : "mismatch"}, Playing: ${playingMatches ? "match" : "mismatch"}`
-        );
-        if (!trackMatches) {
-          const { audioFiles, chapters, ...interestingProps } = store.player.currentTrack || {};
-          diagLog.info(
-            `From TrackPlayer:\n${JSON.stringify(currentTrack)}\nFrom store:\n${JSON.stringify(interestingProps)}`
-          );
-        }
-        if (!positionMatches) {
-          diagLog.info(
-            `From store position: ${formatTime(store.player.position)}, from TrackPlayer position: ${formatTime(progress.position)}`
-          );
-        }
-        if (!playingMatches) {
-          diagLog.info(
-            `From store isPlaying: ${store.player.isPlaying}, from TrackPlayer state: ${state.state}`
-          );
-        }
-      } else {
-        log.info("Player connection verified OK");
-      }
-
-      return isConnected;
-    } catch (error) {
-      log.error("Error verifying connection", error as Error);
-      return false;
-    }
-  }
-
-  /**
-   * Reconcile TrackPlayer state with JS state (playerSlice and ProgressService)
-   * Detects and fixes discrepancies between native and JS layers
-   */
-  async reconcileTrackPlayerState(): Promise<ReconciliationReport> {
-    const report: ReconciliationReport = {
-      discrepanciesFound: false,
-      actionsTaken: [],
-      trackMismatch: false,
-      positionMismatch: false,
-      rateMismatch: false,
-      volumeMismatch: false,
-    };
-
-    try {
-      const store = useAppStore.getState();
-
-      // Query TrackPlayer state
-      const [tpState, tpQueue, tpCurrentTrack, tpProgress, tpRate, tpVolume] = await Promise.all([
-        TrackPlayer.getPlaybackState(),
-        TrackPlayer.getQueue(),
-        TrackPlayer.getActiveTrack(),
-        TrackPlayer.getProgress(),
-        TrackPlayer.getRate(),
-        TrackPlayer.getVolume(),
-      ]);
-
-      const hasTracks = tpQueue.length > 0;
-      const tpPosition = tpProgress.position;
-      const tpIsPlaying = tpState.state === State.Playing;
-      const storePosition = store.player.position;
-
-      // Get DB session as source of truth for position (if we have libraryItemId)
-      let dbPosition = store.player.position;
-      let dbSessionUpdatedAt: Date | null = null;
-      if (store.player.currentTrack?.libraryItemId) {
-        try {
-          const username = await getStoredUsername();
-          if (username) {
-            const user = await getUserByUsername(username);
-            if (user?.id) {
-              const dbSession = await getActiveSession(
-                user.id,
-                store.player.currentTrack.libraryItemId
-              );
-              if (dbSession) {
-                dbPosition = dbSession.currentTime;
-                dbSessionUpdatedAt = dbSession.updatedAt;
-              }
-            }
-          }
-        } catch (error) {
-          log.error("Failed to get DB session for reconciliation", error as Error);
-        }
-      }
-
-      // 1. Check track mismatch
-      if (hasTracks && !store.player.currentTrack) {
-        report.trackMismatch = true;
-        report.discrepanciesFound = true;
-        // TrackPlayer has tracks but playerSlice doesn't - try to restore from DB
-        try {
-          const username = await getStoredUsername();
-          if (username) {
-            const user = await getUserByUsername(username);
-            if (user?.id) {
-              // Query DB for most recent active session
-              const activeSessions = await getAllActiveSessionsForUser(user.id);
-              if (activeSessions.length > 0) {
-                const mostRecent = activeSessions.sort(
-                  (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-                )[0];
-                const dbSession = await progressService.getCurrentSession(
-                  user.id,
-                  mostRecent.libraryItemId
-                );
-                if (dbSession) {
-                  // Try to restore track from DB session
-                  const libraryItem = await getLibraryItemById(dbSession.libraryItemId);
-                  if (libraryItem) {
-                    // Can't fully restore PlayerTrack here without more data, but we can note it
-                    report.actionsTaken.push(
-                      `Found DB session for ${dbSession.libraryItemId} but cannot restore track without metadata`
-                    );
-                  }
-                }
-              }
-            }
-          }
-        } catch (error) {
-          log.error("Failed to load library item for reconciliation", error as Error);
-        }
-      }
-
-      // 2. Check position mismatch (>5s difference)
-      const positionDiff = Math.abs(tpPosition - dbPosition);
-      if (positionDiff > 5) {
-        report.positionMismatch = true;
-        report.discrepanciesFound = true;
-
-        const trackInfo = store.player.currentTrack
-          ? `mediaId=${store.player.currentTrack?.mediaId} item=${store.player.currentTrack?.libraryItemId}`
-          : "track=none";
-
-        // Determine which position is authoritative by checking staleness
-        const STALE_SESSION_THRESHOLD = 60000; // 60 seconds
-        let authoritativePosition = dbPosition;
-        let positionSource = "DB";
-
-        if (dbSessionUpdatedAt) {
-          const sessionAge = Date.now() - dbSessionUpdatedAt.getTime();
-
-          // If DB session is stale (>60s old) and TrackPlayer position is ahead, prefer TrackPlayer
-          if (sessionAge > STALE_SESSION_THRESHOLD && tpPosition > dbPosition) {
-            authoritativePosition = tpPosition;
-            positionSource = "TrackPlayer (DB session is stale)";
-            log.warn(
-              `DB session is stale (${formatTime(sessionAge / 1000)}s old), preferring TrackPlayer position: ${formatTime(tpPosition)}s over DB: ${formatTime(dbPosition)}s`
-            );
-          }
-        }
-
-        log.info(
-          `Position mismatch detected: TrackPlayer=${formatTime(tpPosition)}s, DB=${formatTime(dbPosition)}s, Store=${formatTime(storePosition)}s, diff=${formatTime(positionDiff)}s, ${trackInfo}`
-        );
-
-        if (hasTracks) {
-          // Don't seek TrackPlayer if actively playing to avoid stutters
-          // When playing, TrackPlayer position is ahead of DB due to 1-2s sync lag
-          if (!tpIsPlaying) {
-            await TrackPlayer.seekTo(authoritativePosition);
-            store.updatePosition(authoritativePosition);
-            report.actionsTaken.push(
-              `Adjusted TrackPlayer position to ${positionSource} value: ${formatTime(authoritativePosition)}s`
-            );
-          } else {
-            // Update store but don't seek TrackPlayer
-            store.updatePosition(authoritativePosition);
-            report.actionsTaken.push(
-              `Did not seek TrackPlayer because it's actively playing (would cause stutter). Updated store position to ${positionSource} value: ${formatTime(authoritativePosition)}s`
-            );
-          }
-        } else {
-          const reason = store.player.currentTrack
-            ? "TrackPlayer queue is empty - queue should be rebuilt via restorePlayerServiceFromSession() or playTrack()"
-            : "No current track in store - track restoration may be needed";
-          log.info(`Position mismatch detected but cannot seek: ${reason}`);
-          report.actionsTaken.push(`Position mismatch detected but cannot seek: ${reason}`);
-        }
-      }
-
-      // 3. Check playback rate mismatch
-      if (Math.abs(tpRate - store.player.playbackRate) > 0.01) {
-        report.rateMismatch = true;
-        report.discrepanciesFound = true;
-        await TrackPlayer.setRate(store.player.playbackRate);
-        report.actionsTaken.push(`Applied playback rate from store: ${store.player.playbackRate}`);
-      }
-
-      // 4. Check volume mismatch
-      if (Math.abs(tpVolume - store.player.volume) > 0.01) {
-        report.volumeMismatch = true;
-        report.discrepanciesFound = true;
-        await TrackPlayer.setVolume(store.player.volume);
-        report.actionsTaken.push(`Applied volume from store: ${store.player.volume}`);
-      }
-
-      // 5. Check playing state mismatch
-      if (tpIsPlaying !== store.player.isPlaying) {
-        report.discrepanciesFound = true;
-        store.updatePlayingState(tpIsPlaying);
-        report.actionsTaken.push(`Synced playing state from TrackPlayer: ${tpIsPlaying}`);
-      }
-
-      if (report.discrepanciesFound) {
-        if (report.actionsTaken.length > 0) {
-          log.info(
-            `Reconciliation completed with ${report.actionsTaken.length} actions: ${report.actionsTaken.join(", ")}`
-          );
-        } else {
-          log.info(
-            `Reconciliation completed with 0 actions: discrepancies found but no actions could be taken (trackMismatch=${report.trackMismatch}, positionMismatch=${report.positionMismatch}, rateMismatch=${report.rateMismatch}, volumeMismatch=${report.volumeMismatch})`
-          );
-        }
-      } else {
-        log.info("Reconciliation: No discrepancies found, state is in sync");
-      }
-
-      return report;
-    } catch (error) {
-      log.error("Error during reconciliation", error as Error);
-      report.discrepanciesFound = true;
-      report.actionsTaken.push(`Error: ${(error as Error).message}`);
-      return report;
-    }
-  }
-
-  /**
-   * Sync store state with TrackPlayer state
-   */
-  /**
    * Sync current position from database
    * Useful when database position has been updated (e.g., from server sync)
    */
@@ -1294,42 +949,9 @@ export class PlayerService {
     }
   }
 
-  async syncStoreWithTrackPlayer(): Promise<void> {
-    try {
-      log.info("Syncing store with TrackPlayer");
-
-      const store = useAppStore.getState();
-      const [currentTrack, progress] = await Promise.all([
-        TrackPlayer.getActiveTrack(),
-        TrackPlayer.getProgress(),
-      ]);
-
-      // Update position
-      store.updatePosition(progress.position);
-
-      // Note: Playing state is updated by PlayerBackgroundService event listeners
-
-      // If current track in TrackPlayer doesn't match store, update store
-      if (currentTrack?.id.startsWith(store.player.currentTrack?.mediaId || "")) {
-        // Find the track info from our current track
-        const trackInfo = this.getCurrentTrack();
-        if (trackInfo) {
-          store._setCurrentTrack(trackInfo);
-        }
-      }
-
-      log.info("Store synced with TrackPlayer successfully");
-    } catch (error) {
-      log.error("Error syncing store with TrackPlayer", error as Error);
-    }
-  }
-
   /**
-   * Reconnect background service and sync state
-   *
-   * This method handles reconnection after app updates, hot reloads, or JS context recreation.
-   * It safely loads the background service module and attempts reconnection, falling back
-   * to a full re-registration if the module has changed (e.g., after an app update).
+   * Reconnect background service after app updates, hot reloads, or JS context recreation.
+   * Falls back to full re-registration if the module has changed.
    */
   async reconnectBackgroundService(): Promise<void> {
     try {
@@ -1382,7 +1004,6 @@ export class PlayerService {
         // If we can't load the module, try to force a full re-registration
         log.warn("Attempting full TrackPlayer service re-registration");
         TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
-        await this.syncStoreWithTrackPlayer();
         return;
       }
 
@@ -1415,35 +1036,15 @@ export class PlayerService {
 
       await configureTrackPlayer();
 
-      // Sync the store with TrackPlayer state
-      await this.syncStoreWithTrackPlayer();
-
       log.info("Background service reconnection complete");
     } catch (error) {
       log.error("Error reconnecting background service", error as Error);
-
-      // Last resort: try to sync state anyway
-      try {
-        await this.syncStoreWithTrackPlayer();
-      } catch (syncError) {
-        log.error("Failed to sync store after reconnection error", syncError as Error);
-      }
     }
   }
 
   /**
-   * Refresh file paths after iOS container path changes
-   *
-   * iOS can change the application container path between app launches or when
-   * coming back from background. This causes absolute paths to become invalid
-   * even though the files still exist at a different absolute path.
-   *
-   * This method:
-   * 1. Refreshes the current track's cover URI
-   * 2. Updates the now playing metadata in TrackPlayer
-   *
-   * Should be called when the app comes to foreground to ensure all file
-   * references are valid for the current container path.
+   * Refresh file paths after iOS container path changes.
+   * Refreshes cover URI and now playing metadata. Call when app comes to foreground.
    */
   async refreshFilePathsAfterContainerChange(): Promise<void> {
     log.info("[PlayerService] Refreshing file paths after potential container change...");
@@ -1479,7 +1080,7 @@ export class PlayerService {
 
         // Update TrackPlayer's now playing metadata with the new cover URI
         // This ensures the lock screen and notification show the correct cover
-        await this.updateNowPlayingMetadata();
+        await useAppStore.getState().updateNowPlayingMetadata();
 
         log.info("[PlayerService] Track metadata refreshed with new cover URI");
       } else {

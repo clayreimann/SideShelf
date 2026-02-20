@@ -54,8 +54,6 @@ export interface PlayerSliceState {
     };
     /** Whether the player has been initialized */
     initialized: boolean;
-    /** Whether we're currently restoring state (prevents premature chapter updates) */
-    isRestoringState: boolean;
     /** Sleep timer state */
     sleepTimer: {
       /** End time timestamp (ms since epoch), null if not active */
@@ -108,8 +106,6 @@ export interface PlayerSliceActions {
   _setLastPauseTime: (timestamp: number | null) => void;
   /** Update now playing metadata with chapter information */
   updateNowPlayingMetadata: () => Promise<void>;
-  /** Set isRestoringState flag to prevent UI jumping during state restoration */
-  setIsRestoringState: (isRestoring: boolean) => void;
   /** Set sleep timer with duration in minutes */
   setSleepTimer: (minutes: number) => void;
   /** Set sleep timer to end at chapter boundary */
@@ -130,15 +126,6 @@ export interface PlayerSlice extends PlayerSliceState, PlayerSliceActions {}
  */
 export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
   restorePersistedState: async () => {
-    // Set flag to prevent premature chapter updates during state restoration
-    set((state: PlayerSlice) => ({
-      ...state,
-      player: {
-        ...state.player,
-        isRestoringState: true,
-      },
-    }));
-
     const restored: string[] = [];
     const notFound: string[] = [];
 
@@ -326,17 +313,9 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       }
     }
 
-    // Clear the restoration flag
     // NOTE: We don't update the chapter here because the TrackPlayer queue may not be ready yet.
     // The chapter will be correctly updated by PlayerService.reloadTrackPlayerQueue() when the
     // queue is rebuilt, or by PlayerBackgroundService.handlePlaybackProgressUpdated() during playback.
-    set((state: PlayerSlice) => ({
-      ...state,
-      player: {
-        ...state.player,
-        isRestoringState: false,
-      },
-    }));
 
     // Notify coordinator that state has been restored
     const finalState = get();
@@ -375,7 +354,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       isSeeking: false,
     },
     initialized: false,
-    isRestoringState: false,
     sleepTimer: {
       endTime: null,
       type: null,
@@ -478,12 +456,12 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   _updateCurrentChapter: (position: number) => {
     const state = get() as PlayerSlice;
-    const { currentTrack, currentChapter, isRestoringState } = state.player;
+    const { currentTrack, currentChapter, loading } = state.player;
 
-    // Skip chapter updates during state restoration to prevent UI jumping
-    // The correct chapter will be set after restoration completes
-    if (isRestoringState) {
-      log.debug("Skipping chapter update during state restoration");
+    // Skip chapter updates while track is loading (prevents position-0 chapter during queue rebuild)
+    // Previously guarded by isRestoringState; now uses coordinator-managed isLoadingTrack (CLEAN-03)
+    if (loading.isLoadingTrack) {
+      log.debug("Skipping chapter update while track is loading");
       return;
     }
 
@@ -580,16 +558,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     // Note: lastPauseTime is not persisted - it's ephemeral state for smart rewind
-  },
-
-  setIsRestoringState: (isRestoring: boolean) => {
-    set((state: PlayerSlice) => ({
-      ...state,
-      player: {
-        ...state.player,
-        isRestoringState: isRestoring,
-      },
-    }));
   },
 
   /**

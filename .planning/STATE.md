@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Phase 4 - State Propagation
+**Current focus:** Phase 5 - Cleanup
 
 ## Current Position
 
-Phase: 4 of 5 (State Propagation)
-Plan: 3 of 3 in current phase (complete)
-Status: Phase 4 complete — PROP-01 through PROP-06 contract tests added; coordinator bridge proven as single write authority across all three service files
-Last activity: 2026-02-19 — 04-03: PROP contract tests; full lifecycle verification, sleep timer isolation, BGS graceful failure, chapter debounce
+Phase: 5 of 5 (Cleanup)
+Plan: 6 of 6 in current phase
+Status: Plan 05-06 complete — startSessionLocks mutex removed from ProgressService (37 lines); CLEAN-04 complete; Phase 5 all CLEAN requirements satisfied
+Last activity: 2026-02-20 — 05-06: removed startSessionLocks mutex from ProgressService; all 6 CLEAN requirements met
 
-Progress: [==========] 89% (Phase 1 complete; Phase 2 complete; Phase 3 complete; Phase 4 complete)
+Progress: [==========] 100% (All phases complete: Phase 1-4 complete; Phase 5 complete: 05-01 through 05-06 done)
 
 ## Performance Metrics
 
@@ -46,6 +46,10 @@ Progress: [==========] 89% (Phase 1 complete; Phase 2 complete; Phase 3 complete
 - Trend: stable ~3-12 min/plan
 
 _Updated after each plan completion_
+
+| Phase 05 P04 | 7 min | 2 tasks | 6 files |
+| Phase 05 P05 | 4 min | 2 tasks | 1 file |
+| Phase 05 P06 | 2 min | 2 tasks | 1 file |
 
 ## Accumulated Context
 
@@ -80,6 +84,15 @@ Recent decisions affecting current work:
 - [Phase 3.1 Plan 02]: Both branches (activeSession and savedProgress) get the isFinished guard so whichever branch executes, finished items always return 0
 - [Phase 3.1 Plan 02]: AsyncStorage cleared at read time (coordinator) AND write time (UI component) — defense in depth
 - [Phase 3.1 Plan 02]: currentTime explicitly set to 0 (not preserved) when marking as unfinished — prevents API and DB divergence
+- [Phase 05]: syncStoreWithTrackPlayer calls in reconnectBackgroundService removed — coordinator bridge propagates all state changes via syncStateToStore
+- [Phase 05]: On app foreground (trackPlayerIsPlaying branch), no manual sync needed — coordinator bridge keeps store in sync continuously via NATIVE events
+- [Phase 05, Plan 03]: Coordinator reads store.player.currentChapter (not this.context.currentChapter) after updatePosition() — store reflects updated chapter synchronously via Zustand set
+- [Phase 05, Plan 03]: Periodic now playing updates (2-second gate) removed alongside chapter detection — coordinator bridge makes them redundant
+- [Phase 05, Plan 03]: lastSyncedChapterId shared between syncPositionToStore and syncStateToStore — whichever fires first on a chapter transition sets the debounce, preventing double calls
+- [Phase 05]: isRestoringState replaced by coordinator-managed loading.isLoadingTrack in \_updateCurrentChapter (CLEAN-03)
+- [Phase 05]: PlayerService.ts duplicate JSDoc blocks removed; 6 duplicate comments + 2 verbose JSDoc condensed, bringing file from 1140 to 1097 lines
+- [Phase 05, Plan 05]: Full lifecycle integration test gates Plan 06 (session mutex removal); seek from PAUSED uses NATIVE_PROGRESS_UPDATED as seek completion signal; coverage targets met for coordinator (92.83%) and playerSlice (91.62%)
+- [Phase 05, Plan 06]: startSessionLocks mutex removed from ProgressService — coordinator serial queue + BGS existingSession guard (line 729) provide equivalent duplicate-session protection; 37 lines removed, file 1215 → 1178 lines; CLEAN-04 complete; Phase 5 all 6 plans done
 
 ### Roadmap Evolution
 
@@ -106,6 +119,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-19
-Stopped at: Completed 04-03-PLAN.md — Phase 4 complete. PROP-01 through PROP-06 contract tests prove coordinator bridge is correct and complete. Phase 5 (Component Migration) is next.
+Last session: 2026-02-20
+Stopped at: Completed 05-06-PLAN.md — startSessionLocks mutex removed from ProgressService; Phase 5 complete; all 6 CLEAN requirements satisfied.
 Resume file: None

@@ -107,9 +107,6 @@ export async function initializeApp(): Promise<void> {
 
       // Restore PlayerService state from ProgressService session
       await playerService.restorePlayerServiceFromSession();
-
-      // Reconcile TrackPlayer state with JS state
-      await playerService.reconcileTrackPlayerState();
     } catch (error) {
       log.error("Failed to restore persisted player state", error as Error);
       // Don't throw - continue initialization even if state restoration fails

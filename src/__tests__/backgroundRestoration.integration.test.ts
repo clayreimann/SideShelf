@@ -264,7 +264,7 @@ describe("Background Restoration Integration", () => {
   });
 
   it("should correctly update chapter when queue is rebuilt after restoration", async () => {
-    // This test verifies that even though chapter isn't updated during restoration,
+    // This test verifies that even though chapter isn't updated while track is loading,
     // it will be correctly updated when the TrackPlayer queue is rebuilt.
     //
     // This simulates the scenario where after restoration (with null chapter),
@@ -272,16 +272,17 @@ describe("Background Restoration Integration", () => {
 
     const restoredPosition = 4000; // In Chapter 3 (3600-5400)
 
-    // Setup: Set restoration flag first, then load track and position
-    store.getState().setIsRestoringState(true);
+    // Setup: Set isLoadingTrack first, then load track and position
+    // This simulates the coordinator setting isLoadingTrack=true via RELOAD_QUEUE event
+    store.getState()._setTrackLoading(true);
     store.getState()._setCurrentTrack(mockPlayerTrack);
     store.getState().updatePosition(restoredPosition);
 
-    // Chapter should be null during restoration
+    // Chapter should be null during loading
     expect(store.getState().player.currentChapter).toBeNull();
 
-    // Now simulate queue being rebuilt (isRestoringState would be false)
-    store.getState().setIsRestoringState(false);
+    // Now simulate queue being rebuilt (isLoadingTrack cleared by coordinator)
+    store.getState()._setTrackLoading(false);
 
     // Manually trigger chapter update (simulates what reloadTrackPlayerQueue does)
     store.getState()._updateCurrentChapter(restoredPosition);

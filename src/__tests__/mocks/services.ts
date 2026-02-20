@@ -51,7 +51,6 @@ export interface MockPlayerService {
   seekTo: jest.Mock;
   setRate: jest.Mock;
   setVolume: jest.Mock;
-  reconcileTrackPlayerState: jest.Mock;
   verifyConnection: jest.Mock;
   restorePlayerServiceFromSession: jest.Mock;
 }
@@ -73,9 +72,6 @@ export function createMockPlayerService(): MockPlayerService {
     seekTo: jest.fn().mockResolvedValue(undefined),
     setRate: jest.fn().mockResolvedValue(undefined),
     setVolume: jest.fn().mockResolvedValue(undefined),
-    reconcileTrackPlayerState: jest.fn().mockResolvedValue({
-      discrepanciesFound: false,
-    }),
     verifyConnection: jest.fn().mockResolvedValue(true),
     restorePlayerServiceFromSession: jest.fn().mockResolvedValue(undefined),
   };

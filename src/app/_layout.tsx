@@ -107,16 +107,8 @@ export default function RootLayout() {
 
         if (trackPlayerIsPlaying) {
           log.info(
-            "TrackPlayer is currently playing, syncing state FROM TrackPlayer and skipping restoration"
+            "TrackPlayer is currently playing, coordinator bridge keeps store in sync — skipping restoration"
           );
-
-          // Sync state FROM TrackPlayer to store (don't update TrackPlayer)
-          try {
-            await playerService.syncStoreWithTrackPlayer();
-            log.info("State synced from TrackPlayer successfully");
-          } catch (error) {
-            log.error("Failed to sync state from TrackPlayer", error as Error);
-          }
 
           // Still update player init timestamp if context was recreated
           const currentPlayerInitTimestamp = playerService.getInitializationTimestamp();
@@ -153,22 +145,12 @@ export default function RootLayout() {
 
         if (wasLongBackground || contextRecreated) {
           log.info(
-            `App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, verifying player connection`
+            `App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, restoring persisted state`
           );
 
-          // Verify connection between TrackPlayer and store
           // Restore current track from AsyncStore if missing
+          // Coordinator bridge keeps store in sync; no manual reconciliation needed
           await useAppStore.getState().restorePersistedState();
-          const isConsistent = await playerService.verifyTrackPlayerConsistency();
-          log.info(`Player service isConsistent=${isConsistent}`);
-
-          // Reconcile TrackPlayer state to ensure sync
-          await playerService.reconcileTrackPlayerState();
-
-          // if (!isConnected || contextRecreated) {
-          //   log.warn("Connection mismatch or context recreated, reconnecting background service");
-          //   await playerService.reconnectBackgroundService();
-          // }
         }
 
         log.info("Triggering progress refetch on app foreground");

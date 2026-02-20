@@ -1,25 +1,24 @@
 /**
- * Player State Coordinator - Phase 2: Execution Control
+ * Player State Coordinator
  *
  * Event-driven state machine for coordinating player state.
  *
- * PHASE 2 IMPLEMENTATION (Execution Control):
+ * The coordinator owns player state — services execute its commands and report
+ * reality back, not the other way around.
+ *
  * - Executes state transitions by calling PlayerService execute* methods
  * - Services respond to coordinator commands (not independent execution)
  * - State machine validates transitions and blocks invalid ones
  * - Context updates from ALL events to reflect actual system state
- * - observerMode=false by default; set true for instant Phase 1 rollback
- *
- * KEY DESIGN DECISION:
- * Context (isPlaying, position, etc.) updates from ALL events including NATIVE_*
- * to ensure diagnostics always show current reality. When observerMode is false,
- * the coordinator calls execute* methods on PlayerService to drive playback.
+ * - Position logic centralized via resolveCanonicalPosition
+ * - State propagated to Zustand store via syncPositionToStore / syncStateToStore
  *
  * Phase history:
  * - Phase 1 (Observer Mode): Validated state machine models real system
  * - Phase 2 (Execution Control): Coordinator drives PlayerService
  * - Phase 3: Centralize position logic
  * - Phase 4: Propagate state to subscribers
+ * - Phase 5: Cleanup — observer mode scaffolding removed
  */
 
 import { getActiveSession } from "@/db/helpers/localListeningSessions";
@@ -87,9 +86,6 @@ export class PlayerStateCoordinator extends EventEmitter {
     totalClears: 0,
   };
 
-  // Phase 2: Execution mode
-  private observerMode = false;
-
   // Phase 4: Store bridge - track last synced chapter to debounce metadata updates
   private lastSyncedChapterId: string | null = null;
 
@@ -102,9 +98,7 @@ export class PlayerStateCoordinator extends EventEmitter {
     this.startDiagnosticLogging();
     this.subscribeToEventBus();
 
-    log.info(
-      `[Coordinator] PlayerStateCoordinator initialized (${this.observerMode ? "Observer Mode" : "Execution Mode"})`
-    );
+    log.info(`[Coordinator] PlayerStateCoordinator initialized (Execution Mode)`);
   }
 
   /**
@@ -139,8 +133,8 @@ export class PlayerStateCoordinator extends EventEmitter {
   /**
    * Dispatch an event to the state machine.
    *
-   * Events are queued and processed serially. In execution mode (observerMode=false),
-   * valid transitions invoke the corresponding execute* method on PlayerService.
+   * Events are queued and processed serially. Valid transitions invoke the
+   * corresponding execute* method on PlayerService.
    */
   async dispatch(event: PlayerEvent): Promise<void> {
     this.eventQueue.push(event);
@@ -179,23 +173,6 @@ export class PlayerStateCoordinator extends EventEmitter {
     };
   }
 
-  /**
-   * Check if coordinator is in observer mode
-   */
-  isObserverMode(): boolean {
-    return this.observerMode;
-  }
-
-  /**
-   * Set observer mode at runtime.
-   * When true, coordinator observes but does not execute (Phase 1 behavior).
-   * When false, coordinator calls service execute* methods (Phase 2+ behavior).
-   */
-  setObserverMode(enabled: boolean): void {
-    this.observerMode = enabled;
-    log.info(`[Coordinator] Observer mode ${enabled ? "enabled" : "disabled"}`);
-  }
-
   // ============================================================================
   // Event Processing
   // ============================================================================
@@ -226,8 +203,8 @@ export class PlayerStateCoordinator extends EventEmitter {
   /**
    * Handle a single event.
    *
-   * Validates the transition, updates context, and (when not in observer mode)
-   * calls executeTransition to invoke the appropriate execute* method on PlayerService.
+   * Validates the transition, updates context, and calls executeTransition
+   * to invoke the appropriate execute* method on PlayerService.
    */
   private async handleEvent(event: PlayerEvent): Promise<void> {
     const startTime = Date.now();
@@ -284,21 +261,15 @@ export class PlayerStateCoordinator extends EventEmitter {
       if (nextState && nextState !== currentState) {
         log.info(`[Coordinator] Transition: ${currentState} --[${event.type}]--> ${nextState}`);
         this.metrics.stateTransitionCount++;
-
-        // Update context state to maintain accurate state tracking
-        // Even in observer mode, we need to track state internally to validate subsequent transitions
         this.context.previousState = currentState;
         this.context.currentState = nextState;
       }
-      // Execute transition (Phase 2)
-      if (!this.observerMode) {
-        await this.executeTransition(event, nextState);
-        // Sync coordinator state to Zustand store (Phase 4: State Propagation)
-        if (event.type === "NATIVE_PROGRESS_UPDATED") {
-          this.syncPositionToStore();
-        } else {
-          this.syncStateToStore(event);
-        }
+      await this.executeTransition(event, nextState);
+      // Sync coordinator state to Zustand store (Phase 4: State Propagation)
+      if (event.type === "NATIVE_PROGRESS_UPDATED") {
+        this.syncPositionToStore();
+      } else {
+        this.syncStateToStore(event);
       }
     } else {
       log.warn(
@@ -329,7 +300,6 @@ export class PlayerStateCoordinator extends EventEmitter {
 
   /**
    * Update context based on event payload
-   * Even in observer mode, we need accurate context for validation and diagnostics
    */
   private updateContextFromEvent(event: PlayerEvent): void {
     switch (event.type) {
@@ -481,10 +451,10 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.currentChapter = event.payload.chapter;
         break;
 
-      // Native state changes (observer mode: track actual player state)
+      // Native state changes — track actual player state for diagnostics
       case "NATIVE_STATE_CHANGED":
         // Update context to reflect actual native player state
-        // This is critical for Phase 1 validation - diagnostics UI needs accurate state
+        // Diagnostics UI needs accurate state
         // Map native State enum to isPlaying boolean
         this.context.isPlaying = event.payload.state === State.Playing;
         // Clear isLoadingTrack when playback actually starts — mirrors BGS behavior
@@ -713,14 +683,28 @@ export class PlayerStateCoordinator extends EventEmitter {
    * Only updates store.updatePosition() to avoid triggering expensive Zustand
    * selector re-evaluations across the full player state on every tick (PROP-02/PROP-03).
    *
-   * Guard: no-op when observerMode is true or when Zustand is unavailable (Android
-   * BGS headless context, PROP-05).
+   * Also detects chapter boundary crossings and calls updateNowPlayingMetadata() when
+   * chapter.id changes (CLEAN-03). updatePosition() triggers _updateCurrentChapter
+   * synchronously via Zustand set, so store.player.currentChapter reflects the
+   * updated chapter by the time the comparison runs.
+   *
+   * Debounced by lastSyncedChapterId (mirrors PROP-06 in syncStateToStore).
+   *
+   * Guard: no-op when Zustand is unavailable (Android BGS headless context, PROP-05).
    */
   private syncPositionToStore(): void {
-    if (this.observerMode) return;
     try {
       const store = useAppStore.getState();
-      store.updatePosition(this.context.position);
+      store.updatePosition(this.context.position); // triggers _updateCurrentChapter synchronously
+
+      // Detect chapter boundary crossings; debounced by lastSyncedChapterId (mirrors PROP-06)
+      const currentChapterId = store.player.currentChapter?.chapter?.id?.toString() ?? null;
+      if (currentChapterId !== null && currentChapterId !== this.lastSyncedChapterId) {
+        this.lastSyncedChapterId = currentChapterId;
+        store.updateNowPlayingMetadata().catch((err) => {
+          log.error("[Coordinator] Failed to update now playing metadata on chapter change", err);
+        });
+      }
     } catch {
       // BGS headless context: Zustand store may not be available (PROP-05)
       return;
@@ -732,8 +716,7 @@ export class PlayerStateCoordinator extends EventEmitter {
    *
    * Syncs all coordinator context fields to their corresponding playerSlice mutators.
    * Does NOT sync: lastPauseTime (service-ephemeral), sleepTimer (PROP-04 exception),
-   * isRestoringState (playerSlice-local guard), isModalVisible (UI-only),
-   * initialized (lifecycle).
+   * isModalVisible (UI-only), initialized (lifecycle).
    *
    * currentTrack exception: Only synced on STOP (to clear). PlayerService retains
    * responsibility for building and setting PlayerTrack objects (Plan 02 documented
@@ -742,11 +725,9 @@ export class PlayerStateCoordinator extends EventEmitter {
    * After sync, if the current chapter changed, calls updateNowPlayingMetadata()
    * fire-and-forget (PROP-06: only on actual chapter change, not every structural sync).
    *
-   * Guard: no-op when observerMode is true or when Zustand is unavailable (Android
-   * BGS headless context, PROP-05).
+   * Guard: no-op when Zustand is unavailable (Android BGS headless context, PROP-05).
    */
   private syncStateToStore(event: PlayerEvent): void {
-    if (this.observerMode) return;
     try {
       const store = useAppStore.getState();
       // Only sync currentTrack on STOP (to clear it). PlayerService retains
@@ -887,7 +868,6 @@ export class PlayerStateCoordinator extends EventEmitter {
     processingTimes?: number[];
     transitionHistory: TransitionHistoryEntry[] | CompactHistoryEntry[];
     historyMetadata: { lastClearedAt: number | null; totalClears: number };
-    observerMode: boolean;
   } {
     const history = compact ? this.compactHistory() : [...this.transitionHistory];
 
@@ -898,7 +878,6 @@ export class PlayerStateCoordinator extends EventEmitter {
       ...(compact ? {} : { processingTimes: [...this.processingTimes] }),
       transitionHistory: history,
       historyMetadata: { ...this.historyMetadata },
-      observerMode: this.observerMode,
     };
   }
 
