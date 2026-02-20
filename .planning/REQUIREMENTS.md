@@ -37,8 +37,8 @@ Requirements for completing the migration (Phases 2–5). Phase 1 (observer mode
 ### Cleanup (Phase 5)
 
 - [ ] **CLEAN-01**: Implicit state flags removed: `isLoading`, `isPreparing`, `sessionCreationInProgress` in services
-- [ ] **CLEAN-02**: `PlayerService.ts` reduced from ~1640 lines to under 1100 lines
-- [ ] **CLEAN-03**: `isRestoringState` removed last, only after BGS chapter updates route through coordinator
+- [x] **CLEAN-02**: `PlayerService.ts` reduced from ~1640 lines to under 1100 lines
+- [x] **CLEAN-03**: `isRestoringState` removed last, only after BGS chapter updates route through coordinator
 - [ ] **CLEAN-04**: ProgressService session mutex removed after coordinator serial queue is confirmed as the effective guard
 - [ ] **CLEAN-05**: Integration tests cover full playback flow through coordinator (load → play → pause → seek → stop)
 - [ ] **CLEAN-06**: 90%+ test coverage maintained across all modified files
@@ -71,32 +71,32 @@ Deferred — not in current migration scope.
 
 All 24 v1 requirements mapped to phases. Roadmap created 2026-02-16.
 
-| Requirement | Phase   | Status  |
-| ----------- | ------- | ------- |
-| EXEC-01     | Phase 2 | Pending |
-| EXEC-02     | Phase 2 | Pending |
-| EXEC-03     | Phase 2 | Pending |
-| EXEC-04     | Phase 2 | Pending |
-| EXEC-05     | Phase 2 | Pending |
-| EXEC-06     | Phase 2 | Pending |
-| POS-01      | Phase 3 | Pending |
-| POS-02      | Phase 3 | Pending |
-| POS-03      | Phase 3 | Pending |
-| POS-04      | Phase 3 | Pending |
-| POS-05      | Phase 3 | Pending |
-| POS-06      | Phase 3 | Pending |
-| PROP-01     | Phase 4 | Pending |
-| PROP-02     | Phase 4 | Pending |
-| PROP-03     | Phase 4 | Pending |
-| PROP-04     | Phase 4 | Pending |
-| PROP-05     | Phase 4 | Pending |
-| PROP-06     | Phase 4 | Pending |
-| CLEAN-01    | Phase 5 | Pending |
-| CLEAN-02    | Phase 5 | Pending |
-| CLEAN-03    | Phase 5 | Pending |
-| CLEAN-04    | Phase 5 | Pending |
-| CLEAN-05    | Phase 5 | Pending |
-| CLEAN-06    | Phase 5 | Pending |
+| Requirement | Phase   | Status   |
+| ----------- | ------- | -------- |
+| EXEC-01     | Phase 2 | Pending  |
+| EXEC-02     | Phase 2 | Pending  |
+| EXEC-03     | Phase 2 | Pending  |
+| EXEC-04     | Phase 2 | Pending  |
+| EXEC-05     | Phase 2 | Pending  |
+| EXEC-06     | Phase 2 | Pending  |
+| POS-01      | Phase 3 | Pending  |
+| POS-02      | Phase 3 | Pending  |
+| POS-03      | Phase 3 | Pending  |
+| POS-04      | Phase 3 | Pending  |
+| POS-05      | Phase 3 | Pending  |
+| POS-06      | Phase 3 | Pending  |
+| PROP-01     | Phase 4 | Pending  |
+| PROP-02     | Phase 4 | Pending  |
+| PROP-03     | Phase 4 | Pending  |
+| PROP-04     | Phase 4 | Pending  |
+| PROP-05     | Phase 4 | Pending  |
+| PROP-06     | Phase 4 | Pending  |
+| CLEAN-01    | Phase 5 | Pending  |
+| CLEAN-02    | Phase 5 | Complete |
+| CLEAN-03    | Phase 5 | Complete |
+| CLEAN-04    | Phase 5 | Pending  |
+| CLEAN-05    | Phase 5 | Pending  |
+| CLEAN-06    | Phase 5 | Pending  |
 
 **Coverage:**
 

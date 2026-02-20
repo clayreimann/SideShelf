@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Phase 4 - State Propagation
+**Current focus:** Phase 5 - Cleanup
 
 ## Current Position
 
-Phase: 4 of 5 (State Propagation)
-Plan: 3 of 3 in current phase (complete)
-Status: Phase 4 complete — PROP-01 through PROP-06 contract tests added; coordinator bridge proven as single write authority across all three service files
-Last activity: 2026-02-19 — 04-03: PROP contract tests; full lifecycle verification, sleep timer isolation, BGS graceful failure, chapter debounce
+Phase: 5 of 5 (Cleanup)
+Plan: 3 of 4 in current phase
+Status: Plan 05-03 complete — coordinator syncPositionToStore now owns chapter-change NowPlaying writes; BGS has zero metadata write calls (~25 lines removed)
+Last activity: 2026-02-20 — 05-03: added chapter detection to syncPositionToStore, removed chapter/periodic update blocks from BGS, removed getPeriodicNowPlayingUpdatesEnabled import
 
-Progress: [==========] 89% (Phase 1 complete; Phase 2 complete; Phase 3 complete; Phase 4 complete)
+Progress: [==========] 95% (Phase 1-4 complete; Phase 5 in progress: 05-01 done, 05-02 done, 05-03 done)
 
 ## Performance Metrics
 
@@ -80,6 +80,11 @@ Recent decisions affecting current work:
 - [Phase 3.1 Plan 02]: Both branches (activeSession and savedProgress) get the isFinished guard so whichever branch executes, finished items always return 0
 - [Phase 3.1 Plan 02]: AsyncStorage cleared at read time (coordinator) AND write time (UI component) — defense in depth
 - [Phase 3.1 Plan 02]: currentTime explicitly set to 0 (not preserved) when marking as unfinished — prevents API and DB divergence
+- [Phase 05]: syncStoreWithTrackPlayer calls in reconnectBackgroundService removed — coordinator bridge propagates all state changes via syncStateToStore
+- [Phase 05]: On app foreground (trackPlayerIsPlaying branch), no manual sync needed — coordinator bridge keeps store in sync continuously via NATIVE events
+- [Phase 05, Plan 03]: Coordinator reads store.player.currentChapter (not this.context.currentChapter) after updatePosition() — store reflects updated chapter synchronously via Zustand set
+- [Phase 05, Plan 03]: Periodic now playing updates (2-second gate) removed alongside chapter detection — coordinator bridge makes them redundant
+- [Phase 05, Plan 03]: lastSyncedChapterId shared between syncPositionToStore and syncStateToStore — whichever fires first on a chapter transition sets the debounce, preventing double calls
 
 ### Roadmap Evolution
 
@@ -107,5 +112,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 04-03-PLAN.md — Phase 4 complete. PROP-01 through PROP-06 contract tests prove coordinator bridge is correct and complete. Phase 5 (Component Migration) is next.
+Stopped at: Completed 05-03-PLAN.md — Moved chapter detection to coordinator syncPositionToStore; BGS has zero NowPlaying writes. Plan 05-04 remains.
 Resume file: None
