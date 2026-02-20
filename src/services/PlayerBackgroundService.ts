@@ -7,7 +7,6 @@
  */
 
 import { updateAudioFileLastAccessed } from "@/db/helpers/localData";
-import { getPeriodicNowPlayingUpdatesEnabled } from "@/lib/appSettings";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
@@ -411,7 +410,6 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
     const ids = await getUserIdAndLibraryItemId();
-    const previousChapter = store.player.currentChapter;
 
     if (ids) {
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
@@ -445,26 +443,6 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
       // syncPositionToStore bridge handles position propagation (PROP-02/PROP-03 two-tier sync)
       if (!updatedSession) {
         log.debug(`No session found after updateProgress, position=${formatTime(event.position)}s`);
-      }
-
-      // Check if chapter changed (non-gated update)
-      const currentChapter = store.player.currentChapter;
-      if (previousChapter?.chapter.id !== currentChapter?.chapter.id && currentChapter) {
-        // RETAINED: CHAPTER_CHANGED event is not dispatched by any service — bridge cannot
-        // handle chapter-change metadata yet (Phase 5 candidate). This is the ONLY path
-        // that updates lock screen chapter titles on chapter transitions.
-        log.info(
-          `Chapter changed from ${previousChapter?.chapter.id || "none"} to ${currentChapter.chapter.id}, updating now playing metadata`
-        );
-        await store.updateNowPlayingMetadata();
-      }
-
-      // Periodic now playing metadata updates (gated by setting)
-      // RETAINED: coordinator bridge doesn't replicate periodic metadata updates
-      // Throttle to every 2 seconds to avoid excessive updates
-      const periodicUpdatesEnabled = await getPeriodicNowPlayingUpdatesEnabled();
-      if (periodicUpdatesEnabled && Math.floor(event.position) % 2 === 0) {
-        await store.updateNowPlayingMetadata();
       }
 
       // Check sleep timer and pause if expired

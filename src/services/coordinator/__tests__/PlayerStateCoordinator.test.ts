@@ -2442,6 +2442,53 @@ describe("PlayerStateCoordinator", () => {
       expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
     });
 
+    it("syncPositionToStore triggers updateNowPlayingMetadata on chapter change (CLEAN-03)", async () => {
+      // Reach PLAYING state first
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks to isolate chapter detection behavior
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Set up chapter 1 on the mock store player object
+      const chapter1: any = {
+        chapter: { id: "ch-1", chapterId: 1, title: "Chapter 1", start: 0, end: 600 },
+        positionInChapter: 0,
+        chapterDuration: 600,
+      };
+      mockStore.player = { ...mockStore.player, currentChapter: chapter1 };
+
+      // Dispatch NATIVE_PROGRESS_UPDATED — coordinator reads store.player.currentChapter
+      // after updatePosition() runs; detects chapter-1 is new → calls updateNowPlayingMetadata
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Assert updateNowPlayingMetadata called once for the chapter change
+      expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+
+      // Reset mocks — dispatch again with SAME chapter (no change expected)
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      mockStore.player = { ...mockStore.player, currentChapter: chapter1 };
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 200, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Debounce: same chapter id — updateNowPlayingMetadata must NOT be called again
+      expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+    });
+
     it("syncStateToStore updates all fields on structural transition (LOAD_TRACK)", async () => {
       // Dispatch LOAD_TRACK — structural transition IDLE -> LOADING
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
