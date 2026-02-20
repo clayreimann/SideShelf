@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 5 of 5 (Cleanup)
-Plan: 3 of 4 in current phase
-Status: Plan 05-03 complete — coordinator syncPositionToStore now owns chapter-change NowPlaying writes; BGS has zero metadata write calls (~25 lines removed)
-Last activity: 2026-02-20 — 05-03: added chapter detection to syncPositionToStore, removed chapter/periodic update blocks from BGS, removed getPeriodicNowPlayingUpdatesEnabled import
+Plan: 4 of 6 in current phase
+Status: Plan 05-04 complete — isRestoringState removed from playerSlice and PlayerService; \_updateCurrentChapter now uses coordinator-managed loading.isLoadingTrack; PlayerService.ts at 1,097 lines
+Last activity: 2026-02-20 — 05-04: removed isRestoringState flag, replaced with isLoadingTrack guard, removed duplicate JSDoc blocks from PlayerService
 
-Progress: [==========] 95% (Phase 1-4 complete; Phase 5 in progress: 05-01 done, 05-02 done, 05-03 done)
+Progress: [==========] 96% (Phase 1-4 complete; Phase 5 in progress: 05-01 done, 05-02 done, 05-03 done, 05-04 done)
 
 ## Performance Metrics
 
@@ -46,6 +46,8 @@ Progress: [==========] 95% (Phase 1-4 complete; Phase 5 in progress: 05-01 done,
 - Trend: stable ~3-12 min/plan
 
 _Updated after each plan completion_
+
+| Phase 05 P04 | 7 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -85,6 +87,8 @@ Recent decisions affecting current work:
 - [Phase 05, Plan 03]: Coordinator reads store.player.currentChapter (not this.context.currentChapter) after updatePosition() — store reflects updated chapter synchronously via Zustand set
 - [Phase 05, Plan 03]: Periodic now playing updates (2-second gate) removed alongside chapter detection — coordinator bridge makes them redundant
 - [Phase 05, Plan 03]: lastSyncedChapterId shared between syncPositionToStore and syncStateToStore — whichever fires first on a chapter transition sets the debounce, preventing double calls
+- [Phase 05]: isRestoringState replaced by coordinator-managed loading.isLoadingTrack in \_updateCurrentChapter (CLEAN-03)
+- [Phase 05]: PlayerService.ts duplicate JSDoc blocks removed; 6 duplicate comments + 2 verbose JSDoc condensed, bringing file from 1140 to 1097 lines
 
 ### Roadmap Evolution
 
@@ -111,6 +115,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-19
-Stopped at: Completed 05-03-PLAN.md — Moved chapter detection to coordinator syncPositionToStore; BGS has zero NowPlaying writes. Plan 05-04 remains.
+Last session: 2026-02-20
+Stopped at: Completed 05-04-PLAN.md — Removed isRestoringState from playerSlice and PlayerService; PlayerService.ts now 1,097 lines. Plans 05-05 and 05-06 remain.
 Resume file: None

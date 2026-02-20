@@ -36,7 +36,7 @@ Requirements for completing the migration (Phases 2–5). Phase 1 (observer mode
 
 ### Cleanup (Phase 5)
 
-- [ ] **CLEAN-01**: Implicit state flags removed: `isLoading`, `isPreparing`, `sessionCreationInProgress` in services
+- [x] **CLEAN-01**: Implicit state flags removed: `isLoading`, `isPreparing`, `sessionCreationInProgress` in services
 - [x] **CLEAN-02**: `PlayerService.ts` reduced from ~1640 lines to under 1100 lines
 - [x] **CLEAN-03**: `isRestoringState` removed last, only after BGS chapter updates route through coordinator
 - [ ] **CLEAN-04**: ProgressService session mutex removed after coordinator serial queue is confirmed as the effective guard
@@ -91,7 +91,7 @@ All 24 v1 requirements mapped to phases. Roadmap created 2026-02-16.
 | PROP-04     | Phase 4 | Pending  |
 | PROP-05     | Phase 4 | Pending  |
 | PROP-06     | Phase 4 | Pending  |
-| CLEAN-01    | Phase 5 | Pending  |
+| CLEAN-01    | Phase 5 | Complete |
 | CLEAN-02    | Phase 5 | Complete |
 | CLEAN-03    | Phase 5 | Complete |
 | CLEAN-04    | Phase 5 | Pending  |
