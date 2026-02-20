@@ -179,11 +179,6 @@ export class PlayerService {
   }
 
   /**
-   * Load and play a track
-   * @param libraryItemId - The library item ID to play
-   * @param episodeId - Optional episode ID for podcast episodes (future use)
-   */
-  /**
    * Load and play a track (Public API - Dispatches Event)
    * @param libraryItemId - The library item ID to play
    * @param episodeId - Optional episode ID for podcast episodes
@@ -416,9 +411,6 @@ export class PlayerService {
   }
 
   /**
-   * Resume playback with optional smart rewind
-   */
-  /**
    * Resume playback (Public API - Dispatches Event)
    */
   async play(): Promise<void> {
@@ -527,17 +519,11 @@ export class PlayerService {
     let success = false;
 
     try {
-      // Set isRestoringState to prevent chapter updates during queue rebuild
-      // This prevents the UI from showing "Opening Credits" when tracks are added at position 0
-      const tempStore = useAppStore.getState();
-      tempStore.setIsRestoringState?.(true);
-
       await TrackPlayer.reset();
 
       const tracks = await this.buildTrackList(track);
       if (tracks.length === 0) {
         log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
-        tempStore.setIsRestoringState?.(false);
         return false;
       }
 
@@ -553,16 +539,12 @@ export class PlayerService {
           `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
         );
 
-        // Clear isRestoringState and update chapter with correct position
         // RETAINED: _updateCurrentChapter — chapter calculation lives in playerSlice, not coordinator
-        // RETAINED: setIsRestoringState — playerSlice-local guard
+        // isLoadingTrack is still set (via RELOAD_QUEUE) so this call will be skipped;
+        // chapter will be correctly set when QUEUE_RELOADED clears isLoadingTrack via bridge
         const updatedStore = useAppStore.getState();
         updatedStore._updateCurrentChapter(resumeInfo.position);
-        updatedStore.setIsRestoringState?.(false);
       } else {
-        // Clear isRestoringState even when starting from beginning
-        const updatedStore = useAppStore.getState();
-        updatedStore.setIsRestoringState?.(false);
         log.info("Prepared queue with no resume position (starting from beginning)");
       }
 
@@ -597,9 +579,6 @@ export class PlayerService {
   }
 
   /**
-   * Seek to position in seconds
-   */
-  /**
    * Seek to position in seconds (Public API - Dispatches Event)
    */
   async seekTo(position: number): Promise<void> {
@@ -616,9 +595,6 @@ export class PlayerService {
     await TrackPlayer.seekTo(position);
   }
 
-  /**
-   * Set playback rate
-   */
   /**
    * Set playback rate (Public API - Dispatches Event)
    */
@@ -637,9 +613,6 @@ export class PlayerService {
   }
 
   /**
-   * Set volume (0.0 to 1.0)
-   */
-  /**
    * Set volume (Public API - Dispatches Event)
    */
   async setVolume(volume: number): Promise<void> {
@@ -656,9 +629,6 @@ export class PlayerService {
     await TrackPlayer.setVolume(volume);
   }
 
-  /**
-   * Stop playback and clear queue
-   */
   /**
    * Stop playback (Public API - Dispatches Event)
    */
@@ -980,11 +950,8 @@ export class PlayerService {
   }
 
   /**
-   * Reconnect background service and sync state
-   *
-   * This method handles reconnection after app updates, hot reloads, or JS context recreation.
-   * It safely loads the background service module and attempts reconnection, falling back
-   * to a full re-registration if the module has changed (e.g., after an app update).
+   * Reconnect background service after app updates, hot reloads, or JS context recreation.
+   * Falls back to full re-registration if the module has changed.
    */
   async reconnectBackgroundService(): Promise<void> {
     try {
@@ -1076,18 +1043,8 @@ export class PlayerService {
   }
 
   /**
-   * Refresh file paths after iOS container path changes
-   *
-   * iOS can change the application container path between app launches or when
-   * coming back from background. This causes absolute paths to become invalid
-   * even though the files still exist at a different absolute path.
-   *
-   * This method:
-   * 1. Refreshes the current track's cover URI
-   * 2. Updates the now playing metadata in TrackPlayer
-   *
-   * Should be called when the app comes to foreground to ensure all file
-   * references are valid for the current container path.
+   * Refresh file paths after iOS container path changes.
+   * Refreshes cover URI and now playing metadata. Call when app comes to foreground.
    */
   async refreshFilePathsAfterContainerChange(): Promise<void> {
     log.info("[PlayerService] Refreshing file paths after potential container change...");

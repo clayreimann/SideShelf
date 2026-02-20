@@ -716,8 +716,7 @@ export class PlayerStateCoordinator extends EventEmitter {
    *
    * Syncs all coordinator context fields to their corresponding playerSlice mutators.
    * Does NOT sync: lastPauseTime (service-ephemeral), sleepTimer (PROP-04 exception),
-   * isRestoringState (playerSlice-local guard), isModalVisible (UI-only),
-   * initialized (lifecycle).
+   * isModalVisible (UI-only), initialized (lifecycle).
    *
    * currentTrack exception: Only synced on STOP (to clear). PlayerService retains
    * responsibility for building and setting PlayerTrack objects (Plan 02 documented

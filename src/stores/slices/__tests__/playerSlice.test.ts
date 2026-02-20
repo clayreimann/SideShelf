@@ -137,7 +137,6 @@ describe("PlayerSlice", () => {
           isSeeking: false,
         },
         initialized: false,
-        isRestoringState: false,
         sleepTimer: {
           endTime: null,
           type: null,
@@ -263,9 +262,9 @@ describe("PlayerSlice", () => {
   });
 
   describe("_updateCurrentChapter", () => {
-    it("should skip update when isRestoringState is true", () => {
-      // Set isRestoringState BEFORE setting track (matches restorePersistedState pattern)
-      store.getState().setIsRestoringState(true);
+    it("should skip update when isLoadingTrack is true", () => {
+      // Set isLoadingTrack BEFORE setting track (coordinator sets this via RELOAD_QUEUE event)
+      store.getState()._setTrackLoading(true);
       store.getState()._setCurrentTrack(mockPlayerTrack);
 
       // Chapter should remain null because _setCurrentTrack's internal call to _updateCurrentChapter was skipped
@@ -387,16 +386,6 @@ describe("PlayerSlice", () => {
         expect.anything(),
         expect.stringContaining(String(now))
       );
-    });
-  });
-
-  describe("setIsRestoringState", () => {
-    it("should update isRestoringState flag", () => {
-      store.getState().setIsRestoringState(true);
-      expect(store.getState().player.isRestoringState).toBe(true);
-
-      store.getState().setIsRestoringState(false);
-      expect(store.getState().player.isRestoringState).toBe(false);
     });
   });
 
@@ -531,7 +520,11 @@ describe("PlayerSlice", () => {
       store.getState().updatePosition(100);
 
       mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(0);
-      mockedTrackPlayer.getActiveTrack.mockResolvedValue({ id: "track-1", title: "Test", url: "test-url" });
+      mockedTrackPlayer.getActiveTrack.mockResolvedValue({
+        id: "track-1",
+        title: "Test",
+        url: "test-url",
+      });
 
       await store.getState().updateNowPlayingMetadata();
 
@@ -577,7 +570,11 @@ describe("PlayerSlice", () => {
       store.getState().updatePosition(100);
 
       mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(0);
-      mockedTrackPlayer.getActiveTrack.mockResolvedValue({ id: "track-1", title: "Test", url: "test-url" });
+      mockedTrackPlayer.getActiveTrack.mockResolvedValue({
+        id: "track-1",
+        title: "Test",
+        url: "test-url",
+      });
 
       await store.getState().updateNowPlayingMetadata();
 
@@ -618,13 +615,6 @@ describe("PlayerSlice", () => {
       expect(state.player.position).toBe(300);
       expect(state.player.isPlaying).toBe(true);
       expect(state.player.currentPlaySessionId).toBe("session-123");
-    });
-
-    it("should set and clear isRestoringState flag", async () => {
-      await store.getState().restorePersistedState();
-
-      // Should be false after restoration completes
-      expect(store.getState().player.isRestoringState).toBe(false);
     });
 
     it("should restore valid sleep timer", async () => {
@@ -722,9 +712,10 @@ describe("PlayerSlice", () => {
       await expect(store.getState().restorePersistedState()).resolves.not.toThrow();
     });
 
-    it("should not update chapter during state restoration when TrackPlayer queue is empty", async () => {
-      // This test prevents a regression where the UI would show a stale chapter during restoration
-      // because the chapter was calculated before the TrackPlayer queue was rebuilt.
+    it("should update chapter correctly after state restoration", async () => {
+      // After CLEAN-03: isRestoringState removed; restorePersistedState no longer suppresses
+      // chapter updates. Chapter is now computed during restore from AsyncStorage.
+      // The isLoadingTrack guard (coordinator-managed) only suppresses during reloadTrackPlayerQueue.
 
       // Create expected restored track (dates become strings after JSON round-trip)
       const expectedRestoredTrack = JSON.parse(JSON.stringify(mockPlayerTrack));
@@ -747,9 +738,10 @@ describe("PlayerSlice", () => {
       await store.getState().restorePersistedState();
 
       const state = store.getState();
-      // Chapter should NOT be updated during restoration when TrackPlayer queue is empty
-      // It will be correctly updated when the queue is rebuilt (e.g., when user presses play)
-      expect(state.player.currentChapter).toBeNull();
+      // Chapter IS now computed during restore (isRestoringState guard removed, CLEAN-03)
+      // The coordinator's isLoadingTrack guard prevents chapter updates during queue rebuild only
+      expect(state.player.currentChapter).not.toBeNull();
+      expect(state.player.currentChapter?.chapter.id).toBe("ch-2"); // position 2000 → Chapter 2
       expect(state.player.currentTrack).toEqual(expectedRestoredTrack);
       expect(state.player.position).toBe(2000);
     });

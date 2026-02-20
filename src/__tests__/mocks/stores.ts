@@ -28,7 +28,6 @@ export interface MockPlayerSlice {
       isSeeking: boolean;
     };
     initialized: boolean;
-    isRestoringState: boolean;
     sleepTimer: {
       endTime: number | null;
       type: string | null;
@@ -46,7 +45,6 @@ export interface MockPlayerSlice {
   _setPlaybackRate: jest.Mock;
   _setVolume: jest.Mock;
   _updateCurrentChapter: jest.Mock;
-  setIsRestoringState: jest.Mock;
   setSleepTimer: jest.Mock;
   setSleepTimerChapter: jest.Mock;
   cancelSleepTimer: jest.Mock;
@@ -91,7 +89,6 @@ export function createMockPlayerSlice(options: MockPlayerSliceOptions = {}): Moc
         isSeeking: false,
       },
       initialized: false,
-      isRestoringState: false,
       sleepTimer: {
         endTime: null,
         type: null,
@@ -110,7 +107,6 @@ export function createMockPlayerSlice(options: MockPlayerSliceOptions = {}): Moc
     _setPlaybackRate: jest.fn(),
     _setVolume: jest.fn(),
     _updateCurrentChapter: jest.fn(),
-    setIsRestoringState: jest.fn(),
     setSleepTimer: jest.fn(),
     setSleepTimerChapter: jest.fn(),
     cancelSleepTimer: jest.fn(),
