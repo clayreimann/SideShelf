@@ -87,9 +87,6 @@ export class ProgressService {
   // Removed: pauseTimeoutInterval (pause state tracked per session in DB)
   // Removed: lastSyncTime, isPaused, pauseStartTime, lastProgressUpdateTime, failedSyncs, sessionIsStale (tracked per session in DB)
 
-  // Mutex to prevent concurrent startSession calls for the same library item
-  private startSessionLocks: Map<string, Promise<void>> = new Map();
-
   // Configuration
   public readonly SYNC_INTERVAL_UNMETERED = 15000; // 15 seconds on unmetered connections
   public readonly SYNC_INTERVAL_METERED = 60000; // 60 seconds on metered connections
@@ -227,36 +224,6 @@ export class ProgressService {
     volume: number = 1.0,
     existingServerSessionId?: string
   ): Promise<void> {
-    // MUTEX: Ensure only one startSession call executes at a time for each library item
-    // Wait for any existing startSession call to complete
-    const existingLock = this.startSessionLocks.get(libraryItemId);
-    if (existingLock) {
-      log.info(`Waiting for existing startSession call to complete for ${libraryItemId}`);
-      await existingLock;
-      // After waiting, check if a session now exists and we can skip this call
-      try {
-        const user = await getUserByUsername(username);
-        if (user?.id) {
-          const session = await getActiveSession(user.id, libraryItemId);
-          if (session) {
-            log.info(
-              `Session already created by previous call, skipping duplicate startSession item=${libraryItemId} session=${session.id}`
-            );
-            return;
-          }
-        }
-      } catch (error) {
-        log.warn(`Failed to check for session after lock: ${error}`);
-      }
-    }
-
-    // Create a new lock promise for this call
-    let releaseLock: () => void;
-    const lockPromise = new Promise<void>((resolve) => {
-      releaseLock = resolve;
-    });
-    this.startSessionLocks.set(libraryItemId, lockPromise);
-
     try {
       log.info(`Starting session for library item ${libraryItemId}, media ${mediaId}`);
       if (existingServerSessionId) {
@@ -444,10 +411,6 @@ export class ProgressService {
     } catch (error) {
       log.error("Failed to start session:", error as Error);
       throw error;
-    } finally {
-      // Release the mutex lock
-      releaseLock!();
-      this.startSessionLocks.delete(libraryItemId);
     }
   }
 
