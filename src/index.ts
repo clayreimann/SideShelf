@@ -13,12 +13,14 @@
 // Import crypto polyfill for React Native (required for UUID generation)
 import "react-native-get-random-values";
 
+import { getAllDownloadedAudioFiles } from "@/db/helpers/localData";
 import {
   getFullVersionString,
   getPreviousVersion,
   hasAppBeenUpdated,
   saveCurrentVersion,
 } from "@/lib/appVersion";
+import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 import { performPeriodicCleanup } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
@@ -66,6 +68,11 @@ export async function initializeApp(): Promise<void> {
 
     // Trigger initial purge on app start
     logger.manualTrim();
+
+    // Apply iCloud exclusion to all existing downloads — fire-and-forget, non-blocking
+    applyICloudExclusionToExistingDownloads().catch((error) => {
+      log.warn(`iCloud exclusion startup scan rejected: ${String(error)}`);
+    });
 
     // Check if app has been updated
     const appUpdated = await hasAppBeenUpdated();
@@ -155,6 +162,41 @@ async function handleAppUpdate(): Promise<void> {
   } catch (error) {
     log.error("Error handling app update", error as Error);
     // Don't throw - we want the app to continue even if update handling fails
+  }
+}
+
+/**
+ * Apply iCloud backup exclusion to all existing downloaded files.
+ *
+ * Runs on every startup (idempotent — safe to repeat). Best-effort: individual
+ * file failures are logged but do not abort the scan. Fire-and-forget — must NOT
+ * be awaited to avoid blocking app startup.
+ */
+async function applyICloudExclusionToExistingDownloads(): Promise<void> {
+  try {
+    const downloadedFiles = await getAllDownloadedAudioFiles();
+    if (downloadedFiles.length === 0) {
+      log.info("iCloud exclusion scan: no downloaded files found");
+      return;
+    }
+
+    log.info(`iCloud exclusion scan: applying to ${downloadedFiles.length} file(s)`);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const file of downloadedFiles) {
+      try {
+        await setExcludeFromBackup(file.downloadPath);
+        successCount++;
+      } catch (error) {
+        errorCount++;
+        log.warn(`iCloud exclusion scan: failed for ${file.downloadPath}: ${String(error)}`);
+      }
+    }
+
+    log.info(`iCloud exclusion scan complete: ${successCount} succeeded, ${errorCount} failed`);
+  } catch (error) {
+    log.warn(`iCloud exclusion startup scan failed: ${String(error)}`);
   }
 }
 
