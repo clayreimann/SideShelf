@@ -136,7 +136,7 @@ Plans:
 2. After a file finishes downloading, its filesystem entry has `NSURLIsExcludedFromBackupKey = true` — verifiable via a device diagnostic or the native module's own logging
 3. After `repairDownloadStatus` runs (iOS app update path migration), re-downloaded files still have the exclusion attribute applied — the repair path does not silently re-enable iCloud backup
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 
@@ -206,7 +206,7 @@ Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in
 
 | Phase                     | Plans Complete | Status      | Completed |
 | ------------------------- | -------------- | ----------- | --------- |
-| 6. iCloud Exclusion       | 0/2            | Not started | -         |
+| 6. iCloud Exclusion       | 1/2            | In Progress |           |
 | 7. Download Tracking      | 0/TBD          | Not started | -         |
 | 8. Skip & Player Polish   | 0/TBD          | Not started | -         |
 | 9. Navigation & UI Polish | 0/TBD          | Not started | -         |

@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Milestone v1.1 — Phase 6: iCloud Exclusion (ready to plan)
+**Current focus:** Milestone v1.1 — Phase 6: iCloud Exclusion (in progress)
 
 ## Current Position
 
 Phase: 6 of 9 (v1.1: iCloud Exclusion)
-Plan: 0 of TBD in Phase 6
-Status: Ready to plan
-Last activity: 2026-02-20 — v1.1 roadmap created; Phase 5 (v1.0 Cleanup) complete
+Plan: 1 of 2 in Phase 6 (Plan 01 complete)
+Status: In progress
+Last activity: 2026-02-21 — Phase 6 Plan 01 complete (iCloud exclusion integration wired)
 
-Progress: [██████░░░░] ~55% (v1.0 complete; v1.1 not started)
+Progress: [███████░░░] ~60% (v1.0 complete; Phase 6 Plan 01 done)
 
 ## Performance Metrics
 
@@ -47,6 +47,12 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 05, Plan 06]: startSessionLocks mutex removed — coordinator serial queue + BGS existingSession guard provide equivalent protection
 - [Phase 3.1]: shouldOpenOnLongPress on MenuView — short press = skip action; skip action itself untested — SKIP-01 in v1.1
 
+### Decisions (v1.1)
+
+- [Phase 6, Plan 01]: Use require() (no extension) for withExcludeFromBackup in app.config.js — CommonJS, Node resolves .js before .ts
+- [Phase 6, Plan 01]: Pass withExcludeFromBackup as bare function reference (not array) — plugin takes no options
+- [Phase 6, Plan 01]: Best-effort iCloud exclusion — warn on failure, never throw; download/repair correctness is independent of backup exclusion
+
 ### v1.1 Research Findings (high-confidence)
 
 - iCloud exclusion: one-line config fix (`withExcludeFromBackup` absent from `app.config.js`); Obj-C module exists and is correct
@@ -65,6 +71,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: v1.1 roadmap created — ready to begin Phase 6 planning
+Last session: 2026-02-21
+Stopped at: Completed 06-01-PLAN.md (iCloud exclusion integration — 3 tasks, 3 files)
 Resume file: None

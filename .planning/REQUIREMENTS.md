@@ -18,9 +18,9 @@ Bug fixes and polish pass following the coordinator migration. 16 requirements a
 
 ### iCloud Exclusion (ICLD)
 
-- [ ] **ICLD-01**: iCloud exclusion plugin is registered in `app.config.js` and compiled into the app build
-- [ ] **ICLD-02**: Downloaded files are excluded from iCloud backup at download completion
-- [ ] **ICLD-03**: iCloud exclusion is re-applied to files during download path repair (app update migrations)
+- [x] **ICLD-01**: iCloud exclusion plugin is registered in `app.config.js` and compiled into the app build
+- [x] **ICLD-02**: Downloaded files are excluded from iCloud backup at download completion
+- [x] **ICLD-03**: iCloud exclusion is re-applied to files during download path repair (app update migrations)
 
 ### Download Tracking (DL)
 
@@ -81,24 +81,24 @@ Deferred — not in current milestone scope.
 
 ## Traceability
 
-| Requirement | Phase | Status  |
-| ----------- | ----- | ------- |
-| SKIP-01     | 8     | Pending |
-| SKIP-02     | 8     | Pending |
-| ICLD-01     | 6     | Pending |
-| ICLD-02     | 6     | Pending |
-| ICLD-03     | 6     | Pending |
-| DL-01       | 7     | Pending |
-| DL-02       | 7     | Pending |
-| DL-03       | 7     | Pending |
-| PLR-01      | 8     | Pending |
-| PLR-02      | 8     | Pending |
-| NAV-01      | 9     | Pending |
-| NAV-02      | 9     | Pending |
-| UX-01       | 9     | Pending |
-| UX-02       | 9     | Pending |
-| UX-03       | 9     | Pending |
-| UX-04       | 9     | Pending |
+| Requirement | Phase | Status   |
+| ----------- | ----- | -------- |
+| SKIP-01     | 8     | Pending  |
+| SKIP-02     | 8     | Pending  |
+| ICLD-01     | 6     | Complete |
+| ICLD-02     | 6     | Complete |
+| ICLD-03     | 6     | Complete |
+| DL-01       | 7     | Pending  |
+| DL-02       | 7     | Pending  |
+| DL-03       | 7     | Pending  |
+| PLR-01      | 8     | Pending  |
+| PLR-02      | 8     | Pending  |
+| NAV-01      | 9     | Pending  |
+| NAV-02      | 9     | Pending  |
+| UX-01       | 9     | Pending  |
+| UX-02       | 9     | Pending  |
+| UX-03       | 9     | Pending  |
+| UX-04       | 9     | Pending  |
 
 **Coverage:**
 
