@@ -81,34 +81,32 @@ Deferred — not in current milestone scope.
 
 ## Traceability
 
-Populated during roadmap creation.
-
 | Requirement | Phase | Status  |
 | ----------- | ----- | ------- |
-| SKIP-01     | —     | Pending |
-| SKIP-02     | —     | Pending |
-| ICLD-01     | —     | Pending |
-| ICLD-02     | —     | Pending |
-| ICLD-03     | —     | Pending |
-| DL-01       | —     | Pending |
-| DL-02       | —     | Pending |
-| DL-03       | —     | Pending |
-| PLR-01      | —     | Pending |
-| PLR-02      | —     | Pending |
-| NAV-01      | —     | Pending |
-| NAV-02      | —     | Pending |
-| UX-01       | —     | Pending |
-| UX-02       | —     | Pending |
-| UX-03       | —     | Pending |
-| UX-04       | —     | Pending |
+| SKIP-01     | 8     | Pending |
+| SKIP-02     | 8     | Pending |
+| ICLD-01     | 6     | Pending |
+| ICLD-02     | 6     | Pending |
+| ICLD-03     | 6     | Pending |
+| DL-01       | 7     | Pending |
+| DL-02       | 7     | Pending |
+| DL-03       | 7     | Pending |
+| PLR-01      | 8     | Pending |
+| PLR-02      | 8     | Pending |
+| NAV-01      | 9     | Pending |
+| NAV-02      | 9     | Pending |
+| UX-01       | 9     | Pending |
+| UX-02       | 9     | Pending |
+| UX-03       | 9     | Pending |
+| UX-04       | 9     | Pending |
 
 **Coverage:**
 
 - v1.1 requirements: 16 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 16 ⚠️
+- Mapped to phases: 16
+- Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-02-20_
-_Last updated: 2026-02-20 after initial v1.1 definition_
+_Last updated: 2026-02-20 after v1.1 roadmap creation_

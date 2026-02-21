@@ -4,6 +4,8 @@
 
 Phase 1 (observer mode) is complete and production-validated. This roadmap covers Phases 2-5: flipping the coordinator from observer to executor, centralizing playback position authority, bridging coordinator state to the UI layer, and deleting the legacy coordination scaffolding that becomes redundant once the coordinator owns everything. Each phase unlocks the next — the dependency ordering is structural, not conventional. All four phases together complete the original design intent: the coordinator is the single source of truth for player state.
 
+v1.1 (Phases 6–9) is a focused bug-fix and polish pass following the coordinator migration. Six runtime bugs are corrected and five polish improvements are applied to downloads, the player, navigation, and the home screen.
+
 ## Phases
 
 **Phase Numbering:**
@@ -11,13 +13,18 @@ Phase 1 (observer mode) is complete and production-validated. This roadmap cover
 - Phases 2-5 continue from Phase 1 (already shipped)
 - Integer phases (2, 3, 4, 5): Planned milestone work
 - Decimal phases (e.g., 2.1): Urgent insertions if needed
+- Phases 6-9: v1.1 Bug Fixes & Polish
 
 - [x] **Phase 1: Observer Mode** - Coordinator observes and validates — SHIPPED (production-validated)
 - [x] **Phase 2: Execution Control** - Coordinator calls service methods; services stop executing independently — COMPLETE (human-accepted 2026-02-16)
 - [x] **Phase 3: Position Reconciliation** - Coordinator owns canonical position; single deterministic algorithm replaces three scattered ones — COMPLETE (2026-02-16)
 - [x] **Phase 03.1: Fix Coordinator Service Bugs** - Four runtime bugs fixed: seek state memory loss, completed items resuming from end, mark-as-unfinished not resetting position, skip button UX — COMPLETE (2026-02-18)
 - [x] **Phase 4: State Propagation** - playerSlice becomes read-only proxy driven by coordinator bridge — COMPLETE (human-accepted 2026-02-19)
-- [ ] **Phase 5: Cleanup** - Legacy guard flags and reconciliation methods deleted; services simplified to thin execution layers
+- [x] **Phase 5: Cleanup** - Legacy guard flags and reconciliation methods deleted; services simplified to thin execution layers — COMPLETE (2026-02-20)
+- [ ] **Phase 6: iCloud Exclusion** - Plugin registered, compiled into build, exclusion applied at download completion and path repair
+- [ ] **Phase 7: Download Tracking** - Stale DB records cleared on startup; Storage tab accurate; active downloads excluded from reconciliation scan
+- [ ] **Phase 8: Skip & Player Polish** - Skip action executes on short-tap; lock screen updates after skip; skip intervals persist across sessions
+- [ ] **Phase 9: Navigation & UI Polish** - More screen routes to correct tabs; icons and nav affordance added; home screen loading skeleton; tab reorder UX improved
 
 ## Phase Details
 
@@ -94,6 +101,7 @@ Plans:
 **Goal**: Legacy guard flags and redundant reconciliation methods are deleted; PlayerService is simplified to a thin execution layer; the migration is structurally complete
 **Depends on**: Phase 4
 **Requirements**: CLEAN-01, CLEAN-02, CLEAN-03, CLEAN-04, CLEAN-05, CLEAN-06
+**Status**: COMPLETE (2026-02-20)
 **Success Criteria** (what must be TRUE):
 
 1. Implicit state flags (`isLoading`, `isPreparing`, `sessionCreationInProgress`) do not exist anywhere in service files — confirmed by grep
@@ -102,27 +110,97 @@ Plans:
 4. `ProgressService` session mutex is removed and no duplicate session creation is observable in a complete load-play-pause-seek-stop integration test run
 5. An integration test exercises the full playback flow (load → play → pause → seek → stop) end-to-end through the coordinator, and 90%+ test coverage is maintained across all modified files
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans executed
 
 Plans:
 
-- [ ] 05-01-PLAN.md — Remove observerMode flag and scaffolding from coordinator and coordinator tests
-- [ ] 05-02-PLAN.md — Delete dead PlayerService methods (reconcileTrackPlayerState, verifyTrackPlayerConsistency, syncStoreWithTrackPlayer, dead accessors, updateNowPlayingMetadata wrapper) and update \_layout.tsx/index.ts callers
-- [ ] 05-03-PLAN.md — Move chapter detection to coordinator syncPositionToStore; remove BGS NowPlaying writes
-- [ ] 05-04-PLAN.md — Remove isRestoringState from playerSlice and PlayerService; update backgroundRestoration test to use isLoadingTrack
+- [x] 05-01-PLAN.md — Remove observerMode flag and scaffolding from coordinator and coordinator tests
+- [x] 05-02-PLAN.md — Delete dead PlayerService methods (reconcileTrackPlayerState, verifyTrackPlayerConsistency, syncStoreWithTrackPlayer, dead accessors, updateNowPlayingMetadata wrapper) and update \_layout.tsx/index.ts callers
+- [x] 05-03-PLAN.md — Move chapter detection to coordinator syncPositionToStore; remove BGS NowPlaying writes
+- [x] 05-04-PLAN.md — Remove isRestoringState from playerSlice and PlayerService; update backgroundRestoration test to use isLoadingTrack
 - [x] 05-05-PLAN.md — Full lifecycle integration test (LOAD→PLAY→PAUSE→SEEK→PLAY→STOP) and 90%+ coverage verification
-- [ ] 05-06-PLAN.md — Remove startSessionLocks mutex from ProgressService after integration test gate passes
+- [x] 05-06-PLAN.md — Remove startSessionLocks mutex from ProgressService after integration test gate passes
+
+---
+
+## v1.1: Bug Fixes & Polish
+
+### Phase 6: iCloud Exclusion
+
+**Goal**: Downloaded files are reliably excluded from iCloud backup — the native module is compiled into the build, exclusion is applied at download completion, and path repair re-applies exclusion so iOS app updates do not silently re-enable backup
+**Depends on**: Phase 5 (v1.0 complete)
+**Requirements**: ICLD-01, ICLD-02, ICLD-03
+**Success Criteria** (what must be TRUE):
+
+1. After running `expo prebuild --clean` and building the app, `NativeModules.ICloudBackupExclusion` resolves to a non-null object — the module is compiled into the Xcode project
+2. After a file finishes downloading, its filesystem entry has `NSURLIsExcludedFromBackupKey = true` — verifiable via a device diagnostic or the native module's own logging
+3. After `repairDownloadStatus` runs (iOS app update path migration), re-downloaded files still have the exclusion attribute applied — the repair path does not silently re-enable iCloud backup
+   **Plans**: TBD
+
+### Phase 7: Download Tracking
+
+**Goal**: The app's awareness of which files are downloaded matches what is actually on disk — stale records from deleted or missing files are cleared on startup, and the reconciliation scan does not corrupt in-progress downloads
+**Depends on**: Phase 6 (iCloud exclusion native module must be working before the repair scan re-applies exclusion)
+**Requirements**: DL-01, DL-02, DL-03
+**Success Criteria** (what must be TRUE):
+
+1. After deleting a downloaded file outside the app and restarting, the item's "downloaded" badge is gone and tapping it triggers a fresh download rather than a failed playback attempt
+2. The Storage tab lists every item that has files on disk — no item present in the filesystem is absent from Storage
+3. Performing a scan while a download is actively in progress does not mark the partial file as complete or corrupt the download record
+   **Plans**: TBD
+
+### Phase 8: Skip & Player Polish
+
+**Goal**: The skip button short-tap executes a skip action; the lock screen shows the updated elapsed time after any skip; the user's chosen skip intervals survive app restarts
+**Depends on**: Phase 5 (v1.0 complete; Phase 6/7 can run in parallel)
+**Requirements**: SKIP-01, SKIP-02, PLR-01, PLR-02
+**Success Criteria** (what must be TRUE):
+
+1. Tapping (not holding) the skip button moves playback forward or backward by the configured interval — the menu does not appear on short-tap
+2. After a skip that stays within the same chapter, the iOS lock screen and Control Center show the new elapsed time within one second — not the pre-skip time
+3. The skip forward interval selected in the player persists after closing and reopening the app
+4. The skip backward interval selected in the player persists after closing and reopening the app independently of the forward interval
+   **Plans**: TBD
+
+### Phase 9: Navigation & UI Polish
+
+**Goal**: More screen routes correctly to Series and Authors tabs; More screen items have icons and visual affordance; the home screen shows a shimmer skeleton during cold start; tab reorder UX is improved
+**Depends on**: Phase 5 (v1.0 complete; can run in parallel with Phases 6–8)
+**Requirements**: NAV-01, NAV-02, UX-01, UX-02, UX-03, UX-04
+**Success Criteria** (what must be TRUE):
+
+1. Tapping "Series" on the More screen switches to the Series tab — not pushes a Series screen onto the More navigation stack
+2. Tapping "Authors" on the More screen switches to the Authors tab — not pushes an Authors screen onto the More navigation stack
+3. Each item in the More screen list has a distinct icon identifying its destination
+4. Each item in the More screen list shows a chevron or equivalent affordance indicating it is a navigation target, and has a visible tap state
+5. During cold start (no cached sections), the home screen shows placeholder skeleton cards in the shape of content items before data loads — not a bare spinner
+6. The tab reorder screen provides a sufficiently clear and usable drag-to-reorder interaction
+   **Plans**: TBD
 
 ## Progress
+
+### v1.0 — Player State Machine Migration
 
 **Execution Order:**
 Phases execute in numeric order: 2 → 3 → 4 → 5
 
-| Phase                      | Plans Complete | Status      | Completed  |
-| -------------------------- | -------------- | ----------- | ---------- |
-| 1. Observer Mode           | -              | Complete    | 2026-02-16 |
-| 2. Execution Control       | 2/2            | Complete    | 2026-02-16 |
-| 3. Position Reconciliation | 2/2            | Complete    | 2026-02-16 |
-| 03.1. Bug Fixes            | 2/2            | Complete    | 2026-02-18 |
-| 4. State Propagation       | 3/3            | Complete    | 2026-02-19 |
-| 5. Cleanup                 | 5/6            | In Progress |            |
+| Phase                      | Plans Complete | Status   | Completed  |
+| -------------------------- | -------------- | -------- | ---------- |
+| 1. Observer Mode           | -              | Complete | 2026-02-16 |
+| 2. Execution Control       | 2/2            | Complete | 2026-02-16 |
+| 3. Position Reconciliation | 2/2            | Complete | 2026-02-16 |
+| 03.1. Bug Fixes            | 2/2            | Complete | 2026-02-18 |
+| 4. State Propagation       | 3/3            | Complete | 2026-02-19 |
+| 5. Cleanup                 | 6/6            | Complete | 2026-02-20 |
+
+### v1.1 — Bug Fixes & Polish
+
+**Execution Order:**
+Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in parallel with 6/7
+
+| Phase                     | Plans Complete | Status      | Completed |
+| ------------------------- | -------------- | ----------- | --------- |
+| 6. iCloud Exclusion       | 0/TBD          | Not started | -         |
+| 7. Download Tracking      | 0/TBD          | Not started | -         |
+| 8. Skip & Player Polish   | 0/TBD          | Not started | -         |
+| 9. Navigation & UI Polish | 0/TBD          | Not started | -         |
