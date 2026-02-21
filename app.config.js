@@ -5,6 +5,8 @@
  * at build time via environment variables.
  */
 
+const withExcludeFromBackup = require("./plugins/excludeFromBackup/withExcludeFromBackup");
+
 const IS_DEV = process.env.APP_VARIANT === "development";
 const IS_PREVIEW = process.env.APP_VARIANT === "preview";
 
@@ -57,6 +59,7 @@ module.exports = ({ config }) => {
       favicon: "./assets/images/favicon.png",
     },
     plugins: [
+      withExcludeFromBackup,
       "expo-router",
       [
         "expo-splash-screen",
