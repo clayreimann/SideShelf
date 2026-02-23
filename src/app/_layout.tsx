@@ -1,5 +1,6 @@
 import { initializeApp } from "@/index";
 import { formatTimeRemaining } from "@/lib/helpers/formatters";
+import { runDownloadReconciliationScan } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
 import { AuthProvider } from "@/providers/AuthProvider";
@@ -131,6 +132,12 @@ export default function RootLayout() {
               log.error("Failed to fetch server progress on app foreground", error as Error);
             });
 
+          // Fire-and-forget download reconciliation scan (mirrors iCloud exclusion pattern)
+          // Clears stale DB records for missing files, detects zombies — non-blocking
+          runDownloadReconciliationScan().catch((error) => {
+            log.warn(`[RootLayout] Download reconciliation scan failed: ${String(error)}`);
+          });
+
           return; // Skip all restoration operations that would update TrackPlayer
         }
 
@@ -166,6 +173,12 @@ export default function RootLayout() {
           .catch((error) => {
             log.error("Failed to fetch server progress on app foreground", error as Error);
           });
+
+        // Fire-and-forget download reconciliation scan (mirrors iCloud exclusion pattern)
+        // Clears stale DB records for missing files, detects zombies — non-blocking
+        runDownloadReconciliationScan().catch((error) => {
+          log.warn(`[RootLayout] Download reconciliation scan failed: ${String(error)}`);
+        });
       }
     };
 
