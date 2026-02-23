@@ -154,7 +154,14 @@ Plans:
 1. After deleting a downloaded file outside the app and restarting, the item's "downloaded" badge is gone and tapping it triggers a fresh download rather than a failed playback attempt
 2. The Storage tab lists every item that has files on disk — no item present in the filesystem is absent from Storage
 3. Performing a scan while a download is actively in progress does not mark the partial file as complete or corrupt the download record
-   **Plans**: TBD
+
+**Plans:** 3 plans
+
+Plans:
+
+- [ ] 07-01-PLAN.md — Reconciliation scan in fileLifecycleManager (active-download guard, zombie detection), removeDownloadedItem in downloadSlice, fire-and-forget wiring in \_layout.tsx
+- [ ] 07-02-PLAN.md — Partial download badge in CoverImage, action sheet in LibraryItemDetail, isItemPartiallyDownloaded selector
+- [ ] 07-03-PLAN.md — orphanScanner.ts disk walk, useFocusEffect refresh in storage.tsx, Unknown files section with delete
 
 ### Phase 8: Skip & Player Polish
 
@@ -208,6 +215,6 @@ Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in
 | Phase                     | Plans Complete | Status      | Completed  |
 | ------------------------- | -------------- | ----------- | ---------- |
 | 6. iCloud Exclusion       | 2/2            | Complete    | 2026-02-23 |
-| 7. Download Tracking      | 0/TBD          | Not started | -          |
+| 7. Download Tracking      | 0/3            | Not started | -          |
 | 8. Skip & Player Polish   | 0/TBD          | Not started | -          |
 | 9. Navigation & UI Polish | 0/TBD          | Not started | -          |
