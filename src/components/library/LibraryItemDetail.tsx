@@ -59,7 +59,13 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     updateItemProgress,
     loading: itemLoading,
   } = useLibraryItemDetails();
-  const { activeDownloads, isItemDownloaded, startDownload, deleteDownload } = useDownloads();
+  const {
+    activeDownloads,
+    isItemDownloaded,
+    isItemPartiallyDownloaded,
+    startDownload,
+    deleteDownload,
+  } = useDownloads();
   const { getItemBookmarks, deleteBookmark } = useUserProfile();
 
   // Get cached item data or null
@@ -81,6 +87,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const downloadProgress = activeDownloads[itemId] || null;
   const isDownloading = !!downloadProgress;
   const isDownloaded = isItemDownloaded(itemId);
+  const isPartiallyDownloaded = isItemPartiallyDownloaded(itemId);
 
   // Get bookmarks for this item
   const itemBookmarks = useMemo(() => {
@@ -352,6 +359,45 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     // State will be updated via progress subscription
   }, [item]);
 
+  const handlePartialDownloadAction = useCallback(() => {
+    if (!item) return;
+
+    Alert.alert("Partially Downloaded", "Some files are missing from this item.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Re-download missing files",
+        onPress: async () => {
+          try {
+            await startDownload(item.id);
+          } catch (error) {
+            console.error("[LibraryItemDetail] Re-download failed:", error);
+            Alert.alert(
+              translate("common.error"),
+              translate("libraryItem.alerts.downloadFailed", { error: String(error) }),
+              [{ text: translate("common.ok") }]
+            );
+          }
+        },
+      },
+      {
+        text: "Clear downloaded files",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDownload(item.id);
+          } catch (error) {
+            console.error("[LibraryItemDetail] Clear download failed:", error);
+            Alert.alert(
+              translate("common.error"),
+              translate("libraryItem.alerts.deleteFailed", { error: String(error) }),
+              [{ text: translate("common.ok") }]
+            );
+          }
+        },
+      },
+    ]);
+  }, [item, startDownload, deleteDownload]);
+
   const handlePauseDownload = useCallback(() => {
     if (!item) return;
 
@@ -412,6 +458,9 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         case "delete":
           handleDeleteDownload();
           break;
+        case "partial":
+          handlePartialDownloadAction();
+          break;
         case "mark-finished":
           handleToggleFinished();
           break;
@@ -422,7 +471,13 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           break;
       }
     },
-    [handleDownload, handleDeleteDownload, handleToggleFinished, handleForceResync]
+    [
+      handleDownload,
+      handleDeleteDownload,
+      handlePartialDownloadAction,
+      handleToggleFinished,
+      handleForceResync,
+    ]
   );
 
   // Build menu actions based on current state
@@ -437,6 +492,13 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         attributes: { destructive: true },
         image: "trash",
         imageColor: "#FF3B30",
+      });
+    } else if (isPartiallyDownloaded && !isDownloading) {
+      // Show partial action for items with some files downloaded
+      actions.push({
+        id: "partial",
+        title: "Partial Download",
+        image: "arrow.down.circle.dotted",
       });
     } else if (!isDownloading && serverReachable !== false) {
       // Only show download option when server is reachable
@@ -474,7 +536,15 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     }
 
     return actions;
-  }, [isDownloaded, isDownloading, effectiveProgress, currentTrack, itemId, serverReachable]);
+  }, [
+    isDownloaded,
+    isPartiallyDownloaded,
+    isDownloading,
+    effectiveProgress,
+    currentTrack,
+    itemId,
+    serverReachable,
+  ]);
 
   if (loading) {
     return (
