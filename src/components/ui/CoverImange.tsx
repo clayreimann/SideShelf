@@ -14,11 +14,12 @@ export interface CoverImageProps {
 export default function CoverImage({ uri, title, fontSize, libraryItemId }: CoverImageProps) {
   const { colors } = useThemedStyles();
   const { isConnected, isInternetReachable } = useNetwork();
-  const { isItemDownloaded } = useDownloads();
+  const { isItemDownloaded, isItemPartiallyDownloaded } = useDownloads();
 
   // Determine if we should show the offline icon
   const isOffline = !isConnected || isInternetReachable === false;
   const isDownloaded = libraryItemId ? isItemDownloaded(libraryItemId) : false;
+  const isPartiallyDownloaded = libraryItemId ? isItemPartiallyDownloaded(libraryItemId) : false;
   const showOfflineIcon = isOffline && !isDownloaded && libraryItemId;
 
   return (
@@ -42,6 +43,15 @@ export default function CoverImage({ uri, title, fontSize, libraryItemId }: Cove
           </View>
         </View>
       )}
+
+      {/* Show partial badge for items with some (not all) files downloaded */}
+      {isPartiallyDownloaded && !isDownloaded && (
+        <View style={styles.partialBadgeContainer}>
+          <View style={styles.partialBadgeBackground}>
+            <Text style={styles.partialBadgeText}>Partial</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -56,5 +66,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     borderRadius: 12,
     padding: 4,
+  },
+  partialBadgeContainer: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+  },
+  partialBadgeBackground: {
+    backgroundColor: "rgba(180, 120, 0, 0.75)",
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  partialBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
   },
 });
