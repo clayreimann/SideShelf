@@ -21,7 +21,7 @@ v1.1 (Phases 6–9) is a focused bug-fix and polish pass following the coordinat
 - [x] **Phase 03.1: Fix Coordinator Service Bugs** - Four runtime bugs fixed: seek state memory loss, completed items resuming from end, mark-as-unfinished not resetting position, skip button UX — COMPLETE (2026-02-18)
 - [x] **Phase 4: State Propagation** - playerSlice becomes read-only proxy driven by coordinator bridge — COMPLETE (human-accepted 2026-02-19)
 - [x] **Phase 5: Cleanup** - Legacy guard flags and reconciliation methods deleted; services simplified to thin execution layers — COMPLETE (2026-02-20)
-- [ ] **Phase 6: iCloud Exclusion** - Plugin registered, compiled into build, exclusion applied at download completion and path repair
+- [x] **Phase 6: iCloud Exclusion** - Plugin registered, compiled into build, exclusion applied at download completion and path repair — COMPLETE (2026-02-23)
 - [ ] **Phase 7: Download Tracking** - Stale DB records cleared on startup; Storage tab accurate; active downloads excluded from reconciliation scan
 - [ ] **Phase 8: Skip & Player Polish** - Skip action executes on short-tap; lock screen updates after skip; skip intervals persist across sessions
 - [ ] **Phase 9: Navigation & UI Polish** - More screen routes to correct tabs; icons and nav affordance added; home screen loading skeleton; tab reorder UX improved
@@ -136,12 +136,13 @@ Plans:
 2. After a file finishes downloading, its filesystem entry has `NSURLIsExcludedFromBackupKey = true` — verifiable via a device diagnostic or the native module's own logging
 3. After `repairDownloadStatus` runs (iOS app update path migration), re-downloaded files still have the exclusion attribute applied — the repair path does not silently re-enable iCloud backup
 
-**Plans:** 1/2 plans executed
+**Status**: COMPLETE (2026-02-23)
+**Plans:** 2/2 plans executed
 
 Plans:
 
-- [ ] 06-01-PLAN.md — Register plugin in app.config.js, add exclusion to repairDownloadStatus, add startup retroactive scan
-- [ ] 06-02-PLAN.md — Human verification: native build confirms NativeModules.ICloudBackupExclusion resolves non-null
+- [x] 06-01-PLAN.md — Register plugin in app.config.js, add exclusion to repairDownloadStatus, add startup retroactive scan
+- [x] 06-02-PLAN.md — Human verification: native build confirms NativeModules.ICloudBackupExclusion resolves non-null; fixed file:// URL encoding bug in setExcludeFromBackup
 
 ### Phase 7: Download Tracking
 
@@ -204,9 +205,9 @@ Phases execute in numeric order: 2 → 3 → 4 → 5
 **Execution Order:**
 Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in parallel with 6/7
 
-| Phase                     | Plans Complete | Status      | Completed |
-| ------------------------- | -------------- | ----------- | --------- |
-| 6. iCloud Exclusion       | 1/2            | In Progress |           |
-| 7. Download Tracking      | 0/TBD          | Not started | -         |
-| 8. Skip & Player Polish   | 0/TBD          | Not started | -         |
-| 9. Navigation & UI Polish | 0/TBD          | Not started | -         |
+| Phase                     | Plans Complete | Status      | Completed  |
+| ------------------------- | -------------- | ----------- | ---------- |
+| 6. iCloud Exclusion       | 2/2            | Complete    | 2026-02-23 |
+| 7. Download Tracking      | 0/TBD          | Not started | -          |
+| 8. Skip & Player Polish   | 0/TBD          | Not started | -          |
+| 9. Navigation & UI Polish | 0/TBD          | Not started | -          |
