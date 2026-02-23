@@ -677,9 +677,7 @@ export default function StorageScreen() {
               <Pressable onPress={item.onPress} disabled={item.disabled}>
                 <Text style={item.disabled ? styles.text : styles.link}>{item.label}</Text>
                 {item.sublabel && (
-                  <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>
-                    {item.sublabel}
-                  </Text>
+                  <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>{item.sublabel}</Text>
                 )}
               </Pressable>
             </View>
