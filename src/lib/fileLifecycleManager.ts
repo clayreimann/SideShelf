@@ -18,6 +18,7 @@ import {
   type StorageLocation,
   ensureDownloadsDirectory,
   verifyFileExists,
+  getDownloadsDirectory,
 } from "@/lib/fileSystem";
 import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 import {
@@ -27,6 +28,8 @@ import {
   getDownloadedAudioFilesWithLibraryInfo,
 } from "@/db/helpers/localData";
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
+import { downloadService } from "@/services/DownloadService";
+import RNBackgroundDownloader from "@kesha-antonov/react-native-background-downloader";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 
@@ -295,6 +298,102 @@ export async function detectCleanedUpFiles(): Promise<CleanedUpFile[]> {
   } catch (error) {
     log.error("Error detecting cleaned up files:", error as Error);
     return [];
+  }
+}
+
+/**
+ * Run a download reconciliation scan on foreground resume.
+ *
+ * Performs two operations:
+ * 1. Stale record scan — finds DB records for files that no longer exist on disk
+ *    and clears them, then invalidates the Zustand store for those items.
+ * 2. Zombie detection — finds background download tasks tracked by the OS but
+ *    not by DownloadService (i.e. orphaned from a previous app session), stops
+ *    them, deletes their partial files, and clears any DB records.
+ *
+ * Active and paused downloads are always skipped — `isDownloadActive` returns
+ * true for both states because paused items remain in the activeDownloads Map.
+ */
+export async function runDownloadReconciliationScan(): Promise<void> {
+  log.info("[ReconciliationScan] Starting download reconciliation scan...");
+
+  try {
+    // --- Step 1: Stale record scan ---
+    const downloadedFiles = await getDownloadedAudioFilesWithLibraryInfo();
+
+    // Track which library items had at least one file cleared
+    const clearedLibraryItems = new Set<string>();
+
+    for (const downloadInfo of downloadedFiles) {
+      const { libraryItemId } = downloadInfo;
+
+      // Skip items with active or paused downloads — isDownloadActive covers both
+      if (downloadService.isDownloadActive(libraryItemId)) {
+        log.info(`[ReconciliationScan] Skipping active/paused download: ${libraryItemId}`);
+        continue;
+      }
+
+      const exists = await verifyFileExists(downloadInfo.downloadPath);
+      if (!exists) {
+        log.warn(
+          `[ReconciliationScan] Cleared stale record: ${downloadInfo.filename} (${libraryItemId})`
+        );
+        await clearAudioFileDownloadStatus(downloadInfo.audioFileId);
+        clearedLibraryItems.add(libraryItemId);
+      }
+    }
+
+    // --- Step 2: Zustand store invalidation ---
+    if (clearedLibraryItems.size > 0) {
+      // Dynamic import to avoid circular dependency — appStore imports DownloadService
+      const { useAppStore } = await import("@/stores/appStore");
+      for (const libraryItemId of clearedLibraryItems) {
+        useAppStore.getState().removeDownloadedItem(libraryItemId);
+      }
+      log.info(
+        `[ReconciliationScan] Invalidated ${clearedLibraryItems.size} items in Zustand store`
+      );
+    }
+
+    // --- Step 3: Zombie detection ---
+    const existingTasks = await RNBackgroundDownloader.checkForExistingDownloads();
+
+    for (const task of existingTasks) {
+      // Parse libraryItemId from task ID format: "${libraryItemId}_${audioFile.id}"
+      const underscoreIdx = task.id.indexOf("_");
+      const libraryItemId = underscoreIdx !== -1 ? task.id.slice(0, underscoreIdx) : task.id;
+
+      // If DownloadService knows about this task, it is legitimate — leave it alone
+      if (downloadService.isDownloadActive(libraryItemId)) {
+        continue;
+      }
+
+      // Zombie task: not tracked by DownloadService — stop it and clean up
+      log.warn(`[ReconciliationScan] Zombie cleared: ${libraryItemId}`);
+      task.stop();
+
+      // Delete partial files from both storage locations
+      const docsDir = getDownloadsDirectory(libraryItemId, "documents");
+      if (docsDir.exists) {
+        docsDir.delete();
+      }
+      const cachesDir = getDownloadsDirectory(libraryItemId, "caches");
+      if (cachesDir.exists) {
+        cachesDir.delete();
+      }
+
+      // Clear any DB records for this zombie item's audio files
+      const zombieFiles = downloadedFiles.filter((f) => f.libraryItemId === libraryItemId);
+      for (const zombieFile of zombieFiles) {
+        await clearAudioFileDownloadStatus(zombieFile.audioFileId);
+      }
+    }
+
+    log.info("[ReconciliationScan] Reconciliation scan complete");
+  } catch (error) {
+    log.error("[ReconciliationScan] Error during reconciliation scan:", error as Error);
+    // Don't rethrow — caller uses fire-and-forget .catch() pattern
+    throw error;
   }
 }
 
