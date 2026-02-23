@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Milestone v1.1 — Phase 7: Download Tracking (next)
+**Current focus:** Milestone v1.1 — Phase 7: Download Tracking (complete)
 
 ## Current Position
 
-Phase: 7 of 9 in progress (v1.1: Download Tracking — Plan 1 of 3 complete)
-Next: Phase 7, Plan 02 — Download Status Indicators
-Status: Phase 7 Plan 01 complete; ready for Plan 02
-Last activity: 2026-02-23 — Phase 7 Plan 01 complete (reconciliation scan wired, partiallyDownloadedItems Set added)
+Phase: 7 of 9 complete (v1.1: Download Tracking — all 3 plans complete)
+Next: Phase 8 — Now Playing Metadata
+Status: Phase 7 complete; ready for Phase 8
+Last activity: 2026-02-23 — Phase 7 Plan 03 complete (orphanScanner.ts, storage tab useFocusEffect + Unknown files section)
 
-Progress: [████████░░] ~73% (v1.0 complete; Phase 6 complete; Phase 7 Plan 01 complete)
+Progress: [█████████░] ~80% (v1.0 complete; Phases 6-7 complete)
 
 ## Performance Metrics
 
@@ -37,6 +37,7 @@ Progress: [████████░░] ~73% (v1.0 complete; Phase 6 complete
 _v1.1 metrics will be tracked per phase_
 
 | Phase 07 P01 | 3 min | 3 tasks | 3 files |
+| Phase 07 P03 | 4 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -57,6 +58,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 6, Plan 02]: Normalize file:// URLs before passing to [NSURL fileURLWithPath:] — strip scheme and decodeURIComponent in TypeScript wrapper, not Obj-C
 - [Phase 7, Plan 01]: isDownloadActive covers both active and paused downloads (paused items stay in activeDownloads Map) — single guard sufficient for reconciliation scan
 - [Phase 7, Plan 01]: Dynamic import of appStore inside runDownloadReconciliationScan to avoid circular dependency with DownloadService
+- [Phase 7, Plan 03]: Include both audio file and library file download paths in orphan scanner known-paths set — covers all download types
+- [Phase 7, Plan 03]: URI normalization with decodeURIComponent fallback for robust orphan matching across percent-encoded filenames
 
 ### v1.1 Research Findings (high-confidence)
 
@@ -77,5 +80,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed Phase 7 Plan 01 (07-01-PLAN.md: reconciliation scan, partiallyDownloadedItems, removeDownloadedItem)
+Stopped at: Completed Phase 7 Plan 03 (07-03-PLAN.md: orphanScanner.ts, storage tab useFocusEffect + Unknown files section)
 Resume file: None
