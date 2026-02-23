@@ -20,17 +20,28 @@ import { NativeModules, Platform } from "react-native";
 
 // Type definitions for the native module
 interface ICloudBackupExclusionModule {
-  setExcludeFromBackup(
-    filePath: string
-  ): Promise<{ success: boolean; path: string }>;
-  isExcludedFromBackup(
-    filePath: string
-  ): Promise<{ excluded: boolean; path: string }>;
+  setExcludeFromBackup(filePath: string): Promise<{ success: boolean; path: string }>;
+  isExcludedFromBackup(filePath: string): Promise<{ excluded: boolean; path: string }>;
 }
 
 // Get the native module (only available on iOS)
 const NativeModule: ICloudBackupExclusionModule | null =
   Platform.OS === "ios" ? NativeModules.ICloudBackupExclusion : null;
+
+/**
+ * Normalize a path for the native module.
+ *
+ * The native Obj-C module uses [NSURL fileURLWithPath:] which expects a POSIX
+ * path (e.g. /var/mobile/.../file.m4b). The DB stores file:// URL strings
+ * with percent-encoded characters. Strip the scheme and decode before
+ * passing to native.
+ */
+function normalizePath(filePath: string): string {
+  if (filePath.startsWith("file://")) {
+    return decodeURIComponent(filePath.slice("file://".length));
+  }
+  return filePath;
+}
 
 /**
  * Sets the "do not back up" attribute on a file or directory
@@ -39,7 +50,7 @@ const NativeModule: ICloudBackupExclusionModule | null =
  * Useful for large cache files, downloaded media, and other data that
  * can be re-downloaded or regenerated.
  *
- * @param filePath - Absolute path to the file or directory
+ * @param filePath - Absolute path or file:// URL to the file or directory
  * @returns Promise that resolves with success status and path
  * @throws Error if the operation fails on iOS
  */
@@ -52,13 +63,11 @@ export async function setExcludeFromBackup(
   }
 
   if (!NativeModule) {
-    throw new Error(
-      "ICloudBackupExclusion native module is not available on this platform"
-    );
+    throw new Error("ICloudBackupExclusion native module is not available on this platform");
   }
 
   try {
-    const result = await NativeModule.setExcludeFromBackup(filePath);
+    const result = await NativeModule.setExcludeFromBackup(normalizePath(filePath));
     return result;
   } catch (error) {
     throw new Error(
@@ -83,13 +92,11 @@ export async function isExcludedFromBackup(
   }
 
   if (!NativeModule) {
-    throw new Error(
-      "ICloudBackupExclusion native module is not available on this platform"
-    );
+    throw new Error("ICloudBackupExclusion native module is not available on this platform");
   }
 
   try {
-    const result = await NativeModule.isExcludedFromBackup(filePath);
+    const result = await NativeModule.isExcludedFromBackup(normalizePath(filePath));
     return result;
   } catch (error) {
     throw new Error(
