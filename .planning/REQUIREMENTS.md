@@ -1,110 +1,112 @@
-# Requirements: Player State Machine Migration
+# Requirements: Audiobookshelf React Native
 
-**Defined:** 2026-02-16
+**Defined:** 2026-02-20
 **Core Value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
 
-## v1 Requirements
+## v1.0 Requirements — COMPLETE
 
-Requirements for completing the migration (Phases 2–5). Phase 1 (observer mode) is already validated in production.
+All v1.0 requirements (EXEC-01 through CLEAN-06) were satisfied in Phases 2–5. See `.planning/MILESTONES.md` for the full list.
 
-### Execution Control (Phase 2)
+## v1.1 Requirements
 
-- [ ] **EXEC-01**: Coordinator calls service methods when events arrive (not just observes)
-- [ ] **EXEC-02**: Transition guards prevent invalid operations (duplicate sessions, play-when-loading, seek-when-idle)
-- [ ] **EXEC-03**: Test suite asserts exactly one event is dispatched per coordinator action (feedback loop prevention)
-- [ ] **EXEC-04**: `observerMode` flag preserved and functional for instant rollback
-- [ ] **EXEC-05**: NATIVE\_\* events continue to update coordinator context unconditionally (confirmation + external control handling)
-- [ ] **EXEC-06**: All existing playback behaviors work without regression (resume position, chapter display, lock screen controls, background audio)
+Bug fixes and polish pass following the coordinator migration. 16 requirements across 6 categories.
 
-### Position Reconciliation (Phase 3)
+### Skip Button (SKIP)
 
-- [ ] **POS-01**: Coordinator owns canonical position with defined priority: native player > server DB > AsyncStorage > zero
-- [ ] **POS-02**: `MIN_PLAUSIBLE_POSITION` threshold preserved in reconciliation algorithm (prevents position-0 false starts)
-- [ ] **POS-03**: Native position-0-before-queue-loaded edge case handled (coordinator does not overwrite valid position with 0 during load)
-- [ ] **POS-04**: `determineResumePosition()` removed from PlayerService after coordinator owns position
-- [ ] **POS-05**: Position drift <5 seconds over 30-minute playback session
-- [ ] **POS-06**: Android BGS coordinator instance does not conflict with UI coordinator (DB session remains cross-context truth)
+- [ ] **SKIP-01**: User can short-tap skip button to execute a skip (forward or backward)
+- [ ] **SKIP-02**: Lock screen shows updated elapsed time after any skip (same-chapter or chapter-crossing)
 
-### State Propagation (Phase 4)
+### iCloud Exclusion (ICLD)
 
-- [ ] **PROP-01**: playerSlice receives all player state from coordinator (no direct writes from services to playerSlice)
-- [ ] **PROP-02**: `usePlayerState()` hook supports selector-based subscriptions (prevents re-render storms from 1Hz position updates)
-- [ ] **PROP-03**: React component render counts do not increase after bridge is added (validated with profiler)
-- [ ] **PROP-04**: Sleep timer state retained as playerSlice-local (documented exception to read-only proxy pattern)
-- [ ] **PROP-05**: Android BGS does not call `syncToStore()` (separate JS context enforcement)
-- [ ] **PROP-06**: `updateNowPlayingMetadata()` debounce behavior preserved after bridge is added
+- [x] **ICLD-01**: iCloud exclusion plugin is registered in `app.config.js` and compiled into the app build
+- [x] **ICLD-02**: Downloaded files are excluded from iCloud backup at download completion
+- [x] **ICLD-03**: iCloud exclusion is re-applied to files during download path repair (app update migrations)
 
-### Cleanup (Phase 5)
+### Download Tracking (DL)
 
-- [x] **CLEAN-01**: Implicit state flags removed: `isLoading`, `isPreparing`, `sessionCreationInProgress` in services
-- [x] **CLEAN-02**: `PlayerService.ts` reduced from ~1640 lines to under 1100 lines
-- [x] **CLEAN-03**: `isRestoringState` removed last, only after BGS chapter updates route through coordinator
-- [x] **CLEAN-04**: ProgressService session mutex removed after coordinator serial queue is confirmed as the effective guard
-- [x] **CLEAN-05**: Integration tests cover full playback flow through coordinator (load → play → pause → seek → stop)
-- [x] **CLEAN-06**: 90%+ test coverage maintained across all modified files
+- [ ] **DL-01**: Stale "downloaded" DB records where files no longer exist on disk are cleared on startup
+- [ ] **DL-02**: Storage tab accurately reflects all currently downloaded items
+- [ ] **DL-03**: Download reconciliation scan excludes active in-progress downloads (no partial-file false positives)
+
+### Player (PLR)
+
+- [ ] **PLR-01**: Skip forward interval selection persists across app sessions
+- [ ] **PLR-02**: Skip backward interval selection persists across app sessions
+
+### Navigation (NAV)
+
+- [ ] **NAV-01**: More screen navigates to Series tab (switches tab, not pushes onto More stack)
+- [ ] **NAV-02**: More screen navigates to Authors tab (switches tab, not pushes onto More stack)
+
+### UI Polish (UX)
+
+- [ ] **UX-01**: Home screen shows shimmer skeleton cards during cold start (not just spinner)
+- [ ] **UX-02**: More screen items have icons
+- [ ] **UX-03**: More screen items have visual nav affordance (chevrons, active tap states)
+- [ ] **UX-04**: Tab reorder UX is improved
 
 ## v2 Requirements
 
-Deferred — not in current migration scope.
+Deferred — not in current milestone scope.
+
+### Performance
+
+- **PERF-01**: `NATIVE_PROGRESS_UPDATED` events bypass async-lock for lower-latency position updates (requires explicit safety analysis)
 
 ### Enhanced Diagnostics
 
 - **DIAG-01**: Coordinator diagnostics exportable to crash reporting service (not just local JSON)
 - **DIAG-02**: Position drift metric tracked and reported per session
 
-### Performance
+### Polish & Features
 
-- **PERF-01**: `NATIVE_PROGRESS_UPDATED` events bypass async-lock for lower-latency position updates (requires explicit safety analysis)
+- **FEAT-01**: Configurable smart-rewind intervals — both logic refactor and settings UI (deferred from v1.1)
+- **FEAT-02**: RN Downloader upgrade to mainline (maintenance, not blocking)
+- **FEAT-03**: iOS native intents (app appears in system now-playing suggestions)
+- **FEAT-04**: Siri shortcuts for play/resume/stop
+- **FEAT-05**: Better feedback UX (Cloudflare worker with GH token to create issues)
 
 ## Out of Scope
 
-| Feature                                   | Reason                                                                |
-| ----------------------------------------- | --------------------------------------------------------------------- |
-| Full playerSlice removal                  | Zustand/React integration is valuable; become read-only proxy instead |
-| Changing state machine topology           | Phase 1 validated the transition matrix — it stays                    |
-| New player features                       | This is a migration, not a feature addition                           |
-| XState or other FSM library adoption      | No benefit; adds 16.7kB gzipped for zero functional gain              |
-| Performance optimization beyond migration | Don't optimize what isn't measured as slow                            |
-| Sleep timer migration to coordinator      | UI-only state; not execution state; intentional exception             |
+| Feature                                   | Reason                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------ |
+| Full playerSlice removal                  | Zustand/React integration is valuable; stays as read-only proxy    |
+| Changing state machine topology           | Phase 1 validated the transition matrix — it stays                 |
+| New player features                       | This is a bug-fix and polish milestone                             |
+| Performance optimization beyond migration | Don't optimize what isn't measured as slow                         |
+| Configurable smart-rewind/jump            | Logic changes + settings UI — too large for v1.1, deferred to v1.2 |
+| RN Downloader upgrade                     | Nice-to-have maintenance, not blocking — deferred to v1.2          |
+| iOS intents / Siri shortcuts              | Platform integration features — deferred to a features milestone   |
+| Cloudflare feedback worker                | New service infrastructure — deferred to a features milestone      |
 
 ## Traceability
 
-All 24 v1 requirements mapped to phases. Roadmap created 2026-02-16.
-
-| Requirement | Phase   | Status   |
-| ----------- | ------- | -------- |
-| EXEC-01     | Phase 2 | Pending  |
-| EXEC-02     | Phase 2 | Pending  |
-| EXEC-03     | Phase 2 | Pending  |
-| EXEC-04     | Phase 2 | Pending  |
-| EXEC-05     | Phase 2 | Pending  |
-| EXEC-06     | Phase 2 | Pending  |
-| POS-01      | Phase 3 | Pending  |
-| POS-02      | Phase 3 | Pending  |
-| POS-03      | Phase 3 | Pending  |
-| POS-04      | Phase 3 | Pending  |
-| POS-05      | Phase 3 | Pending  |
-| POS-06      | Phase 3 | Pending  |
-| PROP-01     | Phase 4 | Pending  |
-| PROP-02     | Phase 4 | Pending  |
-| PROP-03     | Phase 4 | Pending  |
-| PROP-04     | Phase 4 | Pending  |
-| PROP-05     | Phase 4 | Pending  |
-| PROP-06     | Phase 4 | Pending  |
-| CLEAN-01    | Phase 5 | Complete |
-| CLEAN-02    | Phase 5 | Complete |
-| CLEAN-03    | Phase 5 | Complete |
-| CLEAN-04    | Phase 5 | Complete |
-| CLEAN-05    | Phase 5 | Complete |
-| CLEAN-06    | Phase 5 | Complete |
+| Requirement | Phase | Status   |
+| ----------- | ----- | -------- |
+| SKIP-01     | 8     | Pending  |
+| SKIP-02     | 8     | Pending  |
+| ICLD-01     | 6     | Complete |
+| ICLD-02     | 6     | Complete |
+| ICLD-03     | 6     | Complete |
+| DL-01       | 7     | Pending  |
+| DL-02       | 7     | Pending  |
+| DL-03       | 7     | Pending  |
+| PLR-01      | 8     | Pending  |
+| PLR-02      | 8     | Pending  |
+| NAV-01      | 9     | Pending  |
+| NAV-02      | 9     | Pending  |
+| UX-01       | 9     | Pending  |
+| UX-02       | 9     | Pending  |
+| UX-03       | 9     | Pending  |
+| UX-04       | 9     | Pending  |
 
 **Coverage:**
 
-- v1 requirements: 24 total
-- Mapped to phases: 24
+- v1.1 requirements: 16 total
+- Mapped to phases: 16
 - Unmapped: 0
 
 ---
 
-_Requirements defined: 2026-02-16_
-_Last updated: 2026-02-16 after roadmap creation_
+_Requirements defined: 2026-02-20_
+_Last updated: 2026-02-20 after v1.1 roadmap creation_

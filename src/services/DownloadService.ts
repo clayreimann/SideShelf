@@ -580,6 +580,17 @@ export class DownloadService {
           await markAudioFileAsDownloaded(file.id, expectedPath);
           repairedCount++;
 
+          // Re-apply iCloud exclusion after path repair (iOS container migration re-enables backup)
+          try {
+            await setExcludeFromBackup(expectedPath);
+            log.info(`  ✓ iCloud exclusion re-applied after path repair: ${file.filename}`);
+          } catch (error) {
+            log.warn(
+              `  iCloud exclusion failed after repair for ${file.filename}: ${String(error)}`
+            );
+            // Continue - path is repaired even if exclusion fails (best-effort)
+          }
+
           log.info(`  ✓ Repaired download path for ${file.filename}`);
         } else {
           log.warn(`  ✗ File not found at expected path either: ${expectedPath}`);

@@ -1,187 +1,249 @@
 # Project Research Summary
 
-**Project:** abs-react-native — PlayerStateCoordinator State Machine Migration (Phases 2–5)
-**Domain:** React Native audio player — observer-to-executor state machine migration
-**Researched:** 2026-02-16
-**Confidence:** HIGH — all four research files are grounded in direct codebase analysis, not generic guidance
+**Project:** abs-react-native (SideShelf) — v1.1 Bug Fixes & Polish
+**Domain:** React Native Expo audiobook player — coordinator-driven architecture
+**Researched:** 2026-02-20
+**Confidence:** HIGH — all findings grounded in direct codebase analysis
 
 ## Executive Summary
 
-This project is a brownfield architectural migration, not a feature addition. The `PlayerStateCoordinator` was built in Phase 1 as an observing FSM that validates transitions and tracks state but does not execute side effects. Phases 2–5 complete the original design intent: the coordinator becomes the single executor of all audio commands, the canonical owner of playback position, the sole writer to the Zustand `playerSlice`, and finally the mechanism that enables deletion of 500+ lines of now-redundant coordination scaffolding scattered across `PlayerService`, `PlayerBackgroundService`, and `ProgressService`. The migration is structurally well-prepared — `executeTransition()` is already scaffolded, `observerMode` is already `false` in the committed code, and the Zustand `useAppStore.setState()` bridge API is already available.
+The v1.1 milestone is a focused bug-fix and polish pass on a mature codebase that completed a five-phase PlayerStateCoordinator migration. The architecture is correct and the coordinator is fully operational. What remains are six discrete gaps: two are behavior bugs visible on every user interaction (lock screen stale after skip, download badge lying about file state), one is a silent data-loss issue (iCloud backup exclusion not working, audiobook files silently backing up to iCloud), two are UX polish items (loading skeleton on cold start, skip interval persistence), and one is a routing correctness question (More screen tab switching). None require architectural change — the coordinator, services, and store patterns are all correct and complete. All fixes are additive and targeted.
 
-The recommended approach requires no new dependencies and no library replacements. The existing custom FSM, Zustand 5.0.8, eventemitter3, and async-lock are all sufficient and already installed. The critical decisions are: (1) keep the custom FSM rather than migrating to XState — the coordinator is production-validated and XState adds 16.7 kB with no meaningful benefit for this use case; (2) use coordinator-pushes-via-`useAppStore.setState()` as the Zustand bridge — one direction only, no feedback loops; (3) establish a deterministic position reconciliation priority: native player > server session DB > AsyncStorage > zero.
+The most important finding from research is the resolution of the iCloud exclusion mystery. The native Obj-C implementation (`ICloudBackupExclusion.m` + `.h`) is complete and correct — it lives in `plugins/excludeFromBackup/ios/`. The `withExcludeFromBackup` Expo config plugin is also complete. However, `withExcludeFromBackup` is absent from the `plugins:` array in `app.config.js`. Because the plugin was never registered, `expo prebuild` never ran it, so the files were never copied to `ios/SideShelf/Modules/` and never compiled into the Xcode project. `NativeModules.ICloudBackupExclusion` resolves to null at runtime, making every `setExcludeFromBackup()` call a silent no-op. The fix is one line in `app.config.js` plus `expo prebuild --clean` — minutes of work, not hours. See the Conflict Resolution section for full investigation details.
 
-The four phases have strict sequential dependencies that must not be shortcut. Each phase unlocks the next: Phase 2 (executor) enables Phase 3 (canonical position) because position authority only makes sense when the coordinator is the only executor. Phase 3 enables Phase 4 (read-only store proxy) because the bridge can only push canonical data after the coordinator owns it. Phase 4 enables Phase 5 (cleanup) because legacy guard flags are load-bearing until all write paths flow through the coordinator. The key risk throughout is concurrent write paths during the transition period — both old service-direct writes and new coordinator-bridge writes existing simultaneously, causing position flicker, duplicate sessions, and inconsistent UI state. The mitigation is strict phase gates with specific grep-based verification before advancing.
+The primary risks in this milestone are: (1) the download reconciliation scan racing active downloads and prematurely marking partial files as complete; (2) the iCloud exclusion attribute silently resetting after iOS container path migrations unless `repairDownloadStatus` is updated to re-apply it; (3) the Expo Router `router.push` vs `router.navigate` distinction for tab-switching, which is version-sensitive and needs hands-on verification before coding. None of these are blockers — each has a documented prevention strategy from research.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The entire migration works within the existing installed dependency set. No new dependencies are required. The custom FSM in `PlayerStateCoordinator.ts` + `transitions.ts` is the correct choice over XState — it is already production-validated with 122+ tests, covers all needed states, and XState's actor model would require restructuring service boundaries that is out of scope. The coordinator communicates outward via two mechanisms: `useAppStore.setState()` pushes to the Zustand playerSlice (for React UI), and `eventemitter3` emits to non-React subscribers (for services). Both mechanisms are already wired.
+No new native modules are needed for this milestone. The only new package is `react-native-shimmer-placeholder` (JS-only, wraps the already-installed `expo-linear-gradient`). The iCloud exclusion module already exists in Obj-C — it needs plugin registration, not implementation. All other fixes work with the existing stack and no `expo prebuild` beyond the one required for the iCloud plugin.
 
-The single addition required in Phase 3 is extending `StateContext` with typed `positionSources` (with timestamps) to enable deterministic reconciliation. In Phase 4, a `usePlayerState(selector)` hook wraps the coordinator's subscription API for React consumers who need direct coordinator access without going through Zustand.
+**Core technologies for this milestone:**
 
-**Core technologies:**
+- `react-native-track-player` 4.1.2: `updateNowPlayingMetadata()` (not `updateMetadataForTrack()`) for lock screen elapsed time — the `elapsedTime` field on `NowPlayingMetadata` is the correct API; the current code works around the missing field with `@ts-ignore`
+- `expo-linear-gradient` (already installed): powering shimmer skeleton via `react-native-shimmer-placeholder` factory — zero new native installs
+- `withExcludeFromBackup` (Expo config plugin, already written in full): add to `app.config.js` plugins array and run `expo prebuild --clean`
+- Expo Router `router.push` / `router.navigate`: behavior is version-sensitive for tab switching — needs hands-on verification against Expo 54 / Expo Router v3
 
-- Custom FSM (`PlayerStateCoordinator` + `transitions.ts`): state machine execution control — already written, production-validated, no migration risk
-- Zustand 5.0.8 (`useAppStore`): React/UI state proxy — `setState()` works outside React components as the coordinator bridge API
-- async-lock 1.4.1: serial event queue — prevents race conditions in transition execution; already in use
-- eventemitter3 5.0.1: coordinator-to-subscriber notification — used for diagnostics and non-React service events
-- react-native-track-player 4.1.2: native audio playback — authoritative position source during active playback via `TrackPlayer.getProgress()`
+**New package required:** `react-native-shimmer-placeholder` (JS-only, no native install)
 
-**What to avoid:**
+**New native install required:** None.
 
-- XState (replaces working code, adds 16.7 kB, requires actor model restructuring)
-- `immer` middleware in Zustand (not needed, existing spread patterns are sufficient)
-- AsyncStorage as position source during live playback (100–500ms stale; write-on-pause/stop only)
+See `.planning/research/STACK.md` for full version table, alternatives considered, and what NOT to add.
 
 ### Expected Features
 
-This migration preserves all existing user-facing behavior. No new user-visible features are delivered. The observable improvements are developer-facing: elimination of duplicate session creation, single canonical position, and reduced coordinator surface area for bugs. User-visible regression risk is the primary concern.
+Research confirmed six feature gaps. Priority order per impact and severity:
 
-**Must preserve (table stakes — regression = user-visible bug):**
+**Must have (table stakes — bugs, not polish):**
 
-- Play starts at correct position on resume — complexity is HIGH in Phase 3; `MIN_PLAUSIBLE_POSITION = 5` threshold from `determineResumePosition()` must be replicated in the coordinator reconciler
-- Position bar updates at 1Hz during playback — fast-path exemption for `NATIVE_PROGRESS_UPDATED` (skips async-lock) is required to maintain update frequency
-- Pause/play from lock screen and notification — already dispatches to event bus; Phase 2 makes coordinator execute them
-- App restore resumes correct book at correct position — most complex table-stakes item; RESTORING → READY transition must own the full restoration flow
-- Progress syncs to server — `ProgressService` must read canonical position from coordinator, not from `TrackPlayer.getProgress()` directly
+- Now playing metadata updates after every skip — Apple WWDC22 explicitly states "whenever we seek to a new time we need to publish new Now Playing info"; the gap is that within-chapter seeks do not call `updateNowPlayingMetadata`; chapter-crossing seeks already work correctly via the coordinator bridge
+- Download file tracking recovery — `isLibraryItemDownloaded` has an explicit `// TODO: Could mark as not downloaded in database here` comment; the detection exists, the correction does not; stale "downloaded" badges cause playback failure on tap
+- iCloud exclusion working — currently silently no-ops because the plugin is unregistered; users' audiobook libraries are being backed up to iCloud
 
-**Developer-reliability improvements (phase deliverables):**
+**Should have (UX quality — user-visible on daily use):**
 
-- Phase 2: No duplicate play sessions; coordinator is the single executor; `observerMode` rollback remains available
-- Phase 3: One position reconciliation algorithm replacing three scattered ones; cold-start restore within 5 seconds; no 30-minute position drift
-- Phase 4: All playerSlice player fields written only via coordinator bridge; `isRestoringState` flag removed; chapter display driven by bridge
-- Phase 5: `PlayerService.ts` under 1,100 lines (from 1,640); three large reconciliation methods deleted; `ProgressService` mutex removed
+- Skip interval persistence — selected skip interval resets on every app open; needs two new settings store keys (`skipForwardInterval`, `skipBackwardInterval`) and wiring of the existing `SkipButton.onJump` callback to the settings slice
+- More screen tab navigation correctness — `router.push` may push onto the More stack rather than switching tabs; needs verification and likely a one-line fix
 
-**Defer (not part of this migration):**
+**Defer (polish):**
 
-- New player features of any kind — migration must complete and stabilize before feature additions
-- Sleep timer migration to coordinator context — retain direct playerSlice write path for now (lower risk; sleep timer does not participate in the race conditions being fixed)
-- XState migration — permanently deferred; decision documented in STACK.md
+- Loading skeletons for home screen cold start — `ActivityIndicator` path works; skeleton is perceptual improvement, not a bug
+- Reverse reconciliation (orphaned files on disk not in DB) — implement stale-record clearing first; the reverse direction follows naturally
+
+See `.planning/research/FEATURES.md` for full table-stakes / differentiators / anti-features breakdown per feature.
 
 ### Architecture Approach
 
-The target architecture enforces a strict "events up, commands down" invariant. All information flows upward to the coordinator via the event bus. All actions flow downward from the coordinator via `execute*` method calls on `PlayerService`. The coordinator is the single point of authority for state, position, and command execution. The Zustand `playerSlice` becomes a read-only projection of coordinator state — React components continue using `usePlayer()` with no API changes.
+The PlayerStateCoordinator architecture is complete and correct. All five v1.x phases are done. The coordinator bridge (`syncStateToStore` / `syncPositionToStore`) already handles now-playing metadata via the `lastSyncedChapterId` debounce — no new call paths should be added to that bridge from outside. Downloads are not in the state machine and should stay out of Zustand. All download state lives in SQLite (source of truth) and the `DownloadService` in-memory `activeDownloads` Map (transient). The reconciliation pass belongs in `DownloadService.initialize()`.
 
-**Major components:**
+**Components that change in this milestone:**
 
-1. `PlayerStateCoordinator` (singleton) — owns canonical state, validates transitions, executes commands via `PlayerService.execute*()`, pushes state to subscribers; no direct TrackPlayer access
-2. `PlayerEventBus` — decoupled dispatch layer; services write events here, coordinator reads; never changes across all phases
-3. `playerSlice` (Zustand) — React integration proxy; Phase 4 removes all write paths, retaining only read-path and UI-only state (sleep timer, modal visibility)
-4. `PlayerService` — execution-only delegate; public methods dispatch events, `execute*` methods called by coordinator to call TrackPlayer; Phase 5 removes reconciliation methods
-5. `PlayerBackgroundService` — forwards native TrackPlayer events to EventBus; handles remote controls; retains direct `ProgressService` calls for Android background context
+| Component                                               | Status              | What Changes                                                                                            |
+| ------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
+| `app.config.js`                                         | MODIFIED            | Add `withExcludeFromBackup` to plugins array                                                            |
+| `plugins/excludeFromBackup/ios/ICloudBackupExclusion.m` | NO CHANGE           | Implementation is complete and correct                                                                  |
+| `src/services/DownloadService.ts`                       | MODIFIED            | Add startup reconciliation pass in `initialize()`; add `setExcludeFromBackup` to `repairDownloadStatus` |
+| `src/services/coordinator/PlayerStateCoordinator.ts`    | MODIFIED (targeted) | Add `updateNowPlayingMetadata` call in `syncPositionToStore` when seeking state clears                  |
+| `src/stores/slices/settingsSlice.ts`                    | MODIFIED            | Add `skipForwardInterval`, `skipBackwardInterval` keys                                                  |
+| `src/components/player/SkipButton.tsx`                  | MODIFIED            | Wire `onJump` callback to settings store                                                                |
+| `src/app/(tabs)/home/index.tsx`                         | MODIFIED            | Replace `ActivityIndicator` with shimmer skeleton cards                                                 |
+| `src/app/(tabs)/more/index.tsx`                         | POSSIBLY MODIFIED   | Verify and fix tab navigation pattern if needed                                                         |
 
-**Key architectural constraint:** Android runs `PlayerBackgroundService` in a separate Headless JS context with its own coordinator instance. The background context coordinator MUST NOT write to `useAppStore` (no Zustand/React context available). DB session via `ProgressService` remains the cross-context source of truth for position.
+**Patterns to maintain:**
+
+- Do NOT add a third `updateNowPlayingMetadata` call site outside the coordinator bridge — the `lastSyncedChapterId` deduplication must be preserved
+- Do NOT add download state to Zustand — progress is delivered via callbacks subscribed directly to `DownloadService`
+- Do NOT implement iCloud exclusion as an Expo Module (Option B) — the TypeScript wrapper uses `NativeModules`, and the Obj-C Option A requires zero TypeScript changes
+
+See `.planning/research/ARCHITECTURE.md` for full data flow diagrams, component boundary table, and build order recommendation.
 
 ### Critical Pitfalls
 
-1. **Coordinator-to-service feedback loop (Phase 2)** — An `execute*` method accidentally calling `dispatchPlayerEvent()` causes the coordinator to process the same intent twice, creating an infinite dispatch loop. Prevention: enforce via JSDoc and code review that no `execute*` method dispatches events. Verification: assert event bus receives exactly one event per coordinator dispatch. Rollback: set `observerMode = true`.
+Research surfaced 12 pitfalls across the milestone. Top 5:
 
-2. **Dual position authority during Phase 3 transition (Phase 3)** — `PlayerBackgroundService.handlePlaybackProgressUpdated` has 14 `store.updatePosition()` call sites. If Phase 3 adds coordinator-pushed position writes before removing these, both paths run simultaneously, causing position flicker. Prevention: extract a single `setCanonicalPosition()` helper first, then swap it for the coordinator bridge in one atomic change. Verify with grep: no `store.updatePosition` in service files after Phase 3.
+1. **Download reconciliation races active downloads** — a startup scan calling `verifyFileExists` on a partial in-progress file marks it as fully downloaded; guard by checking `isDownloadActive(libraryItemId)` before reconciling any item, or compare file size on disk against expected size in DB
+2. **iCloud exclusion attribute resets after container path repair** — `repairDownloadStatus` updates the DB path but never re-applies `setExcludeFromBackup`; every iOS app update silently re-enables iCloud backup for all previously downloaded files; fix: add `setExcludeFromBackup(expectedPath)` immediately after `markAudioFileAsDownloaded` in `repairDownloadStatus`
+3. **iCloud exclusion applied before file exists on disk** — `setResourceValue:forKey:error:` fails silently if the file is not yet flushed after download completion; add `FileManager.default.fileExists` check in the native module before calling `setResourceValues`; log a warning (not silent continue) when `success: false`
+4. **Expo Router `router.push` opens route in current tab stack** — `router.push('/series')` may push Series onto the More stack rather than switching tabs; behavior changed in Expo Router v4 (`router.navigate` now equals `router.push`); needs hands-on verification on the actual Expo 54 build before writing any code
+5. **Skeleton flash on fast content load** — if cached data arrives in <50ms, the skeleton flashes for one frame which is more jarring than showing no skeleton; implement a minimum display duration (~150ms) before dismissal, or only show skeleton when `sections.length === 0 && isLoading`
 
-3. **Zustand re-render storm from NATIVE_PROGRESS_UPDATED (Phase 4)** — If `usePlayerState()` returns the full `StateContext` object, all subscribers re-render every second (position updates at 1Hz). Prevention: design `usePlayerState(selector)` with selector support from day one. Measure component render counts with React Profiler before Phase 4 begins to establish baseline.
+See `.planning/research/PITFALLS.md` for the complete list including moderate pitfalls (Android artwork bug in `updateMetadataForTrack`, `configureTrackPlayer` feedback loop risk, skeleton animation memory leak, skeleton layout shift).
 
-4. **Premature legacy flag removal exposing unguarded code paths (Phase 5)** — `isRestoringState` and session creation guards protect code paths that still bypass the coordinator. Removing flags before all write paths route through the coordinator silently removes guards from those remaining paths. Prevention: for each flag removed, grep all write sites for the guarded state and confirm none remain outside coordinator-controlled paths. Recovery cost is HIGH — no coordinator rollback after Phase 5.
+## Conflict Resolution: iCloud Exclusion — Config Change vs. Native Implementation
+
+STACK.md and ARCHITECTURE.md appeared to contradict each other on the iCloud exclusion fix. Direct file investigation resolved the conflict in favor of STACK.md's diagnosis.
+
+**What STACK.md said:** `withExcludeFromBackup` is absent from `app.config.js` plugins array; add it and run `expo prebuild --clean`.
+
+**What ARCHITECTURE.md said:** `NativeModules.ICloudBackupExclusion` resolves to null on iOS because no Swift implementation exists in `ios/SideShelf/`.
+
+**Ground truth (verified by direct file inspection):**
+
+The Obj-C implementation (`ICloudBackupExclusion.m` + `ICloudBackupExclusion.h`) exists and is correct — at `plugins/excludeFromBackup/ios/`. The `withExcludeFromBackup.js` Expo config plugin is complete and implements both the file-copy step (to `ios/SideShelf/Modules/`) and the Xcode project registration step. However, `withExcludeFromBackup` is NOT in the `app.config.js` `plugins:` array — confirmed by reading the file, which shows only `expo-router`, `expo-splash-screen`, `expo-font`, and `expo-web-browser`.
+
+Because the plugin was never registered, `expo prebuild` never ran it, so `ios/SideShelf/Modules/` does not exist (directory confirmed absent). ARCHITECTURE.md observed the absence of files in `ios/SideShelf/` and correctly deduced that `NativeModules.ICloudBackupExclusion` is null at runtime — but the implementation is present in the plugin source directory, awaiting prebuild to copy and register it.
+
+**The fix is a config change (minutes), not a native module implementation (hours):**
+
+1. Add `withExcludeFromBackup` to `plugins:` in `app.config.js`
+2. Run `expo prebuild --clean` (already part of `npm run ios`)
+3. The plugin copies `.m`/`.h` files to `ios/SideShelf/Modules/` and registers them in the Xcode project
+
+**Confidence:** HIGH — verified by reading `app.config.js` (plugin absent), `plugins/excludeFromBackup/ios/` (Obj-C implementation present and correct), and confirming `ios/SideShelf/Modules/` does not exist.
+
+**No further investigation needed during planning.** The fix path is clear.
 
 ## Implications for Roadmap
 
-The phase structure is already defined in `docs/plans/state-machine-migration.md`. Research confirms the ordering is correct and the dependencies are hard. The roadmap should reflect these phases without reordering.
+Based on combined research, the milestone maps to four phases ordered by dependency and impact:
 
-### Phase 2: Coordinator Executes Transitions
+### Phase 1: iCloud Exclusion (Plugin Registration + Native Hardening)
 
-**Rationale:** The coordinator must be the executor before it can own position or drive UI. This is the foundation all subsequent phases build on. Phase 1 is complete and production-validated — Phase 2 is the logical next step in the original design.
-**Delivers:** Coordinator calls `PlayerService.execute*()` on all transitions; duplicate session creation eliminated; `observerMode` rollback remains available.
-**Addresses:** Lock screen controls, play/pause from notification, no duplicate sessions, seek from headphone controls.
-**Avoids:** Feedback loop pitfall — enforce no `dispatchPlayerEvent` in any `execute*` method.
-**Research flag:** LOW — `executeTransition()` is already scaffolded and `observerMode = false` is already committed. Primary work is wiring service calls and adding execution tests. Standard patterns apply.
+**Rationale:** Highest silent user impact (audiobook files backing up to iCloud quota); fastest core fix (one-line config change + prebuild); foundational dependency for the download reconciliation scan, which should re-apply exclusion during file repair
+**Delivers:** Working `setExcludeFromBackup` calls for all new downloads; `repairDownloadStatus` re-applies exclusion after path migration; native module guards against file-not-yet-flushed edge case
+**Addresses:** Feature 5 (iCloud exclusion), Pitfalls 1, 2, 12
+**Key tasks:**
 
-### Phase 3: Coordinator Owns Canonical Position
+- Add `withExcludeFromBackup` to `app.config.js` plugins
+- Run `expo prebuild --clean`
+- Add `FileManager.default.fileExists` check in `ICloudBackupExclusion.m` before calling `setResourceValues`; log warning on `success: false`
+- Add `setExcludeFromBackup(expectedPath)` to `repairDownloadStatus` after `markAudioFileAsDownloaded`
+- Update Android log message at `DownloadService.ts:286` from generic "success" to "skipped (non-iOS)"
+  **Research flag:** None — fix path fully specified and verified; Obj-C code is correct as-is
 
-**Rationale:** Position reconciliation requires the coordinator to be the single executor (Phase 2). Only after Phase 2 is stable does it make sense to centralize position authority — before that, the coordinator's "canonical position" would be a shadow, not a truth.
-**Delivers:** Single deterministic position reconciliation algorithm replacing three scattered ones; cold-start resume within 5 seconds; 30-minute drift eliminated; server sync reads coordinator position.
-**Addresses:** Correct resume position, app restore behavior, position drift during long playback.
-**Avoids:** Dual position authority pitfall — extract `setCanonicalPosition()` helper before removing existing call sites.
-**Research flag:** MEDIUM — this is the most complex phase. The `MIN_PLAUSIBLE_POSITION = 5` threshold, the "native position 0 vs. native position not-yet-loaded" distinction, and the Android dual-context concern all need explicit design attention before implementation. Consider a brief design spike for the reconciliation algorithm.
+### Phase 2: Download Tracking Reconciliation
 
-### Phase 4: playerSlice Becomes Read-Only Proxy
+**Rationale:** Depends on Phase 1 (startup scan should call `setExcludeFromBackup` during repair, so the native module must be working); directly fixes the user-visible bug where "downloaded" badges cause playback failure
+**Delivers:** Startup reconciliation pass in `DownloadService.initialize()`; `isLibraryItemDownloaded` implements its TODO; partial files guarded before any scan marks them complete
+**Addresses:** Feature 2 (download recovery), Pitfalls 3, 10, 11
+**Key tasks:**
 
-**Rationale:** The coordinator bridge can only push canonical data to the store after it owns canonical position (Phase 3). Phase 4 before Phase 3 creates a bridge that writes potentially stale position data — worse than the current state.
-**Delivers:** All playerSlice player fields written only via coordinator `subscribe()` + `syncToStore()` bridge; `isRestoringState` flag removed; `usePlayerState(selector)` hook added.
-**Addresses:** Consistent UI renders, chapter display correctness, session ID alignment.
-**Avoids:** Re-render storm — `usePlayerState` must accept a selector parameter; measure render counts before migration.
-**Research flag:** MEDIUM — sleep timer migration decision (coordinator context vs. retained local write path) must be resolved before Phase 4 begins. The `updateNowPlayingMetadata()` trigger timing also needs explicit design before implementation.
+- Implement the `// TODO: Could mark as not downloaded` in `isLibraryItemDownloaded`
+- Add reconciliation pass to `DownloadService.initialize()` after `restoreExistingDownloads`
+- Guard scan: check `isDownloadActive(libraryItemId)` before reconciling any item
+- Batch file existence checks (process 20 at a time with `Promise.all` and yield between batches) to avoid JS thread blocking on large libraries
+- Integrate `setExcludeFromBackup` call during repair (from Phase 1)
+  **Research flag:** None — architecture is documented, all helpers exist; this is additive to the existing `initialize()` method
 
-### Phase 5: Service Simplification and Legacy Cleanup
+### Phase 3: Now Playing Metadata on Skip + Skip Interval Persistence
 
-**Rationale:** Removal is only safe after Phases 2–4 own all write paths. Guard flags and reconciliation methods are load-bearing until the coordinator is the sole path for all state changes.
-**Delivers:** `PlayerService.ts` under 1,100 lines; three reconciliation methods deleted; `ProgressService` mutex removed; `isRestoringState` field deleted.
-**Addresses:** Long-term maintainability; eliminates confusion from dual write paths.
-**Avoids:** Premature flag removal — verify all bypass write sites are gone before removing each flag; use dependency-ordered removal.
-**Research flag:** LOW — Phase 5 is pure deletion after Phase 4 is stable. Standard patterns apply. The only risk is sequencing; the research provides explicit ordering guidance.
+**Rationale:** Groups the two player-facing features since both touch the skip code path and the settings layer; the metadata fix is a targeted addition within the existing coordinator bridge (not a new external call site)
+**Delivers:** Lock screen elapsed time updates after same-chapter skips; skip interval persists across app sessions per direction (forward and backward independently)
+**Addresses:** Feature 1 (now playing metadata), Feature 6 (skip persistence), Pitfalls 4, 5
+**Key tasks:**
+
+- Add `updateNowPlayingMetadata` call to `syncPositionToStore` on the `NATIVE_PROGRESS_UPDATED` event that clears the seeking state (not in `executeSeek` directly — preserve the coordinator bridge as the only call site)
+- Verify `configureTrackPlayer()` inside `updateNowPlayingMetadata` does not cause re-entrant coordinator events; add re-entrant guard if needed
+- Test `updateMetadataForTrack` on physical Android device during chapter transition — check for artwork loss (bug #2287); switch to `updateNowPlayingMetadata` if loss confirmed
+- Add `skipForwardInterval` and `skipBackwardInterval` to settings slice with defaults (30s / 15s)
+- Wire `SkipButton.onJump` callback to persist to settings store
+- `FullScreenPlayer` and `FloatingPlayer` read intervals from settings store (not hardcoded)
+  **Research flag:** Android artwork bug (#2287) requires device test before marking complete — test on physical Android or emulator before shipping
+
+### Phase 4: More Screen Navigation + Loading Skeletons
+
+**Rationale:** Both are UX polish with no service dependencies; grouped as the final phase since they are lowest severity and neither blocks the milestone if deferred
+**Delivers:** Correct tab switching from More screen; shimmer skeleton loading cards on home screen cold start matching `CoverItem` 140x140 dimensions
+**Addresses:** Feature 3 (More screen navigation), Feature 4 (loading skeletons), Pitfalls 6, 7, 8, 9
+**Key tasks:**
+
+- Verify `router.push` vs `router.navigate` vs `router.replace` behavior for sibling-tab switching in Expo Router v3 on Expo 54 — test on physical device before writing any code
+- Fix More screen routing if `router.push` is confirmed to push onto the More stack; use `router.navigate` to the index route with `replace` semantics if applicable
+- Install `react-native-shimmer-placeholder`; implement `createShimmerPlaceholder(LinearGradient)` factory
+- Build skeleton cards matching `CoverItem` 140x140 rounded-rect dimensions + two text block placeholders
+- Implement minimum display duration (~150ms) guard to prevent skeleton flash on cache hits
+- Add animation cleanup (`animation.stop()`) in skeleton `useEffect` cleanup return
+- Pin skeleton item dimensions to measured real content dimensions to prevent layout shift
+  **Research flag:** Expo Router tab navigation behavior must be verified hands-on before writing code — `router.navigate` semantics changed between Expo Router versions and this codebase uses `NativeTabs` which adds another variable
 
 ### Phase Ordering Rationale
 
-- **Phase 2 must precede Phase 3:** Position authority is only meaningful when the coordinator is the sole executor. The coordinator cannot be the single source of position truth if services are still independently executing playback commands.
-- **Phase 3 must precede Phase 4:** The coordinator bridge can only be the canonical writer to `playerSlice` after it owns canonical position. Bridging before owning position creates a second writer for potentially stale data.
-- **Phase 4 must precede Phase 5:** Legacy guard flags protect code paths that still bypass the coordinator. Deletion before Phase 4 completes silently removes guards from remaining direct-write paths. Phase 5 recovery cost is HIGH (no rollback).
-- **No reordering is safe.** The dependencies are structural, not merely conventional.
+- Phase 1 before Phase 2: The startup reconciliation scan should call `setExcludeFromBackup` during repair; the native module must be working before the scan runs to avoid re-excluding files with a no-op
+- Phase 2 before Phase 3: No hard dependency, but fixing the data layer (downloads) before the interaction layer (player) is safer; download reconciliation could expose edge cases that affect player state transitions
+- Phases 3 and 4 last: Both are improvements on already-functional systems; each can be deferred independently without blocking the others
 
 ### Research Flags
 
-Phases needing deeper design attention before implementation:
+**Phases needing hands-on verification before coding:**
 
-- **Phase 3:** Position reconciliation algorithm complexity — the "native position 0 before queue loaded" vs. "native position 0 due to failure" distinction, `MIN_PLAUSIBLE_POSITION` threshold replication, and Android dual-coordinator context all need explicit design before coding begins. A short design spike is recommended.
-- **Phase 4:** Sleep timer write path decision (coordinator context vs. retained local write) and `updateNowPlayingMetadata()` trigger timing need resolution before implementation. React Profiler baseline measurement needed before any component migration.
+- **Phase 3 (Android artwork):** Test `updateMetadataForTrack` on physical Android during a chapter transition — the library bug is confirmed but the workaround decision depends on observed behavior in this codebase's specific usage pattern
+- **Phase 4 (Expo Router tab navigation):** Write a minimal navigation test before committing to any API — behavior changed across Expo Router versions; hands-on verification on the Expo 54 build is required
 
-Phases with standard patterns (skip research-phase):
+**Phases with well-documented patterns (no research-phase needed):**
 
-- **Phase 2:** `executeTransition()` is already scaffolded; service method split is already in place; the work is wiring and testing. No novel design required.
-- **Phase 5:** Pure deletion. Ordering rules are clear from research. No novel patterns.
+- **Phase 1 (iCloud exclusion):** Fix path fully specified; Obj-C code is correct; just needs registration and one native guard
+- **Phase 2 (download reconciliation):** All helpers exist; architecture is documented; pattern is additive to `initialize()` with a simple active-download guard
+- **Phase 3 (skip interval persistence):** Two new store keys and callback wiring; standard settings-slice pattern
 
 ## Confidence Assessment
 
-| Area         | Confidence | Notes                                                                                                                                                                                     |
-| ------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stack        | HIGH       | All decisions are grounded in the existing installed codebase. No new dependencies. XState rejection is well-documented with bundle size and migration risk reasoning.                    |
-| Features     | HIGH       | Derived entirely from direct codebase analysis. All claims are verifiable in source files. "Features" here means migration deliverables, not new capabilities.                            |
-| Architecture | HIGH       | Based on direct analysis of all relevant service files, coordinator, transitions matrix, and existing documentation. Component responsibilities and data flows are confirmed from source. |
-| Pitfalls     | HIGH       | Each pitfall is grounded in specific file locations (line numbers cited). Not generic advice. The dual-context Android concern is documented in the codebase itself.                      |
+| Area         | Confidence | Notes                                                                                                                                  |
+| ------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack        | HIGH       | Library sources read directly from `node_modules`; package versions confirmed; plugin source code verified by file inspection          |
+| Features     | HIGH       | All six gaps confirmed by reading source code and finding the actual TODO comments, missing calls, and unregistered plugin             |
+| Architecture | HIGH       | Direct codebase analysis of coordinator bridge, DownloadService, playerSlice; data flows verified line by line                         |
+| Pitfalls     | HIGH       | Critical pitfalls grounded in Apple documentation + library bug reports with issue numbers; moderate pitfalls grounded in code reading |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Sleep timer migration (Phase 4):** Whether `sleepTimer` moves to coordinator `StateContext` or retains a direct playerSlice write path is an unresolved design decision. It is low-risk to defer (sleep timer does not participate in race conditions), but the decision must be made before Phase 4 implementation begins to avoid rework.
-- **Position reconciliation edge case — "native 0 before load" (Phase 3):** The `MIN_PLAUSIBLE_POSITION = 5` threshold in `PlayerService.determineResumePosition()` solves a specific edge case. The new coordinator reconciler must explicitly replicate this guard. Needs attention during Phase 3 design, not yet resolved in research.
-- **Android background context coordinator writes (Phase 3+):** The background context coordinator must NOT write to `useAppStore`. This constraint is documented but the enforcement mechanism (whether by convention or by guard code) is not yet designed. Needs explicit design in Phase 3.
-- **`updateNowPlayingMetadata()` call frequency (Phase 4):** Currently debounced to avoid hammering TrackPlayer. After Phase 4, the coordinator bridge triggers this after chapter changes. The debounce mechanism must be preserved or recreated in the bridge. Design needed before Phase 4 implementation.
+- **Expo Router tab-switching API (Phase 4):** PITFALLS.md notes that `router.navigate` behavior changed in Expo Router v4 to match `router.push`. This codebase runs Expo Router v3 (Expo 54), but the behavior still needs hands-on verification. Resolve by writing a minimal test navigation before coding the More screen fix.
+- **Android `updateMetadataForTrack` artwork bug (Phase 3):** Confirmed as a library bug in v4.1.1+ but the workaround (switch to `updateNowPlayingMetadata`) must be tested on device to confirm the artwork is actually lost in this codebase's usage pattern. The bug exists but severity here is unverified.
+- **Minimum skeleton display duration (Phase 4):** The 150ms threshold is an industry heuristic, not a precise measurement. Tune based on observed flash behavior on device during testing.
 
 ## Sources
 
-### Primary (HIGH confidence)
+### Primary (HIGH confidence — direct codebase analysis)
 
-- `src/services/coordinator/PlayerStateCoordinator.ts` — Phase 1 implementation, `observerMode` flag, `executeTransition()` scaffold, `updateContextFromEvent()` behavior
-- `src/services/coordinator/transitions.ts` — validated state transition matrix, `noOpEvents` list
-- `src/services/coordinator/eventBus.ts` — event bus pattern
-- `src/services/PlayerService.ts` — public/execute method split, `determineResumePosition()` (lines 646–760), `reconcileTrackPlayerState()` (lines 1183–1374), `executeLoadTrack()` (lines 223–421)
-- `src/services/PlayerBackgroundService.ts` — 14 `store.updatePosition()` call sites, Android dual-context acknowledgment (lines 47–53), `handlePlaybackProgressUpdated()` (270-line function)
-- `src/services/ProgressService.ts` — `startSessionLocks` mutex, session management, DB sync logic
-- `src/stores/slices/playerSlice.ts` — `isRestoringState` flag, direct mutation methods, `_updateCurrentChapter()` guard
-- `src/stores/appStore.ts` — `subscribeWithSelector` middleware (line 60–61), `useAppStore.setState()` API
-- `docs/architecture/player-state-machine.md` — design rationale, NATIVE_STATE_CHANGED handler, observer mode behavior
-- `docs/plans/state-machine-migration.md` — phase definitions, success metrics, rollback strategies, testing strategy
-- `.planning/PROJECT.md` — project constraints, key decisions, out-of-scope list
-- `.planning/codebase/CONCERNS.md` — known bugs (duplicate session creation), fragile areas, tech debt
+- `plugins/excludeFromBackup/ios/ICloudBackupExclusion.m` — Obj-C implementation (confirmed complete and correct)
+- `plugins/excludeFromBackup/withExcludeFromBackup.js` — Expo config plugin (confirmed complete)
+- `app.config.js` — plugins array (confirmed `withExcludeFromBackup` absent)
+- `src/services/coordinator/PlayerStateCoordinator.ts` — bridge implementation, `lastSyncedChapterId` debounce, `syncPositionToStore` and `syncStateToStore` flows
+- `src/services/DownloadService.ts` — `isLibraryItemDownloaded` TODO (line 471), `repairDownloadStatus`, `initialize()` structure, iCloud call sites (lines 286, 329, 955)
+- `src/lib/iCloudBackupExclusion.ts` — TypeScript wrapper (complete)
+- `src/stores/slices/playerSlice.ts` — `updateNowPlayingMetadata` implementation (lines 576–627), `configureTrackPlayer()` call (line 619)
+- `src/app/(tabs)/more/index.tsx` — `router.push` pattern for hidden tab navigation (line 144)
+- `src/app/(tabs)/home/index.tsx` — cold-start `ActivityIndicator` path (lines 213–222)
+- `node_modules/react-native-track-player/src/trackPlayer.ts` — `updateNowPlayingMetadata` vs `updateMetadataForTrack` API surface
+- `node_modules/react-native-track-player/src/interfaces/NowPlayingMetadata.ts` — `elapsedTime?: number` field on `NowPlayingMetadata`
 
-### Secondary (MEDIUM confidence)
+### Secondary (HIGH confidence — official documentation)
 
-- Zustand v5 docs — external store `setState()` pattern, `subscribeWithSelector` middleware: https://zustand.docs.pmnd.rs/
-- XState v5 npm (current 5.28.0): https://www.npmjs.com/package/xstate
-- XState bundle size ~16.7 kB gzipped: https://bundlephobia.com/package/xstate (corroborated by multiple sources, not directly measured)
-- XState custom FSM tradeoffs: https://www.rainforestqa.com/blog/selecting-a-finite-state-machine-library-for-react
+- Apple Developer Documentation: `NSURLIsExcludedFromBackupKey`, `NSURL setResourceValue:forKey:error:`, Apple QA1719
+- Apple WWDC22 "Explore media metadata publishing and playback interactions" — `MPNowPlayingInfoPropertyElapsedPlaybackTime` requirement after seek
+- Expo SDK 54 changelog — New Architecture interop layer supports legacy `RCT_EXPORT_MODULE` modules in RN 0.81
+
+### Secondary (MEDIUM confidence — library issues and community)
+
+- react-native-track-player GitHub issue #2287 — `updateMetadataForTrack` clears artwork on Android v4.1.1+
+- Expo Router issue #35212 — `router.navigate` behavior change in v4 to match `router.push` (no longer unwinds to existing routes)
+- Expo Router docs — `router.push` vs `router.navigate` vs `router.replace` (https://docs.expo.dev/router/basics/navigation/)
+- Eidinger blog — `NSURLIsExcludedFromBackupKey` attribute resets on file copy operations
 
 ---
 
-_Research completed: 2026-02-16_
+_Research completed: 2026-02-20_
 _Ready for roadmap: yes_

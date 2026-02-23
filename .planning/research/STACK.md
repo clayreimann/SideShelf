@@ -1,277 +1,357 @@
-# Stack Research
+# Stack Research: v1.1 Bug Fixes & Polish
 
-**Domain:** React Native audio player — state machine migration (coordinator execution control, position reconciliation, Zustand proxy bridge)
-**Researched:** 2026-02-16
-**Confidence:** HIGH for FSM decision and Zustand bridge pattern; MEDIUM for position reconciliation priority ordering (domain pattern, not well-documented as a named pattern)
+**Project:** abs-react-native (SideShelf) — v1.1 milestone
+**Researched:** 2026-02-20
+**Confidence:** HIGH for items 1-4 (source code verified); MEDIUM for item 5 (domain pattern)
 
 ---
 
 ## Executive Decision Summary
 
-Three questions, three answers:
+Five targeted questions, five direct answers:
 
-1. **FSM library**: Keep the custom implementation. Do not adopt XState.
-2. **Position reconciliation priority**: Native player > server session DB > AsyncStorage > zero.
-3. **Zustand-as-proxy bridge**: Coordinator-pushes via `useAppStore.setState()`. No new middleware.
-
----
-
-## Recommended Stack
-
-### Core Technologies
-
-| Technology                | Version           | Purpose                                                             | Why Recommended                                                                                                                                                                  |
-| ------------------------- | ----------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Custom FSM (existing)     | —                 | State machine execution control in `PlayerStateCoordinator`         | Already written, well-structured, covers all needed states. XState adds 16.7 kB gzipped, a steep learning curve, and migration risk with no meaningful upside for this use case. |
-| Zustand                   | 5.0.8 (installed) | React UI state store; playerSlice as read-only proxy of coordinator | Already installed. `subscribeWithSelector` middleware already applied in `appStore.ts`. `useAppStore.setState()` is the correct external-push API.                               |
-| async-lock                | 1.4.1 (installed) | Serial event queue processing in coordinator                        | Already in use in `PlayerStateCoordinator`. Prevents race conditions in transition execution. Keep it.                                                                           |
-| eventemitter3             | 5.0.1 (installed) | Coordinator emits `diagnostic` and `eventProcessed` events          | Already in use. Sufficient for coordinator-to-subscriber notification.                                                                                                           |
-| react-native-track-player | 4.1.2 (installed) | Native audio playback; authoritative source for live position       | Native module; `useProgress()` hook is the only reliable real-time position source during playback.                                                                              |
-
-### Supporting Libraries
-
-| Library                                      | Version                    | Purpose                                                           | When to Use                                                                                    |
-| -------------------------------------------- | -------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `zustand/middleware` `subscribeWithSelector` | bundled with zustand 5.0.8 | Enables `useAppStore.subscribe(selector, callback)` outside React | Already applied in `appStore.ts`. Use for coordinator-to-store change notifications if needed. |
-| `@react-native-async-storage/async-storage`  | 2.2.0 (installed)          | Persist position, track, rate, volume between sessions            | Fallback source only during cold start / restoration. Not authoritative during playback.       |
-
-### Development Tools
-
-| Tool                      | Purpose                                   | Notes                                                                                                 |
-| ------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Existing `PlayerEventBus` | Decoupled event dispatch from coordinator | Already correctly structured. No changes needed to bus itself.                                        |
-| Existing `transitions.ts` | State transition matrix                   | Well-defined. Phase 2 execution can be added by removing `observerMode` guard in `executeTransition`. |
+1. **iCloud exclusion native module** — The native Objective-C code (`NSURLIsExcludedFromBackupKey` + `setResourceValue:forKey:error:`) is correct. The bug is that `withExcludeFromBackup` is NOT registered in `app.config.js`. Add it to `plugins:`. Two secondary concerns: the file must exist before calling `setResourceValue`, and legacy `NativeModules` access works under the New Architecture interop layer in Expo SDK 54 / RN 0.81 but needs migration before SDK 55.
+2. **RNTP metadata for skip forward/back** — Use `updateNowPlayingMetadata()`, not `updateMetadataForTrack()`. The former updates the lock screen display only (no queue mutation); the latter mutates the underlying track object and has a known Android artwork bug in 4.1.1/4.1.2.
+3. **Expo Router cross-tab navigation** — `router.push("/(tabs)/series")` works from any tab, including the More screen. The existing `navigateToTabDetail()` helper in `src/lib/navigation.ts` handles the case where the tab's index needs to be in the stack first. No API additions needed.
+4. **Loading skeleton UI** — Use `react-native-shimmer-placeholder` with the already-installed `expo-linear-gradient`. No new native module needed. `createShimmerPlaceholder(LinearGradient)` gives a component-level shimmer with `visible` prop.
+5. **Download orphan repair** — Pattern is already implemented in `DownloadService.repairDownloadStatus()`. The gap is scheduling: it only runs on demand. Add a startup scan that walks all DB records marked as `downloaded` and runs `verifyFileExists()` against each.
 
 ---
 
-## Decision: Keep Custom FSM — Do NOT Adopt XState
+## Area 1: iCloud Backup Exclusion Native Module
 
-### Why NOT XState
+### What the module does (verified correct)
 
-XState v5 (current: 5.28.0, `@xstate/react` 6.0.0) is a well-designed library. For greenfield projects it is the right default. For this migration it is wrong:
+The Objective-C implementation in `plugins/excludeFromBackup/ios/ICloudBackupExclusion.m` uses the correct iOS API:
 
-1. **The FSM is already written and correct.** `PlayerStateCoordinator` has a complete transition matrix in `transitions.ts`, serial processing via `async-lock`, diagnostic tooling, and `executeTransition` scaffolded. XState would replace working code with learning curve.
+```objc
+BOOL success = [fileURL setResourceValue:@YES
+                                  forKey:NSURLIsExcludedFromBackupKey
+                                   error:&error];
+```
 
-2. **Bundle size penalty for zero gain.** XState core is ~16.7 kB gzipped. The app is already well into install size; adding a large dependency to replace a hand-rolled ~200-line transitions file is not justified.
+`NSURLIsExcludedFromBackupKey` is the Apple-documented key for excluding files from iCloud backup. `NSURL setResourceValue:forKey:error:` is the correct method to set it. Apple's QA1719 documents this as the official approach. The Objective-C code is correct.
 
-3. **Actor model mismatch.** XState v5 centers on actors. The existing architecture is a singleton coordinator + event bus + services. Migrating to XState actors would require restructuring service boundaries — scope creep that derails the actual goal.
+Confidence: HIGH (Apple Developer Documentation, confirmed against source)
 
-4. **No visualization ROI.** XState's main DX advantage over custom FSMs is the Stately visualizer. The `transitions.ts` record is already so explicit it can be visualized by reading it. The tradeoff is not worth it.
+### Root Cause of "Not Working"
 
-5. **Migration risk.** Replacing a running, partially-validated state machine mid-migration with a new library introduces a regression surface with no tests written for XState integration.
+The plugin (`withExcludeFromBackup`) is **not registered in `app.config.js`**. The `plugins:` array in `app.config.js` contains `expo-router`, `expo-splash-screen`, `expo-font`, and `expo-web-browser` — but NOT `withExcludeFromBackup`. Without registration, `expo prebuild` never copies the `.m`/`.h` files into `ios/SideShelf/Modules/` and never adds them to the Xcode project. The TypeScript wrapper finds `NativeModules.ICloudBackupExclusion` as `null` at runtime.
 
-**Decision: The Phase 2+ work is adding execution behavior to the existing FSM, not replacing the FSM.**
+**Fix:** Add the plugin to `app.config.js`:
 
-### What This Means for Phase 2
+```js
+const withExcludeFromBackup = require('./plugins/excludeFromBackup/withExcludeFromBackup');
 
-The existing coordinator has `observerMode = false` and `executeTransition()` already scaffolded. Phase 2 execution control is unblocking `executeTransition` — not a rewrite.
+// In plugins array:
+withExcludeFromBackup,
+```
+
+Then run `expo prebuild --clean` to regenerate the `ios/` directory with the module compiled in.
+
+### Secondary Concern 1: File Must Exist Before Setting Attribute
+
+`setResourceValue:forKey:error:` fails if the file does not yet exist on disk. Apple documentation states the resource value can only be set on an existing filesystem path. The current code in `DownloadService.ts` calls `setExcludeFromBackup()` after the download completes — which is correct timing. No change needed here; but callers that call it proactively on paths that don't exist yet will get a silent failure.
+
+Confidence: HIGH (Apple Developer Documentation confirms requirement)
+
+### Secondary Concern 2: New Architecture Compatibility
+
+The module uses the legacy bridge pattern (`RCT_EXPORT_MODULE`, `RCTBridgeModule`, `NativeModules`). In Expo SDK 54 (React Native 0.81), the New Architecture interop layer is active by default (`newArchEnabled: true` in `app.config.js`). The interop layer supports legacy `RCT_EXPORT_MODULE` modules through a compatibility shim — confirmed as working in 0.81.
+
+**Important:** SDK 54 is the last version where the legacy architecture is supported. SDK 55 will require migration to a TurboModule. For this milestone, the legacy module is fine. Flag for migration before any SDK 55 upgrade.
+
+Confidence: MEDIUM (Expo changelog + React Native new architecture docs; not directly tested on this codebase)
+
+Sources:
+
+- Apple Developer Documentation: https://developer.apple.com/documentation/foundation/nsurlisexcludedfrombackupkey
+- Expo SDK 54 changelog: https://expo.dev/changelog/sdk-54
+- React Native New Architecture interop: https://docs.expo.dev/guides/new-architecture/
 
 ---
 
-## Decision: Position Reconciliation Priority Order
+## Area 2: react-native-track-player — updateNowPlayingMetadata for Skip Controls
 
-Audio position comes from three sources with different staleness profiles. The coordinator must have one deterministic algorithm.
+### Two distinct APIs (verified from installed source)
 
-### Priority Stack (highest to lowest authority)
+Source verified from `/node_modules/react-native-track-player/src/trackPlayer.ts`:
 
-| Priority     | Source                                                    | When Authoritative                                        | Rationale                                                                                                                                                                                                                                                                                                   |
-| ------------ | --------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 (highest)  | Native player (`TrackPlayer.getProgress()`)               | During active playback, after queue loaded                | The native player is the ground truth for what the user is actually hearing. It is updated every progress tick. Never override it with a stale number once playback is running.                                                                                                                             |
-| 2            | Server session DB (`ProgressService.getCurrentSession()`) | At app startup / cold restore, before playback begins     | The Audiobookshelf server's `currentTime` is the cross-device authoritative record. Prefer this over local AsyncStorage at restoration time, as AsyncStorage may be stale from a different session or device. Current threshold: >1s diff triggers update (already in `playerSlice.restorePersistedState`). |
-| 3            | AsyncStorage (`ASYNC_KEYS.position`)                      | Cold start when server is unreachable or no session found | Offline fallback. Accept as the best available position when neither native player nor server can supply a value.                                                                                                                                                                                           |
-| 4 (fallback) | Zero                                                      | No other source available                                 | Initial state.                                                                                                                                                                                                                                                                                              |
+**`updateMetadataForTrack(trackIndex, metadata)`**
 
-### Reconciliation Algorithm (for coordinator Phase 3)
+- Updates metadata on the underlying track object in the queue.
+- Required when you want the track's title/artist/artwork to persist in the queue across track changes.
+- Has a known bug in 4.1.1/4.1.2: clears artwork on Android (GitHub Issue #2287).
+- `TrackMetadataBase` fields: `title`, `album`, `artist`, `duration`, `artwork`, `description`, `genre`, `date`, `rating`, `isLiveStream`.
+
+**`updateNowPlayingMetadata(metadata)`**
+
+- Updates the lock screen / Now Playing Center display only.
+- Does NOT mutate the track object in the queue.
+- Accepts `NowPlayingMetadata`, which extends `TrackMetadataBase` with one additional field: `elapsedTime?: number`.
+- `elapsedTime` is iOS-only: sets the elapsed time scrubber position in the Now Playing Center independently of the native player's actual position.
 
 ```typescript
-async function reconcilePosition(
-  nativePosition: number | null, // from TrackPlayer.getProgress()
-  dbSessionTime: number | null, // from ProgressService.getCurrentSession()
-  asyncStoragePosition: number | null // from AsyncStorage
-): Promise<number> {
-  // Rule 1: If native player has a non-zero position, it wins.
-  // "Non-zero" means playback has actually started or been seeked.
-  if (nativePosition !== null && nativePosition > 0) {
-    return nativePosition;
-  }
-
-  // Rule 2: Server session is authoritative at startup.
-  if (dbSessionTime !== null && dbSessionTime > 0) {
-    return dbSessionTime;
-  }
-
-  // Rule 3: AsyncStorage as offline fallback.
-  if (asyncStoragePosition !== null && asyncStoragePosition > 0) {
-    return asyncStoragePosition;
-  }
-
-  return 0;
+// From NowPlayingMetadata.ts (installed source):
+export interface NowPlayingMetadata extends TrackMetadataBase {
+  elapsedTime?: number;
 }
 ```
 
-### Key Design Constraint: No Position Fights
+Confidence: HIGH (verified from installed node_modules source)
 
-The critical failure mode is two sources both claiming authority and writing back and forth. Prevent this by:
+### Current Usage Assessment
 
-- **During playback**: native player is the ONLY source that writes position to the coordinator context. Server sync reads coordinator position; it does NOT push position back to the coordinator.
-- **During restoration** (RESTORING state only): server DB can override AsyncStorage position. Once `RESTORE_COMPLETE` fires, this gate closes.
-- **Seeking**: coordinator position optimistically updates on `SEEK` event, then native player confirms via `NATIVE_PROGRESS_UPDATED`.
+The existing code in `playerSlice.updateNowPlayingMetadata()` calls `TrackPlayer.updateMetadataForTrack()` (not `updateNowPlayingMetadata()`). This is intentional — it updates the queue track metadata so chapter title/duration shows correctly. However, it carries the Android artwork bug risk.
 
-This maps cleanly to the existing `POSITION_RECONCILED` event already defined in `transitions.ts` (RESTORING -> READY and SYNCING_POSITION -> READY).
+For the chapter-progress use case (showing chapter elapsed time in the lock screen scrubber), `updateNowPlayingMetadata()` with `elapsedTime` is the right call. The `elapsedTime` property on `NowPlayingMetadata` is NOT available on `TrackMetadataBase` (used by `updateMetadataForTrack`). The current code works around this via `@ts-ignore`.
+
+### When to Call After Skip
+
+After a skip forward/backward, the Now Playing Center metadata (chapter title, duration, elapsed time) goes stale because the position has changed and a chapter boundary may have been crossed. The correct pattern:
+
+1. Dispatch `SEEK` event (already done in `handleRemoteJumpForward/Backward`)
+2. After seek resolves, call `updateNowPlayingMetadata()` with updated `elapsedTime` and possibly updated `title` (if chapter boundary crossed)
+
+The coordinator's `syncToStore` bridge is the correct place to trigger metadata refresh after a SEEK event resolves, since it has access to the updated chapter context.
+
+### Capability Configuration
+
+Skip forward/backward capabilities are already configured in `trackPlayerConfig.ts`:
+
+```typescript
+capabilities: [
+  Capability.JumpBackward,
+  Capability.JumpForward,
+  // ...
+],
+forwardJumpInterval: forwardInterval,
+backwardJumpInterval: backwardInterval,
+```
+
+`configureTrackPlayer()` is called after `updateMetadataForTrack()` in `updateNowPlayingMetadata()`. This is defensive — capabilities shouldn't need refreshing after metadata updates. It's safe to keep but not strictly necessary on every metadata update.
+
+Confidence: HIGH (verified from installed RNTP source and existing codebase)
+
+Sources:
+
+- RNTP source (installed): `/node_modules/react-native-track-player/src/trackPlayer.ts`
+- RNTP NowPlayingMetadata type: `/node_modules/react-native-track-player/src/interfaces/NowPlayingMetadata.ts`
+- RNTP Android artwork bug: https://github.com/doublesymmetry/react-native-track-player/issues/2287
 
 ---
 
-## Decision: Zustand-as-Proxy Bridge Pattern
+## Area 3: Expo Router — Cross-Tab Navigation from More Screen
 
-### The Pattern: Coordinator Pushes, playerSlice Receives
+### How It Works
 
-The correct pattern is **coordinator-pushes via `useAppStore.setState()`**. Do not use middleware, do not use subscriptions that create feedback loops.
+Expo Router uses file-based routing. Tabs are defined by directories under `src/app/(tabs)/`. From any screen, `router.push("/(tabs)/series")` navigates to the Series tab's index screen and switches the active tab.
 
-Rationale:
-
-- `useAppStore` already has `subscribeWithSelector` applied (confirmed in `appStore.ts` line 60-61).
-- `useAppStore.setState()` works outside React components — it is a plain JavaScript method on the store object. No hooks, no providers needed.
-- The coordinator is a singleton (`PlayerStateCoordinator.getInstance()`). It can hold a direct reference to `useAppStore.setState`.
-- This is the documented Zustand pattern for external store integration. The Zustand docs explicitly show `useDogStore.setState({ ... })` from outside components.
-
-### Bridge Implementation Pattern
+The existing `navigateToTabDetail()` helper in `src/lib/navigation.ts` already handles the correct pattern for navigating to a detail route within an uninitialized tab:
 
 ```typescript
-// In PlayerStateCoordinator, after processEventQueue completes a transition:
-
-import { useAppStore } from "@/stores/appStore";
-
-private syncToStore(): void {
-  // Push coordinator's StateContext into playerSlice
-  // Only called after a confirmed state transition or context update
-  useAppStore.setState((state) => ({
-    ...state,
-    player: {
-      ...state.player,
-      // Map coordinator context fields to playerSlice fields
-      isPlaying: this.context.isPlaying,
-      position: this.context.position,
-      currentTrack: this.context.currentTrack,
-      currentChapter: this.context.currentChapter,
-      playbackRate: this.context.playbackRate,
-      volume: this.context.volume,
-      currentPlaySessionId: this.context.sessionId,
-      loading: {
-        isLoadingTrack: this.context.isLoadingTrack,
-        isSeeking: this.context.isSeeking,
-      },
-    },
-  }));
+export function navigateToTabDetail(router: Router, tabPath: string, detailPath: string): void {
+  router.push(tabPath as Href); // Push index first (initializes stack)
+  setImmediate(() => {
+    router.push(detailPath as Href); // Then push detail
+  });
 }
 ```
 
-### What "Read-Only Proxy" Means in Practice
+Convenience wrappers `navigateToSeries()` and `navigateToAuthor()` are already defined.
 
-The playerSlice becomes a **read-only projection** of coordinator state for React components. This means:
+Confidence: HIGH (verified from existing codebase source)
 
-1. **playerSlice state fields** (`isPlaying`, `position`, `currentTrack`, etc.) are written **only** by the coordinator bridge, not by `PlayerBackgroundService` directly.
-2. **playerSlice mutation methods** (`updatePosition`, `updatePlayingState`, `_setCurrentTrack`, etc.) become coordinator-internal calls that the bridge invokes on behalf of the coordinator.
-3. **React components** continue using `usePlayer()` hook as today — zero API change.
-4. **Services** (`PlayerBackgroundService`, `ProgressService`) dispatch events to the event bus instead of calling playerSlice setters directly.
+### The More Screen Navigation Pattern
 
-### What NOT to Do
-
-**Do NOT use `subscribeWithSelector` to create a coordinator-to-store feedback loop.** Pattern to avoid:
+The More screen's `hiddenTabsData` mechanism already handles navigating to hidden tabs:
 
 ```typescript
-// BAD: Creates a circular subscription
-useAppStore.subscribe(
-  (state) => state.player.isPlaying,
-  (isPlaying) => coordinator.dispatch({ type: isPlaying ? "PLAY" : "PAUSE" })
-);
+onPress: () => router.push(`/${tab.name}`);
 ```
 
-This creates ambiguity about who initiated the state change and can cause infinite dispatch loops. Direction is always **coordinator → store**, never **store → coordinator**.
+This means `router.push("/series")` and `router.push("/authors")` are already in use when those tabs are hidden. This is valid Expo Router usage — `router.push` to a tab path switches the active tab and renders the tab's index screen.
 
-### Migration Path (How to Reach This from Phase 1)
+### Known Limitation
 
-Phase 1 already dispatches events from `PlayerBackgroundService` → `eventBus` → coordinator. The bridge is the missing last step:
+When navigating from More → a tab's nested route (e.g., a specific series), directly pushing the dynamic route without first pushing the index makes that dynamic route the stack root in the target tab, preventing back navigation to the list. This is exactly what `navigateToTabDetail()` was built to solve.
 
-1. Add `syncToStore()` method to coordinator (calls `useAppStore.setState`)
-2. Call `syncToStore()` at the end of `handleEvent()` after context is updated
-3. Remove direct `playerSlice` mutations from `PlayerBackgroundService` (they become coordinator responsibilities)
-4. The `updatePosition`, `updatePlayingState` etc. methods in playerSlice can be simplified to pure state setters with no side effects once the coordinator owns the write path
+No new APIs needed. The pattern is already implemented.
 
----
+Confidence: HIGH (verified from codebase; consistent with Expo Router docs)
 
-## Alternatives Considered
+Sources:
 
-| Recommended                                     | Alternative                                                              | When to Use Alternative                                                                                                                                                |
-| ----------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Custom FSM (keep existing)                      | XState v5                                                                | Only if starting greenfield with complex nested/parallel states. Not for this migration.                                                                               |
-| Coordinator-pushes `useAppStore.setState()`     | `subscribeWithSelector` middleware in playerSlice that reads coordinator | Creates temporal coupling and complexity. The coordinator already knows when state changes — it should push, not have the store poll.                                  |
-| Coordinator-pushes `useAppStore.setState()`     | Separate Zustand store for coordinator state                             | Would require updating all existing `usePlayer()` call sites. The existing `playerSlice` shape is already correct — fill it from coordinator instead of from services. |
-| Native player as position truth during playback | Server position as position truth during playback                        | Server position is ~5-10 seconds stale by design (sync interval). Never use it as the authoritative position during live playback.                                     |
-| Coordinator emits `diagnostic` events + bridge  | Redux DevTools middleware for debugging                                  | EventEmitter3 diagnostic events are already wired. No need to add another debugging layer.                                                                             |
-
-## What NOT to Use
-
-| Avoid                                                                          | Why                                                                                                                                              | Use Instead                                                                                          |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| XState (`xstate`, `@xstate/react`)                                             | 16.7 kB gzip overhead, replaces working code, actor model requires service restructuring                                                         | Existing custom FSM in `PlayerStateCoordinator` + `transitions.ts`                                   |
-| `immer` middleware in Zustand                                                  | Not installed, not needed. Zustand spread patterns are sufficient and already consistent across all slices                                       | Plain `set((state) => ({ ...state, player: { ...state.player, ... } }))`                             |
-| Direct `TrackPlayer` calls from coordinator                                    | Coordinator already delegates to `PlayerService.execute*()`. Keep that boundary.                                                                 | `PlayerService.executePlay()`, `executeSeek()`, etc.                                                 |
-| AsyncStorage as authoritative position source during playback                  | AsyncStorage writes are async and may be 100-500ms stale. Writing position to AsyncStorage on every progress tick is a performance anti-pattern. | Write to AsyncStorage only on pause/stop/background. Use native player for live position.            |
-| Calling `restorePersistedState()` from playerSlice for Phase 3+ reconciliation | Reconciliation logic should live in the coordinator (which has all sources visible), not in the slice                                            | Move reconciliation into a `PositionReconciler` service called by coordinator during RESTORING state |
+- Expo Router navigation docs: https://docs.expo.dev/router/basics/navigation/
+- Expo Router nesting navigators: https://docs.expo.dev/router/advanced/nesting-navigators/
+- Existing: `src/lib/navigation.ts`
 
 ---
 
-## Stack Patterns by Variant
+## Area 4: Loading Skeleton / Shimmer UI
 
-**If coordinator needs to notify React components of non-state events (e.g., playback errors):**
+### Recommendation: react-native-shimmer-placeholder with expo-linear-gradient
 
-- Use the existing EventEmitter3 `this.emit('error', ...)` in coordinator
-- Create a `useCoordinatorEvents()` hook that subscribes with `useEffect` and calls `useAppStore.setState`
-- Because: one-way data flow, no store pollution with ephemeral events
+**Why:** `expo-linear-gradient` is already in `package.json` as a first-party Expo package with no additional native module install required. `react-native-shimmer-placeholder` wraps any LinearGradient component via a factory function, meaning zero new native dependencies.
 
-**If position sync during playback needs lower latency than the full `handleEvent()` cycle:**
+Install:
 
-- Add a fast path: `NATIVE_PROGRESS_UPDATED` events skip the lock and call a direct `updatePosition()` on the store
-- Only safe because position updates are idempotent and don't drive state transitions
-- Consistent with existing `noOpEvents` list in `transitions.ts` — `NATIVE_PROGRESS_UPDATED` is already designated no-op
+```bash
+npm install react-native-shimmer-placeholder
+```
 
-**If Phase 4 (state propagation to subscribers) requires broadcasting to non-React subscribers:**
+No `expo prebuild --clean` required. No Pods changes. Pure JS with existing `expo-linear-gradient` native layer.
 
-- Use the existing `EventEmitter3` `this.emit('stateChanged', context)` pattern
-- Non-React services subscribe directly to coordinator, not to Zustand
-- Because: Zustand subscriptions are designed for React re-renders, not service-to-service coordination
+**Usage pattern:**
+
+```typescript
+import { createShimmerPlaceholder } from 'react-native-shimmer-placeholder';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const ShimmerPlaceholder = createShimmerPlaceholder(LinearGradient);
+
+// In component:
+<ShimmerPlaceholder
+  visible={isLoaded}
+  style={{ width: 200, height: 20, borderRadius: 4 }}
+>
+  <Text>{title}</Text>
+</ShimmerPlaceholder>
+```
+
+When `visible={false}`, renders the animated shimmer. When `visible={true}`, renders children.
+
+### Alternatives Considered
+
+| Option                                           | Why Not                                                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Moti skeleton                                    | Requires `moti` package (~40KB); uses `react-native-reanimated` worklets — adds complexity for a loading indicator |
+| react-native-fast-shimmer (Callstack)            | Uses `react-native-svg` for gradients — new native dependency; overkill for this use case                          |
+| Hand-rolled with expo-linear-gradient + Animated | Feasible but fragile; `react-native-shimmer-placeholder` is maintained and handles animation lifecycle correctly   |
+| react-native-skeleton-placeholder                | Different lib, requires `react-native-linear-gradient` (not the Expo version) — native install required            |
+
+### What NOT to use
+
+Do not reach for `moti` or `react-native-reanimated`-based skeletons. `react-native-reanimated` is already installed (v4.1.1), but adding Moti creates a large dependency for a shimmer effect that `react-native-shimmer-placeholder` handles with zero native overhead.
+
+Confidence: HIGH for approach (expo-linear-gradient already installed, shimmer-placeholder verified with it); MEDIUM for specific library version (npm registry verified, not tested in this repo yet)
+
+Sources:
+
+- react-native-shimmer-placeholder GitHub: https://github.com/tomzaku/react-native-shimmer-placeholder
+- Callstack fast-shimmer comparison: https://www.callstack.com/blog/performant-and-cross-platform-shimmers-in-react-native-apps
 
 ---
 
-## Version Compatibility
+## Area 5: react-native-background-downloader — Orphaned Download Record Detection
 
-| Package                         | Compatible With                   | Notes                                                                                                                                        |
-| ------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| zustand@5.0.8                   | react@19.1.0, react-native@0.81.5 | Confirmed installed and in use. Uses `useSyncExternalStore` internally — safe for React 19 concurrent mode.                                  |
-| eventemitter3@5.0.1             | Node.js, React Native             | No React dependency. Works in background service context.                                                                                    |
-| async-lock@1.4.1                | Node.js async/await               | Pure JS, no React Native native module required. Safe for service layer.                                                                     |
-| react-native-track-player@4.1.2 | expo@54.0.21                      | Confirmed installed. `useProgress()` hook requires React context; for service-layer position reads use `TrackPlayer.getProgress()` directly. |
+### Current State (existing implementation)
+
+`DownloadService.repairDownloadStatus(libraryItemId)` is already implemented and correct:
+
+1. Queries DB for all audio files of a library item where `downloadStatus = 'downloaded'`
+2. Calls `verifyFileExists(file.downloadInfo.downloadPath)` for each
+3. If missing at stored path, tries `getDownloadPath(libraryItemId, file.filename)` (current container)
+4. If found at new path, calls `markAudioFileAsDownloaded()` with corrected path
+5. Returns count of repaired files
+
+The logic is sound. The gap is **trigger**: `repairDownloadStatus` is only called on-demand from the storage diagnostics screen, not proactively.
+
+### Recommended Pattern: Startup Scan
+
+Add a startup reconciliation pass in `DownloadService.initialize()` that walks all records in the `audio_files` table where `downloadStatus = 'downloaded'` and verifies each file exists on disk. This is the standard pattern for file-backed databases (similar to what iOS Photos, Podcasts, and Safari offline reader use internally).
+
+```typescript
+// Pseudocode for startup scan
+private async reconcileDownloadedFiles(): Promise<void> {
+  const allDownloaded = await getAudioFilesWithStatus('downloaded'); // new DB query
+  for (const file of allDownloaded) {
+    const exists = await verifyFileExists(file.downloadInfo.downloadPath);
+    if (!exists) {
+      // Try iOS container path repair first
+      await this.repairDownloadStatus(file.libraryItemId);
+      // If still missing after repair, mark as not-downloaded
+      const stillMissing = await verifyFileExists(file.downloadInfo.downloadPath);
+      if (stillMissing) {
+        await markAudioFileAsNotDownloaded(file.id);
+      }
+    }
+  }
+}
+```
+
+The DB helper query (`getAudioFilesWithStatus`) is the only missing piece — `audio_files` table and schema already exist.
+
+### Known Pattern: iOS Container Path Migration
+
+iOS changes the app container path on reinstall and some updates. `DownloadService.repairDownloadStatus()` already handles this by comparing the stored path against `getDownloadPath(libraryItemId, filename)` which constructs the current-container path. This is the correct approach.
+
+### What NOT to Add
+
+Do not add a background file watcher or `NSFilePresenter` observer. The downloads directory is under the app container which only this app writes to. A scan-on-launch is sufficient and avoids background thread complexity.
+
+Confidence: MEDIUM (pattern derived from existing implementation; "startup scan" is domain standard but not documented as a RNBD-specific pattern)
+
+Sources:
+
+- Existing: `src/services/DownloadService.ts` (lines 462-606)
+- Existing: `src/lib/fileSystem.ts` (`verifyFileExists`)
 
 ---
 
-## Sources
+## Stack Impact Summary
 
-- Zustand v5 docs — external store setState pattern: https://zustand.docs.pmnd.rs/guides/updating-state
-  Confidence: HIGH (official docs, confirmed behavior)
-- Zustand `subscribeWithSelector` middleware: https://zustand.docs.pmnd.rs/middlewares/subscribe-with-selector
-  Confidence: HIGH (official docs)
-- XState v5 npm — current version 5.28.0: https://www.npmjs.com/package/xstate
-  Confidence: HIGH (npm registry, verified)
-- XState bundle size ~16.7 kB gzipped: https://bundlephobia.com/package/xstate
-  Confidence: MEDIUM (bundlephobia, not directly fetched but corroborated by multiple search results)
-- Existing codebase analysis — `PlayerStateCoordinator.ts`, `playerSlice.ts`, `appStore.ts`, `transitions.ts`, `eventBus.ts`
-  Confidence: HIGH (source of truth for what is already built)
-- Position reconciliation priority order: derived from current `playerSlice.restorePersistedState()` implementation + domain reasoning about source staleness
-  Confidence: MEDIUM (domain pattern, not a named standard — but the logic is directly observable in the existing code)
-- XState v5 custom FSM tradeoffs: https://www.rainforestqa.com/blog/selecting-a-finite-state-machine-library-for-react
-  Confidence: MEDIUM (multiple sources agree on bundle size and learning curve tradeoffs)
+| Area                   | New Dependency                     | New Native Module                           | Config Change                 |
+| ---------------------- | ---------------------------------- | ------------------------------------------- | ----------------------------- |
+| iCloud exclusion       | None                               | None (exists, unregistered)                 | `app.config.js` plugins array |
+| RNTP metadata          | None                               | None                                        | None                          |
+| Expo Router navigation | None                               | None                                        | None                          |
+| Skeleton/shimmer UI    | `react-native-shimmer-placeholder` | None (uses existing `expo-linear-gradient`) | None                          |
+| Download orphan repair | None                               | None                                        | None                          |
+
+**Total new native installs required: 0**
+**Total new packages required: 1** (`react-native-shimmer-placeholder`, JS-only)
 
 ---
 
-_Stack research for: abs-react-native coordinator state machine migration (Phase 2+)_
-_Researched: 2026-02-16_
+## Installation
+
+```bash
+# The only new package needed for this milestone:
+npm install react-native-shimmer-placeholder
+
+# No expo prebuild needed for shimmer-placeholder.
+# DO need expo prebuild --clean after fixing app.config.js:
+npm run ios  # which runs expo prebuild --clean && expo run:ios
+```
+
+---
+
+## Versions Verified
+
+| Package                          | Installed Version | Relevant API                                                 | Confidence                      |
+| -------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------- |
+| react-native-track-player        | 4.1.2             | `updateNowPlayingMetadata`, `NowPlayingMetadata.elapsedTime` | HIGH (source read)              |
+| expo-linear-gradient             | 14.x (via expo)   | Used by shimmer-placeholder                                  | HIGH (package.json)             |
+| expo-router                      | ~6.0.14           | `router.push("/(tabs)/series")` cross-tab                    | HIGH (source + docs)            |
+| expo                             | 54.0.21           | New Architecture interop for legacy modules                  | MEDIUM (Expo docs)              |
+| react-native                     | 0.81.5            | NativeModules interop layer active                           | MEDIUM (RN docs)                |
+| react-native-shimmer-placeholder | 2.x (latest)      | `createShimmerPlaceholder(LinearGradient)`                   | MEDIUM (npm, not yet installed) |
+
+---
+
+## What NOT to Add
+
+| Do Not Add                       | Why                                             | Use Instead                                          |
+| -------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
+| `moti`                           | Large dep (~40KB), complex for shimmer use case | `react-native-shimmer-placeholder`                   |
+| `react-native-fast-shimmer`      | Requires `react-native-svg` (new native dep)    | `react-native-shimmer-placeholder`                   |
+| `@shopify/react-native-skia`     | Extreme overkill for skeleton UI                | `react-native-shimmer-placeholder`                   |
+| TurboModule for iCloud exclusion | Not needed for SDK 54 target                    | Fix plugin registration first, migrate before SDK 55 |
+| `NSFilePresenter` file watcher   | Background complexity, not needed               | Startup reconciliation scan                          |
+| XState                           | Existing coordinator is correct                 | Keep custom FSM                                      |
+
+---
+
+_Stack research for: abs-react-native v1.1 Bug Fixes & Polish milestone_
+_Researched: 2026-02-20_
