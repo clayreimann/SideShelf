@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Milestone v1.1 — Phase 6: iCloud Exclusion (in progress)
+**Current focus:** Milestone v1.1 — Phase 7: Download Tracking (next)
 
 ## Current Position
 
-Phase: 6 of 9 (v1.1: iCloud Exclusion)
-Plan: 1 of 2 in Phase 6 (Plan 01 complete)
-Status: In progress
-Last activity: 2026-02-21 — Phase 6 Plan 01 complete (iCloud exclusion integration wired)
+Phase: 6 of 9 complete (v1.1: iCloud Exclusion — DONE)
+Next: Phase 7 — Download Tracking
+Status: Phase 6 complete; ready for Phase 7
+Last activity: 2026-02-23 — Phase 6 complete (plugin registered, file:// URL encoding bug fixed, human-verified on device)
 
-Progress: [███████░░░] ~60% (v1.0 complete; Phase 6 Plan 01 done)
+Progress: [████████░░] ~70% (v1.0 complete; Phase 6 complete)
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 6, Plan 01]: Use require() (no extension) for withExcludeFromBackup in app.config.js — CommonJS, Node resolves .js before .ts
 - [Phase 6, Plan 01]: Pass withExcludeFromBackup as bare function reference (not array) — plugin takes no options
 - [Phase 6, Plan 01]: Best-effort iCloud exclusion — warn on failure, never throw; download/repair correctness is independent of backup exclusion
+- [Phase 6, Plan 02]: Normalize file:// URLs before passing to [NSURL fileURLWithPath:] — strip scheme and decodeURIComponent in TypeScript wrapper, not Obj-C
 
 ### v1.1 Research Findings (high-confidence)
 
@@ -71,6 +72,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: Completed 06-01-PLAN.md (iCloud exclusion integration — 3 tasks, 3 files)
+Last session: 2026-02-23
+Stopped at: Completed Phase 6 (06-02-PLAN.md human verification; fixed file:// URL encoding bug in normalizePath)
 Resume file: None
