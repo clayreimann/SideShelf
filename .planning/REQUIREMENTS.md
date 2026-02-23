@@ -24,9 +24,9 @@ Bug fixes and polish pass following the coordinator migration. 16 requirements a
 
 ### Download Tracking (DL)
 
-- [ ] **DL-01**: Stale "downloaded" DB records where files no longer exist on disk are cleared on startup
+- [x] **DL-01**: Stale "downloaded" DB records where files no longer exist on disk are cleared on startup
 - [ ] **DL-02**: Storage tab accurately reflects all currently downloaded items
-- [ ] **DL-03**: Download reconciliation scan excludes active in-progress downloads (no partial-file false positives)
+- [x] **DL-03**: Download reconciliation scan excludes active in-progress downloads (no partial-file false positives)
 
 ### Player (PLR)
 
@@ -88,9 +88,9 @@ Deferred — not in current milestone scope.
 | ICLD-01     | 6     | Complete |
 | ICLD-02     | 6     | Complete |
 | ICLD-03     | 6     | Complete |
-| DL-01       | 7     | Pending  |
+| DL-01       | 7     | Complete |
 | DL-02       | 7     | Pending  |
-| DL-03       | 7     | Pending  |
+| DL-03       | 7     | Complete |
 | PLR-01      | 8     | Pending  |
 | PLR-02      | 8     | Pending  |
 | NAV-01      | 9     | Pending  |

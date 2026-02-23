@@ -155,7 +155,7 @@ Plans:
 2. The Storage tab lists every item that has files on disk — no item present in the filesystem is absent from Storage
 3. Performing a scan while a download is actively in progress does not mark the partial file as complete or corrupt the download record
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 
@@ -215,6 +215,6 @@ Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in
 | Phase                     | Plans Complete | Status      | Completed  |
 | ------------------------- | -------------- | ----------- | ---------- |
 | 6. iCloud Exclusion       | 2/2            | Complete    | 2026-02-23 |
-| 7. Download Tracking      | 0/3            | Not started | -          |
+| 7. Download Tracking      | 1/3            | In Progress |            |
 | 8. Skip & Player Polish   | 0/TBD          | Not started | -          |
 | 9. Navigation & UI Polish | 0/TBD          | Not started | -          |

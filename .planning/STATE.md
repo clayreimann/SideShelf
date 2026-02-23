@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 
 ## Current Position
 
-Phase: 6 of 9 complete (v1.1: iCloud Exclusion — DONE)
-Next: Phase 7 — Download Tracking
-Status: Phase 6 complete; ready for Phase 7
-Last activity: 2026-02-23 — Phase 6 complete (plugin registered, file:// URL encoding bug fixed, human-verified on device)
+Phase: 7 of 9 in progress (v1.1: Download Tracking — Plan 1 of 3 complete)
+Next: Phase 7, Plan 02 — Download Status Indicators
+Status: Phase 7 Plan 01 complete; ready for Plan 02
+Last activity: 2026-02-23 — Phase 7 Plan 01 complete (reconciliation scan wired, partiallyDownloadedItems Set added)
 
-Progress: [████████░░] ~70% (v1.0 complete; Phase 6 complete)
+Progress: [████████░░] ~73% (v1.0 complete; Phase 6 complete; Phase 7 Plan 01 complete)
 
 ## Performance Metrics
 
@@ -36,6 +36,8 @@ Progress: [████████░░] ~70% (v1.0 complete; Phase 6 complete
 
 _v1.1 metrics will be tracked per phase_
 
+| Phase 07 P01 | 3 min | 3 tasks | 3 files |
+
 ## Accumulated Context
 
 ### Decisions (v1.0 — carried forward)
@@ -53,6 +55,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 6, Plan 01]: Pass withExcludeFromBackup as bare function reference (not array) — plugin takes no options
 - [Phase 6, Plan 01]: Best-effort iCloud exclusion — warn on failure, never throw; download/repair correctness is independent of backup exclusion
 - [Phase 6, Plan 02]: Normalize file:// URLs before passing to [NSURL fileURLWithPath:] — strip scheme and decodeURIComponent in TypeScript wrapper, not Obj-C
+- [Phase 7, Plan 01]: isDownloadActive covers both active and paused downloads (paused items stay in activeDownloads Map) — single guard sufficient for reconciliation scan
+- [Phase 7, Plan 01]: Dynamic import of appStore inside runDownloadReconciliationScan to avoid circular dependency with DownloadService
 
 ### v1.1 Research Findings (high-confidence)
 
@@ -73,5 +77,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed Phase 6 (06-02-PLAN.md human verification; fixed file:// URL encoding bug in normalizePath)
+Stopped at: Completed Phase 7 Plan 01 (07-01-PLAN.md: reconciliation scan, partiallyDownloadedItems, removeDownloadedItem)
 Resume file: None
