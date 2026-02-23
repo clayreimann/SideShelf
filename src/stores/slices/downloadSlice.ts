@@ -30,6 +30,8 @@ export interface DownloadSliceState {
     activeDownloads: Record<string, DownloadProgress>;
     /** Set of downloaded item IDs (completed downloads) */
     downloadedItems: Set<string>;
+    /** Set of library item IDs that have some (not all) audio files downloaded */
+    partiallyDownloadedItems: Set<string>;
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether downloads are being loaded/checked */
@@ -60,6 +62,8 @@ export interface DownloadSliceActions {
   getDownloadProgress: (itemId: string) => DownloadProgress | null;
   /** Reset the slice to initial state */
   resetDownloads: () => void;
+  /** Remove a single item from downloadedItems and partiallyDownloadedItems (used after reconciliation scan clears stale records) */
+  removeDownloadedItem: (libraryItemId: string) => void;
 }
 
 /**
@@ -74,6 +78,7 @@ const initialState: DownloadSliceState = {
   downloads: {
     activeDownloads: {},
     downloadedItems: new Set(),
+    partiallyDownloadedItems: new Set<string>(),
     initialized: false,
     isLoading: false,
   },
@@ -172,6 +177,7 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
         downloads: {
           ...state.downloads,
           downloadedItems: downloadedItemIds,
+          partiallyDownloadedItems: new Set(partiallyDownloadedItems),
           initialized: true,
           isLoading: false,
         },
@@ -260,12 +266,16 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
       const newDownloadedItems = new Set(state.downloads.downloadedItems);
       newDownloadedItems.add(itemId);
 
+      const newPartiallyDownloadedItems = new Set(state.downloads.partiallyDownloadedItems);
+      newPartiallyDownloadedItems.delete(itemId);
+
       return {
         ...state,
         downloads: {
           ...state.downloads,
           activeDownloads: newActiveDownloads,
           downloadedItems: newDownloadedItems,
+          partiallyDownloadedItems: newPartiallyDownloadedItems,
         },
       };
     });
@@ -341,13 +351,38 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
   },
 
   /**
+   * Remove a single item from downloadedItems and partiallyDownloadedItems
+   * Used by reconciliation scan after clearing stale DB records
+   */
+  removeDownloadedItem: (libraryItemId: string) => {
+    log.info(`[DownloadSlice] Removing download record for ${libraryItemId} (reconciliation scan)`);
+    set((state: DownloadSlice) => {
+      const newDownloadedItems = new Set(state.downloads.downloadedItems);
+      newDownloadedItems.delete(libraryItemId);
+      const newPartiallyDownloadedItems = new Set(state.downloads.partiallyDownloadedItems);
+      newPartiallyDownloadedItems.delete(libraryItemId);
+      return {
+        ...state,
+        downloads: {
+          ...state.downloads,
+          downloadedItems: newDownloadedItems,
+          partiallyDownloadedItems: newPartiallyDownloadedItems,
+        },
+      };
+    });
+  },
+
+  /**
    * Reset the slice to initial state
    */
   resetDownloads: () => {
     log.info("Resetting downloads slice");
     set((state: DownloadSlice) => ({
       ...state,
-      downloads: initialState.downloads,
+      downloads: {
+        ...initialState.downloads,
+        partiallyDownloadedItems: new Set<string>(),
+      },
     }));
   },
 });

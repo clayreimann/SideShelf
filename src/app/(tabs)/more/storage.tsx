@@ -27,10 +27,11 @@ import { useThemedStyles } from "@/lib/theme";
 import { type StorageEntry, useStatistics } from "@/stores";
 import { inArray } from "drizzle-orm";
 import { Directory, File, Paths } from "expo-file-system";
-import { Stack } from "expo-router";
+import { OrphanFile, scanForOrphanFiles } from "@/lib/orphanScanner";
+import { Stack, useFocusEffect } from "expo-router";
 import { defaultDatabaseDirectory } from "expo-sqlite";
-import { useCallback, useEffect, useState } from "react";
-import { Pressable, SectionList, Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import { Alert, Pressable, SectionList, Text, View } from "react-native";
 
 type Section = {
   title: string;
@@ -39,6 +40,7 @@ type Section = {
 
 type ActionItem = {
   label: string;
+  sublabel?: string;
   onPress: () => void;
   disabled?: boolean;
   columns?: [string, string, string] | [string, string, string, string];
@@ -180,6 +182,7 @@ export default function StorageScreen() {
   const floatingPlayerPadding = useFloatingPlayerPadding();
 
   const [storageEntries, setStorageEntries] = useState<StorageEntry[]>([]);
+  const [orphanFiles, setOrphanFiles] = useState<OrphanFile[]>([]);
 
   const refreshStorageStats = useCallback(async () => {
     try {
@@ -420,6 +423,15 @@ export default function StorageScreen() {
 
       // Update storage stats in the store
       updateStorageStatsInStore(allEntries);
+
+      // Scan for orphan files (non-fatal)
+      try {
+        const orphans = await scanForOrphanFiles();
+        setOrphanFiles(orphans);
+      } catch (orphanError) {
+        console.warn("[Storage] Orphan scan failed:", orphanError);
+        // Non-fatal — storage stats still display
+      }
     } catch (error) {
       console.error("Failed to refresh storage stats:", error);
       setStorageEntries([]);
@@ -437,9 +449,23 @@ export default function StorageScreen() {
     await refreshStorageStats();
   }, [refreshStorageStats]);
 
-  useEffect(() => {
-    void refreshStorageStats();
-  }, [refreshStorageStats]);
+  useFocusEffect(
+    useCallback(() => {
+      void refreshStorageStats();
+    }, [refreshStorageStats])
+  );
+
+  const deleteOrphanFile = useCallback(async (orphan: OrphanFile) => {
+    try {
+      const file = new File(orphan.uri);
+      if (file.exists) {
+        await file.delete();
+      }
+      setOrphanFiles((prev) => prev.filter((f) => f.uri !== orphan.uri));
+    } catch (error) {
+      console.error("[Storage] Failed to delete orphan file:", error);
+    }
+  }, []);
 
   // Determine if we should show the backup column
   const showBackupColumn = isICloudBackupExclusionAvailable();
@@ -528,6 +554,32 @@ export default function StorageScreen() {
         },
       ],
     },
+    ...(orphanFiles.length > 0
+      ? [
+          {
+            title: "Unknown files",
+            data: orphanFiles.map((orphan) => ({
+              label: orphan.filename,
+              sublabel: formatBytes(orphan.size),
+              onPress: () => {
+                Alert.alert(
+                  "Delete Unknown File",
+                  `Delete "${orphan.filename}" (${formatBytes(orphan.size)})?`,
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Delete",
+                      style: "destructive",
+                      onPress: () => void deleteOrphanFile(orphan),
+                    },
+                  ]
+                );
+              },
+              disabled: false,
+            })),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -624,6 +676,11 @@ export default function StorageScreen() {
             <View style={styles.listItem}>
               <Pressable onPress={item.onPress} disabled={item.disabled}>
                 <Text style={item.disabled ? styles.text : styles.link}>{item.label}</Text>
+                {item.sublabel && (
+                  <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>
+                    {item.sublabel}
+                  </Text>
+                )}
               </Pressable>
             </View>
           );
