@@ -37,6 +37,7 @@ Progress: [█████████░] ~80% (v1.0 complete; Phases 6-7 compl
 _v1.1 metrics will be tracked per phase_
 
 | Phase 07 P01 | 3 min | 3 tasks | 3 files |
+| Phase 07 P02 | 2 min | 2 tasks | 3 files |
 | Phase 07 P03 | 4 min | 2 tasks | 2 files |
 
 ## Accumulated Context
@@ -58,6 +59,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 6, Plan 02]: Normalize file:// URLs before passing to [NSURL fileURLWithPath:] — strip scheme and decodeURIComponent in TypeScript wrapper, not Obj-C
 - [Phase 7, Plan 01]: isDownloadActive covers both active and paused downloads (paused items stay in activeDownloads Map) — single guard sufficient for reconciliation scan
 - [Phase 7, Plan 01]: Dynamic import of appStore inside runDownloadReconciliationScan to avoid circular dependency with DownloadService
+- [Phase 7, Plan 02]: isItemPartiallyDownloaded uses useCallback + useAppStore.getState() snapshot read — matches existing isItemDownloaded pattern in useDownloads
+- [Phase 7, Plan 02]: Partial badge placed top-left (amber) to avoid overlap with top-right offline icon; partial menu action replaces normal download action for partially-downloaded items
 - [Phase 7, Plan 03]: Include both audio file and library file download paths in orphan scanner known-paths set — covers all download types
 - [Phase 7, Plan 03]: URI normalization with decodeURIComponent fallback for robust orphan matching across percent-encoded filenames
 
@@ -80,5 +83,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed Phase 7 Plan 03 (07-03-PLAN.md: orphanScanner.ts, storage tab useFocusEffect + Unknown files section)
+Stopped at: Completed Phase 7 Plan 02 (07-02-PLAN.md: isItemPartiallyDownloaded selector, CoverImage partial badge, LibraryItemDetail action sheet)
 Resume file: None

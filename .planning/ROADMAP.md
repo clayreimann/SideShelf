@@ -22,7 +22,7 @@ v1.1 (Phases 6–9) is a focused bug-fix and polish pass following the coordinat
 - [x] **Phase 4: State Propagation** - playerSlice becomes read-only proxy driven by coordinator bridge — COMPLETE (human-accepted 2026-02-19)
 - [x] **Phase 5: Cleanup** - Legacy guard flags and reconciliation methods deleted; services simplified to thin execution layers — COMPLETE (2026-02-20)
 - [x] **Phase 6: iCloud Exclusion** - Plugin registered, compiled into build, exclusion applied at download completion and path repair — COMPLETE (2026-02-23)
-- [ ] **Phase 7: Download Tracking** - Stale DB records cleared on startup; Storage tab accurate; active downloads excluded from reconciliation scan
+- [x] **Phase 7: Download Tracking** - Stale DB records cleared on startup; Storage tab accurate; active downloads excluded from reconciliation scan (completed 2026-02-23)
 - [ ] **Phase 8: Skip & Player Polish** - Skip action executes on short-tap; lock screen updates after skip; skip intervals persist across sessions
 - [ ] **Phase 9: Navigation & UI Polish** - More screen routes to correct tabs; icons and nav affordance added; home screen loading skeleton; tab reorder UX improved
 
@@ -155,7 +155,7 @@ Plans:
 2. The Storage tab lists every item that has files on disk — no item present in the filesystem is absent from Storage
 3. Performing a scan while a download is actively in progress does not mark the partial file as complete or corrupt the download record
 
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 
@@ -215,6 +215,6 @@ Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in
 | Phase                     | Plans Complete | Status      | Completed  |
 | ------------------------- | -------------- | ----------- | ---------- |
 | 6. iCloud Exclusion       | 2/2            | Complete    | 2026-02-23 |
-| 7. Download Tracking      | 1/3            | In Progress |            |
+| 7. Download Tracking      | 3/3            | Complete    | 2026-02-23 |
 | 8. Skip & Player Polish   | 0/TBD          | Not started | -          |
 | 9. Navigation & UI Polish | 0/TBD          | Not started | -          |
