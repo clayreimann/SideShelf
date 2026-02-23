@@ -974,6 +974,11 @@ export function useDownloads() {
   const getDownloadProgress = useAppStore((state) => state.getDownloadProgress);
   const resetDownloads = useAppStore((state) => state.resetDownloads);
 
+  const isItemPartiallyDownloaded = React.useCallback(
+    (itemId: string) => useAppStore.getState().downloads.partiallyDownloadedItems.has(itemId),
+    []
+  );
+
   return React.useMemo(
     () => ({
       activeDownloads,
@@ -987,6 +992,7 @@ export function useDownloads() {
       removeActiveDownload,
       deleteDownload,
       isItemDownloaded,
+      isItemPartiallyDownloaded,
       getDownloadProgress,
       resetDownloads,
     }),
@@ -1002,6 +1008,7 @@ export function useDownloads() {
       removeActiveDownload,
       deleteDownload,
       isItemDownloaded,
+      isItemPartiallyDownloaded,
       getDownloadProgress,
       resetDownloads,
     ]
