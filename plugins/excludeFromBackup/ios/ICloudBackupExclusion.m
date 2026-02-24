@@ -6,14 +6,40 @@
 //
 
 #import "ICloudBackupExclusion.h"
+#include <sys/xattr.h>
 
 @implementation ICloudBackupExclusion
 
 RCT_EXPORT_MODULE(ICloudBackupExclusion);
 
 /**
- * Sets the do not back up attribute on a file or directory
- * @param filePath The file path to exclude from backup
+ * Convert a file path (either a POSIX path or a file:// URL string) to a POSIX path.
+ *
+ * The TypeScript normalizePath() already strips "file://" and decodes percent-encoding
+ * before calling native, but this helper also handles raw file:// URLs as a safety net
+ * in case callers pass them directly.
+ */
+static NSString *toPosixPath(NSString *filePath) {
+  if ([filePath hasPrefix:@"file://"]) {
+    // Strip "file://" (7 chars) and decode percent-encoding to recover the POSIX path.
+    // This mirrors the TypeScript normalizePath() logic.
+    NSString *withoutScheme = [filePath substringFromIndex:7];
+    return [withoutScheme stringByRemovingPercentEncoding] ?: withoutScheme;
+  }
+  return filePath;
+}
+
+/**
+ * Sets the do not back up attribute on a file or directory using setxattr.
+ *
+ * Uses setxattr("com.apple.MobileBackup") directly instead of the NSURL
+ * setResourceValue:forKey:NSURLIsExcludedFromBackupKey: API because [NSURL fileURLWithPath:]
+ * leaves bracket characters (e.g. "[B0FBJ2WFHK]") unencoded in the URL, which is
+ * invalid per RFC 3986 and causes setResourceValue to fail with "file doesn't exist"
+ * even when the file is physically present. fileSystemRepresentation bypasses URL
+ * encoding entirely and operates on raw filesystem bytes.
+ *
+ * @param filePath The file path (POSIX path or file:// URL) to exclude from backup
  * @param resolve Promise resolve callback
  * @param reject Promise reject callback
  */
@@ -21,24 +47,34 @@ RCT_EXPORT_METHOD(setExcludeFromBackup:(NSString *)filePath
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
-  NSURL *fileURL = [NSURL fileURLWithPath:filePath];
-  NSError *error = nil;
+  NSString *posixPath = toPosixPath(filePath);
+  if (!posixPath || posixPath.length == 0) {
+    reject(@"INVALID_PATH", @"Could not resolve file path", nil);
+    return;
+  }
 
-  BOOL success = [fileURL setResourceValue:@YES
-                                    forKey:NSURLIsExcludedFromBackupKey
-                                     error:&error];
+  const char *cPath = [posixPath fileSystemRepresentation];
+  const char *attrName = "com.apple.MobileBackup";
+  uint8_t attrValue = 1;
 
-  if (success) {
+  int result = setxattr(cPath, attrName, &attrValue, sizeof(attrValue), 0, 0);
+
+  if (result == 0) {
     resolve(@{@"success": @YES, @"path": filePath});
   } else {
-    NSString *errorMessage = error ? error.localizedDescription : @"Failed to set exclude from backup attribute";
+    NSString *errorMessage = [NSString stringWithFormat:@"Failed to exclude from backup: %s",
+                              strerror(errno)];
+    NSError *error = [NSError errorWithDomain:NSPOSIXErrorDomain
+                                        code:errno
+                                    userInfo:nil];
     reject(@"EXCLUDE_FROM_BACKUP_FAILED", errorMessage, error);
   }
 }
 
 /**
- * Checks if a file or directory is excluded from backup
- * @param filePath The file path to check
+ * Checks if a file or directory is excluded from backup using getxattr.
+ *
+ * @param filePath The file path (POSIX path or file:// URL) to check
  * @param resolve Promise resolve callback
  * @param reject Promise reject callback
  */
@@ -46,20 +82,21 @@ RCT_EXPORT_METHOD(isExcludedFromBackup:(NSString *)filePath
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
-  NSURL *fileURL = [NSURL fileURLWithPath:filePath];
-  NSError *error = nil;
-  NSNumber *isExcluded = nil;
-
-  BOOL success = [fileURL getResourceValue:&isExcluded
-                                    forKey:NSURLIsExcludedFromBackupKey
-                                     error:&error];
-
-  if (success) {
-    resolve(@{@"excluded": isExcluded ?: @NO, @"path": filePath});
-  } else {
-    NSString *errorMessage = error ? error.localizedDescription : @"Failed to check backup exclusion status";
-    reject(@"CHECK_BACKUP_STATUS_FAILED", errorMessage, error);
+  NSString *posixPath = toPosixPath(filePath);
+  if (!posixPath || posixPath.length == 0) {
+    reject(@"INVALID_PATH", @"Could not resolve file path", nil);
+    return;
   }
+
+  const char *cPath = [posixPath fileSystemRepresentation];
+  const char *attrName = "com.apple.MobileBackup";
+  uint8_t attrValue = 0;
+
+  ssize_t result = getxattr(cPath, attrName, &attrValue, sizeof(attrValue), 0, 0);
+
+  // result > 0: attribute exists and was read; attrValue != 0: exclusion is active
+  BOOL isExcluded = (result > 0 && attrValue != 0);
+  resolve(@{@"excluded": @(isExcluded), @"path": filePath});
 }
 
 // Ensure the module is available to React Native

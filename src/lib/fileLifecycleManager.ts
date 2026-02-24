@@ -23,6 +23,7 @@ import {
 import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 import {
   updateAudioFileStorageLocation,
+  updateAudioFileDownloadPath,
   clearAudioFileDownloadStatus,
   getAllDownloadedAudioFiles,
   getDownloadedAudioFilesWithLibraryInfo,
@@ -335,11 +336,32 @@ export async function runDownloadReconciliationScan(): Promise<void> {
 
       const exists = await verifyFileExists(downloadInfo.downloadPath);
       if (!exists) {
-        log.warn(
-          `[ReconciliationScan] Cleared stale record: ${downloadInfo.filename} (${libraryItemId})`
-        );
-        await clearAudioFileDownloadStatus(downloadInfo.audioFileId);
-        clearedLibraryItems.add(libraryItemId);
+        // Before clearing the record, check if the file exists at the current-container path.
+        // iOS changes the app container UUID on every update, making stored absolute paths stale.
+        // New code stores portable relative paths (via toAppRelativePath), but existing records
+        // from before this fix may still be absolute. Attempt repair by looking for the file at
+        // its expected location under the current container.
+        let repaired = false;
+        for (const location of ["documents", "caches"] as const) {
+          const currentPath = getDownloadPath(libraryItemId, downloadInfo.filename, location);
+          const existsAtCurrentPath = await verifyFileExists(currentPath);
+          if (existsAtCurrentPath) {
+            log.info(
+              `[ReconciliationScan] Repaired stale path for ${downloadInfo.filename} (${libraryItemId}) — updating to ${location} path`
+            );
+            await updateAudioFileDownloadPath(downloadInfo.audioFileId, currentPath);
+            repaired = true;
+            break;
+          }
+        }
+
+        if (!repaired) {
+          log.warn(
+            `[ReconciliationScan] Cleared stale record: ${downloadInfo.filename} (${libraryItemId})`
+          );
+          await clearAudioFileDownloadStatus(downloadInfo.audioFileId);
+          clearedLibraryItems.add(libraryItemId);
+        }
       }
     }
 

@@ -66,6 +66,30 @@ jest.mock("@/lib/iCloudBackupExclusion", () => ({
   isICloudBackupExclusionAvailable: jest.fn(),
 }));
 
+// Mock DownloadService singleton
+jest.mock("@/services/DownloadService", () => ({
+  downloadService: {
+    isDownloadActive: jest.fn(() => false),
+  },
+}));
+
+// Mock @kesha-antonov/react-native-background-downloader (used by reconciliation scan)
+jest.mock("@kesha-antonov/react-native-background-downloader", () => ({
+  __esModule: true,
+  default: {
+    checkForExistingDownloads: jest.fn(() => Promise.resolve([])),
+  },
+}));
+
+// Mock @/stores/appStore (dynamic import in reconciliation scan)
+jest.mock("@/stores/appStore", () => ({
+  useAppStore: {
+    getState: jest.fn(() => ({
+      removeDownloadedItem: jest.fn(),
+    })),
+  },
+}));
+
 // Import module under test
 import * as fileLifecycleManager from "@/lib/fileLifecycleManager";
 
@@ -76,6 +100,7 @@ import * as combinedQueries from "@/db/helpers/combinedQueries";
 import * as mediaMetadata from "@/db/helpers/mediaMetadata";
 import * as mediaProgress from "@/db/helpers/mediaProgress";
 import * as iCloudBackup from "@/lib/iCloudBackupExclusion";
+import { downloadService } from "@/services/DownloadService";
 
 // Create typed references to mocked functions
 const mocks = {
@@ -85,6 +110,7 @@ const mocks = {
   mediaMetadata: jest.mocked(mediaMetadata),
   mediaProgress: jest.mocked(mediaProgress),
   iCloudBackup: jest.mocked(iCloudBackup),
+  downloadService: jest.mocked(downloadService),
 };
 
 describe("File Lifecycle Manager", () => {
@@ -619,6 +645,169 @@ describe("File Lifecycle Manager", () => {
       const result = await fileLifecycleManager.detectCleanedUpFiles();
 
       expect(result).toHaveLength(0);
+    });
+  });
+
+  describe("runDownloadReconciliationScan", () => {
+    beforeEach(() => {
+      mocks.localData.clearAudioFileDownloadStatus.mockResolvedValue(undefined as any);
+      mocks.localData.updateAudioFileDownloadPath.mockResolvedValue(undefined as any);
+      mocks.fileSystem.verifyFileExists.mockResolvedValue(true);
+      mocks.downloadService.isDownloadActive.mockReturnValue(false);
+    });
+
+    it("should clear stale DB record when file is missing and not recoverable", async () => {
+      const mockDownloads = [
+        {
+          audioFileId: "audio-stale-1",
+          filename: "chapter1.m4b",
+          downloadPath: "/old-container-uuid/Documents/downloads/item-1/chapter1.m4b",
+          libraryItemId: "item-1",
+          title: "Lost Book",
+        },
+      ];
+      mocks.localData.getDownloadedAudioFilesWithLibraryInfo.mockResolvedValue(
+        mockDownloads as any
+      );
+
+      // File not found at stored path or at any current-container path
+      mocks.fileSystem.verifyFileExists.mockResolvedValue(false);
+      mocks.fileSystem.getDownloadPath.mockImplementation(
+        (id: string, filename: string, location = "caches") =>
+          `${location}/downloads/${id}/${filename}`
+      );
+
+      // The scan clears stale records and then attempts a dynamic import of appStore.
+      // In the Jest CJS environment, dynamic import() of mocked modules is not supported
+      // (requires --experimental-vm-modules). We suppress that specific error and verify
+      // the primary behaviour (clear was called) still happened before the import.
+      try {
+        await fileLifecycleManager.runDownloadReconciliationScan();
+      } catch (e: any) {
+        if (!e?.message?.includes("dynamic import callback")) {
+          throw e;
+        }
+      }
+
+      expect(mocks.localData.clearAudioFileDownloadStatus).toHaveBeenCalledWith("audio-stale-1");
+      expect(mocks.localData.updateAudioFileDownloadPath).not.toHaveBeenCalled();
+    });
+
+    it("repairs stale absolute path when file exists at current-container documents path", async () => {
+      // Simulate iOS app update: stored path has old container UUID (absolute), but file
+      // is still on disk at the new container path.
+      const oldAbsolutePath =
+        "/var/mobile/Containers/Data/Application/OLD-UUID/Documents/downloads/item-2/chapter1.m4b";
+      const mockDownloads = [
+        {
+          audioFileId: "audio-repair-1",
+          filename: "chapter1.m4b",
+          downloadPath: oldAbsolutePath,
+          libraryItemId: "item-2",
+          title: "Repaired Book",
+        },
+      ];
+      mocks.localData.getDownloadedAudioFilesWithLibraryInfo.mockResolvedValue(
+        mockDownloads as any
+      );
+
+      const currentDocumentsPath = "documents/downloads/item-2/chapter1.m4b";
+      mocks.fileSystem.getDownloadPath.mockImplementation(
+        (id: string, filename: string, location = "caches") =>
+          `${location}/downloads/${id}/${filename}`
+      );
+
+      // First call: stored path does not exist (stale). Second call (documents path): exists.
+      mocks.fileSystem.verifyFileExists
+        .mockResolvedValueOnce(false) // stored absolute path
+        .mockResolvedValueOnce(true); // current documents path
+
+      await fileLifecycleManager.runDownloadReconciliationScan();
+
+      // Should repair, not clear
+      expect(mocks.localData.updateAudioFileDownloadPath).toHaveBeenCalledWith(
+        "audio-repair-1",
+        expect.stringContaining("documents")
+      );
+      expect(mocks.localData.clearAudioFileDownloadStatus).not.toHaveBeenCalled();
+    });
+
+    it("repairs stale absolute path when file exists at current-container caches path", async () => {
+      const oldAbsolutePath = "/old-container/Library/Caches/downloads/item-3/file.m4b";
+      const mockDownloads = [
+        {
+          audioFileId: "audio-repair-2",
+          filename: "file.m4b",
+          downloadPath: oldAbsolutePath,
+          libraryItemId: "item-3",
+          title: "Cache Book",
+        },
+      ];
+      mocks.localData.getDownloadedAudioFilesWithLibraryInfo.mockResolvedValue(
+        mockDownloads as any
+      );
+
+      mocks.fileSystem.getDownloadPath.mockImplementation(
+        (id: string, filename: string, location = "caches") =>
+          `${location}/downloads/${id}/${filename}`
+      );
+
+      // Stored path: missing. Documents path: missing. Caches path: exists.
+      mocks.fileSystem.verifyFileExists
+        .mockResolvedValueOnce(false) // stored absolute path
+        .mockResolvedValueOnce(false) // documents path
+        .mockResolvedValueOnce(true); // caches path
+
+      await fileLifecycleManager.runDownloadReconciliationScan();
+
+      expect(mocks.localData.updateAudioFileDownloadPath).toHaveBeenCalledWith(
+        "audio-repair-2",
+        expect.stringContaining("caches")
+      );
+      expect(mocks.localData.clearAudioFileDownloadStatus).not.toHaveBeenCalled();
+    });
+
+    it("skips items that have an active download in progress", async () => {
+      const mockDownloads = [
+        {
+          audioFileId: "audio-active-1",
+          filename: "downloading.m4b",
+          downloadPath: "D:downloads/item-4/downloading.m4b",
+          libraryItemId: "item-4",
+          title: "Active Download",
+        },
+      ];
+      mocks.localData.getDownloadedAudioFilesWithLibraryInfo.mockResolvedValue(
+        mockDownloads as any
+      );
+      mocks.downloadService.isDownloadActive.mockReturnValue(true);
+
+      await fileLifecycleManager.runDownloadReconciliationScan();
+
+      // Should not touch an active download's record
+      expect(mocks.fileSystem.verifyFileExists).not.toHaveBeenCalled();
+      expect(mocks.localData.clearAudioFileDownloadStatus).not.toHaveBeenCalled();
+    });
+
+    it("does not clear records where files still exist at stored path", async () => {
+      const mockDownloads = [
+        {
+          audioFileId: "audio-valid-1",
+          filename: "valid.m4b",
+          downloadPath: "D:downloads/item-5/valid.m4b",
+          libraryItemId: "item-5",
+          title: "Valid Book",
+        },
+      ];
+      mocks.localData.getDownloadedAudioFilesWithLibraryInfo.mockResolvedValue(
+        mockDownloads as any
+      );
+      mocks.fileSystem.verifyFileExists.mockResolvedValue(true);
+
+      await fileLifecycleManager.runDownloadReconciliationScan();
+
+      expect(mocks.localData.clearAudioFileDownloadStatus).not.toHaveBeenCalled();
+      expect(mocks.localData.updateAudioFileDownloadPath).not.toHaveBeenCalled();
     });
   });
 });
