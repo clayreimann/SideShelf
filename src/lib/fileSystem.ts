@@ -3,12 +3,14 @@ import { Directory, File, Paths } from "expo-file-system";
 export type StorageLocation = "documents" | "caches";
 
 /**
- * Get the base directory used for app-managed files.
- * @deprecated Use getDocumentsDirectory() or getCachesDirectory() explicitly
+ * Prefix used to tag app-relative paths stored in the database.
+ * "D:" = Documents directory, "C:" = Caches directory.
+ * Paths without a prefix are legacy absolute paths or relative paths from
+ * the old single-base (Caches) scheme — resolveAppPath handles them as
+ * absolute paths (returned unchanged) so existing data still works.
  */
-function getAppBaseDirectory(): Directory {
-  return Paths.cache;
-}
+const DOCS_PREFIX = "D:";
+const CACHE_PREFIX = "C:";
 
 /**
  * Get the Documents directory.
@@ -81,49 +83,81 @@ function normalizeFileUri(path: string): string {
 }
 
 /**
- * Convert an absolute path that lives under the app base directory into
- * a relative path for storage. Paths outside of the base directory are
- * returned unchanged.
+ * Convert an absolute path under the app's Documents or Caches directory into
+ * a portable relative path for database storage.
+ *
+ * Stored format:
+ *   "D:downloads/item-id/file.m4b"  — file lives in Documents
+ *   "C:downloads/item-id/file.m4b"  — file lives in Caches
+ *
+ * Paths that don't live under either directory are returned unchanged (this
+ * covers cover-image URLs and other non-download paths).
+ *
+ * The stored path survives iOS app updates because it is resolved at runtime
+ * against the current container, rather than storing the container UUID.
  */
 export function toAppRelativePath(path: string): string {
   if (!path) {
     return path;
   }
 
+  // Already a prefixed relative path — nothing to do.
+  if (path.startsWith(DOCS_PREFIX) || path.startsWith(CACHE_PREFIX)) {
+    return path;
+  }
+
   const normalizedPath = normalizeFileUri(path);
 
   if (!Paths.isAbsolute(normalizedPath)) {
+    // Already relative but no prefix — return as-is (legacy or non-download path).
     return normalizedPath;
   }
 
-  const baseDirectory = getAppBaseDirectory();
-  const relative = Paths.relative(baseDirectory.uri, normalizedPath);
-
-  if (!relative || relative.startsWith("..") || Paths.isAbsolute(relative)) {
-    return normalizedPath;
+  // Try Documents first (new downloads always land here).
+  const docsRelative = Paths.relative(Paths.document.uri, normalizedPath);
+  if (docsRelative && !docsRelative.startsWith("..") && !Paths.isAbsolute(docsRelative)) {
+    return DOCS_PREFIX + decodeUriPathSegments(docsRelative);
   }
 
-  return decodeUriPathSegments(relative);
+  // Then try Caches (files moved there by the lifecycle manager).
+  const cacheRelative = Paths.relative(Paths.cache.uri, normalizedPath);
+  if (cacheRelative && !cacheRelative.startsWith("..") && !Paths.isAbsolute(cacheRelative)) {
+    return CACHE_PREFIX + decodeUriPathSegments(cacheRelative);
+  }
+
+  // Path is outside both app directories — return unchanged.
+  return normalizedPath;
 }
 
 /**
  * Resolve a possibly relative path (stored in the database) to an absolute
- * path within the app base directory.
+ * path within the current app container.
+ *
+ * Handles three formats:
+ *   "D:downloads/..."  — resolves against current Documents directory
+ *   "C:downloads/..."  — resolves against current Caches directory
+ *   "/absolute/path"   — returned as-is (legacy stored absolute paths will be
+ *                        stale after an iOS update; callers should use
+ *                        verifyFileExists() and repair if needed)
  */
 export function resolveAppPath(path: string): string {
   if (!path) {
     return path;
   }
 
-  const normalizedPath = normalizeFileUri(path);
-
-  if (Paths.isAbsolute(normalizedPath)) {
-    return normalizedPath;
+  if (path.startsWith(DOCS_PREFIX)) {
+    const relativePart = decodeUriPathSegments(path.slice(DOCS_PREFIX.length));
+    return Paths.join(Paths.document.uri, relativePart);
   }
 
-  const baseDirectory = getAppBaseDirectory();
-  const decodedRelativePath = decodeUriPathSegments(normalizedPath);
-  return Paths.join(baseDirectory.uri, decodedRelativePath);
+  if (path.startsWith(CACHE_PREFIX)) {
+    const relativePart = decodeUriPathSegments(path.slice(CACHE_PREFIX.length));
+    return Paths.join(Paths.cache.uri, relativePart);
+  }
+
+  // Legacy: already-absolute or unprefixed relative path — return unchanged.
+  const normalizedPath = normalizeFileUri(path);
+  return normalizedPath;
 }
 
 /**
