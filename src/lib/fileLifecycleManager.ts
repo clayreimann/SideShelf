@@ -322,8 +322,9 @@ export async function runDownloadReconciliationScan(): Promise<void> {
     // --- Step 1: Stale record scan ---
     const downloadedFiles = await getDownloadedAudioFilesWithLibraryInfo();
 
-    // Track which library items had at least one file cleared
+    // Track which library items had at least one file cleared or repaired
     const clearedLibraryItems = new Set<string>();
+    const repairedLibraryItems = new Set<string>();
 
     for (const downloadInfo of downloadedFiles) {
       const { libraryItemId } = downloadInfo;
@@ -350,6 +351,7 @@ export async function runDownloadReconciliationScan(): Promise<void> {
               `[ReconciliationScan] Repaired stale path for ${downloadInfo.filename} (${libraryItemId}) — updating to ${location} path`
             );
             await updateAudioFileDownloadPath(downloadInfo.audioFileId, currentPath);
+            repairedLibraryItems.add(libraryItemId);
             repaired = true;
             break;
           }
@@ -365,16 +367,31 @@ export async function runDownloadReconciliationScan(): Promise<void> {
       }
     }
 
-    // --- Step 2: Zustand store invalidation ---
-    if (clearedLibraryItems.size > 0) {
+    // --- Step 2: Zustand store invalidation / repair ---
+    if (clearedLibraryItems.size > 0 || repairedLibraryItems.size > 0) {
       // Dynamic import to avoid circular dependency — appStore imports DownloadService
       const { useAppStore } = await import("@/stores/appStore");
+
       for (const libraryItemId of clearedLibraryItems) {
         useAppStore.getState().removeDownloadedItem(libraryItemId);
       }
-      log.info(
-        `[ReconciliationScan] Invalidated ${clearedLibraryItems.size} items in Zustand store`
-      );
+      if (clearedLibraryItems.size > 0) {
+        log.info(
+          `[ReconciliationScan] Invalidated ${clearedLibraryItems.size} items in Zustand store`
+        );
+      }
+
+      // For items that had stale paths repaired, ensure they appear as downloaded in the
+      // Zustand store. This covers the case where removeDownloadedItem was called for the
+      // same item (some files cleared, some repaired) — re-adding preserves the repaired files.
+      for (const libraryItemId of repairedLibraryItems) {
+        useAppStore.getState().completeDownload(libraryItemId);
+      }
+      if (repairedLibraryItems.size > 0) {
+        log.info(
+          `[ReconciliationScan] Refreshed ${repairedLibraryItems.size} repaired items in Zustand store`
+        );
+      }
     }
 
     // --- Step 3: Zombie detection ---

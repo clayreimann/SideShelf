@@ -15,16 +15,18 @@ RCT_EXPORT_MODULE(ICloudBackupExclusion);
 /**
  * Convert a file path (either a POSIX path or a file:// URL string) to a POSIX path.
  *
- * The TypeScript normalizePath() already strips "file://" and decodes percent-encoding
- * before calling native, but this helper also handles raw file:// URLs as a safety net
- * in case callers pass them directly.
+ * The TypeScript normalizePath() already strips "file://" without decoding before
+ * calling native. This helper mirrors that behaviour as a safety net for any caller
+ * that passes a raw file:// URL directly.
+ *
+ * IMPORTANT: do NOT call stringByRemovingPercentEncoding. Files are saved on disk
+ * by the background downloader using the percent-encoded URI path as a POSIX path
+ * (e.g. "Book%20Title.m4b" is the literal filename). Decoding would produce the
+ * wrong POSIX path and cause ENOENT.
  */
 static NSString *toPosixPath(NSString *filePath) {
   if ([filePath hasPrefix:@"file://"]) {
-    // Strip "file://" (7 chars) and decode percent-encoding to recover the POSIX path.
-    // This mirrors the TypeScript normalizePath() logic.
-    NSString *withoutScheme = [filePath substringFromIndex:7];
-    return [withoutScheme stringByRemovingPercentEncoding] ?: withoutScheme;
+    return [filePath substringFromIndex:7];
   }
   return filePath;
 }
