@@ -18,10 +18,9 @@ import SkipButton from "@/components/player/SkipButton";
 import SleepTimerControl from "@/components/player/SleepTimerControl";
 import { ProgressBar } from "@/components/ui";
 import CoverImage from "@/components/ui/CoverImange";
-import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettings";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
-import { usePlayer, useUserProfile } from "@/stores/appStore";
+import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
 import { router, Stack } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -58,10 +57,14 @@ export default function FullScreenPlayer() {
 
   const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
   const { createBookmark } = useUserProfile();
+  const {
+    jumpForwardInterval,
+    jumpBackwardInterval,
+    updateJumpForwardInterval,
+    updateJumpBackwardInterval,
+  } = useSettings();
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
-  const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
-  const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
   const [showChapterList, setShowChapterList] = useState(false);
   const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
@@ -89,19 +92,6 @@ export default function FullScreenPlayer() {
       },
     })
   ).current;
-
-  // Load jump intervals from settings
-  useEffect(() => {
-    const loadIntervals = async () => {
-      const [forward, backward] = await Promise.all([
-        getJumpForwardInterval(),
-        getJumpBackwardInterval(),
-      ]);
-      setJumpForwardInterval(forward);
-      setJumpBackwardInterval(backward);
-    };
-    loadIntervals();
-  }, []);
 
   // Animate chapter list visibility
   useEffect(() => {
@@ -181,25 +171,25 @@ export default function FullScreenPlayer() {
   const handleJumpBackward = useCallback(
     async (seconds: number) => {
       try {
-        // One-time jump to the selected interval (does not change default)
         await playerService.seekTo(Math.max(position - seconds, 0));
+        await updateJumpBackwardInterval(seconds);
       } catch (error) {
         console.error("[FullScreenPlayer] Failed to jump backward:", error);
       }
     },
-    [position]
+    [position, updateJumpBackwardInterval]
   );
 
   const handleJumpForward = useCallback(
     async (seconds: number) => {
       try {
-        // One-time jump to the selected interval (does not change default)
         await playerService.seekTo(position + seconds);
+        await updateJumpForwardInterval(seconds);
       } catch (error) {
         console.error("[FullScreenPlayer] Failed to jump forward:", error);
       }
     },
-    [position]
+    [position, updateJumpForwardInterval]
   );
 
   const handleRateChange = useCallback(async (rate: number) => {
