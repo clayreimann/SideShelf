@@ -1,6 +1,7 @@
 import { getAllDownloadedAudioFiles, getAllDownloadedLibraryFiles } from "@/db/helpers/localData";
 import { logger } from "@/lib/logger";
 import { downloadService } from "@/services/DownloadService";
+import { resolveAppPath } from "@/lib/fileSystem";
 import { Directory, File, Paths } from "expo-file-system";
 
 const log = logger.forTag("OrphanScanner");
@@ -30,13 +31,15 @@ export async function scanForOrphanFiles(): Promise<OrphanFile[]> {
 
   for (const row of audioRows) {
     if (row.downloadPath) {
-      knownPaths.add(row.downloadPath);
+      // Resolve portable "D:..." / "C:..." paths to current-container absolute paths so
+      // the comparison against on-disk file URIs works regardless of storage format.
+      knownPaths.add(resolveAppPath(row.downloadPath));
     }
   }
 
   for (const row of libraryRows) {
     if (row.downloadPath) {
-      knownPaths.add(row.downloadPath);
+      knownPaths.add(resolveAppPath(row.downloadPath));
     }
   }
 
