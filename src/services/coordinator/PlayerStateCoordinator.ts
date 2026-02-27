@@ -751,6 +751,20 @@ export class PlayerStateCoordinator extends EventEmitter {
           log.error("[Coordinator] Failed to update now playing metadata", err);
         });
       }
+
+      // SKIP-02: On seek completion, refresh lock screen elapsed time unconditionally.
+      // Same-chapter skips do not change currentChapterId, so PROP-06 guard above won't fire.
+      // updateNowPlayingMetadata reads positionInChapter from store.player.currentChapter,
+      // which is up-to-date because updatePosition() (called via syncPositionToStore on
+      // NATIVE_PROGRESS_UPDATED) runs _updateCurrentChapter synchronously.
+      // The coordinator bridge calls syncStateToStore after every allowed transition —
+      // SEEK_COMPLETE arrives here after TrackPlayer.seekTo resolves and the event
+      // passes the SEEKING→READY transition guard.
+      if (event.type === "SEEK_COMPLETE") {
+        store.updateNowPlayingMetadata().catch((err) => {
+          log.error("[Coordinator] Failed to update now playing metadata after seek", err);
+        });
+      }
     } catch {
       // BGS headless context: Zustand store may not be available (PROP-05)
       return;
