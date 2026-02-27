@@ -14,7 +14,7 @@ Bug fixes and polish pass following the coordinator migration. 16 requirements a
 ### Skip Button (SKIP)
 
 - [ ] **SKIP-01**: User can short-tap skip button to execute a skip (forward or backward)
-- [ ] **SKIP-02**: Lock screen shows updated elapsed time after any skip (same-chapter or chapter-crossing)
+- [x] **SKIP-02**: Lock screen shows updated elapsed time after any skip (same-chapter or chapter-crossing)
 
 ### iCloud Exclusion (ICLD)
 
@@ -84,7 +84,7 @@ Deferred — not in current milestone scope.
 | Requirement | Phase | Status   |
 | ----------- | ----- | -------- |
 | SKIP-01     | 8     | Pending  |
-| SKIP-02     | 8     | Pending  |
+| SKIP-02     | 8     | Complete |
 | ICLD-01     | 6     | Complete |
 | ICLD-02     | 6     | Complete |
 | ICLD-03     | 6     | Complete |
