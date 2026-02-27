@@ -175,7 +175,7 @@ Plans:
 3. The skip forward interval selected in the player persists after closing and reopening the app
 4. The skip backward interval selected in the player persists after closing and reopening the app independently of the forward interval
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 
