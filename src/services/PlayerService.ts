@@ -593,6 +593,7 @@ export class PlayerService {
    */
   async executeSeek(position: number): Promise<void> {
     await TrackPlayer.seekTo(position);
+    dispatchPlayerEvent({ type: "SEEK_COMPLETE" });
   }
 
   /**
