@@ -196,7 +196,9 @@ Plans:
 4. Each item in the More screen list shows a chevron or equivalent affordance indicating it is a navigation target, and has a visible tap state
 5. During cold start (no cached sections), the home screen shows placeholder skeleton cards in the shape of content items before data loads — not a bare spinner
 6. The tab reorder screen provides a sufficiently clear and usable drag-to-reorder interaction
-   **Plans**: TBD
+7. (Carry-over from Phase 8) Cover art appears on the lock screen on first boot after a fresh app install — investigate why `getCoverUri()` resolves to a file that doesn't exist on first install and add a re-download or remote-fallback path
+
+**Plans**: TBD
 
 ## Progress
 
