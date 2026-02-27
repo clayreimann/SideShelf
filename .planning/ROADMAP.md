@@ -198,7 +198,13 @@ Plans:
 6. The tab reorder screen provides a sufficiently clear and usable drag-to-reorder interaction
 7. (Carry-over from Phase 8) Cover art appears on the lock screen on first boot after a fresh app install — investigate why `getCoverUri()` resolves to a file that doesn't exist on first install and add a re-download or remote-fallback path
 
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+
+- [ ] 09-01-PLAN.md — More screen nav fix (series/authors push) + icons + chevron affordance (NAV-01, NAV-02, UX-02, UX-03)
+- [ ] 09-02-PLAN.md — Home skeleton during cold start + tab reorder drag handle (UX-01, UX-04)
+- [ ] 09-03-PLAN.md — Cover art startup repair scan (Phase 8 carry-over)
 
 ## Progress
 
