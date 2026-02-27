@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 
 ## Current Position
 
-Phase: 8 of 9 in progress (v1.1: Skip Button & Player Polish — Plan 02 complete)
-Next: Phase 8 Plan 03
-Status: Phase 8 Plan 02 complete; ready for Phase 8 Plan 03
-Last activity: 2026-02-27 — Phase 8 Plan 02 complete (SEEK_COMPLETE event wired for lock screen elapsed time refresh)
+Phase: 8 of 9 complete (v1.1: Skip Button & Player Polish — all 3 plans done)
+Next: Phase 9 (Navigation & UI Polish)
+Status: Phase 8 complete; ready for Phase 9
+Last activity: 2026-02-27 — Phase 8 Plan 03 complete (device verification, SkipButton gesture hardening, cover art partial fix)
 
 Progress: [█████████░] ~80% (v1.0 complete; Phases 6-7 complete)
 
@@ -41,6 +41,7 @@ _v1.1 metrics will be tracked per phase_
 | Phase 07 P03 | 4 min | 2 tasks | 2 files |
 | Phase 08-skip-player-polish P01 | 2 | 1 tasks | 1 files |
 | Phase 08-skip-player-polish P02 | 2 min | 2 tasks | 2 files |
+| Phase 08-skip-player-polish P03 | device session | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,10 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 8, Plan 01]: handleJumpForward/handleJumpBackward both seek AND persist — long-press interval selection immediately becomes the new default
 - [Phase 8, Plan 02]: SEEK_COMPLETE dispatched in executeSeek (not seekTo public API) — keeps event dispatch at the execution layer where TrackPlayer.seekTo actually runs
 - [Phase 8, Plan 02]: syncStateToStore SEEK_COMPLETE branch is unconditional (no debounce, no guard) — every skip produces exactly one lock screen refresh regardless of chapter boundary
+- [Phase 8, Plan 03]: SkipButton architecture changed to Pressable-outside-MenuView with programmatic ref.show() — shouldOpenOnLongPress alone was insufficient on iOS 18 to prevent UIContextMenuInteraction from swallowing short taps
+- [Phase 8, Plan 03]: suppressNextPress ref on SkipButton prevents onPress firing on long-press release
+- [Phase 8, Plan 03]: Long-press interval selection changed to one-time apply (does not persist) — Settings controls the default; long press is a per-skip override
+- [Phase 8, Plan 03]: Cover art fix in PlayerService is partial — local imageUrl paths may be stale after iOS app updates; getCoverUri() always current; full fix deferred to Phase 9
 
 ### v1.1 Research Findings (high-confidence)
 
@@ -83,11 +88,12 @@ None.
 
 ### Blockers/Concerns
 
-- [Phase 8]: Android `updateMetadataForTrack` artwork bug (#2287) needs device test before marking PLR work complete
+- [Phase 9]: Cover art on first install of new version — getCoverUri() may not resolve before player initializes after iOS container UUID change; deferred from Phase 8
+- [Phase 9]: Android `updateMetadataForTrack` artwork bug (#2287) — not tested (no Android device available); does not block Phase 8 completion
 - [Phase 9]: Expo Router tab navigation API needs hands-on verification on Expo 54 build before writing More screen fix
 
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed Phase 8 Plan 02 (08-02-PLAN.md: SEEK_COMPLETE event wired for lock screen elapsed time refresh on same-chapter skips)
+Stopped at: Completed Phase 8 Plan 03 (08-03-PLAN.md: device verification complete; SkipButton gesture hardened; cover art partial fix; Phase 8 done)
 Resume file: None

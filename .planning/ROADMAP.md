@@ -23,7 +23,7 @@ v1.1 (Phases 6–9) is a focused bug-fix and polish pass following the coordinat
 - [x] **Phase 5: Cleanup** - Legacy guard flags and reconciliation methods deleted; services simplified to thin execution layers — COMPLETE (2026-02-20)
 - [x] **Phase 6: iCloud Exclusion** - Plugin registered, compiled into build, exclusion applied at download completion and path repair — COMPLETE (2026-02-23)
 - [x] **Phase 7: Download Tracking** - Stale DB records cleared on startup; Storage tab accurate; active downloads excluded from reconciliation scan (completed 2026-02-23)
-- [ ] **Phase 8: Skip & Player Polish** - Skip action executes on short-tap; lock screen updates after skip; skip intervals persist across sessions
+- [x] **Phase 8: Skip & Player Polish** - Skip action executes on short-tap; lock screen updates after skip; skip intervals persist across sessions — COMPLETE (2026-02-27)
 - [ ] **Phase 9: Navigation & UI Polish** - More screen routes to correct tabs; icons and nav affordance added; home screen loading skeleton; tab reorder UX improved
 
 ## Phase Details
@@ -179,9 +179,9 @@ Plans:
 
 Plans:
 
-- [ ] 08-01-PLAN.md — Replace AsyncStorage interval reads in FullScreenPlayer with useSettings() Zustand hook; persist interval selection on long-press (PLR-01, PLR-02)
-- [ ] 08-02-PLAN.md — Dispatch SEEK_COMPLETE from executeSeek; unconditional updateNowPlayingMetadata on SEEK_COMPLETE in syncStateToStore (SKIP-02)
-- [ ] 08-03-PLAN.md — Device verification checkpoint: short-tap skip, lock screen update, interval persistence (SKIP-01)
+- [x] 08-01-PLAN.md — Replace AsyncStorage interval reads in FullScreenPlayer with useSettings() Zustand hook; persist interval selection on long-press (PLR-01, PLR-02)
+- [x] 08-02-PLAN.md — Dispatch SEEK_COMPLETE from executeSeek; unconditional updateNowPlayingMetadata on SEEK_COMPLETE in syncStateToStore (SKIP-02)
+- [x] 08-03-PLAN.md — Device verification checkpoint: short-tap skip, lock screen update, interval persistence (SKIP-01)
 
 ### Phase 9: Navigation & UI Polish
 
@@ -223,5 +223,5 @@ Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in
 | ------------------------- | -------------- | ----------- | ---------- |
 | 6. iCloud Exclusion       | 2/2            | Complete    | 2026-02-23 |
 | 7. Download Tracking      | 3/3            | Complete    | 2026-02-23 |
-| 8. Skip & Player Polish   | 2/3            | In Progress |            |
+| 8. Skip & Player Polish   | 3/3            | Complete    | 2026-02-27 |
 | 9. Navigation & UI Polish | 0/TBD          | Not started | -          |
