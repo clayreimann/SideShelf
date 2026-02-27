@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Milestone v1.1 — Phase 7: Download Tracking (complete)
+**Current focus:** Milestone v1.1 — Phase 8: Skip Button & Player Polish (in progress)
 
 ## Current Position
 
-Phase: 7 of 9 complete (v1.1: Download Tracking — all 3 plans complete)
-Next: Phase 8 — Now Playing Metadata
-Status: Phase 7 complete; ready for Phase 8
-Last activity: 2026-02-23 — Phase 7 Plan 03 complete (orphanScanner.ts, storage tab useFocusEffect + Unknown files section)
+Phase: 8 of 9 in progress (v1.1: Skip Button & Player Polish — Plan 01 complete)
+Next: Phase 8 Plan 02
+Status: Phase 8 Plan 01 complete; ready for Phase 8 Plan 02
+Last activity: 2026-02-27 — Phase 8 Plan 01 complete (FullScreenPlayer useSettings() hook, interval persistence)
 
 Progress: [█████████░] ~80% (v1.0 complete; Phases 6-7 complete)
 
@@ -39,6 +39,7 @@ _v1.1 metrics will be tracked per phase_
 | Phase 07 P01 | 3 min | 3 tasks | 3 files |
 | Phase 07 P02 | 2 min | 2 tasks | 3 files |
 | Phase 07 P03 | 4 min | 2 tasks | 2 files |
+| Phase 08-skip-player-polish P01 | 2 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 7, Plan 02]: Partial badge placed top-left (amber) to avoid overlap with top-right offline icon; partial menu action replaces normal download action for partially-downloaded items
 - [Phase 7, Plan 03]: Include both audio file and library file download paths in orphan scanner known-paths set — covers all download types
 - [Phase 7, Plan 03]: URI normalization with decodeURIComponent fallback for robust orphan matching across percent-encoded filenames
+- [Phase 8, Plan 01]: useSettings() from Zustand replaces AsyncStorage direct reads in FullScreenPlayer — settingsSlice.initializeSettings runs at app startup so values are always ready before FullScreenPlayer mounts
+- [Phase 8, Plan 01]: handleJumpForward/handleJumpBackward both seek AND persist — long-press interval selection immediately becomes the new default
 
 ### v1.1 Research Findings (high-confidence)
 
@@ -82,6 +85,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-23
-Stopped at: Completed Phase 7 Plan 02 (07-02-PLAN.md: isItemPartiallyDownloaded selector, CoverImage partial badge, LibraryItemDetail action sheet)
+Last session: 2026-02-27
+Stopped at: Completed Phase 8 Plan 01 (08-01-PLAN.md: FullScreenPlayer useSettings() hook, interval persistence via updateJumpForwardInterval/updateJumpBackwardInterval)
 Resume file: None

@@ -30,8 +30,8 @@ Bug fixes and polish pass following the coordinator migration. 16 requirements a
 
 ### Player (PLR)
 
-- [ ] **PLR-01**: Skip forward interval selection persists across app sessions
-- [ ] **PLR-02**: Skip backward interval selection persists across app sessions
+- [x] **PLR-01**: Skip forward interval selection persists across app sessions
+- [x] **PLR-02**: Skip backward interval selection persists across app sessions
 
 ### Navigation (NAV)
 
@@ -91,8 +91,8 @@ Deferred — not in current milestone scope.
 | DL-01       | 7     | Complete |
 | DL-02       | 7     | Complete |
 | DL-03       | 7     | Complete |
-| PLR-01      | 8     | Pending  |
-| PLR-02      | 8     | Pending  |
+| PLR-01      | 8     | Complete |
+| PLR-02      | 8     | Complete |
 | NAV-01      | 9     | Pending  |
 | NAV-02      | 9     | Pending  |
 | UX-01       | 9     | Pending  |
