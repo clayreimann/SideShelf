@@ -155,9 +155,19 @@ export function resolveAppPath(path: string): string {
     return Paths.join(Paths.cache.uri, relativePart);
   }
 
-  // Legacy: already-absolute or unprefixed relative path — return unchanged.
+  // Legacy path from before the prefixed-path scheme.
   const normalizedPath = normalizeFileUri(path);
-  return normalizedPath;
+
+  // Absolute file paths or remote URLs (http/https) — return as-is.
+  // Absolute paths will be stale after an iOS update; callers handle repair.
+  if (Paths.isAbsolute(normalizedPath) || /^https?:\/\//.test(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  // Bare relative path from the old single-base (Caches) scheme.
+  // The old resolveAppPath always joined with Paths.cache for relative paths,
+  // so we preserve that behavior here for backward compatibility.
+  return Paths.join(Paths.cache.uri, normalizedPath);
 }
 
 /**
@@ -296,7 +306,8 @@ export function getDownloadPath(
   filename: string,
   location: StorageLocation = "caches"
 ): string {
-  return Paths.join(getDownloadsDirectory(libraryItemId, location).uri, filename);
+  const dir = getDownloadsDirectory(libraryItemId, location);
+  return new File(dir, filename).uri;
 }
 
 /**

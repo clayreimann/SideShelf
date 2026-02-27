@@ -31,14 +31,17 @@ const NativeModule: ICloudBackupExclusionModule | null =
 /**
  * Normalize a path for the native module.
  *
- * The native Obj-C module uses [NSURL fileURLWithPath:] which expects a POSIX
- * path (e.g. /var/mobile/.../file.m4b). The DB stores file:// URL strings
- * with percent-encoded characters. Strip the scheme and decode before
- * passing to native.
+ * The native setxattr call uses fileSystemRepresentation, which operates on
+ * raw filesystem bytes without percent-decoding. Files downloaded by the
+ * background downloader are saved using the percent-encoded URI path directly
+ * (the downloader strips "file://" and passes the remaining string as a POSIX
+ * path), so filenames like "Book%20Title.m4b" exist on disk with literal %20.
+ *
+ * We must NOT decode percent-encoding here — we only strip the "file://" scheme.
  */
 function normalizePath(filePath: string): string {
   if (filePath.startsWith("file://")) {
-    return decodeURIComponent(filePath.slice("file://".length));
+    return filePath.slice("file://".length);
   }
   return filePath;
 }

@@ -86,6 +86,7 @@ jest.mock("@/stores/appStore", () => ({
   useAppStore: {
     getState: jest.fn(() => ({
       removeDownloadedItem: jest.fn(),
+      completeDownload: jest.fn(),
     })),
   },
 }));
@@ -722,7 +723,16 @@ describe("File Lifecycle Manager", () => {
         .mockResolvedValueOnce(false) // stored absolute path
         .mockResolvedValueOnce(true); // current documents path
 
-      await fileLifecycleManager.runDownloadReconciliationScan();
+      // Suppress dynamic-import-in-Jest error (same pattern as the "clear" test above).
+      // The repair (updateAudioFileDownloadPath) happens before the dynamic import, so
+      // the primary assertions hold even if the import step throws.
+      try {
+        await fileLifecycleManager.runDownloadReconciliationScan();
+      } catch (e: any) {
+        if (!e?.message?.includes("dynamic import callback")) {
+          throw e;
+        }
+      }
 
       // Should repair, not clear
       expect(mocks.localData.updateAudioFileDownloadPath).toHaveBeenCalledWith(
@@ -758,7 +768,13 @@ describe("File Lifecycle Manager", () => {
         .mockResolvedValueOnce(false) // documents path
         .mockResolvedValueOnce(true); // caches path
 
-      await fileLifecycleManager.runDownloadReconciliationScan();
+      try {
+        await fileLifecycleManager.runDownloadReconciliationScan();
+      } catch (e: any) {
+        if (!e?.message?.includes("dynamic import callback")) {
+          throw e;
+        }
+      }
 
       expect(mocks.localData.updateAudioFileDownloadPath).toHaveBeenCalledWith(
         "audio-repair-2",
