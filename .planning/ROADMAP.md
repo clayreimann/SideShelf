@@ -175,7 +175,7 @@ Plans:
 3. The skip forward interval selected in the player persists after closing and reopening the app
 4. The skip backward interval selected in the player persists after closing and reopening the app independently of the forward interval
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 
@@ -223,5 +223,5 @@ Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in
 | ------------------------- | -------------- | ----------- | ---------- |
 | 6. iCloud Exclusion       | 2/2            | Complete    | 2026-02-23 |
 | 7. Download Tracking      | 3/3            | Complete    | 2026-02-23 |
-| 8. Skip & Player Polish   | 0/3            | Not started | -          |
+| 8. Skip & Player Polish   | 1/3            | In Progress |            |
 | 9. Navigation & UI Polish | 0/TBD          | Not started | -          |
