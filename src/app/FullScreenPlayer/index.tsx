@@ -57,12 +57,7 @@ export default function FullScreenPlayer() {
 
   const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
   const { createBookmark } = useUserProfile();
-  const {
-    jumpForwardInterval,
-    jumpBackwardInterval,
-    updateJumpForwardInterval,
-    updateJumpBackwardInterval,
-  } = useSettings();
+  const { jumpForwardInterval, jumpBackwardInterval } = useSettings();
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const [showChapterList, setShowChapterList] = useState(false);
@@ -172,24 +167,22 @@ export default function FullScreenPlayer() {
     async (seconds: number) => {
       try {
         await playerService.seekTo(Math.max(position - seconds, 0));
-        await updateJumpBackwardInterval(seconds);
       } catch (error) {
         console.error("[FullScreenPlayer] Failed to jump backward:", error);
       }
     },
-    [position, updateJumpBackwardInterval]
+    [position]
   );
 
   const handleJumpForward = useCallback(
     async (seconds: number) => {
       try {
         await playerService.seekTo(position + seconds);
-        await updateJumpForwardInterval(seconds);
       } catch (error) {
         console.error("[FullScreenPlayer] Failed to jump forward:", error);
       }
     },
-    [position, updateJumpForwardInterval]
+    [position]
   );
 
   const handleRateChange = useCallback(async (rate: number) => {
