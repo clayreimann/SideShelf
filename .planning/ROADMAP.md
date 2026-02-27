@@ -174,7 +174,14 @@ Plans:
 2. After a skip that stays within the same chapter, the iOS lock screen and Control Center show the new elapsed time within one second — not the pre-skip time
 3. The skip forward interval selected in the player persists after closing and reopening the app
 4. The skip backward interval selected in the player persists after closing and reopening the app independently of the forward interval
-   **Plans**: TBD
+
+**Plans:** 3 plans
+
+Plans:
+
+- [ ] 08-01-PLAN.md — Replace AsyncStorage interval reads in FullScreenPlayer with useSettings() Zustand hook; persist interval selection on long-press (PLR-01, PLR-02)
+- [ ] 08-02-PLAN.md — Dispatch SEEK_COMPLETE from executeSeek; unconditional updateNowPlayingMetadata on SEEK_COMPLETE in syncStateToStore (SKIP-02)
+- [ ] 08-03-PLAN.md — Device verification checkpoint: short-tap skip, lock screen update, interval persistence (SKIP-01)
 
 ### Phase 9: Navigation & UI Polish
 
@@ -216,5 +223,5 @@ Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in
 | ------------------------- | -------------- | ----------- | ---------- |
 | 6. iCloud Exclusion       | 2/2            | Complete    | 2026-02-23 |
 | 7. Download Tracking      | 3/3            | Complete    | 2026-02-23 |
-| 8. Skip & Player Polish   | 0/TBD          | Not started | -          |
+| 8. Skip & Player Polish   | 0/3            | Not started | -          |
 | 9. Navigation & UI Polish | 0/TBD          | Not started | -          |
