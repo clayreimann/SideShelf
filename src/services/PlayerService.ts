@@ -277,7 +277,12 @@ export class PlayerService {
         mediaId: metadata.id,
         title: metadata.title || "Unknown Title",
         author: metadata.authorName || metadata.author || "Unknown Author",
-        coverUri: metadata.imageUrl || getCoverUri(libraryItem.id),
+        // Only use imageUrl for remote URLs (e.g. podcast artwork from iTunes/RSS).
+        // Local file paths stored in imageUrl may be stale after iOS app updates change
+        // the container UUID. getCoverUri() always resolves via Paths.cache (current UUID).
+        coverUri: metadata.imageUrl?.match(/^https?:\/\//)
+          ? metadata.imageUrl
+          : getCoverUri(libraryItem.id),
         audioFiles,
         chapters,
         duration: audioFiles.reduce(
@@ -866,7 +871,9 @@ export class PlayerService {
           mediaId: metadata.id,
           title: metadata.title || "Unknown Title",
           author: metadata.authorName || metadata.author || "Unknown Author",
-          coverUri: metadata.imageUrl || getCoverUri(libraryItem.id),
+          coverUri: metadata.imageUrl?.match(/^https?:\/\//)
+            ? metadata.imageUrl
+            : getCoverUri(libraryItem.id),
           audioFiles,
           chapters,
           duration: audioFiles.reduce(

@@ -1,8 +1,9 @@
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { MenuView } from "@react-native-menu/menu";
+import { MenuComponentRef, MenuView } from "@react-native-menu/menu";
 import { SymbolView, SymbolViewProps } from "expo-symbols";
+import { useRef } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 
 // Common jump interval options (in seconds)
@@ -38,6 +39,9 @@ export default function SkipButton({
   onJump,
 }: SkipButtonProps) {
   const { colors } = useThemedStyles();
+  const menuRef = useRef<MenuComponentRef>(null);
+  // Prevents onPress from firing on long-press release after opening the menu
+  const suppressNextPress = useRef(false);
 
   // Use provided interval or defaults
   const seconds = interval ?? 30;
@@ -65,9 +69,71 @@ export default function SkipButton({
     title: formatInterval(intervalSeconds),
   }));
 
-  const buttonContent = (
+  const iconContent =
+    Platform.OS === "ios" ? (
+      <SymbolView
+        name={getSFSymbolName()}
+        size={iconSize}
+        tintColor={colors.textPrimary}
+        type="hierarchical"
+      />
+    ) : (
+      // Android: Show icon with text overlay
+      <View style={{ justifyContent: "center", alignItems: "center" }}>
+        <MaterialIcons
+          name={direction === "forward" ? "fast-forward" : "fast-rewind"}
+          size={iconSize}
+          color={colors.textPrimary}
+        />
+        <Text
+          style={{
+            position: "absolute",
+            fontSize: iconSize * 0.35,
+            fontWeight: "bold",
+            color: colors.textPrimary,
+            marginTop: iconSize * 0.1,
+          }}
+        >
+          {seconds}
+        </Text>
+      </View>
+    );
+
+  // If no onJump handler provided, just render the button without menu
+  if (!onJump) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => ({
+          width: hitBoxSize,
+          height: hitBoxSize,
+          justifyContent: "center",
+          alignItems: "center",
+          opacity: pressed ? 0.5 : 1,
+        })}
+      >
+        {iconContent}
+      </Pressable>
+    );
+  }
+
+  // With onJump: Pressable handles short tap and opens menu on long press.
+  // MenuView with shouldOpenOnLongPress prevents its default tap-to-open behavior;
+  // the menu is opened programmatically via ref.show() from onLongPress instead.
+  // This avoids UIContextMenuInteraction gesture conflicts with the inner Pressable.
+  return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        if (suppressNextPress.current) {
+          suppressNextPress.current = false;
+          return;
+        }
+        onPress();
+      }}
+      onLongPress={() => {
+        suppressNextPress.current = true;
+        menuRef.current?.show();
+      }}
       style={({ pressed }) => ({
         width: hitBoxSize,
         height: hitBoxSize,
@@ -76,55 +142,20 @@ export default function SkipButton({
         opacity: pressed ? 0.5 : 1,
       })}
     >
-      {Platform.OS === "ios" ? (
-        <SymbolView
-          name={getSFSymbolName()}
-          size={iconSize}
-          tintColor={colors.textPrimary}
-          type="hierarchical"
-        />
-      ) : (
-        // Android: Show icon with text overlay
-        <View style={{ justifyContent: "center", alignItems: "center" }}>
-          <MaterialIcons
-            name={direction === "forward" ? "fast-forward" : "fast-rewind"}
-            size={iconSize}
-            color={colors.textPrimary}
-          />
-          <Text
-            style={{
-              position: "absolute",
-              fontSize: iconSize * 0.35,
-              fontWeight: "bold",
-              color: colors.textPrimary,
-              marginTop: iconSize * 0.1,
-            }}
-          >
-            {seconds}
-          </Text>
-        </View>
-      )}
+      <MenuView
+        ref={menuRef}
+        title={translate(
+          direction === "forward" ? "player.jumpMenu.titleForward" : "player.jumpMenu.titleBackward"
+        )}
+        onPressAction={({ nativeEvent }) => {
+          const jumpSeconds = parseInt(nativeEvent.event);
+          onJump(jumpSeconds);
+        }}
+        actions={menuActions}
+        shouldOpenOnLongPress
+      >
+        <View style={{ alignItems: "center", justifyContent: "center" }}>{iconContent}</View>
+      </MenuView>
     </Pressable>
-  );
-
-  // If no onJump handler provided, just render the button without menu
-  if (!onJump) {
-    return buttonContent;
-  }
-
-  return (
-    <MenuView
-      title={translate(
-        direction === "forward" ? "player.jumpMenu.titleForward" : "player.jumpMenu.titleBackward"
-      )}
-      onPressAction={({ nativeEvent }) => {
-        const jumpSeconds = parseInt(nativeEvent.event);
-        onJump(jumpSeconds);
-      }}
-      actions={menuActions}
-      shouldOpenOnLongPress
-    >
-      {buttonContent}
-    </MenuView>
   );
 }
