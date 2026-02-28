@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 
 ## Current Position
 
-Phase: 9 of 9 (v1.1: Navigation & UI Polish — plan 03 done)
-Next: Phase 9 Plans 01, 02 (if not done) or phase complete
-Status: Phase 9 in progress; plan 03 complete
-Last activity: 2026-02-28 — Phase 9 Plan 03 complete (startup cover art repair scan)
+Phase: 9 of 9 (v1.1: Navigation & UI Polish — plans 01, 02, 03 done)
+Next: Phase 9 complete — all plans done
+Status: Phase 9 in progress; plans 01, 02, 03 complete
+Last activity: 2026-02-28 — Phase 9 Plan 02 complete (skeleton home screen, tab drag handle)
 
 Progress: [█████████░] ~80% (v1.0 complete; Phases 6-7 complete)
 
@@ -43,6 +43,7 @@ _v1.1 metrics will be tracked per phase_
 | Phase 08-skip-player-polish P02 | 2 min | 2 tasks | 2 files |
 | Phase 08-skip-player-polish P03 | device session | 2 tasks | 3 files |
 | Phase 09-navigation-ui-polish P03 | 2 | 2 tasks | 2 files |
+| Phase 09-navigation-ui-polish P02 | 4 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 9, Plan 03]: Dynamic imports inside repairMissingCoverArt() body to break circular dependency: mediaMetadata.ts imports covers.ts statically
 - [Phase 9, Plan 03]: Lock screen NOT updated after cover repair scan — executeLoadTrack calls getCoverUri() at track load time; cover correct on next playback; no coupling to player state needed
 - [Phase 9, Plan 03]: Cover repair scan placed alongside applyICloudExclusionToExistingDownloads in initializeApp() — both are fire-and-forget startup scans with identical non-blocking patterns
+- [Phase 9, Plan 02]: floatingPlayerPadding is already a style object {paddingBottom: number} — pass directly as contentContainerStyle, not nested inside another object
+- [Phase 9, Plan 02]: SkeletonSection uses Animated from react-native core (not reanimated) — matches CollapsibleSection.tsx pattern, 800ms opacity 0.3→1→0.3 loop with useNativeDriver: true
 
 ### v1.1 Research Findings (high-confidence)
 
@@ -99,5 +102,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed Phase 9 Plan 03 (09-03-PLAN.md: startup cover art repair scan; repairMissingCoverArt in covers.ts; wired into initializeApp() fire-and-forget)
+Stopped at: Completed Phase 9 Plan 02 (09-02-PLAN.md: skeleton home screen; tab drag handle; appSettings helpers)
 Resume file: None

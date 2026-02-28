@@ -198,7 +198,7 @@ Plans:
 6. The tab reorder screen provides a sufficiently clear and usable drag-to-reorder interaction
 7. (Carry-over from Phase 8) Cover art appears on the lock screen on first boot after a fresh app install — investigate why `getCoverUri()` resolves to a file that doesn't exist on first install and add a re-download or remote-fallback path
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 
@@ -232,4 +232,4 @@ Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in
 | 6. iCloud Exclusion       | 2/2            | Complete    | 2026-02-23 |
 | 7. Download Tracking      | 3/3            | Complete    | 2026-02-23 |
 | 8. Skip & Player Polish   | 3/3            | Complete    | 2026-02-27 |
-| 9. Navigation & UI Polish | 1/3            | In Progress |            |
+| 9. Navigation & UI Polish | 2/3            | In Progress |            |
