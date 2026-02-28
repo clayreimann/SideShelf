@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Milestone v1.1 — Phase 8: Skip Button & Player Polish (in progress)
+**Current focus:** Milestone v1.1 — Phase 9: Navigation & UI Polish (in progress)
 
 ## Current Position
 
-Phase: 8 of 9 complete (v1.1: Skip Button & Player Polish — all 3 plans done)
-Next: Phase 9 (Navigation & UI Polish)
-Status: Phase 8 complete; ready for Phase 9
-Last activity: 2026-02-27 — Phase 8 Plan 03 complete (device verification, SkipButton gesture hardening, cover art partial fix)
+Phase: 9 of 9 (v1.1: Navigation & UI Polish — plan 03 done)
+Next: Phase 9 Plans 01, 02 (if not done) or phase complete
+Status: Phase 9 in progress; plan 03 complete
+Last activity: 2026-02-28 — Phase 9 Plan 03 complete (startup cover art repair scan)
 
 Progress: [█████████░] ~80% (v1.0 complete; Phases 6-7 complete)
 
@@ -42,6 +42,7 @@ _v1.1 metrics will be tracked per phase_
 | Phase 08-skip-player-polish P01 | 2 | 1 tasks | 1 files |
 | Phase 08-skip-player-polish P02 | 2 min | 2 tasks | 2 files |
 | Phase 08-skip-player-polish P03 | device session | 2 tasks | 3 files |
+| Phase 09-navigation-ui-polish P03 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 8, Plan 03]: suppressNextPress ref on SkipButton prevents onPress firing on long-press release
 - [Phase 8, Plan 03]: Long-press interval selection changed to one-time apply (does not persist) — Settings controls the default; long press is a per-skip override
 - [Phase 8, Plan 03]: Cover art fix in PlayerService is partial — local imageUrl paths may be stale after iOS app updates; getCoverUri() always current; full fix deferred to Phase 9
+- [Phase 9, Plan 03]: Dynamic imports inside repairMissingCoverArt() body to break circular dependency: mediaMetadata.ts imports covers.ts statically
+- [Phase 9, Plan 03]: Lock screen NOT updated after cover repair scan — executeLoadTrack calls getCoverUri() at track load time; cover correct on next playback; no coupling to player state needed
+- [Phase 9, Plan 03]: Cover repair scan placed alongside applyICloudExclusionToExistingDownloads in initializeApp() — both are fire-and-forget startup scans with identical non-blocking patterns
 
 ### v1.1 Research Findings (high-confidence)
 
@@ -88,12 +92,12 @@ None.
 
 ### Blockers/Concerns
 
-- [Phase 9]: Cover art on first install of new version — getCoverUri() may not resolve before player initializes after iOS container UUID change; deferred from Phase 8
+- [Phase 9]: Cover art on first install of new version — RESOLVED in Plan 03 via repairMissingCoverArt() startup scan
 - [Phase 9]: Android `updateMetadataForTrack` artwork bug (#2287) — not tested (no Android device available); does not block Phase 8 completion
 - [Phase 9]: Expo Router tab navigation API needs hands-on verification on Expo 54 build before writing More screen fix
 
 ## Session Continuity
 
-Last session: 2026-02-27
-Stopped at: Completed Phase 8 Plan 03 (08-03-PLAN.md: device verification complete; SkipButton gesture hardened; cover art partial fix; Phase 8 done)
+Last session: 2026-02-28
+Stopped at: Completed Phase 9 Plan 03 (09-03-PLAN.md: startup cover art repair scan; repairMissingCoverArt in covers.ts; wired into initializeApp() fire-and-forget)
 Resume file: None
