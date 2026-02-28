@@ -114,3 +114,56 @@ export async function clearCoverCache(libraryItemId: string): Promise<void> {
     console.error(`[covers] Failed to clear cover cache for ${libraryItemId}:`, error);
   }
 }
+
+/**
+ * Scan all library items in the database and re-download any missing cover art files.
+ *
+ * Runs fire-and-forget on app startup to fix cover art gaps caused by fresh install
+ * or iOS container UUID rotation. Items with a valid cached file are skipped.
+ * Downloads are batched (5 concurrent) to avoid overwhelming the server.
+ *
+ * Note: Does NOT update the lock screen after download — executeLoadTrack() calls
+ * getCoverUri() at track load time, which always returns the current path. Cover art
+ * will be correct the next time the user starts playback.
+ */
+export async function repairMissingCoverArt(): Promise<void> {
+  try {
+    const { db } = await import("@/db/client");
+    const { mediaMetadata } = await import("@/db/schema/mediaMetadata");
+    const { cacheCoverAndUpdateMetadata } = await import("@/db/helpers/mediaMetadata");
+
+    const allItems = await db
+      .select({ libraryItemId: mediaMetadata.libraryItemId })
+      .from(mediaMetadata);
+
+    const itemsNeedingCovers = allItems.filter(
+      (row) => row.libraryItemId !== null && !isCoverCached(row.libraryItemId)
+    );
+
+    console.log(
+      `[covers] Repair scan: ${itemsNeedingCovers.length} of ${allItems.length} items missing covers`
+    );
+
+    if (itemsNeedingCovers.length === 0) return;
+
+    const batchSize = 5;
+    let repairedCount = 0;
+
+    for (let i = 0; i < itemsNeedingCovers.length; i += batchSize) {
+      const batch = itemsNeedingCovers.slice(i, i + batchSize);
+      const results = await Promise.all(
+        batch.map((item) =>
+          item.libraryItemId
+            ? cacheCoverAndUpdateMetadata(item.libraryItemId).catch(() => false)
+            : Promise.resolve(false)
+        )
+      );
+      repairedCount += results.filter(Boolean).length;
+    }
+
+    console.log(`[covers] Repair scan complete: ${repairedCount} covers downloaded`);
+  } catch (error) {
+    console.error("[covers] Repair scan failed:", error);
+    throw error; // re-throw so caller's .catch() receives it for logging
+  }
+}
