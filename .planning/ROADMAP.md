@@ -198,11 +198,11 @@ Plans:
 6. The tab reorder screen provides a sufficiently clear and usable drag-to-reorder interaction
 7. (Carry-over from Phase 8) Cover art appears on the lock screen on first boot after a fresh app install — investigate why `getCoverUri()` resolves to a file that doesn't exist on first install and add a re-download or remote-fallback path
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans executed
 
 Plans:
 
-- [ ] 09-01-PLAN.md — More screen nav fix (series/authors push) + icons + chevron affordance (NAV-01, NAV-02, UX-02, UX-03)
+- [x] 09-01-PLAN.md — More screen nav fix (series/authors push) + icons + chevron affordance (NAV-01, NAV-02, UX-02, UX-03)
 - [ ] 09-02-PLAN.md — Home skeleton during cold start + tab reorder drag handle (UX-01, UX-04)
 - [ ] 09-03-PLAN.md — Cover art startup repair scan (Phase 8 carry-over)
 
@@ -227,9 +227,9 @@ Phases execute in numeric order: 2 → 3 → 4 → 5
 **Execution Order:**
 Phase 6 → Phase 7 (depends on 6); Phase 8 and 9 are independent and can run in parallel with 6/7
 
-| Phase                     | Plans Complete | Status      | Completed  |
-| ------------------------- | -------------- | ----------- | ---------- |
-| 6. iCloud Exclusion       | 2/2            | Complete    | 2026-02-23 |
-| 7. Download Tracking      | 3/3            | Complete    | 2026-02-23 |
-| 8. Skip & Player Polish   | 3/3            | Complete    | 2026-02-27 |
-| 9. Navigation & UI Polish | 2/3            | In Progress |            |
+| Phase                     | Plans Complete | Status   | Completed  |
+| ------------------------- | -------------- | -------- | ---------- |
+| 6. iCloud Exclusion       | 2/2            | Complete | 2026-02-23 |
+| 7. Download Tracking      | 3/3            | Complete | 2026-02-23 |
+| 8. Skip & Player Polish   | 3/3            | Complete | 2026-02-27 |
+| 9. Navigation & UI Polish | 3/3            | Complete | 2026-02-28 |
