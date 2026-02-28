@@ -40,10 +40,10 @@ Bug fixes and polish pass following the coordinator migration. 16 requirements a
 
 ### UI Polish (UX)
 
-- [ ] **UX-01**: Home screen shows shimmer skeleton cards during cold start (not just spinner)
+- [x] **UX-01**: Home screen shows shimmer skeleton cards during cold start (not just spinner)
 - [ ] **UX-02**: More screen items have icons
 - [ ] **UX-03**: More screen items have visual nav affordance (chevrons, active tap states)
-- [ ] **UX-04**: Tab reorder UX is improved
+- [x] **UX-04**: Tab reorder UX is improved
 
 ## v2 Requirements
 
@@ -95,10 +95,10 @@ Deferred — not in current milestone scope.
 | PLR-02      | 8     | Complete |
 | NAV-01      | 9     | Pending  |
 | NAV-02      | 9     | Pending  |
-| UX-01       | 9     | Pending  |
+| UX-01       | 9     | Complete |
 | UX-02       | 9     | Pending  |
 | UX-03       | 9     | Pending  |
-| UX-04       | 9     | Pending  |
+| UX-04       | 9     | Complete |
 
 **Coverage:**
 
