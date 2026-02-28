@@ -223,6 +223,14 @@ export default function TabBarSettingsScreen() {
           borderColor: borderColor,
         }}
       >
+        {/* Drag handle — visual affordance for reorderable row */}
+        <Ionicons
+          name="reorder-three"
+          size={20}
+          color={textSecondary}
+          style={{ marginRight: 10 }}
+        />
+
         {/* Tab Label */}
         <View style={{ flex: 1 }}>
           <Text

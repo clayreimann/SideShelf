@@ -1,19 +1,21 @@
 import CoverItem from "@/components/home/CoverItem";
 import Item from "@/components/home/Item";
+import { SkeletonSection } from "@/components/home/SkeletonSection";
 import type { HomeScreenItem } from "@/db/helpers/homeScreen";
 import { getUserByUsername } from "@/db/helpers/users";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
+import { getLastHomeSectionCount, setLastHomeSectionCount } from "@/lib/appSettings";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { progressService } from "@/services/ProgressService";
 import { useHome, useNetwork, useSettings } from "@/stores";
 import { useFocusEffect } from "@react-navigation/native";
 import { Stack } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
   Pressable,
   RefreshControl,
@@ -37,12 +39,8 @@ export default function HomeScreen() {
   const { homeLayout, updateHomeLayout } = useSettings();
   const { serverReachable } = useNetwork();
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Toggle between list and cover layout
-  const toggleLayout = useCallback(() => {
-    const newLayout = homeLayout === "list" ? "cover" : "list";
-    updateHomeLayout(newLayout);
-  }, [homeLayout, updateHomeLayout]);
+  const [skeletonSectionCount, setSkeletonSectionCount] = useState(3);
+  const contentOpacity = useRef(new Animated.Value(0)).current;
 
   // Build sections array from home store data
   // For list layout: limit to 3 items per section
@@ -85,6 +83,39 @@ export default function HomeScreen() {
 
     return newSections;
   }, [continueListening, downloaded, listenAgain, homeLayout]);
+
+  // Load cached section count on mount so skeleton has the right number of rows
+  useEffect(() => {
+    getLastHomeSectionCount()
+      .then(setSkeletonSectionCount)
+      .catch(() => {});
+  }, []);
+
+  // Persist section count after real data arrives
+  useEffect(() => {
+    if (sections.length > 0) {
+      setLastHomeSectionCount(sections.length).catch(() => {});
+    }
+  }, [sections.length]);
+
+  // Fade real content in when loading completes and sections are present
+  useEffect(() => {
+    if (!isLoadingHome && sections.length > 0) {
+      // Reset opacity so fade-in plays on every load (not just first)
+      contentOpacity.setValue(0);
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isLoadingHome, sections.length]);
+
+  // Toggle between list and cover layout
+  const toggleLayout = useCallback(() => {
+    const newLayout = homeLayout === "list" ? "cover" : "list";
+    updateHomeLayout(newLayout);
+  }, [homeLayout, updateHomeLayout]);
 
   // Refresh home data when screen comes into focus
   useFocusEffect(
@@ -212,12 +243,15 @@ export default function HomeScreen() {
 
   if (isLoadingHome && sections.length === 0) {
     return (
-      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <ActivityIndicator size="large" color={colors.link} />
-        <Text style={[styles.text, { marginTop: 12, opacity: 0.7 }]}>
-          {translate("home.loading")}
-        </Text>
-      </View>
+      <ScrollView
+        style={styles.container}
+        scrollEnabled={false}
+        contentContainerStyle={floatingPlayerPadding}
+      >
+        {Array.from({ length: skeletonSectionCount }).map((_, i) => (
+          <SkeletonSection key={i} isDark={isDark} />
+        ))}
+      </ScrollView>
     );
   }
 
@@ -251,23 +285,25 @@ export default function HomeScreen() {
   if (homeLayout === "cover") {
     return (
       <>
-        <ScrollView
-          contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.link}
-            />
-          }
-        >
-          {sections.map((section) => (
-            <View key={section.title}>
-              {renderSectionHeader({ section })}
-              {renderCoverSection({ section })}
-            </View>
-          ))}
-        </ScrollView>
+        <Animated.View style={[styles.container, { opacity: contentOpacity }]}>
+          <ScrollView
+            contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.link}
+              />
+            }
+          >
+            {sections.map((section) => (
+              <View key={section.title}>
+                {renderSectionHeader({ section })}
+                {renderCoverSection({ section })}
+              </View>
+            ))}
+          </ScrollView>
+        </Animated.View>
         <Stack.Screen options={{ headerRight }} />
       </>
     );
@@ -276,18 +312,24 @@ export default function HomeScreen() {
   // Render default list layout
   return (
     <>
-      <SectionList
-        sections={sections}
-        renderItem={Item}
-        renderSectionHeader={renderSectionHeader}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.link} />
-        }
-        stickySectionHeadersEnabled={false}
-        showsVerticalScrollIndicator={false}
-      />
+      <Animated.View style={[styles.container, { opacity: contentOpacity }]}>
+        <SectionList
+          sections={sections}
+          renderItem={Item}
+          renderSectionHeader={renderSectionHeader}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.link}
+            />
+          }
+          stickySectionHeadersEnabled={false}
+          showsVerticalScrollIndicator={false}
+        />
+      </Animated.View>
       <Stack.Screen options={{ headerRight }} />
     </>
   );
