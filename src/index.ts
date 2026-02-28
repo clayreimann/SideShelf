@@ -20,6 +20,7 @@ import {
   hasAppBeenUpdated,
   saveCurrentVersion,
 } from "@/lib/appVersion";
+import { repairMissingCoverArt } from "@/lib/covers";
 import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 import { performPeriodicCleanup } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
@@ -72,6 +73,12 @@ export async function initializeApp(): Promise<void> {
     // Apply iCloud exclusion to all existing downloads — fire-and-forget, non-blocking
     applyICloudExclusionToExistingDownloads().catch((error) => {
       log.warn(`iCloud exclusion startup scan rejected: ${String(error)}`);
+    });
+
+    // Repair missing cover art for all library items — fire-and-forget, non-blocking
+    // Fixes first-boot lock screen cover gap after fresh install or iOS container UUID rotation
+    repairMissingCoverArt().catch((error) => {
+      log.warn(`Cover art repair scan failed: ${String(error)}`);
     });
 
     // Check if app has been updated
