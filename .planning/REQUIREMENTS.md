@@ -35,14 +35,14 @@ Bug fixes and polish pass following the coordinator migration. 16 requirements a
 
 ### Navigation (NAV)
 
-- [ ] **NAV-01**: More screen navigates to Series tab (switches tab, not pushes onto More stack)
-- [ ] **NAV-02**: More screen navigates to Authors tab (switches tab, not pushes onto More stack)
+- [x] **NAV-01**: More screen navigates to Series tab (switches tab, not pushes onto More stack)
+- [x] **NAV-02**: More screen navigates to Authors tab (switches tab, not pushes onto More stack)
 
 ### UI Polish (UX)
 
 - [x] **UX-01**: Home screen shows shimmer skeleton cards during cold start (not just spinner)
-- [ ] **UX-02**: More screen items have icons
-- [ ] **UX-03**: More screen items have visual nav affordance (chevrons, active tap states)
+- [x] **UX-02**: More screen items have icons
+- [x] **UX-03**: More screen items have visual nav affordance (chevrons, active tap states)
 - [x] **UX-04**: Tab reorder UX is improved
 
 ## v2 Requirements
@@ -93,11 +93,11 @@ Deferred — not in current milestone scope.
 | DL-03       | 7     | Complete |
 | PLR-01      | 8     | Complete |
 | PLR-02      | 8     | Complete |
-| NAV-01      | 9     | Pending  |
-| NAV-02      | 9     | Pending  |
+| NAV-01      | 9     | Complete |
+| NAV-02      | 9     | Complete |
 | UX-01       | 9     | Complete |
-| UX-02       | 9     | Pending  |
-| UX-03       | 9     | Pending  |
+| UX-02       | 9     | Complete |
+| UX-03       | 9     | Complete |
 | UX-04       | 9     | Complete |
 
 **Coverage:**

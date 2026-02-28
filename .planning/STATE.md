@@ -44,6 +44,7 @@ _v1.1 metrics will be tracked per phase_
 | Phase 08-skip-player-polish P03 | device session | 2 tasks | 3 files |
 | Phase 09-navigation-ui-polish P03 | 2 | 2 tasks | 2 files |
 | Phase 09-navigation-ui-polish P02 | 4 | 2 tasks | 4 files |
+| Phase 09-navigation-ui-polish P01 | 5 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 9, Plan 03]: Dynamic imports inside repairMissingCoverArt() body to break circular dependency: mediaMetadata.ts imports covers.ts statically
 - [Phase 9, Plan 03]: Lock screen NOT updated after cover repair scan — executeLoadTrack calls getCoverUri() at track load time; cover correct on next playback; no coupling to player state needed
 - [Phase 9, Plan 03]: Cover repair scan placed alongside applyICloudExclusionToExistingDownloads in initializeApp() — both are fire-and-forget startup scans with identical non-blocking patterns
+- [Phase 9, Plan 01]: Re-export screen components for more/series.tsx and more/authors.tsx — Expo Router treats each file's default export as the screen; absolute push paths (/series/ID, /authors/ID) resolve correctly cross-stack
+- [Phase 9, Plan 01]: Conditional push paths (tab.name === "series" ? push("/more/series") : push("/more/authors")) instead of template literal — typed routes union requires literal strings; .expo/types/router.d.ts regenerates on next dev server start
+- [Phase 9, Plan 01]: textSecondary color defined inline in component (#8E8E93 dark / #6E6E73 light) — matches iOS Settings secondary icon tint; theme extension deferred
 - [Phase 9, Plan 02]: floatingPlayerPadding is already a style object {paddingBottom: number} — pass directly as contentContainerStyle, not nested inside another object
 - [Phase 9, Plan 02]: SkeletonSection uses Animated from react-native core (not reanimated) — matches CollapsibleSection.tsx pattern, 800ms opacity 0.3→1→0.3 loop with useNativeDriver: true
 
@@ -102,5 +106,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed Phase 9 Plan 02 (09-02-PLAN.md: skeleton home screen; tab drag handle; appSettings helpers)
+Stopped at: Completed Phase 9 Plan 01 (09-01-PLAN.md: More screen nav fix; series/authors routes; icon+chevron UI)
 Resume file: None
