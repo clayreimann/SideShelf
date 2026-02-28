@@ -16,6 +16,7 @@ const SETTINGS_KEYS = {
   tabOrder: "@app/tabOrder",
   hiddenTabs: "@app/hiddenTabs",
   customUpdateUrl: "@app/customUpdateUrl",
+  lastHomeSectionCount: "@app/lastHomeSectionCount",
 } as const;
 
 // Default values
@@ -296,5 +297,34 @@ export async function setHiddenTabs(hiddenTabs: string[]): Promise<void> {
   } catch (error) {
     console.error("[AppSettings] Failed to save hidden tabs:", error);
     throw error;
+  }
+}
+
+/**
+ * Get the number of sections shown on the home screen in the last session.
+ * Used to size the skeleton on cold start.
+ * Default: 3 (covers most users who have Continue Listening + Downloaded + Listen Again)
+ */
+export async function getLastHomeSectionCount(): Promise<number> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.lastHomeSectionCount);
+    if (value === null) return 3;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? 3 : parsed;
+  } catch (error) {
+    console.error("[AppSettings] Failed to get last home section count:", error);
+    return 3;
+  }
+}
+
+/**
+ * Persist the number of sections currently shown on the home screen.
+ * Called after home data loads so the next cold start knows how many skeletons to show.
+ */
+export async function setLastHomeSectionCount(count: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.lastHomeSectionCount, count.toString());
+  } catch (error) {
+    console.error("[AppSettings] Failed to save last home section count:", error);
   }
 }
