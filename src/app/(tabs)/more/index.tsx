@@ -2,29 +2,44 @@ import { translate, type TranslationKey } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAppStore } from "@/stores/appStore";
+import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
 import * as WebBrowser from "expo-web-browser";
-import { useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, Pressable, Text, View } from "react-native";
+import { type ComponentProps, useEffect, useMemo, useState } from "react";
+import { Alert, FlatList, Platform, Pressable, Text, View } from "react-native";
 import DeviceInfo from "react-native-device-info";
+import type { SFSymbol } from "sf-symbols-typescript";
+
+type IoniconsName = ComponentProps<typeof Ionicons>["name"];
 
 type ActionItem = {
   label: string;
   onPress?: () => void;
   badge?: number;
   styles?: { color?: string };
+  icon?: { sf: SFSymbol; ionicon: IoniconsName };
+  isNavItem?: boolean;
 };
 
 // Tab configuration with labels (matching tab-bar-settings.tsx)
 const ALL_TABS = [
   { name: "home", titleKey: "tabs.home" as TranslationKey },
   { name: "library", titleKey: "tabs.library" as TranslationKey },
-  { name: "series", titleKey: "tabs.series" as TranslationKey },
-  { name: "authors", titleKey: "tabs.authors" as TranslationKey },
+  {
+    name: "series",
+    titleKey: "tabs.series" as TranslationKey,
+    icon: { sf: "square.stack" as SFSymbol, ionicon: "layers-outline" as IoniconsName },
+  },
+  {
+    name: "authors",
+    titleKey: "tabs.authors" as TranslationKey,
+    icon: { sf: "person.circle" as SFSymbol, ionicon: "people-circle-outline" as IoniconsName },
+  },
 ];
 
 export default function MoreScreen() {
-  const { styles } = useThemedStyles();
+  const { styles, isDark } = useThemedStyles();
   const router = useRouter();
   const { logout } = useAuth();
   const errorCount = useAppStore((state) => state.logger.errorCount);
@@ -35,6 +50,9 @@ export default function MoreScreen() {
   const tabOrder = useAppStore((state) => state.settings.tabOrder);
   const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
   const [appVersion, setAppVersion] = useState<string>("");
+
+  // Color for icons and chevrons — matches iOS Settings secondary icon tint
+  const textSecondary = isDark ? "#8E8E93" : "#6E6E73";
 
   // Show badge if there are errors and they haven't been acknowledged (or new errors appeared since acknowledgment)
   // Badge only shows when diagnostics is enabled
@@ -139,15 +157,34 @@ export default function MoreScreen() {
     hiddenTabsData.forEach((tab) => {
       items.push({
         label: translate(tab.titleKey),
-        onPress: () => router.push(`/${tab.name}`),
+        onPress: () =>
+          tab.name === "series" ? router.push("/more/series") : router.push("/more/authors"),
+        icon: tab.icon,
+        isNavItem: true,
       });
     });
 
     // Add standard More menu items
     items.push(
-      { label: translate("more.aboutMe"), onPress: () => router.push("/more/me") },
-      { label: translate("more.settings"), onPress: () => router.push("/more/settings") },
-      { label: translate("more.feedback"), onPress: openFeedback }
+      {
+        label: translate("more.aboutMe"),
+        onPress: () => router.push("/more/me"),
+        icon: {
+          sf: "person.crop.circle" as SFSymbol,
+          ionicon: "person-circle-outline" as IoniconsName,
+        },
+      },
+      {
+        label: translate("more.settings"),
+        onPress: () => router.push("/more/settings"),
+        icon: { sf: "gearshape" as SFSymbol, ionicon: "settings-outline" as IoniconsName },
+        isNavItem: true,
+      },
+      {
+        label: translate("more.feedback"),
+        onPress: openFeedback,
+        icon: { sf: "envelope" as SFSymbol, ionicon: "mail-outline" as IoniconsName },
+      }
     );
 
     // Conditionally add diagnostics screens
@@ -156,19 +193,43 @@ export default function MoreScreen() {
         {
           label: translate("more.libraryStats"),
           onPress: () => router.push("/more/library-stats"),
+          icon: { sf: "chart.bar" as SFSymbol, ionicon: "bar-chart-outline" as IoniconsName },
+          isNavItem: true,
         },
-        { label: translate("more.storage"), onPress: () => router.push("/more/storage") },
-        { label: translate("more.trackPlayer"), onPress: () => router.push("/more/track-player") },
+        {
+          label: translate("more.storage"),
+          onPress: () => router.push("/more/storage"),
+          icon: { sf: "externaldrive" as SFSymbol, ionicon: "server-outline" as IoniconsName },
+          isNavItem: true,
+        },
+        {
+          label: translate("more.trackPlayer"),
+          onPress: () => router.push("/more/track-player"),
+          icon: { sf: "waveform" as SFSymbol, ionicon: "radio-outline" as IoniconsName },
+          isNavItem: true,
+        },
         {
           label: translate("more.logs"),
           onPress: () => router.push("/more/logs"),
           badge: showErrorBadge ? errorCount : undefined,
+          icon: { sf: "doc.text" as SFSymbol, ionicon: "document-text-outline" as IoniconsName },
+          isNavItem: true,
         },
         {
           label: translate("more.loggerSettings"),
           onPress: () => router.push("/more/logger-settings"),
+          icon: {
+            sf: "slider.horizontal.3" as SFSymbol,
+            ionicon: "options-outline" as IoniconsName,
+          },
+          isNavItem: true,
         },
-        { label: translate("more.actions"), onPress: () => router.push("/more/actions") }
+        {
+          label: translate("more.actions"),
+          onPress: () => router.push("/more/actions"),
+          icon: { sf: "bolt" as SFSymbol, ionicon: "flash-outline" as IoniconsName },
+          isNavItem: true,
+        }
       );
     }
 
@@ -176,6 +237,10 @@ export default function MoreScreen() {
     items.push({
       label: translate("more.logOut"),
       styles: { color: "red" },
+      icon: {
+        sf: "rectangle.portrait.and.arrow.right" as SFSymbol,
+        ionicon: "log-out-outline" as IoniconsName,
+      },
       onPress: () => {
         Alert.alert(
           translate("more.logoutConfirm.title"),
@@ -207,13 +272,18 @@ export default function MoreScreen() {
     openFeedback,
     hiddenTabsData,
   ]);
+
   return (
     <>
       <FlatList
         style={[styles.flatListContainer]}
         data={data}
         renderItem={({ item }) => (
-          <Pressable style={styles.listItem} onPress={item.onPress}>
+          <Pressable
+            style={({ pressed }) => [styles.listItem, pressed && { opacity: 0.6 }]}
+            onPress={item.onPress}
+            android_ripple={{ color: textSecondary }}
+          >
             <View
               style={{
                 flexDirection: "row",
@@ -222,7 +292,23 @@ export default function MoreScreen() {
                 flex: 1,
               }}
             >
-              <Text style={[styles.text, item.styles]}>{item.label}</Text>
+              {item.icon && (
+                <View style={{ marginRight: 12 }}>
+                  {Platform.OS === "ios" ? (
+                    <SymbolView
+                      name={item.icon.sf}
+                      size={20}
+                      tintColor={textSecondary}
+                      fallback={
+                        <Ionicons name={item.icon.ionicon} size={20} color={textSecondary} />
+                      }
+                    />
+                  ) : (
+                    <Ionicons name={item.icon.ionicon} size={20} color={textSecondary} />
+                  )}
+                </View>
+              )}
+              <Text style={[styles.text, { flex: 1 }, item.styles]}>{item.label}</Text>
               {item.badge !== undefined && (
                 <View
                   style={{
@@ -240,6 +326,14 @@ export default function MoreScreen() {
                     {item.badge > 99 ? "99+" : item.badge}
                   </Text>
                 </View>
+              )}
+              {item.isNavItem && (
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={textSecondary}
+                  style={{ marginLeft: 4 }}
+                />
               )}
             </View>
           </Pressable>
