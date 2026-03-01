@@ -1,3 +1,4 @@
+import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate, type TranslationKey } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
@@ -50,6 +51,7 @@ export default function MoreScreen() {
   const tabOrder = useAppStore((state) => state.settings.tabOrder);
   const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
   const [appVersion, setAppVersion] = useState<string>("");
+  const floatingPlayerPadding = useFloatingPlayerPadding();
 
   // Color for icons and chevrons — matches iOS Settings secondary icon tint
   const textSecondary = isDark ? "#8E8E93" : "#6E6E73";
@@ -173,6 +175,7 @@ export default function MoreScreen() {
           sf: "person.crop.circle" as SFSymbol,
           ionicon: "person-circle-outline" as IoniconsName,
         },
+        isNavItem: true,
       },
       {
         label: translate("more.settings"),
@@ -277,6 +280,7 @@ export default function MoreScreen() {
     <>
       <FlatList
         style={[styles.flatListContainer]}
+        contentContainerStyle={floatingPlayerPadding}
         data={data}
         renderItem={({ item }) => (
           <Pressable
