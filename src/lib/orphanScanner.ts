@@ -103,7 +103,8 @@ export async function scanForOrphanFiles(): Promise<OrphanFile[]> {
           Array.from(knownPaths).some((known) => fullyDecode(known) === fileDecoded);
 
         if (!isKnown) {
-          const filename = file.uri.split("/").filter(Boolean).pop() ?? file.uri;
+          const rawFilename = file.uri.split("/").filter(Boolean).pop() ?? file.uri;
+          const filename = fullyDecode(rawFilename);
           orphans.push({
             uri: file.uri,
             filename,

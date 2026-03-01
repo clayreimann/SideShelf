@@ -1,5 +1,4 @@
 import CoverItem from "@/components/home/CoverItem";
-import Item from "@/components/home/Item";
 import { SkeletonSection } from "@/components/home/SkeletonSection";
 import type { HomeScreenItem } from "@/db/helpers/homeScreen";
 import { getUserByUsername } from "@/db/helpers/users";
@@ -9,21 +8,10 @@ import { getLastHomeSectionCount, setLastHomeSectionCount } from "@/lib/appSetti
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { progressService } from "@/services/ProgressService";
-import { useHome, useNetwork, useSettings } from "@/stores";
+import { useHome, useNetwork } from "@/stores";
 import { useFocusEffect } from "@react-navigation/native";
-import { Stack } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  Animated,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  SectionList,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Animated, FlatList, RefreshControl, ScrollView, Text, View } from "react-native";
 
 interface HomeSection {
   title: string;
@@ -31,32 +19,32 @@ interface HomeSection {
   showProgress?: boolean;
 }
 
+const MAX_COVER_ITEMS = 20;
+
 export default function HomeScreen() {
   const { styles, colors, isDark } = useThemedStyles();
   const { username, isAuthenticated } = useAuth();
   const floatingPlayerPadding = useFloatingPlayerPadding();
-  const { continueListening, downloaded, listenAgain, isLoadingHome, refreshHome } = useHome();
-  const { homeLayout, updateHomeLayout } = useSettings();
+  const { continueListening, downloaded, listenAgain, isLoadingHome, initialized, refreshHome } =
+    useHome();
   const { serverReachable } = useNetwork();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [skeletonSectionCount, setSkeletonSectionCount] = useState(3);
+  // Debounced "empty confirmed" gate — prevents the empty state from flashing
+  // during brief windows where sections=[] but a load is about to start or
+  // a concurrent load will shortly populate data. Only flips true after
+  // sections=[], isLoadingHome=false, and initialized=true have all been
+  // stable for 500ms with no new load starting to cancel the timer.
+  const [emptyConfirmed, setEmptyConfirmed] = useState(false);
   const contentOpacity = useRef(new Animated.Value(0)).current;
 
-  // Build sections array from home store data
-  // For list layout: limit to 3 items per section
-  // For cover layout: show all items with horizontal scrolling (up to 20 items per section for performance)
   const sections = useMemo<HomeSection[]>(() => {
     const newSections: HomeSection[] = [];
-    const isCoverLayout = homeLayout === "cover";
-    const MAX_COVER_ITEMS = 20; // Reasonable limit for performance
-    const MAX_LIST_ITEMS = 3;
 
     if (continueListening.length > 0) {
       newSections.push({
         title: translate("home.sections.continueListening"),
-        data: isCoverLayout
-          ? continueListening.slice(0, MAX_COVER_ITEMS)
-          : continueListening.slice(0, MAX_LIST_ITEMS),
+        data: continueListening.slice(0, MAX_COVER_ITEMS),
         showProgress: true,
       });
     }
@@ -64,9 +52,7 @@ export default function HomeScreen() {
     if (downloaded.length > 0) {
       newSections.push({
         title: translate("home.sections.downloaded"),
-        data: isCoverLayout
-          ? downloaded.slice(0, MAX_COVER_ITEMS)
-          : downloaded.slice(0, MAX_LIST_ITEMS),
+        data: downloaded.slice(0, MAX_COVER_ITEMS),
         showProgress: false,
       });
     }
@@ -74,15 +60,13 @@ export default function HomeScreen() {
     if (listenAgain.length > 0) {
       newSections.push({
         title: translate("home.sections.listenAgain"),
-        data: isCoverLayout
-          ? listenAgain.slice(0, MAX_COVER_ITEMS)
-          : listenAgain.slice(0, MAX_LIST_ITEMS),
+        data: listenAgain.slice(0, MAX_COVER_ITEMS),
         showProgress: false,
       });
     }
 
     return newSections;
-  }, [continueListening, downloaded, listenAgain, homeLayout]);
+  }, [continueListening, downloaded, listenAgain]);
 
   // Load cached section count on mount so skeleton has the right number of rows
   useEffect(() => {
@@ -101,7 +85,6 @@ export default function HomeScreen() {
   // Fade real content in when loading completes and sections are present
   useEffect(() => {
     if (!isLoadingHome && sections.length > 0) {
-      // Reset opacity so fade-in plays on every load (not just first)
       contentOpacity.setValue(0);
       Animated.timing(contentOpacity, {
         toValue: 1,
@@ -111,15 +94,23 @@ export default function HomeScreen() {
     }
   }, [isLoadingHome, sections.length]);
 
-  // Toggle between list and cover layout
-  const toggleLayout = useCallback(() => {
-    const newLayout = homeLayout === "list" ? "cover" : "list";
-    updateHomeLayout(newLayout);
-  }, [homeLayout, updateHomeLayout]);
+  // Transition to empty state only after sections=[], !isLoadingHome, initialized
+  // have all been stable for 500ms. Any new load (isLoadingHome→true) or data
+  // arrival (sections.length>0) cancels the timer and resets to skeleton.
+  useEffect(() => {
+    if (sections.length > 0 || isLoadingHome || !initialized) {
+      setEmptyConfirmed(false);
+      return;
+    }
+    const t = setTimeout(() => setEmptyConfirmed(true), 500);
+    return () => clearTimeout(t);
+  }, [sections.length, isLoadingHome, initialized]);
 
   // Refresh home data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
+      setEmptyConfirmed(false);
+
       const refreshData = async () => {
         if (!username || !isAuthenticated || !serverReachable) return;
 
@@ -130,10 +121,7 @@ export default function HomeScreen() {
             return;
           }
 
-          // Fetch server progress before refreshing home data
           await progressService.fetchServerProgress();
-
-          // Refresh home data (uses cache if still valid)
           await refreshHome(user.id);
         } catch (error) {
           console.error("[HomeScreen] Error refreshing home data:", error);
@@ -158,10 +146,7 @@ export default function HomeScreen() {
         return;
       }
 
-      // Fetch server progress before refreshing
       await progressService.fetchServerProgress();
-
-      // Force refresh home data
       await refreshHome(user.id, true);
     } catch (error) {
       console.error("[HomeScreen] Error refreshing:", error);
@@ -176,11 +161,7 @@ export default function HomeScreen() {
       <Text
         style={[
           styles.text,
-          {
-            fontSize: 20,
-            fontWeight: "700",
-            backgroundColor: colors.background,
-          },
+          { fontSize: 20, fontWeight: "700", backgroundColor: colors.background },
         ]}
       >
         {section.title}
@@ -188,15 +169,8 @@ export default function HomeScreen() {
     </View>
   );
 
-  // Memoize horizontal section container style
-  const horizontalContentContainerStyle = useMemo(
-    () => ({
-      paddingHorizontal: 16,
-    }),
-    []
-  );
+  const horizontalContentContainerStyle = useMemo(() => ({ paddingHorizontal: 16 }), []);
 
-  // Render horizontal scrolling section for cover layout
   const renderCoverSection = useCallback(
     ({ section }: { section: HomeSection }) => {
       try {
@@ -218,33 +192,10 @@ export default function HomeScreen() {
     [horizontalContentContainerStyle]
   );
 
-  // Header right control for layout toggle
-  const headerRight = useCallback(() => {
-    const buttonStyle = {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 6,
-      marginRight: 8,
-    };
-
-    const textStyle = {
-      color: isDark ? "#fff" : "#000",
-      fontSize: 14,
-    };
-
-    return (
-      <Pressable onPress={toggleLayout} style={buttonStyle}>
-        <Text style={textStyle}>
-          {homeLayout === "list" ? translate("common.cover") : translate("common.list")}
-        </Text>
-      </Pressable>
-    );
-  }, [homeLayout, toggleLayout, isDark]);
-
-  if (isLoadingHome && sections.length === 0) {
+  if (sections.length === 0 && !emptyConfirmed) {
     return (
       <ScrollView
-        style={styles.container}
+        style={{ flex: 1, backgroundColor: colors.background }}
         scrollEnabled={false}
         contentContainerStyle={floatingPlayerPadding}
       >
@@ -265,72 +216,34 @@ export default function HomeScreen() {
 
   if (sections.length === 0) {
     return (
-      <>
-        <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-          <Text
-            style={[
-              styles.text,
-              { fontSize: 18, textAlign: "center", opacity: 0.7, paddingHorizontal: 16 },
-            ]}
-          >
-            {translate("home.emptyState")}
-          </Text>
-        </View>
-        <Stack.Screen options={{ headerRight }} />
-      </>
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <Text
+          style={[
+            styles.text,
+            { fontSize: 18, textAlign: "center", opacity: 0.7, paddingHorizontal: 16 },
+          ]}
+        >
+          {translate("home.emptyState")}
+        </Text>
+      </View>
     );
   }
 
-  // Render cover layout with horizontal scrolling sections using SectionList
-  if (homeLayout === "cover") {
-    return (
-      <>
-        <Animated.View style={[styles.container, { opacity: contentOpacity }]}>
-          <ScrollView
-            contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={onRefresh}
-                tintColor={colors.link}
-              />
-            }
-          >
-            {sections.map((section) => (
-              <View key={section.title}>
-                {renderSectionHeader({ section })}
-                {renderCoverSection({ section })}
-              </View>
-            ))}
-          </ScrollView>
-        </Animated.View>
-        <Stack.Screen options={{ headerRight }} />
-      </>
-    );
-  }
-
-  // Render default list layout
   return (
-    <>
-      <Animated.View style={[styles.container, { opacity: contentOpacity }]}>
-        <SectionList
-          sections={sections}
-          renderItem={Item}
-          renderSectionHeader={renderSectionHeader}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.link}
-            />
-          }
-          stickySectionHeadersEnabled={false}
-          showsVerticalScrollIndicator={false}
-        />
-      </Animated.View>
-      <Stack.Screen options={{ headerRight }} />
-    </>
+    <Animated.View style={{ flex: 1, opacity: contentOpacity }}>
+      <ScrollView
+        contentContainerStyle={[styles.flatListContainer, floatingPlayerPadding]}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.link} />
+        }
+      >
+        {sections.map((section) => (
+          <View key={section.title}>
+            {renderSectionHeader({ section })}
+            {renderCoverSection({ section })}
+          </View>
+        ))}
+      </ScrollView>
+    </Animated.View>
   );
 }

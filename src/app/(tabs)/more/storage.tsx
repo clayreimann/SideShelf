@@ -17,6 +17,7 @@ import { libraryFiles } from "@/db/schema/libraryFiles";
 import { mediaMetadata } from "@/db/schema/mediaMetadata";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
+import { Ionicons } from "@expo/vector-icons";
 import { clearAllCoverCache } from "@/lib/covers";
 import { formatBytes } from "@/lib/helpers/formatters";
 import {
@@ -47,6 +48,7 @@ type ActionItem = {
   isHeader?: boolean;
   isLegend?: boolean;
   legendItems?: string[];
+  trashAction?: () => void;
 };
 
 type StorageBucketStats = {
@@ -561,7 +563,9 @@ export default function StorageScreen() {
             data: orphanFiles.map((orphan) => ({
               label: orphan.filename,
               sublabel: formatBytes(orphan.size),
-              onPress: () => {
+              onPress: disabledOnPress,
+              disabled: true,
+              trashAction: () => {
                 Alert.alert(
                   "Delete Unknown File",
                   `Delete "${orphan.filename}" (${formatBytes(orphan.size)})?`,
@@ -575,7 +579,6 @@ export default function StorageScreen() {
                   ]
                 );
               },
-              disabled: false,
             })),
           },
         ]
@@ -673,13 +676,22 @@ export default function StorageScreen() {
           }
 
           return (
-            <View style={styles.listItem}>
-              <Pressable onPress={item.onPress} disabled={item.disabled}>
+            <View style={[styles.listItem, { flexDirection: "row", alignItems: "center" }]}>
+              <View style={{ flex: 1 }}>
                 <Text style={item.disabled ? styles.text : styles.link}>{item.label}</Text>
                 {item.sublabel && (
                   <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>{item.sublabel}</Text>
                 )}
-              </Pressable>
+              </View>
+              {item.trashAction && (
+                <Pressable
+                  onPress={item.trashAction}
+                  style={{ padding: 8 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                </Pressable>
+              )}
             </View>
           );
         }}
