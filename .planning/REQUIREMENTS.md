@@ -77,36 +77,36 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status  |
 | ----------- | ----- | ------- |
-| DB-01       | —     | Pending |
-| DB-02       | —     | Pending |
-| DB-03       | —     | Pending |
-| DB-04       | —     | Pending |
-| DB-05       | —     | Pending |
-| DB-06       | —     | Pending |
-| DB-07       | —     | Pending |
-| STATE-01    | —     | Pending |
-| STATE-02    | —     | Pending |
-| STATE-03    | —     | Pending |
-| EFFECT-01   | —     | Pending |
-| EFFECT-02   | —     | Pending |
-| EFFECT-03   | —     | Pending |
-| EFFECT-04   | —     | Pending |
-| EFFECT-05   | —     | Pending |
-| EFFECT-06   | —     | Pending |
-| DECOMP-01   | —     | Pending |
-| DECOMP-02   | —     | Pending |
-| DWNLD-01    | —     | Pending |
-| DWNLD-02    | —     | Pending |
-| DWNLD-03    | —     | Pending |
-| DWNLD-04    | —     | Pending |
+| DB-01       | 10    | Pending |
+| DB-02       | 10    | Pending |
+| DB-03       | 10    | Pending |
+| DB-04       | 10    | Pending |
+| DB-05       | 10    | Pending |
+| DB-06       | 10    | Pending |
+| DB-07       | 10    | Pending |
+| STATE-01    | 11    | Pending |
+| STATE-02    | 11    | Pending |
+| STATE-03    | 11    | Pending |
+| EFFECT-01   | 11    | Pending |
+| EFFECT-02   | 11    | Pending |
+| EFFECT-03   | 11    | Pending |
+| EFFECT-04   | 11    | Pending |
+| EFFECT-05   | 11    | Pending |
+| EFFECT-06   | 11    | Pending |
+| DECOMP-01   | 12    | Pending |
+| DECOMP-02   | 12    | Pending |
+| DWNLD-01    | 13    | Pending |
+| DWNLD-02    | 13    | Pending |
+| DWNLD-03    | 13    | Pending |
+| DWNLD-04    | 13    | Pending |
 
 **Coverage:**
 
 - v1.2 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22 ⚠️ (roadmap pending)
+- Mapped to phases: 22
+- Unmapped: 0 (complete)
 
 ---
 
 _Requirements defined: 2026-02-28_
-_Last updated: 2026-02-28 after initial definition_
+_Last updated: 2026-02-28 after roadmap creation (Phases 10–13)_
