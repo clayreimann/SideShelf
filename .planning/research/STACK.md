@@ -1,357 +1,316 @@
-# Stack Research: v1.1 Bug Fixes & Polish
+# Stack Research: v1.2 Tech Cleanup
 
-**Project:** abs-react-native (SideShelf) — v1.1 milestone
-**Researched:** 2026-02-20
-**Confidence:** HIGH for items 1-4 (source code verified); MEDIUM for item 5 (domain pattern)
+**Project:** abs-react-native — v1.2 milestone (tech debt / dependency upgrades)
+**Researched:** 2026-02-28
+**Confidence:** HIGH for versions (npm-verified); MEDIUM for RNTP new-arch status (conflicting signals); LOW for custom fork migration specifics (cannot read remote git diff without auth)
 
 ---
 
 ## Executive Decision Summary
 
-Five targeted questions, five direct answers:
+Three targeted questions, three direct answers:
 
-1. **iCloud exclusion native module** — The native Objective-C code (`NSURLIsExcludedFromBackupKey` + `setResourceValue:forKey:error:`) is correct. The bug is that `withExcludeFromBackup` is NOT registered in `app.config.js`. Add it to `plugins:`. Two secondary concerns: the file must exist before calling `setResourceValue`, and legacy `NativeModules` access works under the New Architecture interop layer in Expo SDK 54 / RN 0.81 but needs migration before SDK 55.
-2. **RNTP metadata for skip forward/back** — Use `updateNowPlayingMetadata()`, not `updateMetadataForTrack()`. The former updates the lock screen display only (no queue mutation); the latter mutates the underlying track object and has a known Android artwork bug in 4.1.1/4.1.2.
-3. **Expo Router cross-tab navigation** — `router.push("/(tabs)/series")` works from any tab, including the More screen. The existing `navigateToTabDetail()` helper in `src/lib/navigation.ts` handles the case where the tab's index needs to be in the stack first. No API additions needed.
-4. **Loading skeleton UI** — Use `react-native-shimmer-placeholder` with the already-installed `expo-linear-gradient`. No new native module needed. `createShimmerPlaceholder(LinearGradient)` gives a component-level shimmer with `visible` prop.
-5. **Download orphan repair** — Pattern is already implemented in `DownloadService.repairDownloadStatus()`. The gap is scheduling: it only runs on demand. Add a startup scan that walks all DB records marked as `downloaded` and runs `verifyFileExists()` against each.
+1. **Expo upgrade target** — Upgrade to **Expo SDK 55.0.4 / React Native 0.83.2**. This is a mandatory architectural break: SDK 55 drops the legacy bridge entirely. New Architecture is not optional. RNTP 4.1.2 does not have full new-arch support on Android — this is the primary blocker to assess before committing.
 
----
+2. **RN Downloader mainline migration** — The mainline package is at **4.5.3** (jumped from the 3.x series the fork was based on, through a major 4.x rewrite). The custom fork is pinned to a `spike-event-queue` branch at tag `3.1.1`. Migrating to mainline 4.x is a significant API surface change; it requires understanding what the fork added and whether mainline absorbed it. This needs a pre-phase investigation.
 
-## Area 1: iCloud Backup Exclusion Native Module
-
-### What the module does (verified correct)
-
-The Objective-C implementation in `plugins/excludeFromBackup/ios/ICloudBackupExclusion.m` uses the correct iOS API:
-
-```objc
-BOOL success = [fileURL setResourceValue:@YES
-                                  forKey:NSURLIsExcludedFromBackupKey
-                                   error:&error];
-```
-
-`NSURLIsExcludedFromBackupKey` is the Apple-documented key for excluding files from iCloud backup. `NSURL setResourceValue:forKey:error:` is the correct method to set it. Apple's QA1719 documents this as the official approach. The Objective-C code is correct.
-
-Confidence: HIGH (Apple Developer Documentation, confirmed against source)
-
-### Root Cause of "Not Working"
-
-The plugin (`withExcludeFromBackup`) is **not registered in `app.config.js`**. The `plugins:` array in `app.config.js` contains `expo-router`, `expo-splash-screen`, `expo-font`, and `expo-web-browser` — but NOT `withExcludeFromBackup`. Without registration, `expo prebuild` never copies the `.m`/`.h` files into `ios/SideShelf/Modules/` and never adds them to the Xcode project. The TypeScript wrapper finds `NativeModules.ICloudBackupExclusion` as `null` at runtime.
-
-**Fix:** Add the plugin to `app.config.js`:
-
-```js
-const withExcludeFromBackup = require('./plugins/excludeFromBackup/withExcludeFromBackup');
-
-// In plugins array:
-withExcludeFromBackup,
-```
-
-Then run `expo prebuild --clean` to regenerate the `ios/` directory with the module compiled in.
-
-### Secondary Concern 1: File Must Exist Before Setting Attribute
-
-`setResourceValue:forKey:error:` fails if the file does not yet exist on disk. Apple documentation states the resource value can only be set on an existing filesystem path. The current code in `DownloadService.ts` calls `setExcludeFromBackup()` after the download completes — which is correct timing. No change needed here; but callers that call it proactively on paths that don't exist yet will get a silent failure.
-
-Confidence: HIGH (Apple Developer Documentation confirms requirement)
-
-### Secondary Concern 2: New Architecture Compatibility
-
-The module uses the legacy bridge pattern (`RCT_EXPORT_MODULE`, `RCTBridgeModule`, `NativeModules`). In Expo SDK 54 (React Native 0.81), the New Architecture interop layer is active by default (`newArchEnabled: true` in `app.config.js`). The interop layer supports legacy `RCT_EXPORT_MODULE` modules through a compatibility shim — confirmed as working in 0.81.
-
-**Important:** SDK 54 is the last version where the legacy architecture is supported. SDK 55 will require migration to a TurboModule. For this milestone, the legacy module is fine. Flag for migration before any SDK 55 upgrade.
-
-Confidence: MEDIUM (Expo changelog + React Native new architecture docs; not directly tested on this codebase)
-
-Sources:
-
-- Apple Developer Documentation: https://developer.apple.com/documentation/foundation/nsurlisexcludedfrombackupkey
-- Expo SDK 54 changelog: https://expo.dev/changelog/sdk-54
-- React Native New Architecture interop: https://docs.expo.dev/guides/new-architecture/
+3. **Drizzle tooling** — Upgrade **drizzle-orm 0.44.5 → 0.45.1** and **drizzle-kit 0.31.4 → 0.31.9**. Minor bumps, no breaking changes documented. No new query analysis tooling needed beyond existing drizzle-kit. expo-sqlite should upgrade from `^16.0.8` → `^55.0.0` (SDK 55 version matching).
 
 ---
 
-## Area 2: react-native-track-player — updateNowPlayingMetadata for Skip Controls
+## Upgrade Target Versions
 
-### Two distinct APIs (verified from installed source)
+| Package                                             | Current                                           | Target           | Notes                                                   |
+| --------------------------------------------------- | ------------------------------------------------- | ---------------- | ------------------------------------------------------- |
+| `expo`                                              | 54.0.21                                           | 55.0.4           | Current stable SDK 55 release                           |
+| `react-native`                                      | 0.81.5                                            | 0.83.2           | Bundled with Expo SDK 55                                |
+| `react` / `react-dom`                               | 19.1.0                                            | 19.2.x           | SDK 55 ships React 19.2                                 |
+| `expo-router`                                       | ~6.0.14                                           | ~55.0.3          | Now versioned with SDK (v7 internally)                  |
+| `expo-sqlite`                                       | ^16.0.8                                           | ^55.0.0          | SDK 55 version alignment                                |
+| `expo-file-system`                                  | ~19.0.17                                          | ^55.0.0          | API change: `Directory/File/Paths` already uses new API |
+| `jest-expo`                                         | ~54.0.13                                          | ~55.0.x          | Must match SDK version                                  |
+| All other `expo-*` packages                         | 54.x                                              | 55.x             | `npx expo install --fix` handles the rest               |
+| `drizzle-orm`                                       | ^0.44.5                                           | ^0.45.1          | Minor bump, safe                                        |
+| `drizzle-kit`                                       | ^0.31.4                                           | ^0.31.9          | Minor bump, safe                                        |
+| `@kesha-antonov/react-native-background-downloader` | github:clayreimann/…#spike-event-queue (3.x base) | 4.5.3 (mainline) | Major API rewrite — needs spike                         |
 
-Source verified from `/node_modules/react-native-track-player/src/trackPlayer.ts`:
+**Hold at current version:**
 
-**`updateMetadataForTrack(trackIndex, metadata)`**
-
-- Updates metadata on the underlying track object in the queue.
-- Required when you want the track's title/artist/artwork to persist in the queue across track changes.
-- Has a known bug in 4.1.1/4.1.2: clears artwork on Android (GitHub Issue #2287).
-- `TrackMetadataBase` fields: `title`, `album`, `artist`, `duration`, `artwork`, `description`, `genre`, `date`, `rating`, `isLiveStream`.
-
-**`updateNowPlayingMetadata(metadata)`**
-
-- Updates the lock screen / Now Playing Center display only.
-- Does NOT mutate the track object in the queue.
-- Accepts `NowPlayingMetadata`, which extends `TrackMetadataBase` with one additional field: `elapsedTime?: number`.
-- `elapsedTime` is iOS-only: sets the elapsed time scrubber position in the Now Playing Center independently of the native player's actual position.
-
-```typescript
-// From NowPlayingMetadata.ts (installed source):
-export interface NowPlayingMetadata extends TrackMetadataBase {
-  elapsedTime?: number;
-}
-```
-
-Confidence: HIGH (verified from installed node_modules source)
-
-### Current Usage Assessment
-
-The existing code in `playerSlice.updateNowPlayingMetadata()` calls `TrackPlayer.updateMetadataForTrack()` (not `updateNowPlayingMetadata()`). This is intentional — it updates the queue track metadata so chapter title/duration shows correctly. However, it carries the Android artwork bug risk.
-
-For the chapter-progress use case (showing chapter elapsed time in the lock screen scrubber), `updateNowPlayingMetadata()` with `elapsedTime` is the right call. The `elapsedTime` property on `NowPlayingMetadata` is NOT available on `TrackMetadataBase` (used by `updateMetadataForTrack`). The current code works around this via `@ts-ignore`.
-
-### When to Call After Skip
-
-After a skip forward/backward, the Now Playing Center metadata (chapter title, duration, elapsed time) goes stale because the position has changed and a chapter boundary may have been crossed. The correct pattern:
-
-1. Dispatch `SEEK` event (already done in `handleRemoteJumpForward/Backward`)
-2. After seek resolves, call `updateNowPlayingMetadata()` with updated `elapsedTime` and possibly updated `title` (if chapter boundary crossed)
-
-The coordinator's `syncToStore` bridge is the correct place to trigger metadata refresh after a SEEK event resolves, since it has access to the updated chapter context.
-
-### Capability Configuration
-
-Skip forward/backward capabilities are already configured in `trackPlayerConfig.ts`:
-
-```typescript
-capabilities: [
-  Capability.JumpBackward,
-  Capability.JumpForward,
-  // ...
-],
-forwardJumpInterval: forwardInterval,
-backwardJumpInterval: backwardInterval,
-```
-
-`configureTrackPlayer()` is called after `updateMetadataForTrack()` in `updateNowPlayingMetadata()`. This is defensive — capabilities shouldn't need refreshing after metadata updates. It's safe to keep but not strictly necessary on every metadata update.
-
-Confidence: HIGH (verified from installed RNTP source and existing codebase)
-
-Sources:
-
-- RNTP source (installed): `/node_modules/react-native-track-player/src/trackPlayer.ts`
-- RNTP NowPlayingMetadata type: `/node_modules/react-native-track-player/src/interfaces/NowPlayingMetadata.ts`
-- RNTP Android artwork bug: https://github.com/doublesymmetry/react-native-track-player/issues/2287
+| Package                        | Current | Reason to Hold                                                                           |
+| ------------------------------ | ------- | ---------------------------------------------------------------------------------------- |
+| `react-native-track-player`    | ^4.1.2  | 5.0.0-alpha0 is broken on iOS; 4.1.2 works under SDK 55 via interop; wait for stable 5.x |
+| `react-native-reanimated`      | ~4.1.1  | Already new-arch compatible; `npx expo install --fix` will set correct version           |
+| `react-native-gesture-handler` | ~2.28.0 | Same; let `--fix` resolve                                                                |
 
 ---
 
-## Area 3: Expo Router — Cross-Tab Navigation from More Screen
+## Section 1: Expo SDK 55 Upgrade
 
-### How It Works
+### What Changed (SDK 54 → 55)
 
-Expo Router uses file-based routing. Tabs are defined by directories under `src/app/(tabs)/`. From any screen, `router.push("/(tabs)/series")` navigates to the Series tab's index screen and switches the active tab.
+**React Native 0.81.5 → 0.83.2** (MEDIUM confidence — search-verified; confirmed by Expo X post)
 
-The existing `navigateToTabDetail()` helper in `src/lib/navigation.ts` already handles the correct pattern for navigating to a detail route within an uninitialized tab:
+**Legacy Architecture dropped — hardest change:**
 
-```typescript
-export function navigateToTabDetail(router: Router, tabPath: string, detailPath: string): void {
-  router.push(tabPath as Href); // Push index first (initializes stack)
-  setImmediate(() => {
-    router.push(detailPath as Href); // Then push detail
-  });
-}
-```
+- SDK 54 was the last SDK supporting the old bridge
+- SDK 55 is new-architecture-only; there is no opt-out
+- The `newArchEnabled` flag becomes irrelevant — it is always true
+- Any library still using `RCT_EXPORT_MODULE` / legacy `NativeModules` may break silently under the compatibility layer or require TurboModule migration
 
-Convenience wrappers `navigateToSeries()` and `navigateToAuthor()` are already defined.
+Impact on this project: the custom iCloud backup exclusion native module (`ICloudBackupExclusion.m`) uses the legacy bridge pattern. In SDK 54 it worked via the interop layer. In SDK 55, the interop layer is still present but narrowing — verify before shipping.
 
-Confidence: HIGH (verified from existing codebase source)
+**expo-file-system API promotion:**
 
-### The More Screen Navigation Pattern
+- The `Directory / File / Paths` API (formerly `expo-file-system/next`) is now the default export from `expo-file-system`
+- The old API (functions like `copyAsync`, `moveAsync`, `readAsStringAsync`) is now at `expo-file-system/legacy`
+- **This project already uses the new API** (`Directory`, `File`, `Paths` imports in `fileSystem.ts`, `covers.ts`, `orphanScanner.ts`, `authorImages.ts`, `exportUtils.ts`, `storage.tsx`) — no migration needed
 
-The More screen's `hiddenTabsData` mechanism already handles navigating to hidden tabs:
+**expo-router v7:**
 
-```typescript
-onPress: () => router.push(`/${tab.name}`);
-```
+- Ships as `expo-router@~55.0.x` (matching SDK version scheme)
+- `router.navigate()` behavior note: as of expo-router v4+, `router.navigate()` is equivalent to `router.push()` — does not pop to existing route. This project uses `router.push` and `router.replace` explicitly — no change required.
+- New features: Colors API, Apple Zoom Transition, Stack.Toolbar (not blocking, purely additive)
 
-This means `router.push("/series")` and `router.push("/authors")` are already in use when those tabs are hidden. This is valid Expo Router usage — `router.push` to a tab path switches the active tab and renders the tab's index screen.
+**expo-av removed from Expo Go:**
 
-### Known Limitation
+- This project does not use `expo-av` (uses `react-native-track-player`) — no impact
 
-When navigating from More → a tab's nested route (e.g., a specific series), directly pushing the dynamic route without first pushing the index makes that dynamic route the stack root in the target tab, preventing back navigation to the list. This is exactly what `navigateToTabDetail()` was built to solve.
+**Package versioning alignment:**
 
-No new APIs needed. The pattern is already implemented.
+- All `expo-*` packages now use the same major version as the SDK (55.x)
+- `npx expo install --fix` resolves these automatically
 
-Confidence: HIGH (verified from codebase; consistent with Expo Router docs)
-
-Sources:
-
-- Expo Router navigation docs: https://docs.expo.dev/router/basics/navigation/
-- Expo Router nesting navigators: https://docs.expo.dev/router/advanced/nesting-navigators/
-- Existing: `src/lib/navigation.ts`
-
----
-
-## Area 4: Loading Skeleton / Shimmer UI
-
-### Recommendation: react-native-shimmer-placeholder with expo-linear-gradient
-
-**Why:** `expo-linear-gradient` is already in `package.json` as a first-party Expo package with no additional native module install required. `react-native-shimmer-placeholder` wraps any LinearGradient component via a factory function, meaning zero new native dependencies.
-
-Install:
+### Upgrade Command Sequence
 
 ```bash
-npm install react-native-shimmer-placeholder
+# Step 1: Upgrade expo and let it resolve compatible versions
+npx expo install expo@55.0.4
+
+# Step 2: Fix all expo-* packages to SDK 55 compatible versions
+npx expo install --fix
+
+# Step 3: Check for remaining issues
+npx expo-doctor
+
+# Step 4: Rebuild native layers
+npm run ios   # runs expo prebuild --clean && expo run:ios
 ```
 
-No `expo prebuild --clean` required. No Pods changes. Pure JS with existing `expo-linear-gradient` native layer.
+Do NOT upgrade Expo SDK and adopt New Architecture simultaneously if you hit issues — isolate each change.
 
-**Usage pattern:**
+### Breaking Changes Requiring Code Changes
 
-```typescript
-import { createShimmerPlaceholder } from 'react-native-shimmer-placeholder';
-import { LinearGradient } from 'expo-linear-gradient';
-
-const ShimmerPlaceholder = createShimmerPlaceholder(LinearGradient);
-
-// In component:
-<ShimmerPlaceholder
-  visible={isLoaded}
-  style={{ width: 200, height: 20, borderRadius: 4 }}
->
-  <Text>{title}</Text>
-</ShimmerPlaceholder>
-```
-
-When `visible={false}`, renders the animated shimmer. When `visible={true}`, renders children.
-
-### Alternatives Considered
-
-| Option                                           | Why Not                                                                                                            |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Moti skeleton                                    | Requires `moti` package (~40KB); uses `react-native-reanimated` worklets — adds complexity for a loading indicator |
-| react-native-fast-shimmer (Callstack)            | Uses `react-native-svg` for gradients — new native dependency; overkill for this use case                          |
-| Hand-rolled with expo-linear-gradient + Animated | Feasible but fragile; `react-native-shimmer-placeholder` is maintained and handles animation lifecycle correctly   |
-| react-native-skeleton-placeholder                | Different lib, requires `react-native-linear-gradient` (not the Expo version) — native install required            |
-
-### What NOT to use
-
-Do not reach for `moti` or `react-native-reanimated`-based skeletons. `react-native-reanimated` is already installed (v4.1.1), but adding Moti creates a large dependency for a shimmer effect that `react-native-shimmer-placeholder` handles with zero native overhead.
-
-Confidence: HIGH for approach (expo-linear-gradient already installed, shimmer-placeholder verified with it); MEDIUM for specific library version (npm registry verified, not tested in this repo yet)
+| Breaking Change                         | Affected Files                      | Fix                                                         |
+| --------------------------------------- | ----------------------------------- | ----------------------------------------------------------- |
+| `expo-file-system` default → new API    | None — project already uses new API | No change needed                                            |
+| `expo-router` version bump              | `package.json`                      | `npx expo install --fix`                                    |
+| Legacy native module (iCloud exclusion) | `plugins/excludeFromBackup/`        | Verify under SDK 55 interop; may need TurboModule migration |
+| Package naming (expo-\* → 55.x)         | `package.json`                      | `npx expo install --fix`                                    |
 
 Sources:
 
-- react-native-shimmer-placeholder GitHub: https://github.com/tomzaku/react-native-shimmer-placeholder
-- Callstack fast-shimmer comparison: https://www.callstack.com/blog/performant-and-cross-platform-shimmers-in-react-native-apps
+- Expo SDK 55 changelog: https://expo.dev/changelog/sdk-55
+- Expo upgrade guide: https://expo.dev/blog/upgrading-to-sdk-55
+- Expo X announcement: https://x.com/expo/status/2026811977990025364
 
 ---
 
-## Area 5: react-native-background-downloader — Orphaned Download Record Detection
+## Section 2: RN Background Downloader — Custom Fork → Mainline
 
-### Current State (existing implementation)
+### Current State
 
-`DownloadService.repairDownloadStatus(libraryItemId)` is already implemented and correct:
-
-1. Queries DB for all audio files of a library item where `downloadStatus = 'downloaded'`
-2. Calls `verifyFileExists(file.downloadInfo.downloadPath)` for each
-3. If missing at stored path, tries `getDownloadPath(libraryItemId, file.filename)` (current container)
-4. If found at new path, calls `markAudioFileAsDownloaded()` with corrected path
-5. Returns count of repaired files
-
-The logic is sound. The gap is **trigger**: `repairDownloadStatus` is only called on-demand from the storage diagnostics screen, not proactively.
-
-### Recommended Pattern: Startup Scan
-
-Add a startup reconciliation pass in `DownloadService.initialize()` that walks all records in the `audio_files` table where `downloadStatus = 'downloaded'` and verifies each file exists on disk. This is the standard pattern for file-backed databases (similar to what iOS Photos, Podcasts, and Safari offline reader use internally).
-
-```typescript
-// Pseudocode for startup scan
-private async reconcileDownloadedFiles(): Promise<void> {
-  const allDownloaded = await getAudioFilesWithStatus('downloaded'); // new DB query
-  for (const file of allDownloaded) {
-    const exists = await verifyFileExists(file.downloadInfo.downloadPath);
-    if (!exists) {
-      // Try iOS container path repair first
-      await this.repairDownloadStatus(file.libraryItemId);
-      // If still missing after repair, mark as not-downloaded
-      const stillMissing = await verifyFileExists(file.downloadInfo.downloadPath);
-      if (stillMissing) {
-        await markAudioFileAsNotDownloaded(file.id);
-      }
-    }
-  }
-}
+```
+"@kesha-antonov/react-native-background-downloader": "github:clayreimann/react-native-background-downloader#spike-event-queue"
 ```
 
-The DB helper query (`getAudioFilesWithStatus`) is the only missing piece — `audio_files` table and schema already exist.
+The custom fork is the `clayreimann/react-native-background-downloader` repo, `spike-event-queue` branch. The fork is based on the original at tag `3.1.1` (confirmed via `git ls-remote` showing tag `3.1.1` on the fork). The branch name `spike-event-queue` matches the problem it was solving: the MEMORY.md notes state it was used to add an event queue fix.
 
-### Known Pattern: iOS Container Path Migration
+### Mainline Version History
 
-iOS changes the app container path on reinstall and some updates. `DownloadService.repairDownloadStatus()` already handles this by comparing the stored path against `getDownloadPath(libraryItemId, filename)` which constructs the current-container path. This is the correct approach.
+Mainline `@kesha-antonov/react-native-background-downloader` is at **4.5.3** (npm-verified, 2026-02-28).
 
-### What NOT to Add
+Major version history (npm registry):
 
-Do not add a background file watcher or `NSFilePresenter` observer. The downloads directory is under the app container which only this app writes to. A scan-on-launch is sufficient and avoids background thread complexity.
+- `3.x` — the series the fork is based on (3.1.1 tag)
+- `3.2.6` — last 3.x release
+- `4.0.0` — major rewrite (confirmed as significant API change; MMKV dependency added)
+- `4.1.x` — MMKV dependency changes (issue #16: MMKV usage incompatible with Expo in 3.1+, fixed in 4.x)
+- `4.2.0` — Android pause/resume support
+- `4.3.x` — iOS MMKV dependency changes
+- `4.4.x` — continued updates
+- `4.5.3` — current stable
 
-Confidence: MEDIUM (pattern derived from existing implementation; "startup scan" is domain standard but not documented as a RNBD-specific pattern)
+### What the Fork Added (Best Inference — LOW confidence)
+
+The branch name `spike-event-queue` combined with the MEMORY.md entry ("custom fork of @kesha-antonov/react-native-background-downloader in use") and the coordinator's event queue pattern suggests the fork adds serialized/queued event delivery to avoid race conditions in the download callbacks. The mainline 4.x changelog mentions MMKV and Android enhancements, but does not explicitly mention event queue serialization.
+
+**Cannot confirm without reading the actual git diff** — the fork is on a private/personal GitHub account without direct read access from this environment.
+
+### Migration Risk Assessment
+
+| Risk Factor                    | Assessment                                                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| API surface change (3.x → 4.x) | HIGH — major version jump with confirmed breaking changes                                                  |
+| MMKV dependency added in 4.x   | MEDIUM — may require `react-native-mmkv` native install or configuration                                   |
+| Event queue behavior lost      | HIGH if the fork's additions are not in mainline — DownloadService relies on predictable callback ordering |
+| Expo compatibility             | Expo SDK 55 / New Architecture may require 4.x anyway (if 3.x uses legacy bridge internals)                |
+
+### Recommended Pre-Phase Investigation
+
+Before scheduling this upgrade in the roadmap, do a focused spike:
+
+1. `git log --oneline 3.1.1..spike-event-queue` on the fork to enumerate commits
+2. Check if any of those commits were upstreamed (compare to mainline 4.x CHANGELOG)
+3. Review mainline 4.x API docs for DownloadService integration points
+
+The `DownloadService.ts` integration surface:
+
+```typescript
+RNBackgroundDownloader.setConfig({ progressInterval, isLogsEnabled })
+RNBackgroundDownloader.checkForExistingDownloads()
+RNBackgroundDownloader.download({ id, url, destination, headers })
+task.begin() / .progress() / .done() / .error() / .stop() / .pause() / .resume()
+```
+
+If mainline 4.x preserves this surface (likely since it's the same author), migration may be straightforward. But the event queue behavior needs validation under the coordinator's serial processing model.
+
+### Confidence Level: LOW
+
+Cannot determine migration effort without reading the fork diff. Flag this for a phase-start research spike.
 
 Sources:
 
-- Existing: `src/services/DownloadService.ts` (lines 462-606)
-- Existing: `src/lib/fileSystem.ts` (`verifyFileExists`)
+- npm registry: https://www.npmjs.com/package/@kesha-antonov/react-native-background-downloader
+- MMKV issue #16: https://github.com/kesha-antonov/react-native-background-downloader/issues/16
+- GitHub releases: https://github.com/kesha-antonov/react-native-background-downloader/releases
 
 ---
 
-## Stack Impact Summary
+## Section 3: Drizzle ORM / SQLite Audit Tooling
 
-| Area                   | New Dependency                     | New Native Module                           | Config Change                 |
-| ---------------------- | ---------------------------------- | ------------------------------------------- | ----------------------------- |
-| iCloud exclusion       | None                               | None (exists, unregistered)                 | `app.config.js` plugins array |
-| RNTP metadata          | None                               | None                                        | None                          |
-| Expo Router navigation | None                               | None                                        | None                          |
-| Skeleton/shimmer UI    | `react-native-shimmer-placeholder` | None (uses existing `expo-linear-gradient`) | None                          |
-| Download orphan repair | None                               | None                                        | None                          |
+### Drizzle Version Targets
 
-**Total new native installs required: 0**
-**Total new packages required: 1** (`react-native-shimmer-placeholder`, JS-only)
+| Package       | Current | Target  | Change Type                            |
+| ------------- | ------- | ------- | -------------------------------------- |
+| `drizzle-orm` | ^0.44.5 | ^0.45.1 | Minor bump                             |
+| `drizzle-kit` | ^0.31.4 | ^0.31.9 | Minor bump                             |
+| `expo-sqlite` | ^16.0.8 | ^55.0.0 | SDK alignment (same underlying SQLite) |
+
+`drizzle-orm` 0.45.1 peer dependency: `"expo-sqlite": ">=14.0.0"` — satisfied by 55.x.
+
+`drizzle-orm` 1.0 beta (`1.0.0-beta.x`) is in active development but NOT stable. Do not use beta channel for this milestone.
+
+### Known Issues to Watch
+
+- `drizzle-orm/expo-sqlite` is not truly async — it blocks the UI thread (issue #5240). This is a known limitation, not a regression. The project's DB architecture (helpers + transactions) already mitigates this by batching writes.
+- Migration failures with multiple migrations (issue #2384) — confirmed resolved in later 0.44.x patches. Running `drizzle-kit generate` before each migration ensures the hash chain is consistent.
+
+### Query Analysis Tooling
+
+No new tooling needed. The existing setup provides:
+
+- `expo-drizzle-studio-plugin` (installed at `^0.2.0`) — provides a visual query debugger in Expo Dev Client
+- `drizzle-kit generate --config=drizzle.config.ts` — migration diff generation
+- `better-sqlite3` (dev dep) — enables server-side test execution of queries
+
+For DB/SQL audit work, the recommended approach:
+
+1. Use `expo-drizzle-studio-plugin` to inspect live query results on device
+2. Review `src/db/helpers/` for N+1 queries by reading helper files directly
+3. Use `npm run test:coverage` to identify untested DB helpers
+
+No additional tooling required.
+
+Sources:
+
+- Drizzle ORM latest releases: https://orm.drizzle.team/docs/latest-releases
+- drizzle-orm/expo-sqlite blocking issue: https://github.com/drizzle-team/drizzle-orm/issues/5240
+- Expo SQLite docs: https://docs.expo.dev/versions/latest/sdk/sqlite/
 
 ---
 
-## Installation
+## react-native-track-player Status
+
+### Hold at 4.1.2
+
+RNTP 4.1.2 is the current stable. The next planned release is 5.0 (new architecture rewrite), but:
+
+- `5.0.0-alpha0` is confirmed broken on iOS (tracks cannot play — issue #2503)
+- The alpha has `shaka-player` as a peer dependency (new web-video dependency, unusual)
+- New Architecture migration for RNTP 4.x was partially completed but Android support is incomplete in 4.1.2
+
+Under Expo SDK 55 / React Native 0.83, the New Architecture interop layer will still run RNTP 4.1.2 in bridge-compatibility mode. The coordinator architecture (Phase 2) does not use any new-arch-specific RNTP APIs. **Hold at 4.1.2 until 5.0 stable ships.**
+
+Verify at project launch: run the app with `newArchEnabled: true` under SDK 55 and confirm audio playback works before committing to the upgrade.
+
+Sources:
+
+- RNTP 5.0.0-alpha0 iOS issue: https://github.com/doublesymmetry/react-native-track-player/issues/2503
+- RNTP New Architecture issue: https://github.com/doublesymmetry/react-native-track-player/issues/2443
+
+---
+
+## Version Compatibility Matrix
+
+| Package A                         | Compatible With        | Notes                                                        |
+| --------------------------------- | ---------------------- | ------------------------------------------------------------ |
+| `expo@55.0.4`                     | `react-native@0.83.2`  | Bundled together                                             |
+| `expo@55.0.4`                     | `react@19.2.x`         | Bundled together                                             |
+| `expo@55.0.4`                     | `expo-router@~55.0.3`  | SDK version alignment                                        |
+| `expo@55.0.4`                     | `expo-sqlite@^55.0.0`  | SDK version alignment                                        |
+| `drizzle-orm@0.45.1`              | `expo-sqlite@>=14.0.0` | Peer dep satisfied by 55.x                                   |
+| `react-native-track-player@4.1.2` | `react-native@0.83.2`  | Verified via interop layer; no new-arch native codegen       |
+| `react-native-reanimated@~4.1.1`  | Expo SDK 55            | `npx expo install --fix` will update to correct 4.x patch    |
+| `@kesha-antonov/…@3.1.1 (fork)`   | `react-native@0.83.2`  | UNKNOWN — legacy bridge internals may conflict with new arch |
+
+---
+
+## Installation Sequence for v1.2
 
 ```bash
-# The only new package needed for this milestone:
-npm install react-native-shimmer-placeholder
+# Phase A: Expo SDK upgrade
+npx expo install expo@55.0.4
+npx expo install --fix          # resolves all expo-* to SDK 55 versions
+npx expo-doctor                  # identifies remaining incompatibilities
+npm run ios                      # rebuilds native layer
 
-# No expo prebuild needed for shimmer-placeholder.
-# DO need expo prebuild --clean after fixing app.config.js:
-npm run ios  # which runs expo prebuild --clean && expo run:ios
+# Phase B: Drizzle minor bump
+npm install drizzle-orm@^0.45.1 drizzle-kit@^0.31.9
+
+# Phase C: RN Downloader (requires pre-phase spike)
+# After spike confirms migration path:
+npm install @kesha-antonov/react-native-background-downloader@4.5.3
+npm run ios   # rebuilds native
+# OR: keep fork if mainline lacks event queue behavior
 ```
 
 ---
 
-## Versions Verified
+## What NOT to Change
 
-| Package                          | Installed Version | Relevant API                                                 | Confidence                      |
-| -------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------- |
-| react-native-track-player        | 4.1.2             | `updateNowPlayingMetadata`, `NowPlayingMetadata.elapsedTime` | HIGH (source read)              |
-| expo-linear-gradient             | 14.x (via expo)   | Used by shimmer-placeholder                                  | HIGH (package.json)             |
-| expo-router                      | ~6.0.14           | `router.push("/(tabs)/series")` cross-tab                    | HIGH (source + docs)            |
-| expo                             | 54.0.21           | New Architecture interop for legacy modules                  | MEDIUM (Expo docs)              |
-| react-native                     | 0.81.5            | NativeModules interop layer active                           | MEDIUM (RN docs)                |
-| react-native-shimmer-placeholder | 2.x (latest)      | `createShimmerPlaceholder(LinearGradient)`                   | MEDIUM (npm, not yet installed) |
+| Do Not Change                         | Why                                                                    | When to Revisit                    |
+| ------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------- |
+| `react-native-track-player`           | 5.0.0-alpha0 broken on iOS; hold at 4.1.2                              | When 5.0 stable ships              |
+| `drizzle-orm` 1.0 beta                | Not stable, API may change                                             | After 1.0 stable release           |
+| `expo-drizzle-studio-plugin`          | Already installed, no upgrade needed                                   | When expo-sqlite has major changes |
+| Custom iCloud exclusion native module | Works under SDK 55 interop; needs test before migrating to TurboModule | If SDK 55 interop breaks it        |
 
 ---
 
-## What NOT to Add
+## Confidence Assessment
 
-| Do Not Add                       | Why                                             | Use Instead                                          |
-| -------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
-| `moti`                           | Large dep (~40KB), complex for shimmer use case | `react-native-shimmer-placeholder`                   |
-| `react-native-fast-shimmer`      | Requires `react-native-svg` (new native dep)    | `react-native-shimmer-placeholder`                   |
-| `@shopify/react-native-skia`     | Extreme overkill for skeleton UI                | `react-native-shimmer-placeholder`                   |
-| TurboModule for iCloud exclusion | Not needed for SDK 54 target                    | Fix plugin registration first, migrate before SDK 55 |
-| `NSFilePresenter` file watcher   | Background complexity, not needed               | Startup reconciliation scan                          |
-| XState                           | Existing coordinator is correct                 | Keep custom FSM                                      |
+| Area                              | Confidence | Basis                                                                  |
+| --------------------------------- | ---------- | ---------------------------------------------------------------------- |
+| Expo 55 target version            | HIGH       | npm registry verified (55.0.4 stable)                                  |
+| Expo 55 breaking changes          | MEDIUM     | Multiple search sources agree; not tested in this repo                 |
+| RN 0.83.2 bundled version         | MEDIUM     | Confirmed by Expo X post + reactnative.dev blog                        |
+| expo-file-system migration status | HIGH       | Source files verified — already uses new API                           |
+| RNTP 4.1.2 hold recommendation    | MEDIUM     | Issue tracker confirms 5.0 alpha broken; interop assumption unverified |
+| Drizzle 0.45.1 upgrade            | HIGH       | npm-verified; minor bump with no documented breaking changes           |
+| RN Downloader mainline 4.5.3      | LOW        | Cannot read fork diff; API surface change unknown                      |
+| expo-sqlite 55.x alignment        | HIGH       | npm-verified; same underlying SQLite engine                            |
 
 ---
 
-_Stack research for: abs-react-native v1.1 Bug Fixes & Polish milestone_
-_Researched: 2026-02-20_
+_Stack research for: abs-react-native v1.2 Tech Cleanup milestone_
+_Researched: 2026-02-28_

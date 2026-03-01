@@ -1,356 +1,415 @@
-# Pitfalls: v1.1 Bug Fixes & Polish
+# Pitfalls Research
 
-**Domain:** React Native audiobook app — adding polish and bug fixes to an existing production coordinator architecture
-**Researched:** 2026-02-20
-**Confidence:** HIGH — grounded in actual codebase analysis and targeted research on each topic area
+**Domain:** React Native Expo audiobook app — v1.2 Tech Cleanup milestone
+**Researched:** 2026-02-28
+**Confidence:** HIGH — grounded in direct codebase analysis, official changelogs, and verified library issue reports
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: iCloud Exclusion Applied Before File Exists
+### Pitfall 1: Expo 55 Mandates New Architecture — react-native-track-player Events Broken in Bridgeless Mode
 
 **What goes wrong:**
-`NSURLIsExcludedFromBackupKey` is applied via `setExcludeFromBackup(downloadPath)` immediately after the background downloader signals completion. If the native call fires before the OS has flushed the file to disk, `setResourceValue:forKey:error:` fails silently — no exception, `success: false`, no error populated. The attribute is never set, and the file gets backed up to iCloud anyway. This failure is invisible because the DownloadService already catches and swallows the error at `DownloadService.ts:288-294` and continues.
+Expo SDK 55 drops the Legacy Architecture entirely. React Native 0.83 (bundled in SDK 55) always enables the New Architecture; there is no opt-out. The current codebase uses `react-native-track-player` 4.1.2. In early 4.x builds, events emitted from the headless audio service on Android do not fire when running under the New Architecture bridgeless mode. The coordinator depends critically on `NATIVE_STATE_CHANGED`, `NATIVE_TRACK_CHANGED`, `NATIVE_PROGRESS_UPDATED`, `NATIVE_PLAYBACK_ERROR`, and `NATIVE_QUEUE_ENDED` events. If any of these fail to reach the coordinator, the state machine stalls silently — no user-visible error, just a frozen player state.
 
 **Why it happens:**
-The background downloader's `done` callback fires when the download task finishes, but there can be a brief window between the native callback firing and the file being fully flushed and queryable by the file system. The native module calls `NSURL.setResourceValue` directly on the path without first verifying the file exists via `NSFileManager.fileExistsAtPath`.
+The underlying issue is `RCTDeviceEventEmitter` (used by Android's headless service) not propagating events through the bridgeless interop layer. This was a known React Native issue (facebook/react-native#44255, #46050). RNTP fixed this in a subsequent release, but version 4.1.2 (currently installed) predates a confirmed-clean bridgeless fix. The exact minimum version with confirmed bridgeless stability is not pinnable from documentation alone — it requires a test on the actual device post-upgrade.
 
-**Consequences:**
+**How to avoid:**
+Before upgrading Expo SDK, upgrade `react-native-track-player` to the latest 4.x release and run the full coordinator event sequence on an Android device: launch → play → skip → seek → pause → resume → queue end. Check the coordinator's `totalEventsProcessed` metric (visible in the diagnostics UI) against the number of expected events. If events are missing, the state machine will reject transitions and `rejectedTransitionCount` will spike with no corresponding action.
 
-- Downloaded audio files are silently backed up to iCloud
-- Users with large libraries may exhaust iCloud storage
-- Apple may reject the app if backup size is excessive
+**Warning signs:**
 
-**Prevention:**
-In the native Swift implementation, verify file existence with `FileManager.default.fileExists(atPath: url.path)` before calling `url.setResourceValues`. If the file does not exist yet, retry with a short delay (100ms, once) or return an explicit error rather than silently returning `success: false`. On the JS side, log a warning (not just silently continue) when `setExcludeFromBackup` returns `success: false`.
+- Player plays audio natively (OS controls work) but the coordinator shows stale state in the diagnostics UI
+- `rejectedTransitionCount` rises but `stateTransitionCount` stays flat
+- `NATIVE_STATE_CHANGED` events absent from the coordinator's transition history during playback
+- Android notification controls work but the in-app UI does not update position
 
-**Detection:**
-
-- Add an `isExcludedFromBackup` verification check after setting: call `isExcludedFromBackup(downloadPath)` and log a warning if `excluded === false`
-- Check iCloud backup size via iOS Settings → iCloud → Manage Account Storage
-- Look for `Failed to set iCloud exclusion` in logs, but note that the error may not appear if the native module swallows the failure
-
-**Phase to address:** Applies to the iCloud exclusion phase. Low native-side risk if the file always exists when the callback fires in practice, but the silent failure path is unacceptable.
+**Phase to address:** Expo upgrade phase. Block the Expo bump until RNTP compatibility is verified on Android. iOS is lower risk (bridgeless issues are predominantly Android-side).
 
 ---
 
-### Pitfall 2: iCloud Exclusion Attribute Resets After File Operations
+### Pitfall 2: Expo 55 Changes NativeTabs API — Tab Layout Will Not Compile After Upgrade
 
 **What goes wrong:**
-Apple's documentation states that "some operations commonly made to user documents will cause this property to be reset to false." Specifically, copying a file does not preserve `NSURLIsExcludedFromBackupKey` — the copy starts with the attribute cleared. The app's path repair logic in `repairDownloadStatus` calls `markAudioFileAsDownloaded(file.id, expectedPath)` to update the database with the corrected container path, but it never re-applies the iCloud exclusion to the file at the new path. This means after any container path migration (which happens on every app update for absolute-path-stored files), the exclusion attribute on the physical file at the new path is not set.
+SDK 55 restructures the `NativeTabs` unstable API. In particular, `Icon`, `Label`, and `Badge` sub-components moved to be accessed via `NativeTabs.Trigger.*` — any direct imports of these components from `expo-router/unstable-native-tabs` will fail to resolve post-upgrade. This codebase uses `NativeTabs` in `src/app/(tabs)/_layout.tsx` for the custom tab order / hidden tabs feature. A compile-time import change in a layout file will make the entire tab navigator fail to render, which means the app opens to a blank screen or crashes at startup.
 
 **Why it happens:**
-`repairDownloadStatus` was written to fix path staleness in the database. It correctly calls `verifyFileExists(expectedPath)` and then `markAudioFileAsDownloaded`. However, it does not call `setExcludeFromBackup(expectedPath)` as part of the repair. The existing `DownloadService.ts:575-579` repair path has no iCloud exclusion step.
+`NativeTabs` is still marked `unstable` in the API surface, meaning it is explicitly not covered by Expo's stability guarantees between SDK versions. The v1.1 milestone made significant investment in the custom tab reorder feature (`tabOrder`, `hiddenTabs` in settingsSlice) that depends directly on this API. SDK 55 also changes `resetOnFocus` (previously `reset`) on headless tabs.
 
-**Consequences:**
+**How to avoid:**
+Before running `npx expo install --fix` (which updates package versions), read the SDK 55 changelog's `expo-router` section in full and grep `src/app/(tabs)/_layout.tsx` for all `NativeTabs` API usages. Map each usage against the new API surface. Do this as a pure reading exercise before touching any files — it costs 30 minutes and avoids a silent tab-break that is hard to diagnose in a partially-upgraded state.
 
-- After every iOS app container path change, all previously downloaded files lose their backup exclusion
-- The attribute is re-applied only when the user re-downloads, not during repair
-- Silent backup growth proportional to library size on every app update
+**Warning signs:**
 
-**Prevention:**
-Add `await setExcludeFromBackup(expectedPath)` immediately after the `markAudioFileAsDownloaded` call in `repairDownloadStatus`. Also consider a startup reconciliation pass that calls `isExcludedFromBackup` on each downloaded file and re-applies the attribute if missing. The `isLibraryItemDownloaded` path already verifies file existence — it is the right hook for this reconciliation.
+- After `npx expo install --fix`, TypeScript errors in `_layout.tsx` referencing `NativeTabs` sub-components
+- App opens to blank tab content area with no crash log (layout render fails silently in some Expo versions)
+- Custom tab ordering stops working (tabs appear but in hardcoded order)
 
-**Detection:**
-
-- Add logging in `repairDownloadStatus` that verifies exclusion status after repair
-- Test by downloading a book, force-killing the app, reinstalling, and checking iCloud backup growth
-
-**Phase to address:** Must be addressed in the same phase as the initial iCloud exclusion implementation — they are one atomic feature.
+**Phase to address:** Expo upgrade phase, immediately after running `npx expo install --fix` and before `expo prebuild --clean`.
 
 ---
 
-### Pitfall 3: Download Reconciliation Scan Races Active Downloads
+### Pitfall 3: Expo 55 Requires Xcode 26 — Build Fails on Older Xcode Without Clear Error
 
 **What goes wrong:**
-A download state reconciliation scan reads `getAudioFilesWithDownloadInfo` from the DB and compares against disk state. If a download is in progress at the same time (task state = `DOWNLOADING`), the file exists on disk but may be a partial file. The reconciliation scan sees the file as "present on disk" (`verifyFileExists` returns `true` for partial files because the file handle is open), marks it as downloaded, and `markAudioFileAsDownloaded` fires — while the download task is still running. When the task later completes, the `done` handler calls `markAudioFileAsDownloaded` again (idempotent in the DB), but the UI may have already shown a "downloaded" badge prematurely.
+SDK 55 (React Native 0.83, Swift Concurrency / MainActor isolation enforcement) requires Xcode 26. Building with an older Xcode produces Swift compiler errors originating in `expo-modules-core`, specifically errors related to `MainActor` isolation — not in application code, but deep in Expo's own iOS layer. The errors look like library bugs, not toolchain issues, causing wasted time investigating RNTP or custom native modules.
 
 **Why it happens:**
-The `activeDownloads` Map in `DownloadService` is the source of truth for in-progress downloads, but a reconciliation scan written separately (e.g., triggered at startup) would not check this Map before querying the DB + disk. The existing `isLibraryItemDownloaded` method has a TODO comment (`// TODO: Could mark as not downloaded in database here`) indicating the partial-file case is known but unhandled.
+Swift 6 strict concurrency checking is enforced by Xcode 26. `expo-modules-core` 55.x uses Swift features that require the newer compiler. The `npm run ios` script already runs `expo prebuild --clean` but prebuild does not check Xcode version — the failure surface is at compile time inside Xcode, after 5-10 minutes of build time.
 
-**Consequences:**
+**How to avoid:**
+Run `xcode-select --version` and check the Xcode version before starting the upgrade. If not on Xcode 26, install it first. Do this as the first step of the upgrade phase, before changing any package.json versions.
 
-- Prematurely marking a partial file as downloaded causes playback failure (audio decoder rejects truncated files)
-- If the download task is cancelled after premature marking, the DB shows "downloaded" but the file is partial
+**Warning signs:**
 
-**Prevention:**
-Before any reconciliation scan, check `downloadService.isDownloadActive(libraryItemId)`. Skip reconciliation for any item with an active download. Alternatively, the scan should compare file size on disk against the expected size from the DB (`audioFiles.size` column) to distinguish partial from complete files. Only mark as downloaded when disk size matches expected size within a small tolerance (e.g., 99% or exact match).
+- Xcode build fails with Swift compiler errors in `expo-modules-core` or other Expo packages
+- Errors reference `MainActor` isolation or `async` annotation issues, not in app code
+- `expo-modules-core` is not listed in any custom native code and was not recently changed
 
-**Detection:**
+**Phase to address:** Expo upgrade phase, as a pre-flight check before any code changes.
 
-- Reconciliation fires while a download is active → "downloaded" badge appears → player fails to load
-- Look for error logs from TrackPlayer when loading a partial audio file
+---
 
-**Phase to address:** Download tracking reconciliation phase. Guard must be added before the reconciliation scan is triggered at startup.
+### Pitfall 4: RN Downloader Mainline Renames `checkForExistingDownloads` to `getExistingDownloadTasks` — Silent Runtime Failure
+
+**What goes wrong:**
+The codebase is pinned to a custom fork (`github:clayreimann/react-native-background-downloader#spike-event-queue`) of the `@kesha-antonov/react-native-background-downloader` library. The mainline `@kesha-antonov` package uses `getExistingDownloadTasks()` instead of `checkForExistingDownloads()` (the legacy EkoLabs API surface). The `DownloadService.initialize()` method calls `RNBackgroundDownloader.checkForExistingDownloads()` at startup. If the mainline package does not expose this name, the call at `DownloadService.ts:78` returns `undefined` instead of an empty array, and `existingTasks.length` throws `TypeError: Cannot read property 'length' of undefined`. This crashes the download service initialization silently (the error is caught at line 89 and logged but the service marks itself as failed to initialize).
+
+**Why it happens:**
+The original EkoLabs fork used `checkForExistingDownloads`. The kesha-antonov fork/rename updated the API surface but the function name changed. The custom fork (`spike-event-queue` branch) may re-expose the old name as an alias or may use the new name — this needs direct inspection of the branch's index.ts before attempting the migration.
+
+**How to avoid:**
+Before switching the package.json reference, clone or inspect the `@kesha-antonov/react-native-background-downloader` mainline source and diff its exported API against the current fork's exports. Specifically: compare `checkForExistingDownloads` vs `getExistingDownloadTasks`, compare task lifecycle events (`done`, `error`, `progress`, `begin`) against what `DownloadService.ts:274-330` registers, and compare `setConfig` options (specifically `progressInterval` and `isLogsEnabled` at lines 72-75). Any API surface difference must be adapter-wrapped in `DownloadService.ts` before the fork switch.
+
+**Warning signs:**
+
+- After switching to mainline, `DownloadService` logs `Error during initialization` on startup
+- Downloads appear to start but never complete (progress callbacks not registered)
+- `isInitialized` stays `false` → subsequent `startDownload` calls call `initialize()` again on every download attempt
+- `checkForExistingDownloads is not a function` error in logs
+
+**Phase to address:** RN Downloader migration phase. Treat as API migration, not a simple dependency swap.
+
+---
+
+### Pitfall 5: RN Downloader Migration Breaks iOS Path Repair Logic If Task IDs Change
+
+**What goes wrong:**
+The `DownloadService` uses task IDs derived from `libraryItemId` and audio file `ino` to match restored background tasks to in-progress downloads at startup. If the mainline downloader generates task IDs differently (e.g., using a different concatenation format, adding a prefix, or using a UUID), `restoreExistingDownloads()` at line 79 will find existing tasks but fail to match them to any known audio file. The orphaned tasks will re-download files that already exist on disk, doubling bandwidth usage. More critically: if the task completes and `markAudioFileAsDownloaded` is called for a file that already has a correct `localAudioFileDownloads` record, Drizzle's `onConflictDoUpdate` handles the duplicate gracefully — but the progress callbacks will not fire for any UI that was waiting (the original subscription was on the old task ID).
+
+**Why it happens:**
+The `spike-event-queue` fork was custom-built for this codebase's event queue pattern. Its task ID format may be a deliberate divergence from the mainline. The mainline's `getExistingDownloadTasks()` returns task objects whose `id` field format is library-defined. If the format differs, the `restoreExistingDownloads` logic (which looks up tasks by ID in `activeDownloads`) will miss all in-flight downloads.
+
+**How to avoid:**
+Test the mainline's task ID format by starting a download, force-quitting the app, relaunching, and logging the `id` field from each task returned by `getExistingDownloadTasks()`. Compare this against the IDs stored in `activeDownloads`. If they differ, add a lookup-by-audio-file-path fallback in `restoreExistingDownloads` that matches tasks by comparing the download URL pattern against the expected download URL for each pending audio file.
+
+**Warning signs:**
+
+- After migrating to mainline: restart during active download → files re-download from zero rather than resuming
+- `restoreExistingDownloads` logs found X tasks but then immediately logs "no matching download info found" for each one
+- `activeDownloads` Map is empty after restart despite files being partially present on disk
+
+**Phase to address:** RN Downloader migration phase. Test specifically with the app-restart-during-download scenario before considering the migration complete.
+
+---
+
+### Pitfall 6: Moving Local State to Zustand Causes Coordinator Event Storms If State Drives Side Effects
+
+**What goes wrong:**
+If a component's local `useState` drives a side effect (e.g., `useEffect(() => { doSomething(localVal); }, [localVal])`), moving that state to Zustand without re-examining the effect dependency chain creates a new failure mode: every Zustand subscriber that touches the same slice will now re-trigger the effect. In the player context, the `playerSlice` has high write frequency (position updates at 1Hz from `NATIVE_PROGRESS_UPDATED`). If any component moves local state that depends on player position into Zustand without a precise selector, that component's `useEffect` fires every second — potentially dispatching coordinator events or re-initializing services on each tick.
+
+**Why it happens:**
+Local `useState` is component-scoped. Zustand state is process-scoped. A component that reads `useAppStore(state => state.player.position)` will re-render on every position update (once per second during playback). Any `useEffect` that lists this selector's output as a dependency fires once per second. In the current architecture, `playerSlice` position is updated at 1Hz specifically to avoid Zustand re-render storms — the `NATIVE_PROGRESS_UPDATED` event uses a separate "position-only" sync path (`syncPositionToStore`). Any new Zustand state that incorrectly listens to `state.player.position` directly in a `useEffect` dependency array breaks this two-tier sync guarantee.
+
+**How to avoid:**
+Audit every `useEffect` in the component being refactored: replace any `state.player.position` dependency with a stable value (e.g., `state.player.currentChapter?.id`) or remove the dependency if the effect does not actually need to track position. Use `useAppStore.getState().player.position` inside the effect body (snapshot access) rather than subscribing to it. If the effect truly needs to react to position, use `subscribeWithSelector` outside React (in a service) rather than in a component effect.
+
+**Warning signs:**
+
+- After moving state to Zustand: performance profiler shows the affected component re-rendering at 1Hz during playback
+- Coordinator `totalEventsProcessed` spikes during playback (events being dispatched from component effects)
+- Excessive network requests or DB writes correlating with playback (1Hz side effect firing)
+
+**Phase to address:** State audit phase. For any component state being centralized, write a test that verifies the component does not re-render during normal position-update ticks before committing the change.
+
+---
+
+### Pitfall 7: Zustand Slice Actions Captured in Closures Become Stale If Not Accessed via `get()`
+
+**What goes wrong:**
+When adding new Zustand slice actions that internally call other slice methods (e.g., a new action in `downloadSlice` that calls `get().startDownload()` or references state from `playerSlice`), the action must use `get()` to access current state — not a closure over the initial `state` parameter. If a new action is written as:
+
+```typescript
+const myAction = (id: string) => {
+  if (state.downloads.initialized) {
+    // BUG: `state` is stale
+    downloadService.startDownload(id);
+  }
+};
+```
+
+...the `state` reference is from slice creation time (always the initial state). The action will always see `initialized: false` even after initialization completes.
+
+**Why it happens:**
+The slice creator pattern `(set, get) => ({...})` requires `get()` to read current state inside actions. This is well-documented in the Zustand README but easy to miss when copying action patterns from a code base where the distinction matters less (e.g., actions that only call `set()` without reading state first). The v1.2 audit will produce new actions in existing slices — each one is a chance to introduce a stale closure if `get()` is forgotten.
+
+**How to avoid:**
+Every new action body that reads state before calling `set()` must use `const state = get()` at the start of the action, not a closure variable. In the existing codebase, this pattern is already consistently applied (e.g., `downloadSlice.ts:97-98`). New actions added during the audit should copy this exact pattern. Add ESLint or a code-review checklist item: "Does this action read state? If yes, does it use `get()` not a closure?"
+
+**Warning signs:**
+
+- New action always behaves as if slice is uninitialized regardless of app state
+- Action fires successfully in unit tests (where initial state is the test's setup state) but fails silently in production
+- Condition checks on slice state inside new actions always evaluate to their initial values
+
+**Phase to address:** State audit and centralization phase.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 4: updateNowPlayingMetadata Feedback Loop via configureTrackPlayer
+### Pitfall 8: SQLite `ALTER TABLE ADD COLUMN NOT NULL` Fails on Existing Rows Without a Default
 
 **What goes wrong:**
-`updateNowPlayingMetadata` in `playerSlice.ts:576-627` calls `await configureTrackPlayer()` at line 619 as a "double check that we don't lose the trackplayer controls." `configureTrackPlayer` presumably calls `TrackPlayer.updateOptions()` or similar. On some TrackPlayer versions, `updateOptions` or capability updates cause the native player to re-emit a state change event (`NATIVE_STATE_CHANGED`), which flows through the event bus to the coordinator. The coordinator processes `NATIVE_STATE_CHANGED` and calls `syncStateToStore`, which checks if the chapter changed and potentially calls `updateNowPlayingMetadata` again.
+Drizzle generates a migration like `ALTER TABLE audio_files ADD COLUMN new_col text NOT NULL` when a new required column is added to a schema without a `.default()`. In PostgreSQL, this is handled with a table rewrite. In SQLite (used by `expo-sqlite`), adding a `NOT NULL` column without a `DEFAULT` clause raises `table audio_files has N rows of data but only M values provided` and the migration fails. When Drizzle's migration runner on `expo-sqlite` encounters this error mid-migration, the migration is not marked as applied, but any DDL statements that ran before the failure have already executed (SQLite DDL is not transactional in older SQLite versions). The database can end up in a half-migrated state.
 
 **Why it happens:**
-`updateNowPlayingMetadata` is called from `syncPositionToStore` and `syncStateToStore` in the coordinator bridge (lines 702-706 and 749-753 of `PlayerStateCoordinator.ts`). The guard is `currentChapterId !== this.lastSyncedChapterId`. After `updateNowPlayingMetadata` runs, `lastSyncedChapterId` is set correctly. The loop breaks because the guard prevents a second call for the same chapter. However, if `configureTrackPlayer()` triggers an event that causes the coordinator to call `syncStateToStore` again for the same chapter _before_ `lastSyncedChapterId` is updated (due to async timing), a second call can slip through.
+The codebase already has 12 migration files — the pattern of adding optional columns (`ALTER TABLE ... ADD ... integer`) is established. Adding a genuinely non-null column without a SQLite-compatible default is a first-time edge case that has not been encountered yet. The schema audit phase may identify columns that "should be" NOT NULL but currently have NULL values in production databases.
 
-**Consequences:**
+**How to avoid:**
+For any new column added to an existing table, always add a SQLite-compatible `.default()` in the Drizzle schema definition — even if the application logic would never store NULL. Use the `DEFAULT` to make the migration safe, then enforce the constraint in application code or helpers. Run `drizzle-kit generate` on a copy of the database with existing rows before shipping any migration, not just on an empty test database. The migration file should be inspected for `NOT NULL` without `DEFAULT` before merging.
 
-- Rapid-fire lock screen metadata updates causing flicker
-- Increased bridge overhead during chapter transitions
+**Warning signs:**
 
-**Prevention:**
-Set `this.lastSyncedChapterId = currentChapterId` synchronously before the `store.updateNowPlayingMetadata()` call (not after the promise resolves). The current code sets it synchronously at line 702 before the `.catch`, which is correct. Verify that `configureTrackPlayer()` inside `updateNowPlayingMetadata` does not dispatch a player event. If it does, add a second guard: a boolean `_isUpdatingNowPlaying` flag that prevents re-entrant calls.
+- Migration runner throws `table has N rows of data but only M values provided` on app startup
+- App starts but some features are missing (migrated to the partially-applied state)
+- `migrations.js` does not show the new migration as applied, but attempting to re-run it fails because some statements already executed
 
-**Detection:**
-
-- Lock screen album art flickers on chapter change
-- `totalEventsProcessed` in coordinator metrics spikes on chapter change (more than one `syncStateToStore` call per chapter crossing)
-- Two `NATIVE_STATE_CHANGED` events appear in coordinator transition history within 50ms of a chapter change
-
-**Phase to address:** Metadata + coordinator bridge phase. Verify by monitoring coordinator transition history during chapter crossings in testing.
+**Phase to address:** DB audit phase. Review every schema file for columns that would generate a `NOT NULL` without `DEFAULT` migration, and add a safe default before generating.
 
 ---
 
-### Pitfall 5: Android Artwork Cleared by updateMetadataForTrack
+### Pitfall 9: DB Index Migration Locks the Table for Multi-Second Reads on Large Libraries
 
 **What goes wrong:**
-There is a confirmed bug in `react-native-track-player` v4.1.1+ (issue #2287) where calling `updateMetadataForTrack` clears the artwork on Android even when `artwork` is passed with a constant value. The `updateNowPlayingMetadata` implementation in `playerSlice.ts:607` calls `TrackPlayer.updateMetadataForTrack(activeTrackIndex, { artwork: currentTrack.coverUri || undefined, ... })`. On Android, this results in the notification and lock screen showing the chapter title but no cover art after the first chapter transition.
+`CREATE INDEX` on a table with hundreds of thousands of rows blocks all other read/write operations on that table for the duration of the index build. The `local_listening_sessions` and `local_progress_snapshots` tables in a power user's database could contain tens of thousands of rows (hourly progress snapshots for a large library). The index creation runs during `migrate()` at app startup — before the user sees the home screen. On a mid-range Android device with older storage, a multi-column index on `local_progress_snapshots(sessionId, timestamp)` could take 2-4 seconds, during which any concurrent DB query (e.g., `initializeDownloads` running in parallel) will be blocked.
 
 **Why it happens:**
-Known library bug introduced after v4.1.1-RC06. The JS layer passes artwork correctly but the Android native module does not preserve the existing bitmap when only some metadata fields change.
+`expo-sqlite` runs on a single-file SQLite database. SQLite's `CREATE INDEX` requires a full table scan and acquires a write lock. There is no `CREATE INDEX CONCURRENTLY` in SQLite (that is a PostgreSQL feature). Drizzle's `migrate()` runs all pending migrations synchronously in sequence.
 
-**Consequences:**
+**How to avoid:**
+Add indexes only where query analysis confirms they are needed (check `EXPLAIN QUERY PLAN` output first). Prefer `CREATE INDEX IF NOT EXISTS` in the migration SQL to make it safe to re-run. For very large tables, consider whether the index should be created in a deferred background task rather than synchronously in `migrate()`. Measure migration time on a database seeded with realistic row counts before shipping.
 
-- Android users see no cover art in notifications after chapter 1 ends
-- Artwork disappears and does not recover until playback is fully restarted
+**Warning signs:**
 
-**Prevention:**
-Check the version of `@doublesymmetry/react-native-track-player` installed. If it is v4.1.1+, test artwork persistence on Android during a chapter transition before shipping. Workaround options: (1) call `TrackPlayer.add()` with the track including artwork before calling `updateMetadataForTrack` on Android, (2) use `TrackPlayer.updateNowPlayingMetadata()` instead of `updateMetadataForTrack` for metadata-only updates (does not touch the track object), (3) check if a newer version of the library has resolved the bug.
+- App startup takes 2-4 seconds longer after deploying the migration
+- `initializeDownloads` or `initializeLibrarySlice` timeout or return stale data on first run after upgrade
 
-**Detection:**
-
-- Chapter transition on Android → cover art disappears from notification
-- Test specifically on Android physical device or emulator, not just iOS simulator
-
-**Phase to address:** Metadata update phase. Test Android explicitly before marking complete.
+**Phase to address:** DB audit phase.
 
 ---
 
-### Pitfall 6: Expo Router Cross-Tab Navigation Creates History Stack Corruption
+### Pitfall 10: PlayerService Decomposition Creates a New Import Cycle if Helpers Import from the Service
 
 **What goes wrong:**
-When navigating from the Library tab to the Home tab (or any sibling tab) using `router.push('/(tabs)/home')`, Expo Router adds the home route to the Library tab's stack — it does not switch tabs. The user ends up with the home content rendered inside the Library stack, with a back button that returns to the library, rather than the Home tab being activated. This is a frequent mistake when thinking in "navigate to a page" terms rather than "switch to a tab" terms.
+The current dependency graph for `PlayerService.ts` imports from `DownloadService`, `ProgressService`, `coordinator/PlayerStateCoordinator`, and `coordinator/eventBus`. If `PlayerService` is split into domain-specific files (e.g., `playerPlaybackHelpers.ts`, `playerTrackHelpers.ts`), any helper that needs to call back into the coordinator or dispatch events will import `dispatchPlayerEvent` from `eventBus.ts`. This is safe — the eventBus is a leaf node with no upstream imports. However, if a helper is written to import `PlayerService.getInstance()` to call another method (the "split but not refactored" pattern), a cycle is introduced: `PlayerService` → `playerTrackHelpers` → `PlayerService`.
 
 **Why it happens:**
-Expo Router's file-based routing treats `/(tabs)/home` as a route within the current navigator context. `router.push` within a tab navigator pushes onto the current tab's stack. To switch tabs, you must use `router.navigate` with the tab's index route, or use the `useRouter` API in a way that targets the tab navigator's tab-switching action rather than the stack's push action. In Expo Router v4, `router.navigate` now behaves identically to `router.push` (it no longer "unwinds" to existing routes), making this worse.
+Large service files are split by copy-pasting methods into helper files. Methods that call `this.someOtherMethod()` are rewritten to call `PlayerService.getInstance().someOtherMethod()` to avoid passing `this` as a parameter. This is the fastest path to a split that compiles, and it introduces a hidden singleton cycle that Metro bundler resolves non-deterministically (one import may be `undefined` at module evaluation time).
 
-**Consequences:**
+**How to avoid:**
+When splitting `PlayerService`, use pure function helpers that take explicit arguments — they should not import the service class. If a helper needs coordinator access, it should accept the coordinator or `dispatchPlayerEvent` as a parameter, not import them directly (they are already available at the `PlayerService` call site). Use `eslint-plugin-import/no-cycle` to fail the build on any new import cycle introduced during the split.
 
-- "Home" content appears inside the Library stack with a back button
-- The Home tab button appears unselected (because you're not actually on that tab)
-- Android physical back button pops back to library instead of staying on home
+**Warning signs:**
 
-**Prevention:**
-To switch tabs, use `router.navigate` with the exact tab index route path. For this app, the tabs use `NativeTabs` from `expo-router/unstable-native-tabs`. Check whether `NativeTabs.Trigger` navigation, or a direct `router.navigate('/')` to the home index, correctly activates the tab. Use `router.replace` (not `router.push`) when you want to navigate to a tab from within another tab and don't want the original tab to have a back entry. The safe pattern: navigate to the index route of the target tab (`/home` not `/(tabs)/home`), and use `replace` if you want to clear the navigation history.
+- After splitting, a method in the new helper file throws `TypeError: PlayerService.getInstance is not a function` or similar at startup
+- Jest imports of the helper file trigger "circular dependency" warnings in the test runner
+- `dispatchPlayerEvent` is `undefined` in a helper file that imports it at module top level (the cycle resolved in the wrong order)
 
-**Detection:**
-
-- Navigate from Library to Home → Home tab button not highlighted
-- Physical back button on Android goes to Library instead of staying on Home
-- Navigation history shows Library → Home in the same stack
-
-**Phase to address:** Wherever cross-tab navigation is added. Test on physical Android device (back button behavior) as well as iOS.
+**Phase to address:** PlayerService decomposition phase. Run `npx dpdm --circular src/services/PlayerService.ts` before and after each file split to verify no cycles are introduced.
 
 ---
 
-### Pitfall 7: Skeleton Flash When Content Loads Quickly
+### Pitfall 11: `useCallback` Anti-Pattern in Zustand Selectors Creates Unnecessary Re-renders on Centralized State
 
 **What goes wrong:**
-If library data is already in the SQLite cache, `isLoading` transitions from `true` to `false` within a single frame, causing the skeleton to flash briefly before content appears. The flash is more jarring than showing no skeleton at all. This happens with cached data where the DB query resolves in <50ms — the skeleton renders for one frame and then the content replaces it.
-
-**Why it happens:**
-The loading state is derived directly from `isLoading` without any minimum display duration. React's reconciliation batches most state updates, but a fast DB query completing synchronously between renders can cause a visible flash, especially on fast devices.
-
-**Consequences:**
-
-- UI glitch that makes the app look broken
-- More noticeable on fast devices (where cache hits are common)
-
-**Prevention:**
-Use a "minimum display" pattern: do not hide the skeleton until at least 150-200ms have elapsed since it first appeared. Implement with `useRef` to track when the skeleton was first shown, and a `setTimeout` that prevents early dismissal:
+When component local state is moved to Zustand, the refactoring often introduces object-returning selectors:
 
 ```typescript
-const skeletonShownAt = useRef<number | null>(null);
-
-useEffect(() => {
-  if (isLoading && skeletonShownAt.current === null) {
-    skeletonShownAt.current = Date.now();
-  }
-  if (!isLoading && skeletonShownAt.current !== null) {
-    const elapsed = Date.now() - skeletonShownAt.current;
-    const remaining = Math.max(0, 150 - elapsed);
-    setTimeout(() => setShowSkeleton(false), remaining);
-  }
-}, [isLoading]);
+const { activeDownloads, isLoading } = useAppStore((state) => ({
+  activeDownloads: state.downloads.activeDownloads,
+  isLoading: state.downloads.isLoading,
+}));
 ```
 
-Alternatively: only show skeleton when the first load has no cached data (`items.length === 0 && isLoading`). If items already exist in the store, skip the skeleton and show stale content while refreshing.
+Zustand uses strict equality (`===`) to compare the selector's return value. An object literal returned from a selector is always a new reference — so every store update (including unrelated slices like position ticks from `playerSlice`) re-renders the component. The existing codebase correctly uses individual selectors in the `use*` hooks in `appStore.ts`, but new components added during the audit may not follow this pattern.
 
-**Detection:**
-
-- Enable "Slow down animations" in iOS Simulator (Debug → Slow Animations) and navigate to a tab with cached data — the flash becomes visible at 1/5 speed
-- On a physical device with fast storage, tap a tab rapidly after startup
-
-**Phase to address:** Loading skeleton phase. Add the minimum display guard before first demo.
-
----
-
-### Pitfall 8: Skeleton Animation Memory Leak on Fast Unmount
-
-**What goes wrong:**
-If a skeleton component using `Animated.loop` (from React Native's built-in `Animated`) is unmounted while the animation loop is running, the loop callback continues to fire on the interval, causing "Can't perform a React state update on an unmounted component" warnings. With Reanimated v3, the same risk exists with `withRepeat` if `cancelAnimation` is not called in the cleanup function.
-
-**Why it happens:**
-`Animated.loop(animation).start()` in a `useEffect` without a cleanup function leaves the loop running after unmount. This is a common mistake because the loop appears to "just work" — the warnings are easy to miss in development.
-
-**Consequences:**
-
-- Warning spam in development
-- Potential memory leak if the animation holds a reference to component state
-- In rare cases on older Android, continued animations on unmounted views can crash
-
-**Prevention:**
-For React Native `Animated`:
+**How to avoid:**
+Use individual selectors, one per state field:
 
 ```typescript
-useEffect(() => {
-  const animation = Animated.loop(Animated.sequence([...]));
-  animation.start();
-  return () => animation.stop(); // cleanup on unmount
-}, []);
+const activeDownloads = useAppStore((state) => state.downloads.activeDownloads);
+const isLoading = useAppStore((state) => state.downloads.isLoading);
 ```
 
-For Reanimated v3 `withRepeat`:
+Or use `useShallow` if multiple fields from the same slice are needed in an object. The existing slice hooks (`useDownloads()`, `useSettings()`, `usePlayer()`) already wrap state in `React.useMemo` with individual selectors — new code should use these hooks rather than writing new object-returning selectors inline.
 
-```typescript
-useEffect(() => {
-  return () => cancelAnimation(sharedValue);
-}, []);
-```
+**Warning signs:**
 
-If using `react-native-reanimated`'s `useSharedValue` + `withRepeat`, call `cancelAnimation(value)` in the cleanup. Prefer Reanimated v3 for skeletons since it runs on the UI thread and does not risk JS-side memory leaks.
+- Component profiler shows re-renders at 1Hz during playback (position ticks triggering everything)
+- React DevTools "Why did this render?" shows `store` as the cause on every tick
 
-**Detection:**
-
-- Navigate to skeleton screen → content loads → navigate away → check for "Can't perform a React state update on an unmounted component" in console
-- Use React DevTools Memory tab to check for retained component instances
-
-**Phase to address:** Loading skeleton phase.
+**Phase to address:** State audit phase. Code review checklist: "Does this component use an object-returning selector? If yes, convert to individual selectors or use the existing slice hook."
 
 ---
 
-### Pitfall 9: Skeleton Dimensions Causing Layout Shift
+### Pitfall 12: Expo Upgrade Invalidates All Prebuild Artifacts — Custom Plugin Must Re-Run Correctly
 
 **What goes wrong:**
-If skeleton placeholder dimensions do not match the final content dimensions exactly, content appears to "jump" when it loads — the layout shifts. This is particularly bad on list screens where each item changes height, causing the entire list to reflow. In this app's library list, the cover art aspect ratio and title/author text heights must match between skeleton and real content.
+The `withExcludeFromBackup` plugin (added in v1.1) copies `ICloudBackupExclusion.m` and `ICloudBackupExclusion.h` into `ios/SideShelf/Modules/` and registers them in the Xcode project during `expo prebuild`. After upgrading Expo SDK, `expo prebuild --clean` wipes the `ios/` directory entirely and regenerates it. The plugin must re-run cleanly for the native module to be available. If the plugin has any path assumptions or version-specific Xcode project structure assumptions, it may silently fail to register the files in the new Xcode project format — `NativeModules.ICloudBackupExclusion` resolves to `null` again, and iCloud exclusion silently stops working.
 
 **Why it happens:**
-Skeleton shapes are often approximated (e.g., a fixed-height rectangle for where a variable-height text block will appear). When the real content renders with different dimensions, React Native recalculates layout and the screen visually jerks.
+Expo config plugins use `@expo/config-plugins` APIs that may change between SDK versions. The Xcode project format also evolves. A plugin that worked with SDK 54's Xcode project structure may produce incorrect Xcode project modifications for SDK 55's structure.
 
-**Consequences:**
+**How to avoid:**
+After the Expo upgrade and `expo prebuild --clean`, verify that `ios/SideShelf/Modules/ICloudBackupExclusion.m` exists in the new `ios/` directory. Run the app and check that `NativeModules.ICloudBackupExclusion` is not null (add a log line to `iCloudBackupExclusion.ts` at startup if needed). Do not assume the prebuild succeeded because it produced no errors — the plugin could write files but fail to register them in the Xcode project.
 
-- Jarring visual experience on content load
-- Worse on Android where layout recomputation is slightly slower than iOS
+**Warning signs:**
 
-**Prevention:**
-Pin skeleton item height to the minimum expected content height. Use fixed dimensions derived from the actual content's layout — measure a real list item and copy its exact heights. For the library card: measure the card height when it renders with a one-line vs two-line title, and use the common case. Avoid `numberOfLines={0}` (unconstrained) text in skeletons — it will be the wrong height.
+- After Expo upgrade and prebuild, iCloud exclusion logs show "ICloudBackupExclusion module not available" (from the null-check guard in `iCloudBackupExclusion.ts`)
+- `ios/SideShelf/Modules/` directory is absent after prebuild
+- The Xcode project (`ios/SideShelf.xcodeproj/project.pbxproj`) does not contain `ICloudBackupExclusion` references
 
-**Detection:**
-
-- Enable "Slow down animations" in iOS Simulator and observe the skeleton→content transition
-- Layout shift is most visible when the list scrolls slightly as items load
-
-**Phase to address:** Loading skeleton phase.
+**Phase to address:** Expo upgrade phase. This is a post-prebuild verification step that must be checked before marking the Expo upgrade complete.
 
 ---
 
-## Minor Pitfalls
+## Technical Debt Patterns
 
-### Pitfall 10: repairDownloadStatus Called Concurrently at Startup
+Shortcuts that seem reasonable but create long-term problems.
 
-**What goes wrong:**
-If `repairDownloadStatus` is triggered at startup and another component also triggers `isLibraryItemDownloaded` for the same item at the same time, both functions call `verifyFileExists` and `markAudioFileAsDownloaded` (or `clearAudioFileDownloadStatus`) independently. Drizzle ORM's `onConflictDoUpdate` handles the DB write idempotently, but the scan can fire log messages for the same file from both code paths within milliseconds, making debugging confusing.
-
-**Prevention:**
-Trigger `repairDownloadStatus` once from a single entry point (e.g., the DownloadService `initialize()` method) and guard with the `isInitialized` flag. Avoid calling it from component `useEffect` hooks.
-
-**Phase to address:** Download reconciliation phase.
-
----
-
-### Pitfall 11: Large Library Performance During Download Scan
-
-**What goes wrong:**
-A full reconciliation scan calling `verifyFileExists` (which creates a `new File(path)` from `expo-file-system/next`) for every downloaded audio file in a large library (e.g., 500 audiobooks × 10 files = 5,000 `File.exists` checks) will block the JS thread for several seconds. `File.exists` in `expo-file-system/next` is synchronous.
-
-**Prevention:**
-Batch the reconciliation: process 20 items at a time with `Promise.all`, yielding with `await new Promise(r => setTimeout(r, 0))` between batches to allow other JS work to proceed. Or trigger reconciliation at a lower priority — after the user sees the first screen, not during splash/boot.
-
-**Detection:**
-
-- Enable JS thread frame drops monitoring in Flipper
-- On a library with 50+ downloaded items, time the startup reconciliation
-
-**Phase to address:** Download reconciliation phase.
+| Shortcut                                                         | Immediate Benefit                               | Long-term Cost                                                                             | When Acceptable                                                               |
+| ---------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Object-returning Zustand selector                                | Less boilerplate                                | Re-renders on every store tick, breaks `playerSlice` two-tier sync                         | Never — use individual selectors or `useShallow`                              |
+| Calling `PlayerService.getInstance()` inside a split helper file | Avoids refactoring `this` references            | Hidden singleton import cycle; Metro resolution is non-deterministic                       | Never during decomposition — pass dependencies explicitly                     |
+| `ALTER TABLE ADD COLUMN NOT NULL` without `DEFAULT`              | Mirrors intended constraint                     | Migration fails on existing rows; database left in half-migrated state                     | Never — always add a SQLite-safe default                                      |
+| Skipping `expo-doctor` after SDK bump                            | Faster iteration                                | Missing dependency mismatches surface as runtime errors, not build errors                  | Never — run `expo-doctor` immediately after `npx expo install --fix`          |
+| Testing only on iOS simulator after Expo upgrade                 | RNTP + coordinator events easy to verify on iOS | Android bridgeless event routing is a different code path — silent failure on Android only | Never — verify coordinator event sequence on physical Android before shipping |
 
 ---
 
-### Pitfall 12: iCloud Exclusion No-Op on Android
+## Integration Gotchas
 
-**What goes wrong:**
-The `setExcludeFromBackup` function in `iCloudBackupExclusion.ts` returns `{ success: true }` on Android without doing anything. If the caller logs "iCloud exclusion applied" unconditionally, the logs falsely suggest the operation succeeded on Android when nothing happened. This is benign for behavior (Android has no iCloud backup) but creates confusion when reading logs.
+Common mistakes when connecting to external services or libraries.
 
-**Prevention:**
-Log "iCloud exclusion skipped (non-iOS)" on Android paths rather than "iCloud exclusion applied." The current code already guards with `Platform.OS !== 'ios'` but the success return is silent. The fix is in the log message at the call site in `DownloadService.ts:286-291`.
-
-**Phase to address:** iCloud exclusion phase.
+| Integration                                                  | Common Mistake                                    | Correct Approach                                                                                                                              |
+| ------------------------------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@kesha-antonov/react-native-background-downloader` mainline | Treat as drop-in swap of the fork                 | Diff the exported API surface; adapter-wrap changed method names in `DownloadService.ts` before switching the package reference               |
+| `react-native-track-player` 4.x post-New Architecture        | Assume 4.1.2 behavior is stable on SDK 55         | Upgrade RNTP first, separately from Expo SDK bump; verify all coordinator event types fire on Android before combining upgrades               |
+| Drizzle `migrate()` on live user database                    | Test only on empty database during development    | Seed a test database with realistic row counts; run `EXPLAIN QUERY PLAN` on common queries before adding indexes                              |
+| Expo config plugin `withExcludeFromBackup`                   | Assume prebuild success = plugin success          | Post-prebuild, verify `ios/SideShelf/Modules/ICloudBackupExclusion.m` exists and `NativeModules.ICloudBackupExclusion` is not null at runtime |
+| Zustand slice actions calling other slices                   | Use closure variables for cross-slice state reads | Always call `get()` inside the action body to access current state; cross-slice reads via `get()` are documented behavior                     |
 
 ---
 
-## Phase-Specific Warnings
+## Performance Traps
 
-| Phase Topic                   | Likely Pitfall                                                               | Mitigation                                                                                 |
-| ----------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| iCloud exclusion              | File doesn't exist at time of `setResourceValue` call                        | Native: check `fileExists` before setting attribute; log warning on `success: false`       |
-| iCloud exclusion              | Attribute not re-applied after container path repair                         | Add `setExcludeFromBackup` to `repairDownloadStatus` repair path                           |
-| iCloud exclusion              | Android no-op logged as success                                              | Update log message at call site to distinguish platforms                                   |
-| Download reconciliation       | Partial file marked as downloaded                                            | Check `downloadService.isDownloadActive()` before reconciling any item                     |
-| Download reconciliation       | Large library blocks JS thread                                               | Batch reconciliation with yield between groups; defer after first screen                   |
-| Metadata + coordinator bridge | `configureTrackPlayer()` inside `updateNowPlayingMetadata` triggers re-entry | Set `lastSyncedChapterId` before the async call; add re-entrant guard                      |
-| Metadata + coordinator bridge | `updateMetadataForTrack` clears artwork on Android                           | Test on physical Android; use `updateNowPlayingMetadata` instead if artwork loss confirmed |
-| Expo Router tab navigation    | `router.push` opens route in current tab stack, not as tab switch            | Use `router.navigate` to the index route of the target tab with `replace` semantics        |
-| Loading skeletons             | Flash on fast content load                                                   | Minimum display duration (~150ms) before skeleton dismissal                                |
-| Loading skeletons             | Animation loop memory leak                                                   | `animation.stop()` or `cancelAnimation()` in `useEffect` cleanup                           |
-| Loading skeletons             | Layout shift on skeleton→content transition                                  | Pin skeleton item dimensions to measured real content dimensions                           |
+Patterns that work at small scale but fail as usage grows.
+
+| Trap                                                               | Symptoms                                                                      | Prevention                                                                               | When It Breaks                           |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `CREATE INDEX` in startup migration                                | 2-4s hang on first app open after upgrade for power users                     | Measure on a seeded database; consider deferred creation for large tables                | Libraries > ~5,000 rows in indexed table |
+| Object selector in Zustand on position-heavy slice                 | Component re-renders 1Hz during playback regardless of what it actually needs | Individual selectors; use existing `use*()` hooks                                        | Any playback session                     |
+| Full table scan in `initializeDownloads` without index             | Startup slows linearly with downloaded item count                             | Add indexes on join columns: `audioFiles.mediaId`, `localAudioFileDownloads.audioFileId` | Libraries > ~500 downloaded items        |
+| `verifyFileExists` in startup reconciliation scan with no batching | JS thread blocked for several seconds with large downloaded libraries         | Batch 20 items per tick with `await new Promise(r => setTimeout(r, 0))` between batches  | Libraries > ~100 downloaded books        |
+
+---
+
+## "Looks Done But Isn't" Checklist
+
+Things that appear complete but are missing critical pieces.
+
+- [ ] **Expo upgrade:** `expo-doctor` passes with no warnings — do not skip, dependency mismatches are silent until runtime
+- [ ] **Expo upgrade:** Physical Android device confirms coordinator receives all event types during a full play → seek → pause → resume → queue-end session
+- [ ] **Expo upgrade:** `NativeModules.ICloudBackupExclusion` is not null on device after `expo prebuild --clean`
+- [ ] **Expo upgrade:** `NativeTabs` custom tab order and hidden tabs still work after SDK bump (v1.1 feature)
+- [ ] **RN Downloader migration:** App-restart-during-active-download test: kill app mid-download → relaunch → download resumes from where it stopped (not from zero)
+- [ ] **RN Downloader migration:** `checkForExistingDownloads` (or its mainline equivalent) returns the expected task type and the `done`/`error`/`progress` callbacks register correctly
+- [ ] **State audit:** No component that subscribes to `state.player.position` has a `useEffect` with position in its dependency array (would fire 1Hz during playback)
+- [ ] **State audit:** Every new slice action that reads state before calling `set()` uses `get()` not a closure variable
+- [ ] **DB audit:** Every `ALTER TABLE ADD COLUMN` migration generated has a `DEFAULT` clause (no NOT NULL without DEFAULT)
+- [ ] **PlayerService decomposition:** `npx dpdm --circular src/services/PlayerService.ts` reports no new circular dependencies vs pre-decomposition baseline
+
+---
+
+## Recovery Strategies
+
+When pitfalls occur despite prevention, how to recover.
+
+| Pitfall                                       | Recovery Cost | Recovery Steps                                                                                                                                                                                    |
+| --------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Coordinator silent event loss after SDK bump  | HIGH          | Revert to Expo 54 by restoring `package.json` and `ios/` from git; upgrade RNTP independently; retest; retry Expo bump                                                                            |
+| NativeTabs API break after SDK bump           | MEDIUM        | Restore `_layout.tsx` from git; read SDK 55 changelog `expo-router` section; patch API usage; rebuild                                                                                             |
+| Half-migrated SQLite database on user device  | HIGH          | Requires manual migration recovery helper (drop/recreate affected table using `getSQLiteDb().execSync`); cannot be patched remotely via OTA update; user must reinstall or receive a hotfix build |
+| Import cycle from PlayerService decomposition | LOW           | `git revert` the split commit; re-split using explicit argument passing rather than singleton access                                                                                              |
+| Re-render storm from object selector          | LOW           | Convert to individual selectors; existing `use*()` hooks already have the correct pattern — inline selectors should be replaced with hook calls                                                   |
+
+---
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls.
+
+| Pitfall                                                        | Prevention Phase                                | Verification                                                                                         |
+| -------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| RNTP events broken in bridgeless mode (Pitfall 1)              | Expo upgrade phase                              | Play → seek → pause → queue-end on physical Android; check `totalEventsProcessed` in diagnostics     |
+| NativeTabs API break (Pitfall 2)                               | Expo upgrade phase (pre-flight)                 | TypeScript compiles cleanly; custom tab order works in UI                                            |
+| Xcode version requirement (Pitfall 3)                          | Expo upgrade phase (pre-flight checklist)       | `xcode-select --version` before any code changes                                                     |
+| Downloader API surface mismatch (Pitfall 4)                    | RN Downloader migration phase                   | `DownloadService.initialize()` completes without error; existing tasks detected on restart           |
+| Task ID format change breaking restart recovery (Pitfall 5)    | RN Downloader migration phase                   | Kill-and-restart mid-download test                                                                   |
+| Coordinator event storms from Zustand side effects (Pitfall 6) | State audit phase                               | React profiler shows component does not re-render at 1Hz during playback                             |
+| Stale closure in new slice actions (Pitfall 7)                 | State audit phase                               | Unit test: action called after initialization reads current state, not initial state                 |
+| NOT NULL column migration fails on existing rows (Pitfall 8)   | DB audit phase                                  | Run migration on seeded test database before shipping                                                |
+| Index creation blocking startup (Pitfall 9)                    | DB audit phase                                  | Time startup with realistic row counts (5,000+ in indexed tables)                                    |
+| Import cycle from service decomposition (Pitfall 10)           | PlayerService decomposition phase               | `dpdm --circular` baseline + post-split comparison                                                   |
+| Object-returning selector re-renders (Pitfall 11)              | State audit phase                               | React DevTools profiler during playback: target component render frequency                           |
+| iCloud exclusion plugin regression after prebuild (Pitfall 12) | Expo upgrade phase (post-prebuild verification) | Check `ios/SideShelf/Modules/` contents; runtime null check on `NativeModules.ICloudBackupExclusion` |
 
 ---
 
 ## Sources
 
-- Direct code analysis: `/Users/clay/Code/github/abs-react-native/src/services/DownloadService.ts` — iCloud exclusion applied in `done` callback (line 281-294), `repairDownloadStatus` missing exclusion re-application (lines 571-601), partial file detection gap in `isLibraryItemDownloaded` (line 467 TODO)
-- Direct code analysis: `/Users/clay/Code/github/abs-react-native/src/lib/iCloudBackupExclusion.ts` — native module wrapper, Android no-op behavior
-- Direct code analysis: `/Users/clay/Code/github/abs-react-native/src/services/coordinator/PlayerStateCoordinator.ts` — `syncPositionToStore` chapter guard (lines 695-712), `syncStateToStore` chapter guard (lines 730-758), `lastSyncedChapterId` debounce field
-- Direct code analysis: `/Users/clay/Code/github/abs-react-native/src/stores/slices/playerSlice.ts` — `updateNowPlayingMetadata` calls `configureTrackPlayer()` (line 619), `updateMetadataForTrack` call (line 607)
-- Direct code analysis: `/Users/clay/Code/github/abs-react-native/src/app/(tabs)/_layout.tsx` — `NativeTabs` usage, tab configuration, existing `router.replace` pattern
-- Apple Developer Forums: `NSURLIsExcludedFromBackupKey` silent failure on non-existent files; attribute resets on file copy operations (Apple documentation)
-- react-native-track-player issue #2287: `updateMetadataForTrack` clears artwork on Android in v4.1.1+ — [github.com/doublesymmetry/react-native-track-player/issues/2287](https://github.com/doublesymmetry/react-native-track-player/issues/2287)
-- Expo Router documentation: `router.push` vs `router.navigate` vs `router.replace` behavior — [docs.expo.dev/router/basics/navigation](https://docs.expo.dev/router/basics/navigation/)
-- Expo Router breaking change issue #35212: `router.navigate` in v4 behaves like `router.push` (no longer unwinds) — [github.com/expo/expo/issues/35212](https://github.com/expo/expo/issues/35212)
+### Direct Codebase Analysis (HIGH confidence)
+
+- `src/services/DownloadService.ts` — `checkForExistingDownloads` call at line 78; `restoreExistingDownloads` logic; `setConfig` options at lines 72-75; `done` callback at lines 275-330; task ID usage
+- `src/services/coordinator/PlayerStateCoordinator.ts` — event type dependencies (`NATIVE_STATE_CHANGED`, `NATIVE_TRACK_CHANGED`, `NATIVE_PROGRESS_UPDATED`); two-tier sync: `syncPositionToStore` vs `syncStateToStore`; `totalEventsProcessed` metric
+- `src/services/coordinator/eventBus.ts` — leaf node with no upstream service imports; `dispatchPlayerEvent` is the safe decoupling point for split service helpers
+- `src/stores/appStore.ts` — existing `use*()` hooks use individual selectors + `React.useMemo` (the correct pattern); `useDownloads.isItemPartiallyDownloaded` uses `useAppStore.getState()` snapshot access (correct pattern)
+- `src/stores/slices/downloadSlice.ts` — correct `get()` usage in all existing actions (lines 97-98, 205-207); `initializeDownloads` query pattern (multi-join without indexes)
+- `src/db/schema/audioFiles.ts`, `localData.ts` — no existing indexes on join columns (`mediaId`, `audioFileId`)
+- `src/db/migrations/` — 12 existing migration files; all use `ADD COLUMN ... DEFAULT` for non-null additions; this pattern is established
+- `src/db/helpers/migrationHelpers.ts` — precedent for data-preservation helper before destructive migration; pattern should be reused if any schema changes require data transformation
+- `package.json` — `"@kesha-antonov/react-native-background-downloader": "github:clayreimann/react-native-background-downloader#spike-event-queue"` — confirms custom fork, non-standard branch name
+
+### Official Documentation (HIGH confidence)
+
+- Expo SDK 55 changelog: New Architecture required (Old Architecture removed); NativeTabs `Icon/Label/Badge` moved to `NativeTabs.Trigger.*`; `resetOnFocus` replaces `reset` on headless tabs; Xcode 26 required — [expo.dev/changelog/sdk-55](https://expo.dev/changelog/sdk-55)
+- Expo "How to upgrade to SDK 55" — `npx expo install --fix` + `expo-doctor` workflow; delete `android/` and `ios/` before prebuild — [expo.dev/blog/upgrading-to-sdk-55](https://expo.dev/blog/upgrading-to-sdk-55)
+- Zustand documentation — selectors with object returns trigger re-renders on every store update; `useShallow` or individual selectors required for stability — [github.com/pmndrs/zustand](https://github.com/pmndrs/zustand)
+
+### Library Issues and Community (MEDIUM confidence)
+
+- react-native-track-player issue #2443: New Architecture support tracking — [github.com/doublesymmetry/react-native-track-player/issues/2443](https://github.com/doublesymmetry/react-native-track-player/issues/2443)
+- react-native-track-player issue #2389: Crash with RN 0.76 (New Architecture) — confirmed as a real compatibility risk for older 4.x versions — [github.com/doublesymmetry/react-native-track-player/issues/2389](https://github.com/doublesymmetry/react-native-track-player/issues/2389)
+- facebook/react-native #44255, #46050: `RCTDeviceEventEmitter` events not propagating from headless tasks in bridgeless mode — root cause of RNTP event loss on Android New Architecture — [github.com/facebook/react-native/issues/44255](https://github.com/facebook/react-native/issues/44255)
+- expo/expo issue #42525: Swift MainActor isolation build failures with Xcode 15+ and expo-modules-core 55.x — [github.com/expo/expo/issues/42525](https://github.com/expo/expo/issues/42525)
+- expo/expo issue #39587: NativeTabs animation property on Tabs broke navigation in SDK 54 — precedent for NativeTabs API instability across SDK bumps — [github.com/expo/expo/issues/39587](https://github.com/expo/expo/issues/39587)
+- kesha-antonov/react-native-background-downloader releases: v4.4.1 fix for `getExistingDownloadTasks()` not returning paused tasks after restart — confirms API surface change from `checkForExistingDownloads` — [github.com/kesha-antonov/react-native-background-downloader/releases](https://github.com/kesha-antonov/react-native-background-downloader/releases)
+- 2025 Expo Spring Hackathon investigation: Metro `inlineRequires` timing differences between Expo and RN CLI can make circular dependency resolution non-deterministic — directly relevant to service decomposition safety
 
 ---
 
-_Pitfalls research for: v1.1 Bug Fixes & Polish milestone_
-_Researched: 2026-02-20_
+_Pitfalls research for: v1.2 Tech Cleanup milestone_
+_Researched: 2026-02-28_
