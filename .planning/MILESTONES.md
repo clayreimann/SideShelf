@@ -23,3 +23,25 @@
 - ProgressService mutex removed (37 lines); serial queue provides equivalent protection
 - Coordinator coverage: 92.83%, playerSlice: 91.62%
 - observerMode flag preserved for instant rollback
+
+## v1.1 — Bug Fixes & Polish
+
+**Completed:** 2026-02-27
+**Phases:** 6–9 (4 phases, 11 plans, ~23 tasks)
+
+**Goal:** Fix six runtime bugs exposed after the coordinator migration and apply five focused polish improvements to downloads, navigation, and the home screen.
+
+**What shipped:**
+
+- Phase 6: iCloud exclusion plugin compiled into Xcode build; file:// URL encoding bug fixed; exclusion applied at download completion and during path repair
+- Phase 7: Download reconciliation scan clears stale DB records on startup with active-download guard; partial download badge and action sheet; orphan scanner walks disk for unknown files
+- Phase 8: SkipButton refactored to Pressable-outside-MenuView (iOS 18 UIContextMenuInteraction fix); short-tap skip works; lock screen updates after skip via unconditional SEEK_COMPLETE; interval selections persist via Zustand settingsSlice
+- Phase 9: More screen Series/Authors navigation fixed via re-export screen pattern; 12 items assigned SF Symbol + Ionicons icons with chevron affordance; home screen cold-start spinner replaced with pulsing skeleton shelves (140×140, 300ms cross-fade); cover art startup repair scan; drag handle on tab reorder rows
+
+**Key outcomes:**
+
+- All 16 v1.1 requirements delivered
+- 58 files changed, 6,978+ insertions
+- 6 days execution (Feb 22 → Feb 27)
+
+---

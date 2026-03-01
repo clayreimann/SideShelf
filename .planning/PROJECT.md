@@ -2,31 +2,17 @@
 
 ## What This Is
 
-An Expo-based React Native mobile client for the Audiobookshelf self-hosted audiobook and podcast server. The app provides offline downloads, audio playback with chapter navigation, and progress synchronization across devices. The player system has been fully migrated to an event-driven coordinator architecture (v1.0 complete) — the coordinator is now the single source of truth for all playback state.
+An Expo-based React Native mobile client for the Audiobookshelf self-hosted audiobook and podcast server. The app provides offline downloads, audio playback with chapter navigation, and progress synchronization across devices. The player system has been fully migrated to an event-driven coordinator architecture (v1.0), with bug fixes and polish applied in v1.1 — the coordinator is the single source of truth for all playback state, downloads are tracked accurately, and the UI is polished.
 
 ## Core Value
 
 The coordinator owns player state — services execute its commands and report reality back, not the other way around.
 
-## Current Milestone: v1.1 Bug Fixes & Polish
-
-**Goal:** Fix six runtime bugs exposed after the coordinator migration and apply five focused polish improvements to downloads, navigation, and the home screen.
-
-**Target features:**
-
-- Fix skip buttons: short-tap action and now playing metadata refresh after skip
-- Fix download tracking: files lost from app awareness after download
-- Fix iCloud exclusion native module (excludes downloads from iCloud backup)
-- Fix Storage tab: not showing all downloaded items
-- Fix More screen routing: Series and Authors tabs fail to open
-- Move now playing metadata ownership to coordinator (out of AppStore)
-- More screen icons and navigation UX polish
-- Better reorder tab UX
-- Home screen loading skeleton
-
 ## Requirements
 
 ### Validated
+
+**v1.0 — Player State Machine Migration**
 
 - ✓ Coordinator runs in observer mode in production — v1.0 Phase 1
 - ✓ Event bus decouples services from coordinator (no circular dependencies) — v1.0 Phase 1
@@ -44,48 +30,53 @@ The coordinator owns player state — services execute its commands and report r
 - ✓ Services simplified to thin execution layers — v1.0 Phase 5
 - ✓ 90%+ test coverage maintained across all modified files — v1.0 Phase 5
 
+**v1.1 — Bug Fixes & Polish**
+
+- ✓ Short-tap skip button executes skip action without opening interval menu (iOS 18 gesture fix) — v1.1 Phase 8
+- ✓ Lock screen shows updated elapsed time after any skip (SEEK_COMPLETE dispatch) — v1.1 Phase 8
+- ✓ Skip forward/backward intervals persist across app sessions via Zustand settingsSlice — v1.1 Phase 8
+- ✓ iCloud exclusion plugin compiled into Xcode build; downloads excluded at completion and path repair — v1.1 Phase 6
+- ✓ Stale downloaded-but-missing-on-disk DB records cleared on startup — v1.1 Phase 7
+- ✓ Storage tab accurately reflects all downloaded items; orphan scanner detects unknown files — v1.1 Phase 7
+- ✓ Download reconciliation scan excludes active in-progress downloads — v1.1 Phase 7
+- ✓ More screen navigates to Series/Authors tabs (not push onto More stack) — v1.1 Phase 9
+- ✓ More screen items have SF Symbol + Ionicons icons with chevron nav affordance — v1.1 Phase 9
+- ✓ Home screen shows pulsing skeleton shelves during cold start with 300ms cross-fade — v1.1 Phase 9
+- ✓ Tab reorder screen has drag handle visual affordance — v1.1 Phase 9
+- ✓ Cover art startup repair scan re-downloads missing covers after iOS app updates — v1.1 Phase 9
+
 ### Active
 
-- [ ] Skip button short-tap performs skip action (not just menu appearance)
-- [ ] Skip button triggers now playing metadata refresh with updated current time
-- [ ] Downloaded file tracking survives app restart (files on disk remain registered)
-- [ ] iCloud exclusion module correctly excludes downloaded files from iCloud backup
-- [ ] Storage tab shows all downloaded items
-- [ ] More screen correctly routes to Series and Authors tabs
-- [ ] Now playing metadata updates are owned by the coordinator, not AppStore
-- [ ] More screen items have icons and clear visual affordance as navigation targets
-- [ ] Reorder tab UX improved
-- [ ] Home screen shows loading skeleton while content loads
+_No active requirements — v1.2 not yet defined._
 
 ### Out of Scope
 
 - Full playerSlice removal — Zustand/React integration is valuable; stays as read-only proxy
 - Changing the state machine topology — Phase 1 validated the transition matrix; it stays
-- New player features beyond bug fixes — this is polish, not a feature milestone
-- Performance optimization beyond what naturally emerges from cleanup
 - Configurable smart-rewind/jump intervals — logic + settings UI needed; deferred to v1.2
-- RN Downloader upgrade — maintenance upgrade, not blocking; deferred to v1.2
+- RN Downloader upgrade to mainline — maintenance upgrade, not blocking; deferred to v1.2
 - iOS native intents, Siri shortcuts — deferred to a future features milestone
 - Cloudflare feedback worker — deferred to a future milestone
+- PERF-01: NATIVE_PROGRESS_UPDATED bypass of async-lock — requires explicit safety analysis; deferred
+- DIAG-01/02: Coordinator diagnostics to crash reporting — deferred
 
 ## Context
 
-The codebase is a React Native app using Expo, Zustand for state, SQLite/Drizzle for persistence, and react-native-track-player for audio. The coordinator migration (v1.0) is complete — the coordinator is the single executor of playback state transitions, with playerSlice as a read-only proxy.
+**Post-v1.1 codebase state:**
 
-**Post-migration architecture:**
+- ~50,175 lines TypeScript/TSX across `src/`
+- Tech stack: Expo 54, React Native, Zustand, SQLite/Drizzle, react-native-track-player, Expo Router
+- Coordinator migration (v1.0) complete — coordinator is single executor of playback state transitions
+- Bug fixes (v1.1) complete — downloads, iCloud, skip button, navigation, home screen all polished
+- PlayerService: ~1,097 lines (down from ~1,640 post-migration)
+- Coordinator test coverage: 92.83%; playerSlice: 91.62%
+- observerMode flag preserved as instant rollback mechanism
 
-- `src/services/coordinator/PlayerStateCoordinator.ts` — owns all player state transitions and canonical position
-- `src/services/PlayerService.ts` — thin execution layer (~1,097 lines, down from ~1,640)
-- `src/services/ProgressService.ts` — session management and server sync (~1,178 lines)
-- `src/stores/slices/playerSlice.ts` — read-only Zustand proxy driven by coordinator bridge
-- `src/services/coordinator/__tests__/` — 122+ tests, 92.83% coordinator coverage
+**Known technical debt going into v1.2:**
 
-**Known technical debt going into v1.1:**
-
-- AppStore still calls `updateNowPlayingMetadata()` directly — coordinator bridge should own this
-- Skip button `MenuView` component: `shouldOpenOnLongPress` prop fixes menu appearance but skip action itself was untested
-- Download tracking has regressions surfaced in real usage
-- More screen uses a routing pattern that breaks for nested tabs (Series, Authors)
+- `PERF-01`: `NATIVE_PROGRESS_UPDATED` events go through async-lock — lower latency possible with safety analysis
+- Android `updateMetadataForTrack` artwork bug (#2287) — not verified (no Android device available)
+- Long-press interval selection on skip button is now one-time-apply (not persistent) — by design; Settings controls default
 
 Key architecture files:
 
@@ -104,16 +95,22 @@ Key architecture files:
 
 ## Key Decisions
 
-| Decision                           | Rationale                                                                     | Outcome                                     |
-| ---------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------- |
-| Event bus decoupling               | Prevents circular dependencies between coordinator and services               | ✓ Good — Phase 1 validated                  |
-| Serial event processing            | Guarantees no race conditions, simpler reasoning                              | ✓ Good — <10ms average, no issues           |
-| Observer mode first                | Zero-risk validation of state machine logic in production                     | ✓ Good — 122+ tests, minimal rejections     |
-| playerSlice as read-only proxy     | Zustand/React integration too valuable to remove; make it reflect coordinator | ✓ Good — Phase 4 shipped cleanly            |
-| YOLO rollback posture              | 122+ tests + Phase 1 production validation provides sufficient confidence     | ✓ Good — migration shipped without rollback |
-| Continuous delivery between phases | Artificial wait periods add no value given test coverage                      | ✓ Good — 11 plans completed in ~1 month     |
-| Custom FSM over XState             | Production-validated, XState adds 16.7kB with no functional gain              | ✓ Good — no regrets                         |
+| Decision                                  | Rationale                                                                                   | Outcome                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Event bus decoupling                      | Prevents circular dependencies between coordinator and services                             | ✓ Good — Phase 1 validated                      |
+| Serial event processing                   | Guarantees no race conditions, simpler reasoning                                            | ✓ Good — <10ms average, no issues               |
+| Observer mode first                       | Zero-risk validation of state machine logic in production                                   | ✓ Good — 122+ tests, minimal rejections         |
+| playerSlice as read-only proxy            | Zustand/React integration too valuable to remove; make it reflect coordinator               | ✓ Good — Phase 4 shipped cleanly                |
+| YOLO rollback posture                     | 122+ tests + Phase 1 production validation provides sufficient confidence                   | ✓ Good — migration shipped without rollback     |
+| Continuous delivery between phases        | Artificial wait periods add no value given test coverage                                    | ✓ Good — 20 plans completed across 2 milestones |
+| Custom FSM over XState                    | Production-validated, XState adds 16.7kB with no functional gain                            | ✓ Good — no regrets                             |
+| Pressable-outside-MenuView (SkipButton)   | shouldOpenOnLongPress alone insufficient on iOS 18 — UIContextMenuInteraction swallows taps | ✓ Good — Phase 8 device-verified                |
+| suppressNextPress ref on SkipButton       | Prevents onPress firing on long-press release (Pressable fires both events)                 | ✓ Good — clean gesture semantics                |
+| SEEK_COMPLETE dispatch in executeSeek     | Keeps event dispatch at execution layer where TrackPlayer.seekTo actually runs              | ✓ Good — unconditional lock screen refresh      |
+| Dynamic import in repairMissingCoverArt() | mediaMetadata.ts statically imports covers.ts — dynamic import breaks the circular dep      | ✓ Good — no circular dependency at runtime      |
+| Re-export screens for More stack nav      | Expo Router treats each file's default export as the screen — re-export to share components | ✓ Good — series/authors cross-stack nav works   |
+| Long-press interval as one-time-apply     | User intent in Settings controls default; long press is per-skip override                   | ✓ Good — cleaner UX semantics                   |
 
 ---
 
-_Last updated: 2026-02-20 after v1.1 milestone start_
+_Last updated: 2026-02-27 after v1.1 milestone_
