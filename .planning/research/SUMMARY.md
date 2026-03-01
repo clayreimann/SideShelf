@@ -1,249 +1,247 @@
 # Project Research Summary
 
-**Project:** abs-react-native (SideShelf) — v1.1 Bug Fixes & Polish
-**Domain:** React Native Expo audiobook player — coordinator-driven architecture
-**Researched:** 2026-02-20
-**Confidence:** HIGH — all findings grounded in direct codebase analysis
+**Project:** abs-react-native — v1.2 Tech Cleanup milestone
+**Domain:** React Native Expo audiobook app — dependency upgrades, DB performance, state audit, service decomposition
+**Researched:** 2026-02-28
+**Confidence:** MEDIUM overall (HIGH for DB/state work; MEDIUM for Expo upgrade path; LOW for RN Downloader migration specifics)
 
 ## Executive Summary
 
-The v1.1 milestone is a focused bug-fix and polish pass on a mature codebase that completed a five-phase PlayerStateCoordinator migration. The architecture is correct and the coordinator is fully operational. What remains are six discrete gaps: two are behavior bugs visible on every user interaction (lock screen stale after skip, download badge lying about file state), one is a silent data-loss issue (iCloud backup exclusion not working, audiobook files silently backing up to iCloud), two are UX polish items (loading skeleton on cold start, skip interval persistence), and one is a routing correctness question (More screen tab switching). None require architectural change — the coordinator, services, and store patterns are all correct and complete. All fixes are additive and targeted.
+v1.2 is a pure internal cleanup milestone with no user-facing features. It attacks four classes of technical debt simultaneously: Expo SDK upgrade, DB performance, state centralization, and service decomposition. The DB and state work is low-risk, well-understood, and can ship independently of the dependency upgrades. The Expo SDK upgrade and RN Downloader fork migration both carry real blockers that must be de-risked before a full phase is committed — neither is a simple dependency bump.
 
-The most important finding from research is the resolution of the iCloud exclusion mystery. The native Obj-C implementation (`ICloudBackupExclusion.m` + `.h`) is complete and correct — it lives in `plugins/excludeFromBackup/ios/`. The `withExcludeFromBackup` Expo config plugin is also complete. However, `withExcludeFromBackup` is absent from the `plugins:` array in `app.config.js`. Because the plugin was never registered, `expo prebuild` never ran it, so the files were never copied to `ios/SideShelf/Modules/` and never compiled into the Xcode project. `NativeModules.ICloudBackupExclusion` resolves to null at runtime, making every `setExcludeFromBackup()` call a silent no-op. The fix is one line in `app.config.js` plus `expo prebuild --clean` — minutes of work, not hours. See the Conflict Resolution section for full investigation details.
+The single most important risk in this milestone is the interaction between Expo SDK 55's mandatory New Architecture and `react-native-track-player` 4.1.2. SDK 55 drops the legacy bridge entirely, and RNTP 4.1.2 has confirmed Android TurboModule incompatibilities (issues #2443, #2460) with known `RCTDeviceEventEmitter` propagation failures in bridgeless mode. The coordinator FSM depends on five specific RNTP events (`NATIVE_STATE_CHANGED`, `NATIVE_TRACK_CHANGED`, `NATIVE_PROGRESS_UPDATED`, `NATIVE_PLAYBACK_ERROR`, `NATIVE_QUEUE_ENDED`) — if any of these fail silently on Android under New Architecture, the player will appear to work while the state machine freezes. This failure mode is invisible without deliberate coordinator diagnostic checks. The recommended stance is: **verify on SDK 54 with New Architecture enabled before touching the SDK version**. Enable New Architecture in `app.json` on the current SDK 54 build, run a full play → seek → pause → resume → queue-end session on a physical Android device, and inspect `totalEventsProcessed` and `rejectedTransitionCount` in the diagnostics UI. Only if all coordinator events fire correctly should the team proceed to bump the SDK.
 
-The primary risks in this milestone are: (1) the download reconciliation scan racing active downloads and prematurely marking partial files as complete; (2) the iCloud exclusion attribute silently resetting after iOS container path migrations unless `repairDownloadStatus` is updated to re-apply it; (3) the Expo Router `router.push` vs `router.navigate` distinction for tab-switching, which is version-sensitive and needs hands-on verification before coding. None of these are blockers — each has a documented prevention strategy from research.
+The RN Downloader fork migration is a separate, equally high-stakes unknown. The custom fork (`spike-event-queue` branch) may expose `checkForExistingDownloads()` under the EkoLabs API surface that mainline 4.x renamed to `getExistingDownloadTasks()`. A silent name mismatch will cause `DownloadService.initialize()` to fail at startup with a swallowed error, leaving the service permanently uninitialized. Beyond the API surface, the task ID format and metadata serialization behavior across app restarts must be validated — the download reconciliation logic depends on both. This migration requires a pre-phase spike against the actual mainline source before any phase work begins.
+
+---
 
 ## Key Findings
 
 ### Recommended Stack
 
-No new native modules are needed for this milestone. The only new package is `react-native-shimmer-placeholder` (JS-only, wraps the already-installed `expo-linear-gradient`). The iCloud exclusion module already exists in Obj-C — it needs plugin registration, not implementation. All other fixes work with the existing stack and no `expo prebuild` beyond the one required for the iCloud plugin.
+The upgrade target is **Expo SDK 55.0.4 / React Native 0.83.2**. All `expo-*` packages version-align with the SDK major — `npx expo install --fix` handles the mechanical part. Drizzle bumps are minor (0.44.5 → 0.45.1, 0.31.4 → 0.31.9) with no breaking changes. The `expo-file-system` API rename from SDK 55 is a non-issue for this project: the codebase already uses the new `Directory/File/Paths` API throughout. Xcode 26 is required for the iOS build; verify this before any SDK work begins.
 
-**Core technologies for this milestone:**
+**Core technologies and upgrade targets:**
 
-- `react-native-track-player` 4.1.2: `updateNowPlayingMetadata()` (not `updateMetadataForTrack()`) for lock screen elapsed time — the `elapsedTime` field on `NowPlayingMetadata` is the correct API; the current code works around the missing field with `@ts-ignore`
-- `expo-linear-gradient` (already installed): powering shimmer skeleton via `react-native-shimmer-placeholder` factory — zero new native installs
-- `withExcludeFromBackup` (Expo config plugin, already written in full): add to `app.config.js` plugins array and run `expo prebuild --clean`
-- Expo Router `router.push` / `router.navigate`: behavior is version-sensitive for tab switching — needs hands-on verification against Expo 54 / Expo Router v3
+- **Expo SDK 55.0.4** — mandatory; all expo-\* packages follow via `npx expo install --fix`
+- **React Native 0.83.2** — bundled with SDK 55; New Architecture is non-optional
+- **expo-router ~55.0.3** — v7 internally; NativeTabs API changed from `unstable` imports; requires audit of `(tabs)/_layout.tsx`
+- **drizzle-orm 0.45.1 / drizzle-kit 0.31.9** — minor bump, safe, no breaking changes
+- **expo-sqlite ^55.0.0** — SDK alignment only; same underlying SQLite engine
+- **react-native-track-player 4.1.2** — HOLD at current version; verify New Architecture compatibility on Android before any upgrade decision
+- **@kesha-antonov/react-native-background-downloader 4.5.3 (mainline)** — TARGET pending spike; custom fork must be diffed first
 
-**New package required:** `react-native-shimmer-placeholder` (JS-only, no native install)
+**Do not upgrade:**
 
-**New native install required:** None.
+- RNTP to 5.0.0-alpha0 — broken on iOS (issue #2503); 5.x is not release-ready
+- drizzle-orm to 1.0 beta — not stable; API may change
 
-See `.planning/research/STACK.md` for full version table, alternatives considered, and what NOT to add.
+### Expected Features (v1.2 Scope)
 
-### Expected Features
+v1.2 has no new user-facing features. All work is internal cleanup organized into four tracks.
 
-Research confirmed six feature gaps. Priority order per impact and severity:
+**Must deliver (table stakes for the milestone):**
 
-**Must have (table stakes — bugs, not polish):**
+- DB indexes on `library_items.library_id`, `media_metadata.library_item_id`, `audio_files.media_id`, `media_progress.(user_id, library_item_id)`, `local_listening_sessions.user_id`, `local_listening_sessions.is_synced` — confirmed missing from schema audit
+- Replace N+1 upsert loop in `upsertLibraryItems()` — 500-item sync currently executes 1,000 sequential queries
+- Replace select-then-insert pattern in `upsertLibraryItem()` with `onConflictDoUpdate` (already used in `authors.ts`, `libraries.ts`)
+- Replace N+1 series progress fetch in `SeriesDetailScreen` with a single `inArray` query
+- Move `progressMap` (series detail) and `books/author/isLoadingBooks` (author detail) to Zustand — confirmed candidates that re-fetch from DB on every mount
+- WAL pragma + `synchronous=NORMAL` on SQLite open — 2-line change, no migration, 4x write throughput
+- Split `PlayerService.ts` (1,105 lines), `ProgressService.ts` (1,178 lines), `DownloadService.ts` (1,170 lines) into focused submodules
+- Expo SDK 55 upgrade (contingent on RNTP verification)
+- RN Downloader fork → mainline migration (contingent on spike)
 
-- Now playing metadata updates after every skip — Apple WWDC22 explicitly states "whenever we seek to a new time we need to publish new Now Playing info"; the gap is that within-chapter seeks do not call `updateNowPlayingMetadata`; chapter-crossing seeks already work correctly via the coordinator bridge
-- Download file tracking recovery — `isLibraryItemDownloaded` has an explicit `// TODO: Could mark as not downloaded in database here` comment; the detection exists, the correction does not; stale "downloaded" badges cause playback failure on tap
-- iCloud exclusion working — currently silently no-ops because the plugin is unregistered; users' audiobook libraries are being backed up to iCloud
+**Should deliver (differentiators within the cleanup scope):**
 
-**Should have (UX quality — user-visible on daily use):**
+- WAL pragma + `synchronous=NORMAL` pragma on SQLite open (2-line change, no migration required)
+- `audioFiles.media_id` index — called on every play action
+- Batch `upsertGenres/Narrators/Tags` in `fullLibraryItems.ts`
+- Move `libraryViewMode` preference to `settingsSlice` for navigation persistence
 
-- Skip interval persistence — selected skip interval resets on every app open; needs two new settings store keys (`skipForwardInterval`, `skipBackwardInterval`) and wiring of the existing `SkipButton.onJump` callback to the settings slice
-- More screen tab navigation correctness — `router.push` may push onto the More stack rather than switching tabs; needs verification and likely a one-line fix
+**Explicitly defer:**
 
-**Defer (polish):**
+- Splitting `librarySlice.ts` (1,011 lines) — tightly coupled through shared Zustand `set()` closure; split risk exceeds benefit in v1.2
+- Converting service singletons to module-level singletons everywhere — high-risk pattern change across all three services simultaneously
+- Switching ORM or DB layer — Drizzle is working; no user benefit
+- drizzle-orm 1.0 beta — not stable
 
-- Loading skeletons for home screen cold start — `ActivityIndicator` path works; skeleton is perceptual improvement, not a bug
-- Reverse reconciliation (orphaned files on disk not in DB) — implement stale-record clearing first; the reverse direction follows naturally
-
-See `.planning/research/FEATURES.md` for full table-stakes / differentiators / anti-features breakdown per feature.
+**State audit decision rule:** Centralize if the same data is fetched by `useEffect` in more than one screen OR if it must survive navigation. Keep local if ephemeral UI state (modals, inputs, scroll position) used by one component only. Confirmed candidates for centralization: `progressMap` in `series/[seriesId]/index.tsx`, `books/author/isLoadingBooks` in `authors/[authorId]/index.tsx`. Confirmed correct as local: slider drag state, sort menus, form inputs, debug screen state.
 
 ### Architecture Approach
 
-The PlayerStateCoordinator architecture is complete and correct. All five v1.x phases are done. The coordinator bridge (`syncStateToStore` / `syncPositionToStore`) already handles now-playing metadata via the `lastSyncedChapterId` debounce — no new call paths should be added to that bridge from outside. Downloads are not in the state machine and should stay out of Zustand. All download state lives in SQLite (source of truth) and the `DownloadService` in-memory `activeDownloads` Map (transient). The reconciliation pass belongs in `DownloadService.initialize()`.
+The existing coordinator FSM architecture is stable and must not be disturbed. `PlayerStateCoordinator` processes events serially via `async-lock`; `playerSlice` is a read-only proxy of coordinator state. All playback state changes go through `dispatchPlayerEvent` — no component or service may write to `playerSlice` directly except via the coordinator bridge (`syncStateToStore` / `syncPositionToStore`). This invariant must be preserved through all service decomposition and state centralization work.
 
-**Components that change in this milestone:**
+**Major components and their v1.2 change exposure:**
 
-| Component                                               | Status              | What Changes                                                                                            |
-| ------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
-| `app.config.js`                                         | MODIFIED            | Add `withExcludeFromBackup` to plugins array                                                            |
-| `plugins/excludeFromBackup/ios/ICloudBackupExclusion.m` | NO CHANGE           | Implementation is complete and correct                                                                  |
-| `src/services/DownloadService.ts`                       | MODIFIED            | Add startup reconciliation pass in `initialize()`; add `setExcludeFromBackup` to `repairDownloadStatus` |
-| `src/services/coordinator/PlayerStateCoordinator.ts`    | MODIFIED (targeted) | Add `updateNowPlayingMetadata` call in `syncPositionToStore` when seeking state clears                  |
-| `src/stores/slices/settingsSlice.ts`                    | MODIFIED            | Add `skipForwardInterval`, `skipBackwardInterval` keys                                                  |
-| `src/components/player/SkipButton.tsx`                  | MODIFIED            | Wire `onJump` callback to settings store                                                                |
-| `src/app/(tabs)/home/index.tsx`                         | MODIFIED            | Replace `ActivityIndicator` with shimmer skeleton cards                                                 |
-| `src/app/(tabs)/more/index.tsx`                         | POSSIBLY MODIFIED   | Verify and fix tab navigation pattern if needed                                                         |
+1. **DB schema + migrations** — MODIFIED: add index definitions to relevant tables; generate migrations
+2. **`src/db/helpers/`** — MODIFIED: fix N+1 patterns, adopt `onConflictDoUpdate` in `libraryItems.ts`
+3. **`src/db/client.ts`** — MODIFIED: add WAL pragma immediately after `openDatabaseSync`
+4. **`settingsSlice`** — MODIFIED: add `libraryViewMode` field; add `libraryViewMode` to `appSettings` persistence
+5. **`seriesSlice` / `authorsSlice`** — MODIFIED: add caching for per-series progress and per-author book lists
+6. **`PlayerService.ts`** — SPLIT into facade + concern-specific collaborators; facade retains `getInstance()` and coordinator dispatch contracts
+7. **`ProgressService.ts`** — SPLIT (highest risk); background service entrypoint must be identified before splitting; should be done in its own dedicated phase
+8. **`DownloadService.ts`** — SPLIT (medium risk); Status Queries and Repair/Reconciliation groups can be extracted first; Lifecycle + Progress Tracking share `activeDownloads` Map and should stay together initially
+9. **`package.json` / `app.json`** — MODIFIED: SDK 55 bump, remove `newArchEnabled` flag, swap downloader dep
+10. **`PlayerStateCoordinator.ts` / `playerSlice.ts`** — NO CHANGE; isolated from all four task tracks
 
-**Patterns to maintain:**
-
-- Do NOT add a third `updateNowPlayingMetadata` call site outside the coordinator bridge — the `lastSyncedChapterId` deduplication must be preserved
-- Do NOT add download state to Zustand — progress is delivered via callbacks subscribed directly to `DownloadService`
-- Do NOT implement iCloud exclusion as an Expo Module (Option B) — the TypeScript wrapper uses `NativeModules`, and the Obj-C Option A requires zero TypeScript changes
-
-See `.planning/research/ARCHITECTURE.md` for full data flow diagrams, component boundary table, and build order recommendation.
+**Key decomposition constraint:** When splitting `PlayerService`, helpers must accept dependencies as arguments — never import `PlayerService.getInstance()` internally. The `executeLoadTrack` dispatch pattern (dispatches `PLAY` rather than calling `TrackPlayer.play()` directly) must not be split across modules; the `LOADING → PLAYING` transition depends on this sequence staying intact.
 
 ### Critical Pitfalls
 
-Research surfaced 12 pitfalls across the milestone. Top 5:
+1. **RNTP event loss in Android bridgeless mode** — `RCTDeviceEventEmitter` events from the headless audio service may not propagate through the New Architecture interop layer. The coordinator goes silent: audio plays natively but FSM state freezes. Prevention: enable New Architecture on SDK 54 first; run full coordinator event sequence on physical Android; verify `totalEventsProcessed` matches expected event count before proceeding to SDK 55.
 
-1. **Download reconciliation races active downloads** — a startup scan calling `verifyFileExists` on a partial in-progress file marks it as fully downloaded; guard by checking `isDownloadActive(libraryItemId)` before reconciling any item, or compare file size on disk against expected size in DB
-2. **iCloud exclusion attribute resets after container path repair** — `repairDownloadStatus` updates the DB path but never re-applies `setExcludeFromBackup`; every iOS app update silently re-enables iCloud backup for all previously downloaded files; fix: add `setExcludeFromBackup(expectedPath)` immediately after `markAudioFileAsDownloaded` in `repairDownloadStatus`
-3. **iCloud exclusion applied before file exists on disk** — `setResourceValue:forKey:error:` fails silently if the file is not yet flushed after download completion; add `FileManager.default.fileExists` check in the native module before calling `setResourceValues`; log a warning (not silent continue) when `success: false`
-4. **Expo Router `router.push` opens route in current tab stack** — `router.push('/series')` may push Series onto the More stack rather than switching tabs; behavior changed in Expo Router v4 (`router.navigate` now equals `router.push`); needs hands-on verification on the actual Expo 54 build before writing any code
-5. **Skeleton flash on fast content load** — if cached data arrives in <50ms, the skeleton flashes for one frame which is more jarring than showing no skeleton; implement a minimum display duration (~150ms) before dismissal, or only show skeleton when `sections.length === 0 && isLoading`
+2. **RN Downloader API name mismatch** — mainline renamed `checkForExistingDownloads()` to `getExistingDownloadTasks()`. If the mainline package does not expose the old name, `DownloadService.initialize()` throws a swallowed `TypeError` at startup and the service never initializes. All downloads silently fail. Prevention: diff the fork's exported API surface against mainline before touching `package.json`; adapter-wrap any renamed methods in `DownloadService.ts`.
 
-See `.planning/research/PITFALLS.md` for the complete list including moderate pitfalls (Android artwork bug in `updateMetadataForTrack`, `configureTrackPlayer` feedback loop risk, skeleton animation memory leak, skeleton layout shift).
+3. **NativeTabs API break after SDK bump** — `expo-router/unstable-native-tabs` API changed in v7; `Icon`, `Label`, `Badge` moved to `NativeTabs.Trigger.*`. The v1.1 custom tab order feature depends on this API. A compile-time import error in `(tabs)/_layout.tsx` produces a blank screen at startup. Prevention: read the SDK 55 `expo-router` changelog section in full and audit all `NativeTabs` usages before running `npx expo install --fix`.
 
-## Conflict Resolution: iCloud Exclusion — Config Change vs. Native Implementation
+4. **Zustand selector re-render storms** — Object-returning selectors (`useAppStore(s => ({ a: s.x, b: s.y }))`) create new references on every store update. During playback, `playerSlice` updates at 1Hz; any component with an object selector re-renders every second. New actions added during the state audit must use `get()` inside the action body, not closure variables. Prevention: use individual selectors or the existing `use*()` slice hooks; run React DevTools profiler to verify no component re-renders at 1Hz during playback.
 
-STACK.md and ARCHITECTURE.md appeared to contradict each other on the iCloud exclusion fix. Direct file investigation resolved the conflict in favor of STACK.md's diagnosis.
-
-**What STACK.md said:** `withExcludeFromBackup` is absent from `app.config.js` plugins array; add it and run `expo prebuild --clean`.
-
-**What ARCHITECTURE.md said:** `NativeModules.ICloudBackupExclusion` resolves to null on iOS because no Swift implementation exists in `ios/SideShelf/`.
-
-**Ground truth (verified by direct file inspection):**
-
-The Obj-C implementation (`ICloudBackupExclusion.m` + `ICloudBackupExclusion.h`) exists and is correct — at `plugins/excludeFromBackup/ios/`. The `withExcludeFromBackup.js` Expo config plugin is complete and implements both the file-copy step (to `ios/SideShelf/Modules/`) and the Xcode project registration step. However, `withExcludeFromBackup` is NOT in the `app.config.js` `plugins:` array — confirmed by reading the file, which shows only `expo-router`, `expo-splash-screen`, `expo-font`, and `expo-web-browser`.
-
-Because the plugin was never registered, `expo prebuild` never ran it, so `ios/SideShelf/Modules/` does not exist (directory confirmed absent). ARCHITECTURE.md observed the absence of files in `ios/SideShelf/` and correctly deduced that `NativeModules.ICloudBackupExclusion` is null at runtime — but the implementation is present in the plugin source directory, awaiting prebuild to copy and register it.
-
-**The fix is a config change (minutes), not a native module implementation (hours):**
-
-1. Add `withExcludeFromBackup` to `plugins:` in `app.config.js`
-2. Run `expo prebuild --clean` (already part of `npm run ios`)
-3. The plugin copies `.m`/`.h` files to `ios/SideShelf/Modules/` and registers them in the Xcode project
-
-**Confidence:** HIGH — verified by reading `app.config.js` (plugin absent), `plugins/excludeFromBackup/ios/` (Obj-C implementation present and correct), and confirming `ios/SideShelf/Modules/` does not exist.
-
-**No further investigation needed during planning.** The fix path is clear.
-
-## Implications for Roadmap
-
-Based on combined research, the milestone maps to four phases ordered by dependency and impact:
-
-### Phase 1: iCloud Exclusion (Plugin Registration + Native Hardening)
-
-**Rationale:** Highest silent user impact (audiobook files backing up to iCloud quota); fastest core fix (one-line config change + prebuild); foundational dependency for the download reconciliation scan, which should re-apply exclusion during file repair
-**Delivers:** Working `setExcludeFromBackup` calls for all new downloads; `repairDownloadStatus` re-applies exclusion after path migration; native module guards against file-not-yet-flushed edge case
-**Addresses:** Feature 5 (iCloud exclusion), Pitfalls 1, 2, 12
-**Key tasks:**
-
-- Add `withExcludeFromBackup` to `app.config.js` plugins
-- Run `expo prebuild --clean`
-- Add `FileManager.default.fileExists` check in `ICloudBackupExclusion.m` before calling `setResourceValues`; log warning on `success: false`
-- Add `setExcludeFromBackup(expectedPath)` to `repairDownloadStatus` after `markAudioFileAsDownloaded`
-- Update Android log message at `DownloadService.ts:286` from generic "success" to "skipped (non-iOS)"
-  **Research flag:** None — fix path fully specified and verified; Obj-C code is correct as-is
-
-### Phase 2: Download Tracking Reconciliation
-
-**Rationale:** Depends on Phase 1 (startup scan should call `setExcludeFromBackup` during repair, so the native module must be working); directly fixes the user-visible bug where "downloaded" badges cause playback failure
-**Delivers:** Startup reconciliation pass in `DownloadService.initialize()`; `isLibraryItemDownloaded` implements its TODO; partial files guarded before any scan marks them complete
-**Addresses:** Feature 2 (download recovery), Pitfalls 3, 10, 11
-**Key tasks:**
-
-- Implement the `// TODO: Could mark as not downloaded` in `isLibraryItemDownloaded`
-- Add reconciliation pass to `DownloadService.initialize()` after `restoreExistingDownloads`
-- Guard scan: check `isDownloadActive(libraryItemId)` before reconciling any item
-- Batch file existence checks (process 20 at a time with `Promise.all` and yield between batches) to avoid JS thread blocking on large libraries
-- Integrate `setExcludeFromBackup` call during repair (from Phase 1)
-  **Research flag:** None — architecture is documented, all helpers exist; this is additive to the existing `initialize()` method
-
-### Phase 3: Now Playing Metadata on Skip + Skip Interval Persistence
-
-**Rationale:** Groups the two player-facing features since both touch the skip code path and the settings layer; the metadata fix is a targeted addition within the existing coordinator bridge (not a new external call site)
-**Delivers:** Lock screen elapsed time updates after same-chapter skips; skip interval persists across app sessions per direction (forward and backward independently)
-**Addresses:** Feature 1 (now playing metadata), Feature 6 (skip persistence), Pitfalls 4, 5
-**Key tasks:**
-
-- Add `updateNowPlayingMetadata` call to `syncPositionToStore` on the `NATIVE_PROGRESS_UPDATED` event that clears the seeking state (not in `executeSeek` directly — preserve the coordinator bridge as the only call site)
-- Verify `configureTrackPlayer()` inside `updateNowPlayingMetadata` does not cause re-entrant coordinator events; add re-entrant guard if needed
-- Test `updateMetadataForTrack` on physical Android device during chapter transition — check for artwork loss (bug #2287); switch to `updateNowPlayingMetadata` if loss confirmed
-- Add `skipForwardInterval` and `skipBackwardInterval` to settings slice with defaults (30s / 15s)
-- Wire `SkipButton.onJump` callback to persist to settings store
-- `FullScreenPlayer` and `FloatingPlayer` read intervals from settings store (not hardcoded)
-  **Research flag:** Android artwork bug (#2287) requires device test before marking complete — test on physical Android or emulator before shipping
-
-### Phase 4: More Screen Navigation + Loading Skeletons
-
-**Rationale:** Both are UX polish with no service dependencies; grouped as the final phase since they are lowest severity and neither blocks the milestone if deferred
-**Delivers:** Correct tab switching from More screen; shimmer skeleton loading cards on home screen cold start matching `CoverItem` 140x140 dimensions
-**Addresses:** Feature 3 (More screen navigation), Feature 4 (loading skeletons), Pitfalls 6, 7, 8, 9
-**Key tasks:**
-
-- Verify `router.push` vs `router.navigate` vs `router.replace` behavior for sibling-tab switching in Expo Router v3 on Expo 54 — test on physical device before writing any code
-- Fix More screen routing if `router.push` is confirmed to push onto the More stack; use `router.navigate` to the index route with `replace` semantics if applicable
-- Install `react-native-shimmer-placeholder`; implement `createShimmerPlaceholder(LinearGradient)` factory
-- Build skeleton cards matching `CoverItem` 140x140 rounded-rect dimensions + two text block placeholders
-- Implement minimum display duration (~150ms) guard to prevent skeleton flash on cache hits
-- Add animation cleanup (`animation.stop()`) in skeleton `useEffect` cleanup return
-- Pin skeleton item dimensions to measured real content dimensions to prevent layout shift
-  **Research flag:** Expo Router tab navigation behavior must be verified hands-on before writing code — `router.navigate` semantics changed between Expo Router versions and this codebase uses `NativeTabs` which adds another variable
-
-### Phase Ordering Rationale
-
-- Phase 1 before Phase 2: The startup reconciliation scan should call `setExcludeFromBackup` during repair; the native module must be working before the scan runs to avoid re-excluding files with a no-op
-- Phase 2 before Phase 3: No hard dependency, but fixing the data layer (downloads) before the interaction layer (player) is safer; download reconciliation could expose edge cases that affect player state transitions
-- Phases 3 and 4 last: Both are improvements on already-functional systems; each can be deferred independently without blocking the others
-
-### Research Flags
-
-**Phases needing hands-on verification before coding:**
-
-- **Phase 3 (Android artwork):** Test `updateMetadataForTrack` on physical Android during a chapter transition — the library bug is confirmed but the workaround decision depends on observed behavior in this codebase's specific usage pattern
-- **Phase 4 (Expo Router tab navigation):** Write a minimal navigation test before committing to any API — behavior changed across Expo Router versions; hands-on verification on the Expo 54 build is required
-
-**Phases with well-documented patterns (no research-phase needed):**
-
-- **Phase 1 (iCloud exclusion):** Fix path fully specified; Obj-C code is correct; just needs registration and one native guard
-- **Phase 2 (download reconciliation):** All helpers exist; architecture is documented; pattern is additive to `initialize()` with a simple active-download guard
-- **Phase 3 (skip interval persistence):** Two new store keys and callback wiring; standard settings-slice pattern
-
-## Confidence Assessment
-
-| Area         | Confidence | Notes                                                                                                                                  |
-| ------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Stack        | HIGH       | Library sources read directly from `node_modules`; package versions confirmed; plugin source code verified by file inspection          |
-| Features     | HIGH       | All six gaps confirmed by reading source code and finding the actual TODO comments, missing calls, and unregistered plugin             |
-| Architecture | HIGH       | Direct codebase analysis of coordinator bridge, DownloadService, playerSlice; data flows verified line by line                         |
-| Pitfalls     | HIGH       | Critical pitfalls grounded in Apple documentation + library bug reports with issue numbers; moderate pitfalls grounded in code reading |
-
-**Overall confidence:** HIGH
-
-### Gaps to Address
-
-- **Expo Router tab-switching API (Phase 4):** PITFALLS.md notes that `router.navigate` behavior changed in Expo Router v4 to match `router.push`. This codebase runs Expo Router v3 (Expo 54), but the behavior still needs hands-on verification. Resolve by writing a minimal test navigation before coding the More screen fix.
-- **Android `updateMetadataForTrack` artwork bug (Phase 3):** Confirmed as a library bug in v4.1.1+ but the workaround (switch to `updateNowPlayingMetadata`) must be tested on device to confirm the artwork is actually lost in this codebase's usage pattern. The bug exists but severity here is unverified.
-- **Minimum skeleton display duration (Phase 4):** The 150ms threshold is an industry heuristic, not a precise measurement. Tune based on observed flash behavior on device during testing.
-
-## Sources
-
-### Primary (HIGH confidence — direct codebase analysis)
-
-- `plugins/excludeFromBackup/ios/ICloudBackupExclusion.m` — Obj-C implementation (confirmed complete and correct)
-- `plugins/excludeFromBackup/withExcludeFromBackup.js` — Expo config plugin (confirmed complete)
-- `app.config.js` — plugins array (confirmed `withExcludeFromBackup` absent)
-- `src/services/coordinator/PlayerStateCoordinator.ts` — bridge implementation, `lastSyncedChapterId` debounce, `syncPositionToStore` and `syncStateToStore` flows
-- `src/services/DownloadService.ts` — `isLibraryItemDownloaded` TODO (line 471), `repairDownloadStatus`, `initialize()` structure, iCloud call sites (lines 286, 329, 955)
-- `src/lib/iCloudBackupExclusion.ts` — TypeScript wrapper (complete)
-- `src/stores/slices/playerSlice.ts` — `updateNowPlayingMetadata` implementation (lines 576–627), `configureTrackPlayer()` call (line 619)
-- `src/app/(tabs)/more/index.tsx` — `router.push` pattern for hidden tab navigation (line 144)
-- `src/app/(tabs)/home/index.tsx` — cold-start `ActivityIndicator` path (lines 213–222)
-- `node_modules/react-native-track-player/src/trackPlayer.ts` — `updateNowPlayingMetadata` vs `updateMetadataForTrack` API surface
-- `node_modules/react-native-track-player/src/interfaces/NowPlayingMetadata.ts` — `elapsedTime?: number` field on `NowPlayingMetadata`
-
-### Secondary (HIGH confidence — official documentation)
-
-- Apple Developer Documentation: `NSURLIsExcludedFromBackupKey`, `NSURL setResourceValue:forKey:error:`, Apple QA1719
-- Apple WWDC22 "Explore media metadata publishing and playback interactions" — `MPNowPlayingInfoPropertyElapsedPlaybackTime` requirement after seek
-- Expo SDK 54 changelog — New Architecture interop layer supports legacy `RCT_EXPORT_MODULE` modules in RN 0.81
-
-### Secondary (MEDIUM confidence — library issues and community)
-
-- react-native-track-player GitHub issue #2287 — `updateMetadataForTrack` clears artwork on Android v4.1.1+
-- Expo Router issue #35212 — `router.navigate` behavior change in v4 to match `router.push` (no longer unwinds to existing routes)
-- Expo Router docs — `router.push` vs `router.navigate` vs `router.replace` (https://docs.expo.dev/router/basics/navigation/)
-- Eidinger blog — `NSURLIsExcludedFromBackupKey` attribute resets on file copy operations
+5. **Import cycle from service decomposition** — splitting a large service class by copy-pasting methods into helper files, then rewriting `this.method()` calls to `PlayerService.getInstance().method()`, introduces a singleton import cycle that Metro resolves non-deterministically. Prevention: helper functions must accept dependencies as arguments; run `npx dpdm --circular src/services/PlayerService.ts` as a baseline before splitting and verify no new cycles after each file split.
 
 ---
 
-_Research completed: 2026-02-20_
+## RNTP Conflict Resolution
+
+STACK.md and ARCHITECTURE.md present conflicting assessments of RNTP 4.1.2 under SDK 55:
+
+- **STACK.md position:** RNTP 4.1.2 works under SDK 55 via the New Architecture interop layer; hold at 4.1.2
+- **ARCHITECTURE.md position:** RNTP 4.1.2 does not have full TurboModule support; known Android TurboModule crash issues (#2443, #2460); check before attempting SDK 55
+- **PITFALLS.md evidence:** `RCTDeviceEventEmitter` events from the headless audio service do not propagate through the bridgeless interop layer on Android; coordinator goes silent without any visible error
+
+**Synthesis — Recommended stance: VERIFY BEFORE COMMITTING**
+
+These positions are not actually contradictory. STACK.md's "works via interop" claim is an optimistic inference applicable to iOS; ARCHITECTURE.md and PITFALLS.md are reporting confirmed open issues specific to Android bridgeless mode. The correct resolution:
+
+1. The iOS risk is LOW — bridgeless event propagation issues are predominantly Android-side. RNTP 4.1.2 likely works fine on iOS under SDK 55.
+2. The Android risk is HIGH and confirmed by multiple issue reports. The coordinator's dependency on five Android headless service events makes silent failure catastrophic.
+3. The recommendation is not "hold" (too conservative — we cannot know without testing) and not "upgrade to 5.x" (broken on iOS). It is: **gate the Expo upgrade on a pre-flight RNTP event verification test on physical Android under New Architecture**. Run this test on SDK 54 with `newArchEnabled: true` before any SDK version change. If the test passes, proceed with SDK 55. If it fails, the Expo upgrade track is blocked until RNTP ships a version with confirmed bridgeless Android stability (likely 4.2.0+; exact version to be determined from the RNTP issue tracker at that time).
+
+This means Phase 5 has a hard pre-flight gate that may extend its timeline independently of the other phases. The other four phases should be designed and scheduled assuming they will complete before the RNTP gate opens.
+
+---
+
+## Implications for Roadmap
+
+Based on combined research, the recommended phase structure for v1.2 is five phases ordered by risk (lowest first) with the two high-uncertainty tracks gated behind verification or spikes.
+
+### Phase 1: DB Quick Wins
+
+**Rationale:** Zero coordinator risk, zero UI risk, entirely in schema and helpers. Fast wins that immediately improve sync and playback start performance. Can ship before any other phase completes. All changes are non-destructive SQLite DDL.
+**Delivers:** WAL pragma, missing indexes (6 confirmed FK gaps), N+1 fixes in `upsertLibraryItems` / `upsertLibraryItem` / `fullLibraryItems.ts`, N+1 fix in SeriesDetailScreen (new `getMediaProgressForMultipleItems` helper)
+**Features addressed:** All DB/SQL audit table stakes and differentiators from FEATURES.md
+**Pitfalls to avoid:** Pitfall 8 (NOT NULL without DEFAULT in migrations — always include a SQLite-safe default); Pitfall 9 (time migration on a seeded database with realistic row counts before shipping; index creation blocks the table)
+**Research flag:** SKIP — established Drizzle patterns, SQLite semantics are well-documented, codebase audit confirmed exact gap locations
+
+### Phase 2: State Audit
+
+**Rationale:** Isolated to slice definitions and two screen components; no coordinator or service changes. Medium complexity, low risk if the decision criteria from FEATURES.md are followed. Should precede service decomposition so centralized data is available to the split services.
+**Delivers:** `progressMap` moved to `seriesSlice`; author books/loading state moved to `authorsSlice`; `libraryViewMode` moved to `settingsSlice` with persistence
+**Features addressed:** State audit table stakes and `libraryViewMode` differentiator from FEATURES.md
+**Pitfalls to avoid:** Pitfall 6 (Zustand side effect storms — audit every `useEffect` in refactored components for position-in-dependency-array); Pitfall 7 (stale closures in new slice actions — use `get()` not closure); Pitfall 11 (object-returning selectors — use individual selectors or existing `use*()` slice hooks)
+**Research flag:** SKIP — architecture boundary is clear from direct codebase analysis; Zustand patterns are well-documented
+
+### Phase 3: Service Decomposition — PlayerService and DownloadService
+
+**Rationale:** PlayerService (1,105 lines) and DownloadService (1,170 lines) are both medium-risk splits with clear concern boundaries. PlayerService splits well into a facade + collaborators. DownloadService Status Queries and Repair/Reconciliation groups have low coupling and can be extracted first; Lifecycle and Progress Tracking share the `activeDownloads` Map and should remain together. Both in the same phase because their coupling points are disjoint. ProgressService is excluded — highest-risk split, requires its own phase.
+**Delivers:** PlayerService split into facade + track-loading, playback-control, progress-restore, path-repair, background-reconnect collaborators; DownloadService Status Queries and Repair extracted; Lifecycle + Progress Tracking remain in DownloadService core
+**Features addressed:** PlayerService and DownloadService decomposition table stakes from FEATURES.md
+**Pitfalls to avoid:** Pitfall 10 (import cycles — helpers accept arguments, never import the service class; run `dpdm --circular` before and after each file split); coordinator dispatch contracts must stay intact in `executeLoadTrack` pattern (`LOADING → PLAYING` transition depends on this sequence)
+**Research flag:** CONSIDER — if RN Downloader migration (Phase 4) is scheduled to run concurrently or immediately after, coordinate the DownloadService split with the downloader API changes to avoid splitting and then immediately touching the same file for an API adapter
+
+### Phase 4: RN Downloader Fork → Mainline Migration
+
+**Rationale:** Confined entirely to `DownloadService.ts` — no coordinator, no Zustand, no other services. The unknown API surface change requires a pre-phase spike. Treat as an API migration, not a dependency swap.
+**Delivers:** Custom fork removed; mainline `@kesha-antonov/react-native-background-downloader@4.5.3` installed; `DownloadService.ts` adapter-wrapped for any renamed methods; download recovery verified
+**Features addressed:** RN Downloader upgrade from FEATURES.md
+**Pitfalls to avoid:** Pitfall 4 (`checkForExistingDownloads` → `getExistingDownloadTasks` rename — adapter-wrap before swapping package reference); Pitfall 5 (task ID format change breaking restart recovery — test kill-and-restart mid-download before marking phase complete)
+**Research flag:** REQUIRES pre-phase spike — (1) clone or inspect mainline 4.5.3 source, diff exported API surface against fork; (2) verify `task.metadata` survival across app restarts in mainline; (3) determine if event queue behavior from `spike-event-queue` branch was absorbed into mainline 4.x or must be reimplemented
+
+### Phase 5: Expo SDK 55 Upgrade + ProgressService Decomposition
+
+**Rationale:** Expo upgrade is last because it is the only change that can fail due to factors outside this codebase (RNTP Android bridgeless, Xcode toolchain). If the Expo upgrade reveals a hard blocker, the other four phases ship independently. ProgressService decomposition is the highest-risk service split and benefits from dedicated verification time; pairing it with the Expo upgrade phase keeps both high-risk items in one accountable phase with clear completion criteria. RNTP verification (enable New Architecture on SDK 54, test on physical Android) is a hard pre-flight gate before any package.json changes.
+**Delivers:** Expo SDK 55.0.4 with full New Architecture; ProgressService split into Session Lifecycle, Server Sync, Periodic Sync, Progress Tracking, Position Resolution collaborators; iCloud exclusion plugin verified post-prebuild; NativeTabs API migrated to v7 surface; `app.json` `newArchEnabled` flag removed
+**Features addressed:** Expo upgrade and ProgressService decomposition table stakes from FEATURES.md
+**Pitfalls to avoid:** Pitfall 1 (RNTP Android event loss — verify on SDK 54 first, physical device, full coordinator event sequence); Pitfall 2 (NativeTabs API break — read SDK 55 expo-router changelog before `npx expo install --fix`); Pitfall 3 (Xcode 26 required — run `xcode-select --version` before any code changes); Pitfall 12 (iCloud exclusion plugin regression — verify `ios/SideShelf/Modules/ICloudBackupExclusion.m` exists and `NativeModules.ICloudBackupExclusion` is not null post-prebuild); ProgressService constraint: `resolveCanonicalPosition` isFinished guard must stay coupled to position resolution code path; `syncInterval` and timing constants must remain accessible to the background service
+**Research flag:** REQUIRES pre-flight gate — enable New Architecture on SDK 54 and run coordinator event verification on physical Android before beginning this phase. If RNTP 4.1.2 fails the event test, the Expo upgrade sub-track is blocked until a RNTP version with confirmed bridgeless Android support ships. ProgressService decomposition can proceed independently of the SDK upgrade.
+
+### Phase Ordering Rationale
+
+- DB changes have no dependencies and deliver immediate value; they go first
+- State audit precedes service decomposition so centralized data is available to the split services without a second refactoring pass
+- RN Downloader migration is contained to one file; doing it before the Expo upgrade avoids the native layer changing twice in the same file in the same timeframe
+- Expo upgrade goes last because it is the only change that can be blocked by external factors (RNTP upstream, Xcode toolchain); the other four phases must ship regardless
+- ProgressService decomposition is paired with the Expo upgrade phase because both require dedicated verification and cannot be combined with other work without obscuring regression attribution
+
+### Research Flags
+
+**Requires pre-phase spike or gate (do not begin phase until complete):**
+
+- **Phase 4 (RN Downloader migration):** Diff `spike-event-queue` fork exports against mainline 4.5.3; validate `task.metadata` persistence; determine whether event queue behavior needs reimplementation
+- **Phase 5 (Expo upgrade):** Enable New Architecture on SDK 54; run full coordinator event sequence on physical Android device; verify RNTP 4.1.2 receives all five coordinator event types (`NATIVE_STATE_CHANGED`, `NATIVE_TRACK_CHANGED`, `NATIVE_PROGRESS_UPDATED`, `NATIVE_PLAYBACK_ERROR`, `NATIVE_QUEUE_ENDED`) before scheduling SDK bump
+
+**Standard patterns (skip research-phase, proceed directly to planning):**
+
+- **Phase 1 (DB Quick Wins):** SQLite index and N+1 patterns are well-documented; gap locations confirmed from codebase audit
+- **Phase 2 (State Audit):** Coordinator/Zustand boundary is precisely defined; decision criteria are deterministic
+- **Phase 3 (PlayerService + DownloadService split):** Decomposition boundaries identified; coordinator dispatch contracts documented in MEMORY.md
+
+---
+
+## Confidence Assessment
+
+| Area                           | Confidence | Notes                                                                                                                                                 |
+| ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DB indexes and N+1 fixes       | HIGH       | Direct schema and helper audit confirmed gap locations; SQLite and Drizzle semantics are well-documented official sources                             |
+| State audit candidates         | HIGH       | Direct codebase analysis; coordinator boundary fully verified from source; confirmed candidates enumerated with specific file/line references         |
+| Service decomposition approach | HIGH       | Method groups identified from direct code reading; concern boundaries are clear; coupling points documented                                           |
+| Expo SDK 55 upgrade path       | MEDIUM     | SDK 55 changelog is official and verified; RNTP Android behavior under New Architecture is actively evolving and cannot be pinned without a live test |
+| RNTP new-arch Android status   | LOW        | Multiple open issues as of Feb 2026; resolution state is not pinnable from documentation; requires live device verification                           |
+| RN Downloader migration effort | LOW        | API surface traced from `DownloadService.ts`; mainline behavior unverified; fork diff not readable without repository access                          |
+| Drizzle minor bump             | HIGH       | npm-verified; no breaking changes documented; peer dep satisfied                                                                                      |
+| NativeTabs v7 changes          | MEDIUM     | SDK 55 changelog is official; specific breakage in this codebase's `_layout.tsx` is inferred from API change descriptions, not tested                 |
+
+**Overall confidence:** MEDIUM — the low-risk DB and state work is well-understood and can proceed immediately; the Expo and downloader tracks require verification gates before full commitment.
+
+### Gaps to Address
+
+- **RNTP Android bridgeless compatibility:** Cannot be resolved by research alone; requires a live test on physical Android with New Architecture enabled on SDK 54. This is the single highest-stakes unknown in the milestone. Resolution path: enable New Architecture on current SDK 54 build, run the coordinator event verification sequence, read `totalEventsProcessed` from the diagnostics UI.
+- **RN Downloader fork diff:** The `spike-event-queue` branch diff against mainline 4.5.3 cannot be read from this environment. The spike must be done with direct repository access. Until complete, Phase 4 effort is unknown and could range from a 2-hour API adapter to a multi-day behavior reimplementation.
+- **RNTP minimum bridgeless-safe version:** If 4.1.2 fails the pre-flight test, the team needs to know which 4.x version has confirmed bridgeless Android stability. Monitor RNTP issue #2443 for a resolution comment; the answer is not available from current research.
+- **ProgressService background entrypoint:** Before splitting `ProgressService.ts`, the background service entrypoint that wires up the sync interval must be identified to ensure it remains accessible post-split. This is a pre-Phase 5 reading task, not a research spike.
+
+---
+
+## Sources
+
+### Primary (HIGH confidence)
+
+- Direct codebase audit — `src/db/schema/*.ts`, `src/db/helpers/*.ts`, `src/services/*.ts`, `src/stores/slices/*.ts`, `src/app/**/*.tsx`, `package.json`, `drizzle.config.ts` (50,175 lines TypeScript/TSX analyzed)
+- Project MEMORY.md — coordinator architecture, executeLoadTrack dispatch pattern, known bug history, v1.1 decisions
+- [Expo SDK 55 Changelog](https://expo.dev/changelog/sdk-55) — New Architecture mandatory, expo-file-system rename, NativeTabs API changes, Xcode 26 requirement
+- [SQLite Write-Ahead Logging](https://sqlite.org/wal.html) — WAL mode semantics
+- [SQLite Query Planning](https://sqlite.org/queryplanner.html) — index selection guidance
+- [SQLite CREATE INDEX](https://sqlite.org/lang_createindex.html) — safety guarantees on existing data
+- [Drizzle ORM Indexes and Constraints](https://orm.drizzle.team/docs/indexes-constraints) — index definition syntax
+
+### Secondary (MEDIUM confidence)
+
+- [Expo Upgrading to SDK 55](https://expo.dev/blog/upgrading-to-sdk-55) — step-by-step upgrade guidance
+- [react-native-track-player issue #2443](https://github.com/doublesymmetry/react-native-track-player/issues/2443) — New Architecture support tracking
+- [react-native-track-player issue #2460](https://github.com/doublesymmetry/react-native-track-player/issues/2460) — TurboModule parsing error on Android
+- [react-native-track-player issue #2503](https://github.com/doublesymmetry/react-native-track-player/issues/2503) — 5.0.0-alpha0 broken on iOS
+- [react-native issue #44255](https://github.com/facebook/react-native/issues/44255) — `RCTDeviceEventEmitter` bridgeless propagation failure (root cause of RNTP Android event loss)
+- [kesha-antonov/react-native-background-downloader releases](https://github.com/kesha-antonov/react-native-background-downloader/releases) — v4.4.1 confirms `getExistingDownloadTasks()` API surface change
+- [Zustand documentation](https://github.com/pmndrs/zustand) — selector stability requirements, `get()` pattern in actions
+- [npm: @kesha-antonov/react-native-background-downloader](https://www.npmjs.com/package/@kesha-antonov/react-native-background-downloader) — version 4.5.3 confirmed current stable
+- [SQLite Optimizations for Ultra High-Performance — PowerSync](https://www.powersync.com/blog/sqlite-optimizations-for-ultra-high-performance) — WAL + synchronous=NORMAL practitioner validation
+
+### Tertiary (LOW confidence)
+
+- Expo X post confirming React Native 0.83.2 bundled with SDK 55 — not independently verified against reactnative.dev
+- 2025 Expo Spring Hackathon investigation: Metro `inlineRequires` timing differences — relevant to service decomposition cycle safety; single community source
+
+---
+
+_Research completed: 2026-02-28_
 _Ready for roadmap: yes_
