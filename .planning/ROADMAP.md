@@ -99,12 +99,12 @@ Plans:
 4. DownloadService Status Queries and Repair/Reconciliation groups are extracted to collaborators; Lifecycle + Progress Tracking remain together (share `activeDownloads` Map)
 5. Test coverage stays at or above 90% across all modified files
 
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 
-- [ ] 12-01: PlayerService facade + collaborators (DECOMP-01)
-- [ ] 12-02: DownloadService facade + collaborators (DECOMP-02)
+- [ ] 12-01-PLAN.md — PlayerService facade + 4 collaborators (TrackLoading, PlaybackControl, ProgressRestore, BackgroundReconnect) + 90% coverage (DECOMP-01)
+- [ ] 12-02-PLAN.md — DownloadService facade + 2 collaborators (DownloadStatus, DownloadRepair) + 90% coverage (DECOMP-02)
 
 ### Phase 13: RN Downloader Migration
 
