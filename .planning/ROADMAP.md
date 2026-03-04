@@ -103,7 +103,7 @@ Plans:
 
 Plans:
 
-- [ ] 12-01-PLAN.md — PlayerService facade + 4 collaborators (TrackLoading, PlaybackControl, ProgressRestore, BackgroundReconnect) + 90% coverage (DECOMP-01)
+- [x] 12-01-PLAN.md — PlayerService facade + 4 collaborators (TrackLoading, PlaybackControl, ProgressRestore, BackgroundReconnect) + 92% coverage (DECOMP-01) — completed 2026-03-04
 - [ ] 12-02-PLAN.md — DownloadService facade + 2 collaborators (DownloadStatus, DownloadRepair) + 90% coverage (DECOMP-02)
 
 ### Phase 13: RN Downloader Migration
@@ -142,5 +142,5 @@ Plans:
 | 9. Navigation & UI Polish                    | v1.1      | 3/3            | Complete    | 2026-02-27 |
 | 10. DB Quick Wins                            | 2/2       | Complete       | 2026-03-04  | -          |
 | 11. useEffect Cleanup + State Centralization | 2/2       | Complete       | 2026-03-04  | -          |
-| 12. Service Decomposition                    | v1.2      | 0/2            | Not started | -          |
+| 12. Service Decomposition                    | v1.2      | 1/2            | In Progress | -          |
 | 13. RN Downloader Migration                  | v1.2      | 0/2            | Not started | -          |
