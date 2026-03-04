@@ -7,10 +7,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import * as WebBrowser from "expo-web-browser";
-import { type ComponentProps, useEffect, useMemo, useState } from "react";
+import { type ComponentProps, useMemo } from "react";
 import { Alert, FlatList, Platform, Pressable, Text, View } from "react-native";
 import DeviceInfo from "react-native-device-info";
 import type { SFSymbol } from "sf-symbols-typescript";
+
+// Module-scope constant — DeviceInfo.getVersion() and getBuildNumber() are synchronous
+const APP_VERSION = `${DeviceInfo.getVersion()} (${DeviceInfo.getBuildNumber()})`;
 
 type IoniconsName = ComponentProps<typeof Ionicons>["name"];
 
@@ -50,7 +53,6 @@ export default function MoreScreen() {
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
   const tabOrder = useAppStore((state) => state.settings.tabOrder);
   const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
-  const [appVersion, setAppVersion] = useState<string>("");
   const floatingPlayerPadding = useFloatingPlayerPadding();
 
   // Color for icons and chevrons — matches iOS Settings secondary icon tint
@@ -68,21 +70,6 @@ export default function MoreScreen() {
       .map((tabName) => ALL_TABS.find((tab) => tab.name === tabName))
       .filter((tab): tab is (typeof ALL_TABS)[number] => tab !== undefined);
   }, [tabOrder, hiddenTabs]);
-
-  useEffect(() => {
-    // Load app version info
-    const loadVersionInfo = async () => {
-      try {
-        const version = DeviceInfo.getVersion();
-        const buildNumber = DeviceInfo.getBuildNumber();
-        setAppVersion(`${version} (${buildNumber})`);
-      } catch (error) {
-        console.error("[MoreScreen] Failed to load version info:", error);
-        setAppVersion("Unknown");
-      }
-    };
-    loadVersionInfo();
-  }, []);
 
   const openFeedback = () => {
     Alert.alert(translate("more.feedback"), translate("more.feedbackPrompt"), [
@@ -343,13 +330,11 @@ export default function MoreScreen() {
           </Pressable>
         )}
         ListFooterComponent={
-          appVersion ? (
-            <View style={{ paddingVertical: 16, paddingHorizontal: 16, alignItems: "center" }}>
-              <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>
-                {translate("more.version", { version: appVersion })}
-              </Text>
-            </View>
-          ) : null
+          <View style={{ paddingVertical: 16, paddingHorizontal: 16, alignItems: "center" }}>
+            <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>
+              {translate("more.version", { version: APP_VERSION })}
+            </Text>
+          </View>
         }
       />
 

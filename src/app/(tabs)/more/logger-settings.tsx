@@ -8,8 +8,10 @@
 import Toggle from "@/components/ui/Toggle";
 import { translate } from "@/i18n";
 import { formatBytes } from "@/lib/helpers/formatters";
-import { getAllTags, getDatabaseSize, logger, type LogLevel } from "@/lib/logger";
+import { getDatabaseSize, logger, type LogLevel } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { useAppStore } from "@/stores/appStore";
+import { useFocusEffect } from "@react-navigation/native";
 import { MenuView } from "@react-native-menu/menu";
 import { Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -37,7 +39,17 @@ const LOG_LEVELS: Array<{ label: string; value: LogLevel | "default" }> = [
 
 export default function LoggerSettingsScreen() {
   const { colors, isDark } = useThemedStyles();
-  const [availableTags, setAvailableTags] = useState<string[]>([]);
+
+  // Read availableTags from loggerSlice — stale-while-revalidate on every focus
+  const availableTags = useAppStore((state) => state.logger.availableTags);
+
+  // Refresh available tags on every screen focus
+  useFocusEffect(
+    useCallback(() => {
+      useAppStore.getState().logger.refreshAvailableTags();
+    }, [])
+  );
+
   const [disabledTags, setDisabledTags] = useState<string[]>([]);
   const [tagLevels, setTagLevels] = useState<Record<string, LogLevel | "default">>({});
   const [retentionHours, setRetentionHours] = useState<number>(() =>
@@ -55,20 +67,18 @@ export default function LoggerSettingsScreen() {
   const primaryColor = isDark ? "#4A9EFF" : "#007AFF";
   const cardBackground = isDark ? "#2C2C2E" : "#E5E5EA";
 
-  // Load tags and retention preference
+  // Load retention preference and disabled tags
   const loadLoggerSettings = useCallback(() => {
     try {
       const disabled = logger.getDisabledTags();
       setDisabledTags(disabled);
-      const tags = getAllTags();
-      setAvailableTags([...tags, ...disabled.filter((t) => !tags.includes(t))].sort());
       setRetentionHours(logger.getRetentionDurationHours());
       setDefaultLogLevel(logger.getDefaultLogLevel());
 
       // Load tag levels
       const levels = logger.getAllTagLevels();
       const levelsWithDefaults: Record<string, LogLevel | "default"> = {};
-      tags.forEach((tag) => {
+      availableTags.forEach((tag) => {
         levelsWithDefaults[tag] = levels[tag] || "default";
       });
       setTagLevels(levelsWithDefaults);
@@ -80,7 +90,7 @@ export default function LoggerSettingsScreen() {
       log.error("Failed to load logger settings", error as Error);
       Alert.alert(translate("common.error"), translate("loggerSettings.error.loadFailed"));
     }
-  }, []);
+  }, [availableTags]);
 
   useEffect(() => {
     loadLoggerSettings();
