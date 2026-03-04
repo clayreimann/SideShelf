@@ -57,12 +57,13 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full phase details.
 3. `upsertLibraryItems()` executes a single batch `onConflictDoUpdate` call for a 500-item sync (not 1,000 sequential queries)
 4. `fullLibraryItems.ts` genre/narrator/tag inserts are batched — no per-item insert loops remain
 5. All existing tests pass with no regressions after schema and helper changes
-   **Plans**: TBD
+
+**Plans**: 2 plans
 
 Plans:
 
-- [ ] 10-01: WAL pragma + missing indexes (DB-01–05)
-- [ ] 10-02: N+1 upsert fixes in libraryItems.ts and fullLibraryItems.ts (DB-06–07)
+- [ ] 10-01-PLAN.md — WAL pragma, blocking DbErrorScreen, and 4 missing indexes via schema + migration (DB-01–05)
+- [ ] 10-02-PLAN.md — N+1 batch upsert conversion across all db/helpers/ files + test assertions (DB-06–07)
 
 ### Phase 11: useEffect Cleanup + State Centralization
 
@@ -77,7 +78,8 @@ Plans:
 4. Author and series navigation IDs are resolved inside `fetchItemDetails` — no separate component-level useEffect for each item open
 5. `MoreScreen` app version is read from a module-scope constant — no `useState` or `useEffect` involved
 6. `getAllTags()` is called once via `loggerSlice` — `LogsScreen` and `LoggerSettingsScreen` share the same cached result
-   **Plans**: TBD
+
+**Plans**: TBD
 
 Plans:
 
@@ -96,7 +98,8 @@ Plans:
 3. DownloadService public interface is unchanged — all callers of status queries, lifecycle methods, and repair entry points work without modification
 4. DownloadService Status Queries and Repair/Reconciliation groups are extracted to collaborators; Lifecycle + Progress Tracking remain together (share `activeDownloads` Map)
 5. Test coverage stays at or above 90% across all modified files
-   **Plans**: TBD
+
+**Plans**: TBD
 
 Plans:
 
@@ -115,7 +118,8 @@ Plans:
 3. `DownloadService.ts` uses the mainline API (`getExistingDownloadTasks` and any other renamed methods) — no fork-only API calls remain
 4. A download started, then app killed and relaunched, resumes correctly — restart recovery works with mainline task IDs and metadata format
 5. iCloud exclusion (`withExcludeFromBackup` plugin) applies correctly post-migration — v1.1 behavior is not regressed
-   **Plans**: TBD
+
+**Plans**: TBD
 
 Plans:
 
