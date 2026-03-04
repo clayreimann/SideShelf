@@ -79,12 +79,12 @@ Plans:
 5. `MoreScreen` app version is read from a module-scope constant — no `useState` or `useEffect` involved
 6. `getAllTags()` is called once via `loggerSlice` — `LogsScreen` and `LoggerSettingsScreen` share the same cached result
 
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 
-- [ ] 11-01: State centralization (STATE-01–03)
-- [ ] 11-02: useEffect cleanup — component-level fetch elimination (EFFECT-01–06)
+- [ ] 11-01-PLAN.md — Slice extensions: viewMode in settingsSlice, progressMap in seriesSlice, getOrFetchAuthorById in authorsSlice, availableTags in loggerSlice (STATE-01–03, EFFECT-06)
+- [ ] 11-02-PLAN.md — Consumer wiring: userId in useAuth, authorId/seriesId in CachedItemDetails, remove redundant useEffects, logout DB wipe (EFFECT-01–05)
 
 ### Phase 12: Service Decomposition
 
