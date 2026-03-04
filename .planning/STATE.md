@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: — Tech Cleanup
 status: executing
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-03-04T12:41:22.735Z"
-last_activity: 2026-03-04 — Plan 10-02 complete (N+1 batch upsert elimination, 9 helpers, 2 test files)
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-03-04T13:39:00Z"
+last_activity: 2026-03-04 — Plan 11-01 complete (4 slice extensions, batch mediaProgress helper, 29 new tests)
 progress:
   total_phases: 4
   completed_phases: 1
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** v1.2 Tech Cleanup — Phase 10: DB Quick Wins
+**Current focus:** v1.2 Tech Cleanup — Phase 11: useEffect Cleanup + State Centralization
 
 ## Current Position
 
-Phase: 10 of 13 (DB Quick Wins) — COMPLETE
-Plan: 2 of 2 in current phase — COMPLETE
+Phase: 11 of 13 (useEffect Cleanup + State Centralization) — In Progress
+Plan: 1 of ? in current phase — COMPLETE
 Status: In progress
-Last activity: 2026-03-04 — Plan 10-02 complete (N+1 batch upsert elimination, 9 helpers, 2 test files)
+Last activity: 2026-03-04 — Plan 11-01 complete (4 slice extensions, batch mediaProgress helper, 29 new tests)
 
 Progress: [██████████] 97%
 
@@ -48,6 +48,7 @@ Progress: [██████████] 97%
 
 - Plan 10-01: 4 min (2 tasks, 8 files)
 - Plan 10-02: 12 min (2 tasks, 11 files)
+- Plan 11-01: 8 min (3 tasks, 10 files, 29 new tests)
 
 ## Accumulated Context
 
@@ -70,6 +71,13 @@ Key decisions to carry forward:
 - upsertGenres/Narrators/Tags wrapped in try/catch — reference data failures must not abort full item upsert
 - upsertLibraryItemTx removed after confirming zero callers outside its own file
 
+**Phase 11 decisions:**
+
+- viewMode uses manual AsyncStorage helper pattern (not Zustand persist middleware) — consistent with all other settings in settingsSlice
+- getAuthorById existed in authors.ts; getOrFetchAuthorById uses in-memory find() first, DB fallback logs a warning
+- getMediaProgressForItems deduplicates by orderBy(desc(lastUpdate)) + first-row-wins per libraryItemId
+- loggerSlice.availableTags populated synchronously via getAllTags() in initialize() and refreshAvailableTags()
+
 ### Pending Todos
 
 None.
@@ -82,6 +90,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T12:44:00Z
-Stopped at: Completed 10-02-PLAN.md
+Last session: 2026-03-04T13:39:00Z
+Stopped at: Completed 11-01-PLAN.md
 Resume file: None
