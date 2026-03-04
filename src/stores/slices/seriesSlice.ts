@@ -10,10 +10,12 @@
 
 import {
   getAllSeries,
+  SeriesBookRow,
   SeriesListRow,
   SeriesWithBooks,
   transformSeriesToDisplayFormat,
 } from "@/db/helpers/series";
+import { getMediaProgressForItems, MediaProgressRow } from "@/db/helpers/mediaProgress";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { LoadingStates, SeriesSortConfig, SliceCreator } from "@/types/store";
@@ -38,6 +40,10 @@ export interface SeriesSliceState {
     initialized: boolean;
     /** Whether API and DB are ready for operations */
     ready: boolean;
+    /** Progress map for the currently viewed series, keyed by libraryItemId */
+    progressMap: Record<string, MediaProgressRow>;
+    /** The seriesId whose progress is currently loaded in progressMap */
+    progressMapSeriesId: string | null;
   };
 }
 
@@ -54,6 +60,8 @@ export interface SeriesSliceActions {
   setSeriesSortConfig: (config: SeriesSortConfig) => Promise<void>;
   /** Reset the slice to initial state */
   resetSeries: () => void;
+  /** Fetch progress for all books in a series in a single batch DB query */
+  fetchSeriesProgress: (seriesId: string, userId: string) => Promise<void>;
 
   // Internal actions (prefixed with underscore)
   /** Set ready state based on API and DB initialization */
@@ -91,6 +99,8 @@ const initialSeriesState: SeriesSliceState = {
     loading: INITIAL_SERIES_LOADING_STATES,
     initialized: false,
     ready: false,
+    progressMap: {},
+    progressMapSeriesId: null,
   },
 };
 
@@ -237,6 +247,30 @@ export const createSeriesSlice: SliceCreator<SeriesSlice> = (set, get) => ({
     set((state: SeriesSlice) => ({
       ...state,
       ...initialSeriesState,
+    }));
+  },
+
+  /**
+   * Fetch progress for all books in a series in a single batch DB query.
+   * Sets progressMap (keyed by libraryItemId) and progressMapSeriesId in state.
+   */
+  fetchSeriesProgress: async (seriesId: string, userId: string) => {
+    const state = get();
+    const matchingSeries = state.series.series.find((s: SeriesWithBooks) => s.id === seriesId);
+
+    // Extract all libraryItemIds from the series books
+    const libraryItemIds: string[] =
+      matchingSeries?.books?.map((b: SeriesBookRow) => b.libraryItemId) ?? [];
+
+    const progressMap = await getMediaProgressForItems(libraryItemIds, userId);
+
+    set((state: SeriesSlice) => ({
+      ...state,
+      series: {
+        ...state.series,
+        progressMap,
+        progressMapSeriesId: seriesId,
+      },
     }));
   },
 

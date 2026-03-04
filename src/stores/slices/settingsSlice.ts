@@ -16,6 +16,7 @@ import {
   getJumpForwardInterval,
   getSmartRewindEnabled,
   getTabOrder,
+  getViewMode,
   setCustomUpdateUrl,
   setDiagnosticsEnabled,
   setHiddenTabs,
@@ -24,6 +25,7 @@ import {
   setJumpForwardInterval,
   setSmartRewindEnabled,
   setTabOrder,
+  setViewMode,
 } from "@/lib/appSettings";
 import { logger } from "@/lib/logger";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
@@ -53,6 +55,8 @@ export interface SettingsSliceState {
     hiddenTabs: string[];
     /** Custom update URL for loading test bundles */
     customUpdateUrl: string | null;
+    /** Library view mode preference */
+    viewMode: "list" | "grid";
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -83,6 +87,8 @@ export interface SettingsSliceActions {
   updateHiddenTabs: (hiddenTabs: string[]) => Promise<void>;
   /** Update custom update URL */
   updateCustomUpdateUrl: (url: string | null) => Promise<void>;
+  /** Update library view mode preference */
+  updateViewMode: (mode: "list" | "grid") => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -104,6 +110,7 @@ const DEFAULT_SETTINGS = {
   tabOrder: ["home", "library", "series", "authors", "more"],
   hiddenTabs: [] as string[],
   customUpdateUrl: null,
+  viewMode: "list" as const,
 };
 
 /**
@@ -156,6 +163,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         tabOrder,
         hiddenTabs,
         customUpdateUrl,
+        viewMode,
       ] = await Promise.all([
         getJumpForwardInterval(),
         getJumpBackwardInterval(),
@@ -165,6 +173,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         getTabOrder(),
         getHiddenTabs(),
         getCustomUpdateUrl(),
+        getViewMode(),
       ]);
 
       set((state: SettingsSlice) => ({
@@ -178,6 +187,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           tabOrder: tabOrder,
           hiddenTabs: hiddenTabs,
           customUpdateUrl: customUpdateUrl,
+          viewMode: viewMode,
           initialized: true,
           isLoading: false,
         },
@@ -512,6 +522,45 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           customUpdateUrl: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update library view mode preference
+   */
+  updateViewMode: async (mode: "list" | "grid") => {
+    log.info(`Updating view mode to ${mode}`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.viewMode;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        viewMode: mode,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setViewMode(mode);
+
+      log.info(`View mode updated to ${mode}`);
+    } catch (error) {
+      log.error("Failed to update view mode setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          viewMode: previousValue,
         },
       }));
 

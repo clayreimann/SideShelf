@@ -1,7 +1,7 @@
 import { db } from "@/db/client";
 import { mediaProgress } from "@/db/schema/mediaProgress";
 import type { ApiMediaProgress, ApiMeResponse, ApiUser } from "@/types/api";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 export type NewMediaProgressRow = typeof mediaProgress.$inferInsert;
 export type MediaProgressRow = typeof mediaProgress.$inferSelect;
@@ -97,6 +97,36 @@ export async function upsertMediaProgress(rows: NewMediaProgressRow[]): Promise<
         finishedAt: sql`excluded.finished_at`,
       },
     });
+}
+
+/**
+ * Get media progress for multiple library items in a single batch query.
+ * Returns a record keyed by libraryItemId. When multiple rows exist for the
+ * same item (e.g., duplicate syncs), the most recent row by lastUpdate is kept.
+ */
+export async function getMediaProgressForItems(
+  libraryItemIds: string[],
+  userId: string
+): Promise<Record<string, MediaProgressRow>> {
+  if (libraryItemIds.length === 0) return {};
+
+  const results = await db
+    .select()
+    .from(mediaProgress)
+    .where(
+      and(inArray(mediaProgress.libraryItemId, libraryItemIds), eq(mediaProgress.userId, userId))
+    )
+    .orderBy(desc(mediaProgress.lastUpdate));
+
+  // Deduplicate: keep the first (most recent) row per libraryItemId
+  const progressMap: Record<string, MediaProgressRow> = {};
+  for (const row of results) {
+    if (row.libraryItemId && !(row.libraryItemId in progressMap)) {
+      progressMap[row.libraryItemId] = row;
+    }
+  }
+
+  return progressMap;
 }
 
 // Get media progress for a specific library item and user
