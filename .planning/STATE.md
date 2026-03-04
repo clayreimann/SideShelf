@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: — Tech Cleanup
 status: executing
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-03-04T14:00:06.344Z"
-last_activity: 2026-03-04 — Plan 11-02 complete (9 EFFECT/STATE requirements satisfied, wipeUserData helper, logout/server-switch wipe)
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-03-04T23:36:00.000Z"
+last_activity: 2026-03-04 — Plan 12-01 complete (PlayerService facade + 4 collaborators, 92% coverage, DECOMP-01 satisfied)
 progress:
   total_phases: 4
   completed_phases: 2
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 
 ## Current Position
 
-Phase: 11 of 13 (useEffect Cleanup + State Centralization) — In Progress
-Plan: 2 of 2 in current phase — COMPLETE (Phase 11 complete)
+Phase: 12 of 13 (Service Decomposition) — In Progress
+Plan: 1 of 2 in current phase — COMPLETE (Plan 12-01 complete, Plan 12-02 up next)
 Status: In progress
-Last activity: 2026-03-04 — Plan 11-02 complete (9 EFFECT/STATE requirements satisfied, wipeUserData helper, logout/server-switch wipe)
+Last activity: 2026-03-04 — Plan 12-01 complete (PlayerService facade + 4 collaborators, 92% coverage, DECOMP-01 satisfied)
 
 Progress: [██████████] 97%
 
@@ -50,6 +50,7 @@ Progress: [██████████] 97%
 - Plan 10-02: 12 min (2 tasks, 11 files)
 - Plan 11-01: 8 min (3 tasks, 10 files, 29 new tests)
 - Plan 11-02: 90 min (4 tasks, 14 files, 8 new tests)
+- Plan 12-01: 33 min (3 tasks [1+2 combined], 13 files, 67 new tests)
 
 ## Accumulated Context
 
@@ -71,6 +72,13 @@ Key decisions to carry forward:
 - sql`excluded.col_name` uses SQL snake_case column names (not TypeScript camelCase); verified tagASIN maps to tag_asin
 - upsertGenres/Narrators/Tags wrapped in try/catch — reference data failures must not abort full item upsert
 - upsertLibraryItemTx removed after confirming zero callers outside its own file
+
+**Phase 12 decisions:**
+
+- IPlayerServiceFacade placed in types.ts — both PlayerService.ts and collaborators import from the same file, preventing circular imports; no collaborator imports from PlayerService.ts
+- rebuildCurrentTrackIfNeeded placed in ProgressRestoreCollaborator (owns session restore); exposed on IPlayerServiceFacade so PlaybackControlCollaborator can call it without importing ProgressRestoreCollaborator directly
+- BackgroundReconnectCollaborator keeps require() pattern for PlayerBackgroundService per CLAUDE.md pattern (module cache clearing in **DEV** mode)
+- forceExit added to jest.config.js — @react-native-community/netinfo starts an internet reachability timer that never unrefs; forceExit fixes lint-staged --bail invocations without changing test behavior
 
 **Phase 11 decisions:**
 
@@ -95,6 +103,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T14:00:06.341Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-03-04T23:36:00.000Z
+Stopped at: Completed 12-01-PLAN.md
 Resume file: None
