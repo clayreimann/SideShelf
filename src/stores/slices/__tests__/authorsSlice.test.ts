@@ -18,6 +18,7 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 // Mock database helpers
 jest.mock("@/db/helpers/authors", () => ({
   getAllAuthors: jest.fn(),
+  getAuthorById: jest.fn(),
   transformAuthorsToDisplayFormat: jest.fn(),
 }));
 
@@ -31,7 +32,7 @@ describe("AuthorsSlice", () => {
 
   // Get mocked functions for type safety
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
-  const { getAllAuthors, transformAuthorsToDisplayFormat } = require("@/db/helpers/authors");
+  const { getAllAuthors, getAuthorById, transformAuthorsToDisplayFormat } = require("@/db/helpers/authors");
   const { cacheAuthorImageIfMissing } = require("@/lib/authorImages");
 
   // Mock author data
@@ -78,6 +79,7 @@ describe("AuthorsSlice", () => {
     mockedAsyncStorage.getItem.mockResolvedValue(null);
     mockedAsyncStorage.setItem.mockResolvedValue();
     getAllAuthors.mockResolvedValue([]);
+    getAuthorById.mockResolvedValue(null);
     transformAuthorsToDisplayFormat.mockReturnValue([]);
     cacheAuthorImageIfMissing.mockResolvedValue({ uri: "", wasDownloaded: false });
   });
@@ -451,6 +453,51 @@ describe("AuthorsSlice", () => {
       mockedAsyncStorage.getItem.mockRejectedValue(new Error("Storage error"));
 
       await expect(store.getState()._loadAuthorsSettingsFromStorage()).resolves.not.toThrow();
+    });
+  });
+
+  describe("getOrFetchAuthorById", () => {
+    const mockAuthorFull = {
+      id: "author-1",
+      name: "Author One",
+      imageUrl: "http://example.com/author1.jpg",
+      numBooks: 5,
+    };
+
+    beforeEach(async () => {
+      getAllAuthors.mockResolvedValue(mockAuthors);
+      transformAuthorsToDisplayFormat.mockReturnValue(mockDisplayAuthors);
+      await store.getState().initializeAuthors(true, true);
+      jest.clearAllMocks();
+      getAuthorById.mockResolvedValue(null);
+    });
+
+    it("getOrFetchAuthorById returns author from in-memory authors list when found", async () => {
+      // authors are already loaded from initializeAuthors
+      const result = await store.getState().getOrFetchAuthorById("author-1");
+
+      expect(result).toMatchObject({ id: "author-1", name: "Author One" });
+      // Should NOT call DB since author is in memory
+      expect(getAuthorById).not.toHaveBeenCalled();
+    });
+
+    it("getOrFetchAuthorById calls DB when author not in authors list", async () => {
+      const dbAuthor = { id: "author-99", name: "DB Author", imageUrl: null, numBooks: 0 };
+      getAuthorById.mockResolvedValue(dbAuthor);
+
+      const result = await store.getState().getOrFetchAuthorById("author-99");
+
+      expect(getAuthorById).toHaveBeenCalledWith("author-99");
+      expect(result).toEqual(dbAuthor);
+    });
+
+    it("getOrFetchAuthorById returns null when author not found in DB", async () => {
+      getAuthorById.mockResolvedValue(null);
+
+      const result = await store.getState().getOrFetchAuthorById("nonexistent-author");
+
+      expect(getAuthorById).toHaveBeenCalledWith("nonexistent-author");
+      expect(result).toBeNull();
     });
   });
 });

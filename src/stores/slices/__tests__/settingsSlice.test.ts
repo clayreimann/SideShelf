@@ -16,6 +16,7 @@ jest.mock("@/lib/appSettings", () => ({
   getTabOrder: jest.fn(),
   getHiddenTabs: jest.fn(),
   getCustomUpdateUrl: jest.fn(),
+  getViewMode: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
@@ -24,6 +25,7 @@ jest.mock("@/lib/appSettings", () => ({
   setTabOrder: jest.fn(),
   setHiddenTabs: jest.fn(),
   setCustomUpdateUrl: jest.fn(),
+  setViewMode: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
 }));
@@ -46,6 +48,7 @@ describe("SettingsSlice", () => {
     getTabOrder,
     getHiddenTabs,
     getCustomUpdateUrl,
+    getViewMode,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
@@ -54,6 +57,7 @@ describe("SettingsSlice", () => {
     setTabOrder,
     setHiddenTabs,
     setCustomUpdateUrl,
+    setViewMode,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
 
@@ -83,6 +87,8 @@ describe("SettingsSlice", () => {
     setTabOrder.mockResolvedValue();
     setHiddenTabs.mockResolvedValue();
     setCustomUpdateUrl.mockResolvedValue();
+    getViewMode.mockResolvedValue("list");
+    setViewMode.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
 
@@ -103,9 +109,15 @@ describe("SettingsSlice", () => {
         tabOrder: ["home", "library", "series", "authors", "more"],
         hiddenTabs: [],
         customUpdateUrl: null,
+        viewMode: "list",
         initialized: false,
         isLoading: false,
       });
+    });
+
+    it("viewMode defaults to 'list' in initial state", () => {
+      const state = store.getState();
+      expect(state.settings.viewMode).toBe("list");
     });
   });
 
@@ -196,6 +208,16 @@ describe("SettingsSlice", () => {
 
       // All promises should have been created (parallel loading)
       expect(loadPromises.length).toBe(5);
+    });
+
+    it("initializeSettings loads viewMode from AsyncStorage via getViewMode()", async () => {
+      getViewMode.mockResolvedValue("grid");
+
+      await store.getState().initializeSettings();
+
+      const state = store.getState();
+      expect(getViewMode).toHaveBeenCalled();
+      expect(state.settings.viewMode).toBe("grid");
     });
   });
 
@@ -430,6 +452,46 @@ describe("SettingsSlice", () => {
 
       store.getState().resetSettings();
       expect(store.getState().settings.initialized).toBe(false);
+    });
+
+    it("resetSettings resets viewMode to 'list'", async () => {
+      await store.getState().updateViewMode("grid");
+      expect(store.getState().settings.viewMode).toBe("grid");
+
+      store.getState().resetSettings();
+      expect(store.getState().settings.viewMode).toBe("list");
+    });
+  });
+
+  describe("updateViewMode", () => {
+    it("updateViewMode('grid') updates state and calls setViewMode('grid')", async () => {
+      await store.getState().updateViewMode("grid");
+
+      const state = store.getState();
+      expect(state.settings.viewMode).toBe("grid");
+      expect(setViewMode).toHaveBeenCalledWith("grid");
+    });
+
+    it("updateViewMode('list') updates state and calls setViewMode('list')", async () => {
+      // First set to grid
+      await store.getState().updateViewMode("grid");
+      jest.clearAllMocks();
+      setViewMode.mockResolvedValue();
+
+      await store.getState().updateViewMode("list");
+
+      const state = store.getState();
+      expect(state.settings.viewMode).toBe("list");
+      expect(setViewMode).toHaveBeenCalledWith("list");
+    });
+
+    it("updateViewMode falls back to 'list' on AsyncStorage error (reverts optimistic update)", async () => {
+      setViewMode.mockRejectedValue(new Error("Storage error"));
+
+      await expect(store.getState().updateViewMode("grid")).rejects.toThrow("Storage error");
+
+      const state = store.getState();
+      expect(state.settings.viewMode).toBe("list");
     });
   });
 
