@@ -1,13 +1,15 @@
-import { db } from '@/db/client';
-import { mediaProgress } from '@/db/schema/mediaProgress';
-import type { ApiMediaProgress, ApiMeResponse, ApiUser } from '@/types/api';
-import { and, desc, eq } from 'drizzle-orm';
+import { db } from "@/db/client";
+import { mediaProgress } from "@/db/schema/mediaProgress";
+import type { ApiMediaProgress, ApiMeResponse, ApiUser } from "@/types/api";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 export type NewMediaProgressRow = typeof mediaProgress.$inferInsert;
 export type MediaProgressRow = typeof mediaProgress.$inferSelect;
 
 // Extract array of media progress rows from an auth/me or login response
-export function marshalMediaProgressFromAuthResponse(data: ApiMeResponse | ApiUser): NewMediaProgressRow[] {
+export function marshalMediaProgressFromAuthResponse(
+  data: ApiMeResponse | ApiUser
+): NewMediaProgressRow[] {
   const userId = data.id;
   const list = data.mediaProgress ?? [];
 
@@ -30,7 +32,10 @@ export function marshalMediaProgressFromAuthResponse(data: ApiMeResponse | ApiUs
 }
 
 // Alternative function that accepts ApiMediaProgress array and userId directly
-export function marshalMediaProgressFromArray(mediaProgressList: ApiMediaProgress[], userId: string): NewMediaProgressRow[] {
+export function marshalMediaProgressFromArray(
+  mediaProgressList: ApiMediaProgress[],
+  userId: string
+): NewMediaProgressRow[] {
   if (!userId || !Array.isArray(mediaProgressList) || mediaProgressList.length === 0) return [];
 
   return mediaProgressList.map((mp) => ({
@@ -50,7 +55,10 @@ export function marshalMediaProgressFromArray(mediaProgressList: ApiMediaProgres
 }
 
 // Marshal a single ApiMediaProgress item to database format
-export function marshalMediaProgressFromApi(mp: ApiMediaProgress, userId: string): NewMediaProgressRow {
+export function marshalMediaProgressFromApi(
+  mp: ApiMediaProgress,
+  userId: string
+): NewMediaProgressRow {
   return {
     id: mp.id,
     userId,
@@ -69,12 +77,26 @@ export function marshalMediaProgressFromApi(mp: ApiMediaProgress, userId: string
 
 export async function upsertMediaProgress(rows: NewMediaProgressRow[]): Promise<void> {
   if (!rows?.length) return;
-  for (const row of rows) {
-    await db
-      .insert(mediaProgress)
-      .values(row)
-      .onConflictDoUpdate({ target: mediaProgress.id, set: row });
-  }
+
+  await db
+    .insert(mediaProgress)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: mediaProgress.id,
+      set: {
+        userId: sql`excluded.user_id`,
+        libraryItemId: sql`excluded.library_item_id`,
+        episodeId: sql`excluded.episode_id`,
+        duration: sql`excluded.duration`,
+        progress: sql`excluded.progress`,
+        currentTime: sql`excluded.current_time`,
+        isFinished: sql`excluded.is_finished`,
+        hideFromContinueListening: sql`excluded.hide_from_continue_listening`,
+        lastUpdate: sql`excluded.last_update`,
+        startedAt: sql`excluded.started_at`,
+        finishedAt: sql`excluded.finished_at`,
+      },
+    });
 }
 
 // Get media progress for a specific library item and user
@@ -85,12 +107,7 @@ export async function getMediaProgressForLibraryItem(
   const results = await db
     .select()
     .from(mediaProgress)
-    .where(
-      and(
-        eq(mediaProgress.libraryItemId, libraryItemId),
-        eq(mediaProgress.userId, userId)
-      )
-    )
+    .where(and(eq(mediaProgress.libraryItemId, libraryItemId), eq(mediaProgress.userId, userId)))
     .orderBy(desc(mediaProgress.lastUpdate))
     .limit(1);
 

@@ -58,33 +58,34 @@ export async function upsertLibraryItem(row: NewLibraryItemRow): Promise<Library
   return inserted;
 }
 
-// Upsert multiple library items
+// Upsert multiple library items — single-statement batch INSERT ON CONFLICT DO UPDATE
 export async function upsertLibraryItems(rows: NewLibraryItemRow[]): Promise<void> {
   if (!rows?.length) return;
 
-  for (const row of rows) {
-    await upsertLibraryItem(row);
-  }
-}
-
-// Transaction-aware variant for batch operations
-export async function upsertLibraryItemTx(
-  tx: typeof db,
-  row: NewLibraryItemRow
-): Promise<LibraryItemRow> {
-  const existing = await tx.select().from(libraryItems).where(eq(libraryItems.id, row.id)).limit(1);
-
-  if (existing.length > 0) {
-    const [updated] = await tx
-      .update(libraryItems)
-      .set(row)
-      .where(eq(libraryItems.id, row.id))
-      .returning();
-    return updated;
-  }
-
-  const [inserted] = await tx.insert(libraryItems).values(row).returning();
-  return inserted;
+  await db
+    .insert(libraryItems)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: libraryItems.id,
+      set: {
+        libraryId: sql`excluded.library_id`,
+        ino: sql`excluded.ino`,
+        folderId: sql`excluded.folder_id`,
+        path: sql`excluded.path`,
+        relPath: sql`excluded.rel_path`,
+        isFile: sql`excluded.is_file`,
+        mtimeMs: sql`excluded.mtime_ms`,
+        ctimeMs: sql`excluded.ctime_ms`,
+        birthtimeMs: sql`excluded.birthtime_ms`,
+        addedAt: sql`excluded.added_at`,
+        updatedAt: sql`excluded.updated_at`,
+        lastScan: sql`excluded.last_scan`,
+        scanVersion: sql`excluded.scan_version`,
+        isMissing: sql`excluded.is_missing`,
+        isInvalid: sql`excluded.is_invalid`,
+        mediaType: sql`excluded.media_type`,
+      },
+    });
 }
 
 // Get all library items from database

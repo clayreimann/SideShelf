@@ -1,20 +1,23 @@
-import { db } from '@/db/client';
-import { libraryFiles } from '@/db/schema/libraryFiles';
-import { isFileDownloadedAndExists } from '@/lib/fileSystem';
-import type { ApiLibraryFile } from '@/types/api';
-import { and, eq } from 'drizzle-orm';
+import { db } from "@/db/client";
+import { libraryFiles } from "@/db/schema/libraryFiles";
+import { isFileDownloadedAndExists } from "@/lib/fileSystem";
+import type { ApiLibraryFile } from "@/types/api";
+import { and, eq, sql } from "drizzle-orm";
 import {
   clearLibraryFileDownloadStatus as clearLibraryFileDownloadStatusLocal,
   getAllDownloadedLibraryFiles,
   getLibraryFileDownloadInfo,
-  markLibraryFileAsDownloaded as markLibraryFileDownloadedLocal
-} from './localData';
+  markLibraryFileAsDownloaded as markLibraryFileDownloadedLocal,
+} from "./localData";
 
 export type NewLibraryFileRow = typeof libraryFiles.$inferInsert;
 export type LibraryFileRow = typeof libraryFiles.$inferSelect;
 
 // Marshal ApiLibraryFile from API to database row
-export function marshalLibraryFileFromApi(libraryItemId: string, apiLibraryFile: ApiLibraryFile): NewLibraryFileRow {
+export function marshalLibraryFileFromApi(
+  libraryItemId: string,
+  apiLibraryFile: ApiLibraryFile
+): NewLibraryFileRow {
   return {
     id: `${libraryItemId}_${apiLibraryFile.ino}`,
     libraryItemId,
@@ -55,30 +58,31 @@ export async function upsertLibraryFile(libraryFile: NewLibraryFileRow): Promise
   return inserted;
 }
 
-// Upsert multiple library files
+// Upsert multiple library files — single-statement batch INSERT ON CONFLICT DO UPDATE
 export async function upsertLibraryFiles(libraryFileRows: NewLibraryFileRow[]): Promise<void> {
   if (libraryFileRows.length === 0) return;
 
-  // Use a transaction for batch operations
-  await db.transaction(async (tx) => {
-    for (const libraryFile of libraryFileRows) {
-      const results = await tx
-        .select()
-        .from(libraryFiles)
-        .where(eq(libraryFiles.id, libraryFile.id))
-        .limit(1);
-      const existing = results[0];
-
-      if (existing) {
-        await tx
-          .update(libraryFiles)
-          .set(libraryFile)
-          .where(eq(libraryFiles.id, libraryFile.id));
-      } else {
-        await tx.insert(libraryFiles).values(libraryFile);
-      }
-    }
-  });
+  await db
+    .insert(libraryFiles)
+    .values(libraryFileRows)
+    .onConflictDoUpdate({
+      target: libraryFiles.id,
+      set: {
+        libraryItemId: sql`excluded.library_item_id`,
+        ino: sql`excluded.ino`,
+        filename: sql`excluded.filename`,
+        ext: sql`excluded.ext`,
+        path: sql`excluded.path`,
+        relPath: sql`excluded.rel_path`,
+        size: sql`excluded.size`,
+        mtimeMs: sql`excluded.mtime_ms`,
+        ctimeMs: sql`excluded.ctime_ms`,
+        birthtimeMs: sql`excluded.birthtime_ms`,
+        addedAt: sql`excluded.added_at`,
+        updatedAt: sql`excluded.updated_at`,
+        fileType: sql`excluded.file_type`,
+      },
+    });
 }
 
 // Get library files for a library item
@@ -99,9 +103,11 @@ export async function markLibraryFileAsDownloaded(
 }
 
 // Get downloaded library files for a library item
-export async function getDownloadedLibraryFilesForItem(libraryItemId: string): Promise<(LibraryFileRow & { downloadInfo: { downloadPath: string; downloadedAt: Date } })[]> {
+export async function getDownloadedLibraryFilesForItem(
+  libraryItemId: string
+): Promise<(LibraryFileRow & { downloadInfo: { downloadPath: string; downloadedAt: Date } })[]> {
   const downloadedFiles = await getAllDownloadedLibraryFiles();
-  const downloadedFileIds = new Set(downloadedFiles.map(d => d.libraryFileId));
+  const downloadedFileIds = new Set(downloadedFiles.map((d) => d.libraryFileId));
 
   const libraryFilesForItem = await db
     .select()
@@ -110,25 +116,27 @@ export async function getDownloadedLibraryFilesForItem(libraryItemId: string): P
     .orderBy(libraryFiles.filename);
 
   return libraryFilesForItem
-    .filter(lf => downloadedFileIds.has(lf.id))
-    .map(lf => {
-      const downloadInfo = downloadedFiles.find(d => d.libraryFileId === lf.id)!;
+    .filter((lf) => downloadedFileIds.has(lf.id))
+    .map((lf) => {
+      const downloadInfo = downloadedFiles.find((d) => d.libraryFileId === lf.id)!;
       return {
         ...lf,
         downloadInfo: {
           downloadPath: downloadInfo.downloadPath,
           downloadedAt: downloadInfo.downloadedAt,
-        }
+        },
       };
     });
 }
 
 // Get audio library files for a library item
-export async function getAudioLibraryFilesForItem(libraryItemId: string): Promise<LibraryFileRow[]> {
+export async function getAudioLibraryFilesForItem(
+  libraryItemId: string
+): Promise<LibraryFileRow[]> {
   return db
     .select()
     .from(libraryFiles)
-    .where(and(eq(libraryFiles.libraryItemId, libraryItemId), eq(libraryFiles.fileType, 'audio')))
+    .where(and(eq(libraryFiles.libraryItemId, libraryItemId), eq(libraryFiles.fileType, "audio")))
     .orderBy(libraryFiles.filename);
 }
 
@@ -139,7 +147,7 @@ export async function isLibraryFileDownloaded(libraryFileId: string): Promise<bo
     downloadInfo,
     libraryFileId,
     clearLibraryFileDownloadStatusLocal,
-    'LibraryFiles'
+    "LibraryFiles"
   );
 }
 

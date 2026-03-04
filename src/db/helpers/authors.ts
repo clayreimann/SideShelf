@@ -5,11 +5,11 @@
  * including fetching, upserting, and transforming author data.
  */
 
-import { getAuthorImageUri, isAuthorImageCached } from '@/lib/authorImages';
-import { count, desc, eq } from 'drizzle-orm';
-import { db } from '../client';
-import { AuthorRow, authors } from '../schema/authors';
-import { mediaAuthors } from '../schema/mediaJoins';
+import { getAuthorImageUri, isAuthorImageCached } from "@/lib/authorImages";
+import { count, desc, eq, sql } from "drizzle-orm";
+import { db } from "../client";
+import { AuthorRow, authors } from "../schema/authors";
+import { mediaAuthors } from "../schema/mediaJoins";
 
 export type NewAuthorRow = typeof authors.$inferInsert;
 export type { AuthorRow };
@@ -21,10 +21,7 @@ export type { AuthorRow };
 export async function getAllAuthors(): Promise<AuthorRow[]> {
   try {
     // Get all authors
-    const allAuthors = await db
-      .select()
-      .from(authors)
-      .orderBy(authors.name);
+    const allAuthors = await db.select().from(authors).orderBy(authors.name);
 
     if (allAuthors.length === 0) {
       return [];
@@ -68,22 +65,17 @@ export async function getAllAuthors(): Promise<AuthorRow[]> {
     // Batch update all authors that need updating
     if (updates.length > 0) {
       await Promise.all(
-        updates.map(update =>
-          db.update(authors)
-            .set({ numBooks: update.numBooks })
-            .where(eq(authors.id, update.id))
+        updates.map((update) =>
+          db.update(authors).set({ numBooks: update.numBooks }).where(eq(authors.id, update.id))
         )
       );
     }
 
     return authorsWithCounts;
   } catch (error) {
-    console.error('[getAllAuthors] Error fetching authors:', error);
+    console.error("[getAllAuthors] Error fetching authors:", error);
     // Return authors without book counts if calculation fails
-    return await db
-      .select()
-      .from(authors)
-      .orderBy(authors.name);
+    return await db.select().from(authors).orderBy(authors.name);
   }
 }
 
@@ -91,11 +83,7 @@ export async function getAllAuthors(): Promise<AuthorRow[]> {
  * Get author by ID
  */
 export async function getAuthorById(id: string): Promise<AuthorRow | null> {
-  const result = await db
-    .select()
-    .from(authors)
-    .where(eq(authors.id, id))
-    .limit(1);
+  const result = await db.select().from(authors).where(eq(authors.id, id)).limit(1);
 
   return result[0] || null;
 }
@@ -104,10 +92,7 @@ export async function getAuthorById(id: string): Promise<AuthorRow | null> {
  * Get authors ordered by number of books (most popular first)
  */
 export async function getAuthorsByPopularity(): Promise<AuthorRow[]> {
-  return await db
-    .select()
-    .from(authors)
-    .orderBy(desc(authors.numBooks), authors.name);
+  return await db.select().from(authors).orderBy(desc(authors.numBooks), authors.name);
 }
 
 /**
@@ -131,24 +116,29 @@ export async function upsertAuthor(row: NewAuthorRow): Promise<AuthorRow> {
 }
 
 /**
- * Upsert multiple authors
+ * Upsert multiple authors — single-statement batch INSERT ON CONFLICT DO UPDATE
  */
 export async function upsertAuthors(rows: NewAuthorRow[]): Promise<void> {
   if (rows.length === 0) return;
 
-  for (const row of rows) {
-    await upsertAuthor(row);
-  }
+  await db
+    .insert(authors)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: authors.id,
+      set: {
+        name: sql`excluded.name`,
+        imageUrl: sql`excluded.image_url`,
+        numBooks: sql`excluded.num_books`,
+      },
+    });
 }
 
 /**
  * Update author book count
  */
 export async function updateAuthorBookCount(authorId: string, count: number): Promise<void> {
-  await db
-    .update(authors)
-    .set({ numBooks: count })
-    .where(eq(authors.id, authorId));
+  await db.update(authors).set({ numBooks: count }).where(eq(authors.id, authorId));
 }
 
 /**
@@ -171,7 +161,7 @@ function convertToLastFirst(name: string): string {
   if (!name) return name;
 
   // If already in "Last, First" format, return as is
-  if (name.includes(',')) {
+  if (name.includes(",")) {
     return name;
   }
 
@@ -179,7 +169,7 @@ function convertToLastFirst(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) {
     const lastName = parts[parts.length - 1];
-    const firstName = parts.slice(0, -1).join(' ');
+    const firstName = parts.slice(0, -1).join(" ");
     return `${lastName}, ${firstName}`;
   }
 
@@ -192,7 +182,7 @@ function convertToLastFirst(name: string): string {
  * Checks for cached images and sets cachedImageUri if found
  */
 export function transformAuthorsToDisplayFormat(authors: AuthorRow[]): AuthorListRow[] {
-  return authors.map(author => {
+  return authors.map((author) => {
     // Check if image is already cached locally
     let cachedImageUri: string | null = null;
     if (isAuthorImageCached(author.id)) {
@@ -201,8 +191,8 @@ export function transformAuthorsToDisplayFormat(authors: AuthorRow[]): AuthorLis
 
     return {
       id: author.id,
-      name: author.name || 'Unknown ApiAuthor',
-      nameLF: convertToLastFirst(author.name || 'Unknown ApiAuthor'),
+      name: author.name || "Unknown ApiAuthor",
+      nameLF: convertToLastFirst(author.name || "Unknown ApiAuthor"),
       imageUrl: author.imageUrl,
       numBooks: author.numBooks || 0,
       cachedImageUri, // Set from cache if available

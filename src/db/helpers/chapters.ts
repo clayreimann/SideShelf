@@ -1,6 +1,6 @@
-import { db } from '@/db/client';
-import { chapters } from '@/db/schema/chapters';
-import { eq } from 'drizzle-orm';
+import { db } from "@/db/client";
+import { chapters } from "@/db/schema/chapters";
+import { eq, sql } from "drizzle-orm";
 
 export type NewChapterRow = typeof chapters.$inferInsert;
 export type ChapterRow = typeof chapters.$inferSelect;
@@ -27,11 +27,7 @@ export function marshalChapterFromApi(mediaId: string, apiChapter: ApiChapter): 
 
 // Upsert a single chapter
 export async function upsertChapter(chapter: NewChapterRow): Promise<ChapterRow> {
-  const results = await db
-    .select()
-    .from(chapters)
-    .where(eq(chapters.id, chapter.id))
-    .limit(1);
+  const results = await db.select().from(chapters).where(eq(chapters.id, chapter.id)).limit(1);
   const existing = results[0];
 
   if (existing) {
@@ -47,30 +43,23 @@ export async function upsertChapter(chapter: NewChapterRow): Promise<ChapterRow>
   return inserted;
 }
 
-// Upsert multiple chapters
+// Upsert multiple chapters — single-statement batch INSERT ON CONFLICT DO UPDATE
 export async function upsertChapters(chapterRows: NewChapterRow[]): Promise<void> {
   if (chapterRows.length === 0) return;
 
-  // Use a transaction for batch operations
-  await db.transaction(async (tx) => {
-    for (const chapter of chapterRows) {
-      const results = await tx
-        .select()
-        .from(chapters)
-        .where(eq(chapters.id, chapter.id))
-        .limit(1);
-      const existing = results[0];
-
-      if (existing) {
-        await tx
-          .update(chapters)
-          .set(chapter)
-          .where(eq(chapters.id, chapter.id));
-      } else {
-        await tx.insert(chapters).values(chapter);
-      }
-    }
-  });
+  await db
+    .insert(chapters)
+    .values(chapterRows)
+    .onConflictDoUpdate({
+      target: chapters.id,
+      set: {
+        mediaId: sql`excluded.media_id`,
+        chapterId: sql`excluded.chapter_id`,
+        start: sql`excluded.start`,
+        end: sql`excluded.end`,
+        title: sql`excluded.title`,
+      },
+    });
 }
 
 // Get chapters for a media item
@@ -90,7 +79,10 @@ export async function deleteChaptersForMedia(mediaId: string): Promise<void> {
 /**
  * Get chapters that have already been played (position > chapter.end)
  */
-export function getPlayedChapters(chapterList: ChapterRow[], currentPosition: number): ChapterRow[] {
+export function getPlayedChapters(
+  chapterList: ChapterRow[],
+  currentPosition: number
+): ChapterRow[] {
   return chapterList.filter((chapter) => currentPosition > chapter.end);
 }
 
@@ -98,7 +90,10 @@ export function getPlayedChapters(chapterList: ChapterRow[], currentPosition: nu
  * Get chapters that are upcoming (position < chapter.end)
  * Includes the current chapter if one exists
  */
-export function getUpcomingChapters(chapterList: ChapterRow[], currentPosition: number): ChapterRow[] {
+export function getUpcomingChapters(
+  chapterList: ChapterRow[],
+  currentPosition: number
+): ChapterRow[] {
   return chapterList.filter((chapter) => currentPosition < chapter.end);
 }
 
