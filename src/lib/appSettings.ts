@@ -17,6 +17,7 @@ const SETTINGS_KEYS = {
   hiddenTabs: "@app/hiddenTabs",
   customUpdateUrl: "@app/customUpdateUrl",
   lastHomeSectionCount: "@app/lastHomeSectionCount",
+  viewMode: "@app/viewMode",
 } as const;
 
 // Default values
@@ -326,5 +327,31 @@ export async function setLastHomeSectionCount(count: number): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.lastHomeSectionCount, count.toString());
   } catch (error) {
     console.error("[AppSettings] Failed to save last home section count:", error);
+  }
+}
+
+/**
+ * Get library view mode preference
+ * Default: 'list' (vertical list layout)
+ */
+export async function getViewMode(): Promise<"list" | "grid"> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.viewMode);
+    return value === "grid" ? "grid" : "list";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get view mode setting:", error);
+    return "list";
+  }
+}
+
+/**
+ * Set library view mode preference
+ */
+export async function setViewMode(mode: "list" | "grid"): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.viewMode, mode);
+  } catch (error) {
+    console.error("[AppSettings] Failed to save view mode setting:", error);
+    throw error;
   }
 }

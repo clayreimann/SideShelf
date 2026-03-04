@@ -12,6 +12,7 @@ import {
   AuthorListRow,
   AuthorRow,
   getAllAuthors,
+  getAuthorById,
   transformAuthorsToDisplayFormat,
 } from "@/db/helpers/authors";
 import { cacheAuthorImageIfMissing } from "@/lib/authorImages";
@@ -55,6 +56,8 @@ export interface AuthorsSliceActions {
   setAuthorsSortConfig: (config: AuthorSortConfig) => Promise<void>;
   /** Reset the slice to initial state */
   resetAuthors: () => void;
+  /** Look up an author by ID, using the in-memory list first, falling back to DB */
+  getOrFetchAuthorById: (authorId: string) => Promise<AuthorRow | null>;
 
   // Internal actions (prefixed with underscore)
   /** Set ready state based on API and DB initialization */
@@ -291,6 +294,24 @@ export const createAuthorsSlice: SliceCreator<AuthorsSlice> = (set, get) => ({
       ...state,
       ...initialAuthorsState,
     }));
+  },
+
+  /**
+   * Look up an author by ID, using in-memory authors list first, then falling back to DB.
+   * The DB fallback should be rare — authors are expected to be in memory after library sync.
+   */
+  getOrFetchAuthorById: async (authorId: string): Promise<AuthorRow | null> => {
+    // Search in-memory list first (O(n) but avoids async DB round-trip)
+    const inMemory = get().authors.authors.find((a: AuthorRow) => a.id === authorId);
+    if (inMemory) {
+      return inMemory;
+    }
+
+    // Fall back to DB — log a warning since this should be uncommon
+    console.warn(
+      `[AuthorsSlice] getOrFetchAuthorById: author ${authorId} not in memory, falling back to DB`
+    );
+    return await getAuthorById(authorId);
   },
 
   /**

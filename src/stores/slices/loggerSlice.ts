@@ -8,6 +8,7 @@
  */
 
 import {
+  getAllTags,
   getErrorCount,
   getErrorCountSince,
   getWarningCount,
@@ -29,6 +30,8 @@ export interface LoggerSliceState {
     errorsAcknowledgedTimestamp: number | null;
     /** Whether the slice has been initialized */
     initialized: boolean;
+    /** All unique log tags seen in the current logger database (synchronous, from getAllTags) */
+    availableTags: string[];
   };
 }
 
@@ -45,6 +48,8 @@ export interface LoggerSliceActions {
     resetErrorAcknowledgment: () => Promise<void>;
     /** Initialize the slice (load counts and acknowledgment state) */
     initialize: () => Promise<void>;
+    /** Refresh availableTags synchronously from the logger database */
+    refreshAvailableTags: () => void;
   };
 }
 
@@ -59,6 +64,7 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
     warningCount: 0,
     errorsAcknowledgedTimestamp: null,
     initialized: false,
+    availableTags: [],
 
     /**
      * Update error and warning counts from database
@@ -161,12 +167,16 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
           }
         }
 
+        // Load available tags synchronously
+        const availableTags = getAllTags();
+
         set((state: LoggerSliceState) => ({
           logger: {
             ...state.logger,
             errorCount,
             warningCount,
             errorsAcknowledgedTimestamp,
+            availableTags,
             initialized: true,
           },
         }));
@@ -179,6 +189,20 @@ export const createLoggerSlice: SliceCreator<LoggerSlice> = (set, get) => ({
           },
         }));
       }
+    },
+
+    /**
+     * Refresh availableTags synchronously from the logger database.
+     * Call this after new log entries may have introduced new tags.
+     */
+    refreshAvailableTags: () => {
+      const availableTags = getAllTags();
+      set((state: LoggerSliceState) => ({
+        logger: {
+          ...state.logger,
+          availableTags,
+        },
+      }));
     },
   },
 });
