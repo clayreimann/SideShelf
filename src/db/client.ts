@@ -15,6 +15,18 @@ export function getSQLiteDb(): SQLite.SQLiteDatabase {
     // sqliteDb = SQLite.openDatabaseSync('abs.db');
     // sqliteDb = SQLite.openDatabaseSync('abs.sqlite');
     sqliteDb = SQLite.openDatabaseSync(DB_NAME);
+    /**
+     * WAL (Write-Ahead Logging) mode: persistent — set once on first open, survives across
+     * app restarts. Eliminates write contention during ProgressService syncs.
+     *
+     * synchronous=NORMAL: connection-level setting — must be set on every open.
+     * getSQLiteDb() is the single chokepoint (called from resetDatabaseFile too), so
+     * the if (!sqliteDb) guard ensures these pragmas run exactly once per connection.
+     *
+     * Using execSync on the raw SQLite handle before Drizzle wraps the connection.
+     */
+    sqliteDb.execSync("PRAGMA journal_mode=WAL;");
+    sqliteDb.execSync("PRAGMA synchronous=NORMAL;");
   }
   return sqliteDb;
 }
