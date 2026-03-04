@@ -119,12 +119,12 @@ Plans:
 4. A download started, then app killed and relaunched, resumes correctly — restart recovery works with mainline task IDs and metadata format
 5. iCloud exclusion (`withExcludeFromBackup` plugin) applies correctly post-migration — v1.1 behavior is not regressed
 
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 
-- [ ] 13-01: Fork diff spike + API compatibility analysis (DWNLD-01)
-- [ ] 13-02: Mainline package swap + DownloadService API adapter (DWNLD-02–04)
+- [ ] 13-01-PLAN.md — Fork diff investigation document: API surface diff, call site mapping, event queue analysis, iCloud exclusion independence, smoke test checklist (DWNLD-01)
+- [ ] 13-02-PLAN.md — Package swap + DownloadService API migration + startup reconciliation unit tests (DWNLD-02–04)
 
 ## Progress
 
