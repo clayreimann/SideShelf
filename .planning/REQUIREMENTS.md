@@ -9,11 +9,11 @@ Requirements for the Tech Cleanup milestone. Each maps to roadmap phases startin
 
 ### DB Performance
 
-- [ ] **DB-01**: WAL mode + `synchronous=NORMAL` pragmas configured at DB open (~4x write throughput for ProgressService 15s sync writes)
-- [ ] **DB-02**: Index added on `library_items.library_id`
-- [ ] **DB-03**: Index added on `media_metadata.library_item_id`
-- [ ] **DB-04**: Index added on `audio_files.media_id`
-- [ ] **DB-05**: Composite index added on `media_progress(user_id, library_item_id)`
+- [x] **DB-01**: WAL mode + `synchronous=NORMAL` pragmas configured at DB open (~4x write throughput for ProgressService 15s sync writes)
+- [x] **DB-02**: Index added on `library_items.library_id`
+- [x] **DB-03**: Index added on `media_metadata.library_item_id`
+- [x] **DB-04**: Index added on `audio_files.media_id`
+- [x] **DB-05**: Composite index added on `media_progress(user_id, library_item_id)`
 - [ ] **DB-06**: `upsertLibraryItems()` converted from serial for-loop to batch `onConflictDoUpdate`
 - [ ] **DB-07**: `fullLibraryItems.ts` genre/narrator/tag inserts converted to batch operations
 
@@ -75,30 +75,30 @@ _Deferred: RNTP Android bridgeless compatibility (open issue #2443) is an extern
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement | Phase | Status  |
-| ----------- | ----- | ------- |
-| DB-01       | 10    | Pending |
-| DB-02       | 10    | Pending |
-| DB-03       | 10    | Pending |
-| DB-04       | 10    | Pending |
-| DB-05       | 10    | Pending |
-| DB-06       | 10    | Pending |
-| DB-07       | 10    | Pending |
-| STATE-01    | 11    | Pending |
-| STATE-02    | 11    | Pending |
-| STATE-03    | 11    | Pending |
-| EFFECT-01   | 11    | Pending |
-| EFFECT-02   | 11    | Pending |
-| EFFECT-03   | 11    | Pending |
-| EFFECT-04   | 11    | Pending |
-| EFFECT-05   | 11    | Pending |
-| EFFECT-06   | 11    | Pending |
-| DECOMP-01   | 12    | Pending |
-| DECOMP-02   | 12    | Pending |
-| DWNLD-01    | 13    | Pending |
-| DWNLD-02    | 13    | Pending |
-| DWNLD-03    | 13    | Pending |
-| DWNLD-04    | 13    | Pending |
+| Requirement | Phase | Status   |
+| ----------- | ----- | -------- |
+| DB-01       | 10    | Complete |
+| DB-02       | 10    | Complete |
+| DB-03       | 10    | Complete |
+| DB-04       | 10    | Complete |
+| DB-05       | 10    | Complete |
+| DB-06       | 10    | Pending  |
+| DB-07       | 10    | Pending  |
+| STATE-01    | 11    | Pending  |
+| STATE-02    | 11    | Pending  |
+| STATE-03    | 11    | Pending  |
+| EFFECT-01   | 11    | Pending  |
+| EFFECT-02   | 11    | Pending  |
+| EFFECT-03   | 11    | Pending  |
+| EFFECT-04   | 11    | Pending  |
+| EFFECT-05   | 11    | Pending  |
+| EFFECT-06   | 11    | Pending  |
+| DECOMP-01   | 12    | Pending  |
+| DECOMP-02   | 12    | Pending  |
+| DWNLD-01    | 13    | Pending  |
+| DWNLD-02    | 13    | Pending  |
+| DWNLD-03    | 13    | Pending  |
+| DWNLD-04    | 13    | Pending  |
 
 **Coverage:**
 
