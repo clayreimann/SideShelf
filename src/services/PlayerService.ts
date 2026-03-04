@@ -1,63 +1,70 @@
 /**
  * PlayerService - Manages react-native-track-player integration
  *
- * This service handles:
- * - Track player setup and configuration
- * - Local and remote audio file playback
- * - Progress tracking and chapter navigation
- * - Integration with Zustand player store
+ * This service is a facade that retains all public interface methods and all
+ * mutable state. Execution is delegated to four focused collaborators:
+ *
+ * - TrackLoadingCollaborator: executeLoadTrack, buildTrackList, reloadTrackPlayerQueue
+ * - PlaybackControlCollaborator: executePlay, executePause, executeStop, executeSeek, setRate, setVolume
+ * - ProgressRestoreCollaborator: restorePlayerServiceFromSession, syncPositionFromDatabase, rebuildCurrentTrackIfNeeded
+ * - BackgroundReconnectCollaborator: reconnectBackgroundService, refreshFilePathsAfterContainerChange
+ *
+ * Interfaces are defined in src/services/player/types.ts to prevent circular imports.
  */
 
-import { clearAudioFileDownloadStatus } from "@/db/helpers/audioFiles";
-import { getChaptersForMedia } from "@/db/helpers/chapters";
-import type { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
-import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
-import { getLibraryItemById } from "@/db/helpers/libraryItems";
-import { getAllActiveSessionsForUser } from "@/db/helpers/localListeningSessions";
-import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
-import { getUserByUsername } from "@/db/helpers/users";
-import { startPlaySession } from "@/lib/api/endpoints";
-import { getCoverUri } from "@/lib/covers";
-import { ensureItemInDocuments } from "@/lib/fileLifecycleManager";
-import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
-import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
-import { getStoredUsername } from "@/lib/secureStore";
-import { applySmartRewind } from "@/lib/smartRewind";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { apiClientService } from "@/services/ApiClientService";
-import { downloadService } from "@/services/DownloadService";
-import { progressService } from "@/services/ProgressService";
-import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
+import { formatTime } from "@/lib/helpers/formatters";
 import { useAppStore } from "@/stores/appStore";
-import type { ApiPlaySessionResponse } from "@/types/api";
-import type { PlayerTrack } from "@/types/player";
-import { AppState } from "react-native";
+import type { PlayerEvent } from "@/types/coordinator";
 import TrackPlayer, {
   AndroidAudioContentType,
   IOSCategory,
   IOSCategoryMode,
   State,
-  Track,
 } from "react-native-track-player";
+import { BackgroundReconnectCollaborator } from "./player/BackgroundReconnectCollaborator";
+import { PlaybackControlCollaborator } from "./player/PlaybackControlCollaborator";
+import { ProgressRestoreCollaborator } from "./player/ProgressRestoreCollaborator";
+import { TrackLoadingCollaborator } from "./player/TrackLoadingCollaborator";
+import type {
+  IBackgroundReconnectCollaborator,
+  IPlaybackControlCollaborator,
+  IPlayerServiceFacade,
+  IProgressRestoreCollaborator,
+  ITrackLoadingCollaborator,
+} from "./player/types";
 
-const log = logger.forTag("PlayerService"); // Cached sublogger
-const diagLog = logger.forDiagnostics("PlayerService"); // Diagnostic logger
+const log = logger.forTag("PlayerService");
+const diagLog = logger.forDiagnostics("PlayerService");
 
 /**
- * Track player service class
+ * Track player service facade.
+ * Implements IPlayerServiceFacade so collaborators can call back via the interface.
  */
-export class PlayerService {
+export class PlayerService implements IPlayerServiceFacade {
   private static instance: PlayerService | null = null;
   private initialized = false;
   private initializationTimestamp = 0;
   private listenersSetup = false;
   private eventSubscriptions: Array<{ remove: () => void }> = [];
   private cachedApiInfo: { baseUrl: string; accessToken: string } | null = null;
-  // Removed: currentTrack, currentUsername, currentPlaySessionId, lastPauseTime (now in playerSlice)
 
-  private constructor() {}
+  // Collaborator references (typed to interfaces — swappable in tests)
+  private trackLoading!: ITrackLoadingCollaborator;
+  private playbackControl!: IPlaybackControlCollaborator;
+  private progressRestore!: IProgressRestoreCollaborator;
+  private backgroundReconnect!: IBackgroundReconnectCollaborator;
+
+  private constructor() {
+    // Collaborators created here — facade is `this`
+    this.trackLoading = new TrackLoadingCollaborator(this);
+    this.playbackControl = new PlaybackControlCollaborator(this);
+    this.progressRestore = new ProgressRestoreCollaborator(this);
+    this.backgroundReconnect = new BackgroundReconnectCollaborator(this);
+  }
 
   /**
    * Get singleton instance
@@ -83,7 +90,6 @@ export class PlayerService {
    * Clean up resources
    */
   private cleanup(): void {
-    // Remove all event listeners
     this.eventSubscriptions.forEach((subscription) => {
       try {
         subscription.remove();
@@ -91,11 +97,56 @@ export class PlayerService {
         log.error("Error removing subscription", error as Error);
       }
     });
-    this.eventSubscriptions.length = 0; // Clear the array
+    this.eventSubscriptions.length = 0;
 
     this.initialized = false;
     this.listenersSetup = false;
   }
+
+  // --- IPlayerServiceFacade implementation ---
+
+  /**
+   * Dispatch a coordinator event.
+   * Collaborators call this instead of importing dispatchPlayerEvent directly.
+   */
+  dispatchEvent(event: PlayerEvent): void {
+    dispatchPlayerEvent(event);
+  }
+
+  /**
+   * Get cached API credentials for building streaming URLs.
+   */
+  getApiInfo(): { baseUrl: string; accessToken: string } | null {
+    const baseUrl = apiClientService.getBaseUrl();
+    const accessToken = apiClientService.getAccessToken();
+
+    if (!baseUrl || !accessToken) {
+      log.error(" Missing base URL or access token");
+      return null;
+    }
+
+    // Update cache
+    this.cachedApiInfo = { baseUrl, accessToken };
+    return this.cachedApiInfo;
+  }
+
+  /**
+   * Get the initialization timestamp (for detecting context recreation).
+   */
+  getInitializationTimestamp(): number {
+    return this.initializationTimestamp;
+  }
+
+  /**
+   * Rebuild currentTrack if it's missing but should exist.
+   * Delegates to ProgressRestoreCollaborator; exposed on facade so
+   * PlaybackControlCollaborator can call it without a direct import.
+   */
+  async rebuildCurrentTrackIfNeeded(): Promise<boolean> {
+    return this.progressRestore.rebuildCurrentTrackIfNeeded();
+  }
+
+  // --- Debug ---
 
   async printDebugInfo(from: string): Promise<void> {
     try {
@@ -111,13 +162,14 @@ export class PlayerService {
     }
   }
 
+  // --- Initialization ---
+
   /**
    * Initialize the track player
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
       log.info("Already initialized, skipping");
-      // Diagnostic: log current track, position, playing state
       await this.printDebugInfo("initialize");
       return;
     }
@@ -125,45 +177,33 @@ export class PlayerService {
     try {
       log.info("Initializing track player");
 
-      // Check if player is already set up (e.g., during hot reload)
       try {
         const state = await TrackPlayer.getPlaybackState();
         log.info("Track player already exists, reusing existing instance");
 
-        // Player exists, just set up our event listeners
         this.initialized = true;
         this.initializationTimestamp = Date.now();
         log.info("Reused existing track player successfully");
         return;
       } catch (checkError) {
-        // Player doesn't exist yet, continue with setup
         log.info("No existing player found, setting up new instance");
       }
 
       await TrackPlayer.setupPlayer({
-        // We want to manage metadata updates ourselves so we can send track details
         autoUpdateMetadata: false,
-
-        // iOS specific options
         iosCategory: IOSCategory.Playback,
         iosCategoryMode: IOSCategoryMode.SpokenAudio,
-
-        // Android specific options
         androidAudioContentType: AndroidAudioContentType.Speech,
       });
       await configureTrackPlayer();
-
-      // Set up event listeners
 
       this.initialized = true;
       this.initializationTimestamp = Date.now();
       log.info("Track player initialized successfully");
     } catch (error) {
-      // Handle the specific "already initialized" error gracefully
       if (error instanceof Error && error.message.includes("already been initialized")) {
         log.info("Player was already initialized elsewhere, setting up listeners");
         try {
-          // Set up our event listeners on the existing player
           this.initialized = true;
           this.initializationTimestamp = Date.now();
           log.info("Successfully attached to existing player");
@@ -178,210 +218,16 @@ export class PlayerService {
     }
   }
 
+  // --- Public API (event dispatching — unchanged from callers' perspective) ---
+
   /**
    * Load and play a track (Public API - Dispatches Event)
-   * @param libraryItemId - The library item ID to play
-   * @param episodeId - Optional episode ID for podcast episodes
    */
   async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
     dispatchPlayerEvent({
       type: "LOAD_TRACK",
       payload: { libraryItemId, episodeId },
     });
-  }
-
-  /**
-   * Execute track loading (Internal - Called by Coordinator)
-   */
-  async executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void> {
-    try {
-      diagLog.info(`playTrack called for libraryItemId: ${libraryItemId}`);
-      // Diagnostic: log current track, position, playing state before loading
-      await this.printDebugInfo("playTrack::init");
-      log.info(`Loading track for library item: ${libraryItemId}`);
-
-      // Ensure downloaded files are in Documents directory before playback
-      // This is a synchronous operation that will move files if needed
-      try {
-        await ensureItemInDocuments(libraryItemId);
-      } catch (error) {
-        // Log error but don't block playback - files might be in cache or streaming
-        log.warn(`Failed to ensure item in Documents, continuing with playback: ${error}`);
-      }
-
-      // Repair download paths to account for iOS container path changes
-      // This ensures buildTrackList() will find locally downloaded files
-      try {
-        await downloadService.repairDownloadStatus(libraryItemId);
-      } catch (error) {
-        // Log error but don't block playback - will fall back to streaming if needed
-        log.warn(`Failed to repair download status, continuing with playback: ${error}`);
-      }
-
-      // Get username from secure storage
-      const username = await getStoredUsername();
-      if (!username) {
-        throw new Error("No authenticated user found");
-      }
-
-      // Get user from database
-      const user = await getUserByUsername(username);
-      if (!user?.id) {
-        throw new Error("User not found in database");
-      }
-
-      // Check if already playing this item - if so, just resume
-      const store = useAppStore.getState();
-      if (store.player.currentTrack?.libraryItemId === libraryItemId) {
-        const state = await TrackPlayer.getPlaybackState();
-        const queue = await TrackPlayer.getQueue();
-
-        // Only short-circuit if we actually have tracks in the queue
-        if (queue.length > 0) {
-          if (state.state === State.Playing) {
-            log.info("Already playing this item - syncing coordinator state");
-            dispatchPlayerEvent({ type: "PLAY" });
-            return;
-          } else if (state.state === State.Paused) {
-            log.info("Resuming paused playback via coordinator");
-            dispatchPlayerEvent({ type: "PLAY" });
-            return;
-          }
-        } else {
-          // Queue is empty even though we have a currentTrack - need to reload
-          log.warn("Current track set but queue is empty - reloading track");
-        }
-      }
-
-      // Fetch required data from database
-      const libraryItem = await getLibraryItemById(libraryItemId);
-      if (!libraryItem) {
-        throw new Error(`Library item ${libraryItemId} not found`);
-      }
-
-      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
-      if (!metadata) {
-        throw new Error(`Metadata not found for library item ${libraryItemId}`);
-      }
-
-      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-      if (audioFiles.length === 0) {
-        throw new Error("No audio files found for this item");
-      }
-
-      const chapters = await getChaptersForMedia(metadata.id);
-
-      // Build PlayerTrack object
-      const track: PlayerTrack = {
-        libraryItemId: libraryItem.id,
-        mediaId: metadata.id,
-        title: metadata.title || "Unknown Title",
-        author: metadata.authorName || metadata.author || "Unknown Author",
-        // Only use imageUrl for remote URLs (e.g. podcast artwork from iTunes/RSS).
-        // Local file paths stored in imageUrl may be stale after iOS app updates change
-        // the container UUID. getCoverUri() always resolves via Paths.cache (current UUID).
-        coverUri: metadata.imageUrl?.match(/^https?:\/\//)
-          ? metadata.imageUrl
-          : getCoverUri(libraryItem.id),
-        audioFiles,
-        chapters,
-        duration: audioFiles.reduce(
-          (total: number, file: AudioFileWithDownloadInfo) => total + (file.duration || 0),
-          0
-        ),
-        isDownloaded: audioFiles.some(
-          (file: AudioFileWithDownloadInfo) => file.downloadInfo?.isDownloaded
-        ),
-      };
-
-      log.info(`Built track: ${track.title}`);
-
-      // Clear current queue
-      await TrackPlayer.reset();
-
-      // Determine the audio source (local or remote)
-      const tracks = await this.buildTrackList(track);
-
-      if (tracks.length === 0) {
-        // Provide more detailed error information
-        const hasDownloadedFiles = track.audioFiles.some((af) => af.downloadInfo?.isDownloaded);
-
-        const needsStreaming = track.audioFiles.some(
-          (audioFile) => !audioFile.downloadInfo?.isDownloaded
-        );
-
-        let errorMessage = "No playable audio files found";
-        if (hasDownloadedFiles && !needsStreaming) {
-          errorMessage +=
-            ". Downloaded files are missing from device storage. Please re-download the content.";
-        } else if (!hasDownloadedFiles && needsStreaming) {
-          errorMessage +=
-            ". Content is not downloaded and streaming is not available. Please check your internet connection.";
-        } else if (hasDownloadedFiles && needsStreaming) {
-          errorMessage +=
-            ". Downloaded files are missing and streaming failed. Please check your internet connection or re-download the content.";
-        }
-
-        log.error(
-          `No playable tracks available: ${JSON.stringify({
-            totalAudioFiles: track.audioFiles.length,
-            downloadedFiles: track.audioFiles.filter((af) => af.downloadInfo?.isDownloaded).length,
-            needsStreaming,
-          })}`
-        );
-
-        throw new Error(errorMessage);
-      }
-
-      // Update store with current track — RETAINED: coordinator cannot build PlayerTrack
-      // isLoadingTrack is now set via LOAD_TRACK event → coordinator → syncStateToStore bridge
-      store._setCurrentTrack(track);
-
-      // Add tracks to queue
-      await TrackPlayer.add(tracks);
-
-      const coordinator = getCoordinator();
-      const resumeInfo = await coordinator.resolveCanonicalPosition(libraryItemId);
-
-      // Seek to resume position first (if applicable)
-      // store.updatePosition removed: POSITION_RECONCILED event → coordinator → syncStateToStore bridge
-      if (resumeInfo.position > 0) {
-        await TrackPlayer.seekTo(resumeInfo.position);
-        log.info(
-          `Resuming playback from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
-        );
-      }
-
-      // Apply playback settings from store to TrackPlayer
-      const currentPlaybackRate = store.player.playbackRate;
-      const currentVolume = store.player.volume;
-
-      if (currentPlaybackRate !== 1.0) {
-        await TrackPlayer.setRate(currentPlaybackRate);
-        log.info(`Applied playback rate from store: ${currentPlaybackRate}`);
-      }
-
-      if (currentVolume !== 1.0) {
-        await TrackPlayer.setVolume(currentVolume);
-        log.info(`Applied volume from store: ${currentVolume}`);
-      }
-
-      // Dispatch PLAY so the coordinator transitions to PLAYING and calls executePlay().
-      // executePlay() owns smart rewind and TrackPlayer.play() — single responsibility.
-      // The coordinator accepts PLAY from both LOADING and READY states, so this is
-      // safe regardless of whether NATIVE_TRACK_CHANGED has already arrived.
-      dispatchPlayerEvent({ type: "PLAY" });
-
-      // Diagnostic: log current track, position, playing state after loading
-      await this.printDebugInfo("playTrack::done");
-      log.info("Track loaded, PLAY dispatched to coordinator");
-    } catch (error) {
-      log.error(" Failed to load track:", error as Error);
-      // Clear loading state on error
-      const store = useAppStore.getState();
-      store._setTrackLoading(false);
-      throw error;
-    }
   }
 
   /**
@@ -405,182 +251,10 @@ export class PlayerService {
   }
 
   /**
-   * Execute pause (Internal - Called by Coordinator)
-   */
-  async executePause(): Promise<void> {
-    const store = useAppStore.getState();
-    const pauseTime = Date.now();
-    store._setLastPauseTime(pauseTime);
-    log.info(`Pausing playback at ${new Date(pauseTime).toISOString()}`);
-    await TrackPlayer.pause();
-  }
-
-  /**
    * Resume playback (Public API - Dispatches Event)
    */
   async play(): Promise<void> {
     dispatchPlayerEvent({ type: "PLAY" });
-  }
-
-  /**
-   * Execute play (Internal - Called by Coordinator)
-   */
-  async executePlay(): Promise<void> {
-    const prepared = await this.rebuildCurrentTrackIfNeeded();
-    if (!prepared) {
-      log.warn("Playback request ignored: no track available after restoration");
-      return;
-    }
-
-    try {
-      const store = useAppStore.getState();
-
-      // Apply smart rewind (checks enabled setting internally)
-      await applySmartRewind();
-
-      // Clear pause time since we're resuming
-      store._setLastPauseTime(null);
-      await TrackPlayer.play();
-    } catch (error) {
-      const store = useAppStore.getState();
-      store._setTrackLoading(false);
-      throw error;
-    }
-  }
-
-  /**
-   * Rebuild currentTrack if it's missing but should exist
-   * Handles case where streaming media wasn't restored but playback should resume
-   */
-  private async rebuildCurrentTrackIfNeeded(): Promise<boolean> {
-    try {
-      const store = useAppStore.getState();
-      let playerSliceTrack = store.player.currentTrack;
-
-      if (!playerSliceTrack) {
-        log.info("No currentTrack in store, attempting to restore from session");
-        await this.restorePlayerServiceFromSession();
-        playerSliceTrack = useAppStore.getState().player.currentTrack;
-      }
-
-      if (!playerSliceTrack) {
-        log.warn("Unable to rebuild player state - no track information available");
-        return false;
-      }
-
-      const queue = await TrackPlayer.getQueue();
-      const expectedIds = playerSliceTrack.audioFiles.map((file) => file.id);
-      const queueIds = queue.map((track) => track.id);
-      const queueMatchesTrack =
-        queue.length > 0 &&
-        queue.length === expectedIds.length &&
-        queueIds.every((id, index) => id === expectedIds[index]);
-
-      if (queueMatchesTrack) {
-        const requiresStreaming = playerSliceTrack.audioFiles.some(
-          (audioFile) => !audioFile.downloadInfo?.isDownloaded
-        );
-        if (!requiresStreaming) {
-          const refreshedStore = useAppStore.getState();
-          if (refreshedStore.player.currentPlaySessionId) {
-            log.info(
-              `Clearing stale streaming session ID for downloaded track ${playerSliceTrack.libraryItemId}`
-            );
-            refreshedStore._setPlaySessionId(null);
-          }
-        }
-        log.info(`TrackPlayer queue already prepared for ${playerSliceTrack.libraryItemId}`);
-        return true;
-      }
-
-      log.info(
-        `TrackPlayer queue missing or mismatched, rebuilding for ${playerSliceTrack.libraryItemId}`
-      );
-      const rebuilt = await this.reloadTrackPlayerQueue(playerSliceTrack);
-
-      if (!rebuilt) {
-        log.warn(`Failed to rebuild TrackPlayer queue for ${playerSliceTrack.libraryItemId}`);
-      }
-
-      return rebuilt;
-    } catch (error) {
-      log.error("Failed to rebuild currentTrack", error as Error);
-      // Don't throw - playback can still proceed
-      return false;
-    }
-  }
-
-  /**
-   * Prepare TrackPlayer queue based on the current track stored in playerSlice
-   */
-  private async reloadTrackPlayerQueue(track: PlayerTrack): Promise<boolean> {
-    // Dispatch RELOAD_QUEUE event to state machine — coordinator sets isLoadingTrack=true,
-    // bridge propagates via syncStateToStore. Direct store._setTrackLoading(true) removed.
-    dispatchPlayerEvent({
-      type: "RELOAD_QUEUE",
-      payload: { libraryItemId: track.libraryItemId },
-    });
-
-    let success = false;
-
-    try {
-      await TrackPlayer.reset();
-
-      const tracks = await this.buildTrackList(track);
-      if (tracks.length === 0) {
-        log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
-        return false;
-      }
-
-      await TrackPlayer.add(tracks);
-
-      const coordinator = getCoordinator();
-      const resumeInfo = await coordinator.resolveCanonicalPosition(track.libraryItemId);
-
-      if (resumeInfo.position > 0) {
-        await TrackPlayer.seekTo(resumeInfo.position);
-        // store.updatePosition removed: POSITION_RECONCILED event → coordinator → syncStateToStore bridge
-        log.info(
-          `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
-        );
-
-        // RETAINED: _updateCurrentChapter — chapter calculation lives in playerSlice, not coordinator
-        // isLoadingTrack is still set (via RELOAD_QUEUE) so this call will be skipped;
-        // chapter will be correctly set when QUEUE_RELOADED clears isLoadingTrack via bridge
-        const updatedStore = useAppStore.getState();
-        updatedStore._updateCurrentChapter(resumeInfo.position);
-      } else {
-        log.info("Prepared queue with no resume position (starting from beginning)");
-      }
-
-      const updatedStore = useAppStore.getState();
-      if (updatedStore.player.playbackRate !== 1.0) {
-        await TrackPlayer.setRate(updatedStore.player.playbackRate);
-        log.info(`Applied stored playback rate: ${updatedStore.player.playbackRate}`);
-      }
-
-      if (updatedStore.player.volume !== 1.0) {
-        await TrackPlayer.setVolume(updatedStore.player.volume);
-        log.info(`Applied stored volume: ${updatedStore.player.volume}`);
-      }
-
-      // Dispatch QUEUE_RELOADED event to state machine
-      dispatchPlayerEvent({
-        type: "QUEUE_RELOADED",
-        payload: { position: resumeInfo.position },
-      });
-
-      success = true;
-      return true;
-    } catch (error) {
-      log.error("Failed to rebuild TrackPlayer queue", error as Error);
-      return false;
-    } finally {
-      if (!success) {
-        const updatedStore = useAppStore.getState();
-        updatedStore._setTrackLoading(false);
-      }
-    }
   }
 
   /**
@@ -594,14 +268,6 @@ export class PlayerService {
   }
 
   /**
-   * Execute seek (Internal - Called by Coordinator)
-   */
-  async executeSeek(position: number): Promise<void> {
-    await TrackPlayer.seekTo(position);
-    dispatchPlayerEvent({ type: "SEEK_COMPLETE" });
-  }
-
-  /**
    * Set playback rate (Public API - Dispatches Event)
    */
   async setRate(rate: number): Promise<void> {
@@ -609,13 +275,6 @@ export class PlayerService {
       type: "SET_RATE",
       payload: { rate },
     });
-  }
-
-  /**
-   * Execute set rate (Internal - Called by Coordinator)
-   */
-  async executeSetRate(rate: number): Promise<void> {
-    await TrackPlayer.setRate(rate);
   }
 
   /**
@@ -629,475 +288,89 @@ export class PlayerService {
   }
 
   /**
-   * Execute set volume (Internal - Called by Coordinator)
-   */
-  async executeSetVolume(volume: number): Promise<void> {
-    await TrackPlayer.setVolume(volume);
-  }
-
-  /**
    * Stop playback (Public API - Dispatches Event)
    */
   async stop(): Promise<void> {
     dispatchPlayerEvent({ type: "STOP" });
   }
 
+  // --- Internal (Called by Coordinator) — single-line delegates ---
+
+  /**
+   * Execute track loading (Internal - Called by Coordinator)
+   */
+  async executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void> {
+    return this.trackLoading.executeLoadTrack(libraryItemId, episodeId);
+  }
+
+  /**
+   * Execute play (Internal - Called by Coordinator)
+   */
+  async executePlay(): Promise<void> {
+    return this.playbackControl.executePlay();
+  }
+
+  /**
+   * Execute pause (Internal - Called by Coordinator)
+   */
+  async executePause(): Promise<void> {
+    return this.playbackControl.executePause();
+  }
+
   /**
    * Execute stop (Internal - Called by Coordinator)
    */
   async executeStop(): Promise<void> {
-    // PlayerBackgroundService will handle ending the session
-    await TrackPlayer.stop();
-    await TrackPlayer.reset();
-    // store._setCurrentTrack(null) removed: STOP event sets context.currentTrack=null,
-    //   coordinator bridge syncs via syncStateToStore
-    // store._setPlaySessionId(null) removed: STOP event sets context.sessionId=null,
-    //   coordinator bridge syncs via syncStateToStore
+    return this.playbackControl.executeStop();
   }
 
   /**
-   * Build track list from PlayerTrack
+   * Execute seek (Internal - Called by Coordinator)
    */
-  private async buildTrackList(playerTrack: PlayerTrack): Promise<Track[]> {
-    const tracks: Track[] = [];
-
-    // First, check which files we have locally
-    const locallyAvailableFiles = new Set<string>();
-    for (const audioFile of playerTrack.audioFiles) {
-      if (audioFile.downloadInfo?.isDownloaded && audioFile.downloadInfo.downloadPath) {
-        const storedPath = audioFile.downloadInfo.downloadPath;
-        const fileExists = await verifyFileExists(storedPath);
-        if (fileExists) {
-          locallyAvailableFiles.add(audioFile.id);
-        } else {
-          const resolvedPath = resolveAppPath(storedPath);
-          log.warn(`File marked as downloaded but missing: ${resolvedPath}`);
-
-          // Clean up database
-          try {
-            await clearAudioFileDownloadStatus(audioFile.id);
-            log.info(`Cleared download status for missing file: ${audioFile.id}`);
-          } catch (error) {
-            log.error("Failed to clear download status", error as Error);
-          }
-        }
-      }
-    }
-
-    // Only get streaming URLs if we don't have all files locally
-    let playSession: ApiPlaySessionResponse | null = null;
-    const needsStreaming = playerTrack.audioFiles.some(
-      (audioFile) => !locallyAvailableFiles.has(audioFile.id)
-    );
-    const store = useAppStore.getState();
-
-    if (needsStreaming) {
-      try {
-        playSession = await startPlaySession(playerTrack.libraryItemId);
-        store._setPlaySessionId(playSession.id); // Store session ID in playerSlice for progress tracking
-        log.info(`Started play session: ${playSession.id}`);
-        log.info(`Got streaming tracks: ${playSession.audioTracks.length}`);
-
-        if (playSession.audioTracks.length > 0) {
-          log.info(
-            `Sample streaming track: ${JSON.stringify({
-              contentUrl: playSession.audioTracks[0].contentUrl,
-              filename: playSession.audioTracks[0].metadata.filename,
-              mimeType: playSession.audioTracks[0].mimeType,
-            })}`
-          );
-        }
-      } catch (error) {
-        log.error("Failed to start play session", error as Error);
-      }
-    } else if (store.player.currentPlaySessionId) {
-      log.info(
-        `Clearing stale streaming session ID before local playback for ${playerTrack.libraryItemId}`
-      );
-      store._setPlaySessionId(null);
-    }
-
-    // Get API info once for all streaming URLs
-    if (playSession && !this.cachedApiInfo) {
-      this.cachedApiInfo = this.getApiInfo();
-    }
-
-    // Process each audio file in a single loop
-    for (const audioFile of playerTrack.audioFiles) {
-      let url: string | undefined;
-      let sourceType: "local" | "streaming" = "local";
-
-      // First, try to use local file if available
-      if (locallyAvailableFiles.has(audioFile.id) && audioFile.downloadInfo?.downloadPath) {
-        url = resolveAppPath(audioFile.downloadInfo.downloadPath);
-        sourceType = "local";
-      }
-      // If no local file, try streaming
-      else if (playSession && playSession.audioTracks.length > 0) {
-        const streamingTrack = playSession.audioTracks.find(
-          (track) =>
-            track.metadata.filename === audioFile.filename || track.index === audioFile.index
-        );
-
-        if (streamingTrack && this.cachedApiInfo) {
-          const separator = streamingTrack.contentUrl.includes("?") ? "&" : "?";
-          url = `${this.cachedApiInfo.baseUrl}${streamingTrack.contentUrl}${separator}token=${this.cachedApiInfo.accessToken}`;
-          sourceType = "streaming";
-        }
-      }
-
-      // Add track if we have a valid URL
-      if (url) {
-        const displayUrl =
-          sourceType === "streaming"
-            ? url.replace(this.cachedApiInfo?.accessToken || "", "<token>")
-            : url;
-        log.info(`Using ${sourceType} file for ${audioFile.filename}: ${displayUrl}`);
-
-        tracks.push({
-          id: audioFile.id,
-          url,
-          title: audioFile.tagTitle || audioFile.filename,
-          artist: playerTrack.author,
-          album: playerTrack.title,
-          artwork: playerTrack.coverUri || undefined,
-          duration: audioFile.duration || undefined,
-        });
-      } else {
-        log.warn(`No playable source found for: ${audioFile.filename}`);
-      }
-    }
-
-    return tracks;
+  async executeSeek(position: number): Promise<void> {
+    return this.playbackControl.executeSeek(position);
   }
 
   /**
-   * Get base URL and access token from API client service
+   * Execute set rate (Internal - Called by Coordinator)
    */
-  private getApiInfo(): { baseUrl: string; accessToken: string } | null {
-    const baseUrl = apiClientService.getBaseUrl();
-    const accessToken = apiClientService.getAccessToken();
-
-    if (!baseUrl || !accessToken) {
-      log.error(" Missing base URL or access token");
-      return null;
-    }
-
-    return { baseUrl, accessToken };
+  async executeSetRate(rate: number): Promise<void> {
+    return this.playbackControl.executeSetRate(rate);
   }
 
   /**
-   * Get the initialization timestamp (for detecting context recreation)
+   * Execute set volume (Internal - Called by Coordinator)
    */
-  getInitializationTimestamp(): number {
-    return this.initializationTimestamp;
+  async executeSetVolume(volume: number): Promise<void> {
+    return this.playbackControl.executeSetVolume(volume);
   }
 
   /**
    * Restore PlayerService state from ProgressService session
-   * Restores currentTrack to playerSlice from database session
    */
   async restorePlayerServiceFromSession(): Promise<void> {
-    try {
-      const username = await getStoredUsername();
-      if (!username) {
-        log.info("No username found, skipping PlayerService restoration");
-        return;
-      }
-
-      const user = await getUserByUsername(username);
-      if (!user?.id) {
-        log.info("User not found, skipping PlayerService restoration");
-        return;
-      }
-
-      // Get active session from DB - need to get libraryItemId first
-      // Try to get it from playerSlice, or query DB for most recent session
-      const store = useAppStore.getState();
-      let libraryItemId: string | null = store.player.currentTrack?.libraryItemId || null;
-
-      if (!libraryItemId) {
-        // Query DB for most recent active session
-        const activeSessions = await getAllActiveSessionsForUser(user.id);
-        if (activeSessions.length > 0) {
-          const mostRecent = activeSessions.sort(
-            (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-          )[0];
-          libraryItemId = mostRecent.libraryItemId;
-        }
-      }
-
-      if (!libraryItemId) {
-        log.info("No active session found, skipping PlayerService restoration");
-        return;
-      }
-
-      const session = await progressService.getCurrentSession(user.id, libraryItemId);
-      if (!session) {
-        log.info("No active session found, skipping PlayerService restoration");
-        return;
-      }
-
-      log.info(`Restoring PlayerService from session: ${session.libraryItemId}`);
-
-      // Try to restore track info - only load full track if we have downloaded files
-      try {
-        const libraryItem = await getLibraryItemById(session.libraryItemId);
-        if (!libraryItem) {
-          log.warn(`Library item ${session.libraryItemId} not found, cannot restore track`);
-          return;
-        }
-
-        const metadata = await getMediaMetadataByLibraryItemId(session.libraryItemId);
-        if (!metadata) {
-          log.warn(`Metadata not found for ${session.libraryItemId}, cannot restore track`);
-          return;
-        }
-
-        // Check if we have downloaded audio files (indicates downloaded media)
-        const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-        if (audioFiles.length === 0) {
-          log.warn(`No audio files found for ${session.libraryItemId}, cannot restore track`);
-          return;
-        }
-
-        const chapters = await getChaptersForMedia(metadata.id);
-        const hasDownloadedFiles = audioFiles.some(
-          (file: AudioFileWithDownloadInfo) => file.downloadInfo?.isDownloaded
-        );
-
-        const track: PlayerTrack = {
-          libraryItemId: libraryItem.id,
-          mediaId: metadata.id,
-          title: metadata.title || "Unknown Title",
-          author: metadata.authorName || metadata.author || "Unknown Author",
-          coverUri: metadata.imageUrl?.match(/^https?:\/\//)
-            ? metadata.imageUrl
-            : getCoverUri(libraryItem.id),
-          audioFiles,
-          chapters,
-          duration: audioFiles.reduce(
-            (total: number, file: AudioFileWithDownloadInfo) => total + (file.duration || 0),
-            0
-          ),
-          isDownloaded: hasDownloadedFiles,
-        };
-
-        store._setCurrentTrack(track);
-        log.info(
-          `Restored PlayerService track to playerSlice (${hasDownloadedFiles ? "downloaded" : "streaming"}): ${track.title}`
-        );
-      } catch (error) {
-        log.error("Failed to restore currentTrack from session", error as Error);
-      }
-    } catch (error) {
-      log.error("Failed to restore PlayerService from session", error as Error);
-    }
+    return this.progressRestore.restorePlayerServiceFromSession();
   }
 
   /**
    * Sync current position from database
-   * Useful when database position has been updated (e.g., from server sync)
    */
   async syncPositionFromDatabase(): Promise<void> {
-    try {
-      log.info("Syncing position from database");
-
-      const store = useAppStore.getState();
-      const currentTrack = store.player.currentTrack;
-
-      if (!currentTrack?.libraryItemId) {
-        log.warn("No current track, skipping position sync");
-        return;
-      }
-
-      // Get username to fetch user
-      const username = await getStoredUsername();
-      if (!username) {
-        log.warn("No username found, cannot sync position");
-        return;
-      }
-
-      // Get user from database
-      const user = await getUserByUsername(username);
-      if (!user?.id) {
-        log.warn("User not found in database, cannot sync position");
-        return;
-      }
-
-      // Get the current session from database
-      const session = await progressService.getCurrentSession(user.id, currentTrack.libraryItemId);
-      if (!session) {
-        log.warn(`No active session found for ${currentTrack.libraryItemId}`);
-        return;
-      }
-
-      // Check if TrackPlayer is actively playing
-      const playbackState = await TrackPlayer.getPlaybackState();
-      const isPlaying = playbackState.state === State.Playing;
-
-      // Update store position (for UI consistency)
-      store.updatePosition(session.currentTime);
-
-      // Only seek TrackPlayer if NOT actively playing to avoid stutters
-      // When playing, TrackPlayer position is ahead of DB due to 1-2s sync lag
-      if (!isPlaying) {
-        await TrackPlayer.seekTo(session.currentTime);
-        log.info(
-          `Position synced from database: ${formatTime(session.currentTime)}s for ${currentTrack.libraryItemId}`
-        );
-      } else {
-        log.info(
-          `Position updated from database in store: ${formatTime(session.currentTime)}s (TrackPlayer not seeked because actively playing)`
-        );
-      }
-    } catch (error) {
-      log.error("Error syncing position from database", error as Error);
-      throw error;
-    }
+    return this.progressRestore.syncPositionFromDatabase();
   }
 
   /**
-   * Reconnect background service after app updates, hot reloads, or JS context recreation.
-   * Falls back to full re-registration if the module has changed.
+   * Reconnect background service after app updates, hot reloads, or JS context recreation
    */
   async reconnectBackgroundService(): Promise<void> {
-    try {
-      log.info("Reconnecting background service");
-      const runtimeParts: string[] = [];
-      runtimeParts.push(typeof globalThis.window === "undefined" ? "no-window" : "window");
-      runtimeParts.push(typeof globalThis.document === "undefined" ? "no-document" : "document");
-      try {
-        runtimeParts.push(`AppState=${AppState.currentState ?? "unknown"}`);
-      } catch {
-        runtimeParts.push("AppState=unavailable");
-      }
-      diagLog.info(`PlayerService reconnect runtime: ${runtimeParts.join(" ")}`);
-
-      // Try to load the background service module
-      // Using require() here to handle dynamic loading
-      let PlayerBackgroundServiceModule;
-
-      try {
-        // Clear the require cache for this module to ensure we get the latest version
-        // This is important after app updates where the module might have changed. Hermes
-        // doesn't expose Node's require.resolve / require.cache, so guard their usage.
-        const metroRequire = require as {
-          resolve?: (path: string) => string;
-          cache?: Record<string, unknown>;
-        };
-        const canResolve =
-          typeof require === "function" && typeof metroRequire.resolve === "function";
-        const cache = typeof require === "function" ? metroRequire.cache : undefined;
-
-        if (canResolve && metroRequire.resolve) {
-          const modulePath = metroRequire.resolve("./PlayerBackgroundService");
-          if (__DEV__) {
-            log.debug(`Module path: ${modulePath}`);
-          }
-
-          // Delete from cache in development to ensure we get fresh code
-          if (__DEV__ && cache && cache[modulePath]) {
-            log.debug("Clearing module cache for PlayerBackgroundService");
-            delete cache[modulePath];
-          }
-        } else if (__DEV__) {
-          log.debug("require.resolve not available; skipping cache clear");
-        }
-
-        PlayerBackgroundServiceModule = require("./PlayerBackgroundService");
-      } catch (requireError) {
-        log.error("Failed to require PlayerBackgroundService module", requireError as Error);
-
-        // If we can't load the module, try to force a full re-registration
-        log.warn("Attempting full TrackPlayer service re-registration");
-        TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
-        return;
-      }
-
-      // Check if the reconnect function exists
-      const reconnectFn = PlayerBackgroundServiceModule.reconnectBackgroundService;
-      const isInitialized = PlayerBackgroundServiceModule.isBackgroundServiceInitialized?.();
-
-      if (typeof reconnectFn === "function") {
-        log.info(`Background service initialized: ${isInitialized}`);
-        if (isInitialized) {
-          reconnectFn();
-        } else {
-          log.warn(
-            "Background service not initialized; forcing TrackPlayer service re-registration instead of reconnect"
-          );
-          TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
-        }
-      } else {
-        // Function doesn't exist (old version or incompatible module)
-        log.warn("reconnectBackgroundService function not found - forcing full re-registration");
-
-        // Shutdown if the function exists
-        if (typeof PlayerBackgroundServiceModule.shutdownBackgroundService === "function") {
-          PlayerBackgroundServiceModule.shutdownBackgroundService();
-        }
-
-        // Force re-registration
-        TrackPlayer.registerPlaybackService(() => require("./PlayerBackgroundService"));
-      }
-
-      await configureTrackPlayer();
-
-      log.info("Background service reconnection complete");
-    } catch (error) {
-      log.error("Error reconnecting background service", error as Error);
-    }
+    return this.backgroundReconnect.reconnectBackgroundService();
   }
 
   /**
-   * Refresh file paths after iOS container path changes.
-   * Refreshes cover URI and now playing metadata. Call when app comes to foreground.
+   * Refresh file paths after iOS container path changes
    */
   async refreshFilePathsAfterContainerChange(): Promise<void> {
-    log.info("[PlayerService] Refreshing file paths after potential container change...");
-
-    try {
-      const store = useAppStore.getState();
-      const currentTrack = store.player.currentTrack;
-
-      if (!currentTrack) {
-        log.debug("No current track, skipping path refresh");
-        return;
-      }
-
-      // The cover URI may contain an old absolute path
-      // getCoverUri() will resolve it to the current container path
-      const refreshedCoverUri = getCoverUri(currentTrack.libraryItemId);
-
-      // Check if the cover URI actually changed
-      if (refreshedCoverUri !== currentTrack.coverUri) {
-        log.info(
-          `[PlayerService] Cover URI changed for ${currentTrack.libraryItemId}, updating track metadata`
-        );
-        log.debug(`  Old: ${currentTrack.coverUri}`);
-        log.debug(`  New: ${refreshedCoverUri}`);
-
-        // Update the track in the store
-        const updatedTrack: PlayerTrack = {
-          ...currentTrack,
-          coverUri: refreshedCoverUri,
-        };
-
-        store._setCurrentTrack(updatedTrack);
-
-        // Update TrackPlayer's now playing metadata with the new cover URI
-        // This ensures the lock screen and notification show the correct cover
-        await useAppStore.getState().updateNowPlayingMetadata();
-
-        log.info("[PlayerService] Track metadata refreshed with new cover URI");
-      } else {
-        log.debug("Cover URI unchanged, no refresh needed");
-      }
-    } catch (error) {
-      log.error("Failed to refresh file paths after container change", error as Error);
-      // Don't throw - this is a best-effort operation
-    }
+    return this.backgroundReconnect.refreshFilePathsAfterContainerChange();
   }
 }
 

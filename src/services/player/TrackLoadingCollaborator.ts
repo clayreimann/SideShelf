@@ -1,0 +1,405 @@
+/**
+ * TrackLoadingCollaborator
+ *
+ * Concern group: track loading, track list building, and queue reload.
+ * Owns: executeLoadTrack, buildTrackList, reloadTrackPlayerQueue.
+ *
+ * These three methods share DB lookups, path repair, streaming session
+ * creation, and TrackPlayer queue management.
+ *
+ * IMPORTANT: This file must NEVER import from "@/services/PlayerService" —
+ * always use IPlayerServiceFacade from "./types" to prevent circular imports.
+ */
+
+import { clearAudioFileDownloadStatus } from "@/db/helpers/audioFiles";
+import { getChaptersForMedia } from "@/db/helpers/chapters";
+import type { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
+import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
+import { getLibraryItemById } from "@/db/helpers/libraryItems";
+import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
+import { getUserByUsername } from "@/db/helpers/users";
+import { startPlaySession } from "@/lib/api/endpoints";
+import { getCoverUri } from "@/lib/covers";
+import { ensureItemInDocuments } from "@/lib/fileLifecycleManager";
+import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
+import { formatTime } from "@/lib/helpers/formatters";
+import { logger } from "@/lib/logger";
+import { getStoredUsername } from "@/lib/secureStore";
+import { downloadService } from "@/services/DownloadService";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
+import { useAppStore } from "@/stores/appStore";
+import type { ApiPlaySessionResponse } from "@/types/api";
+import type { PlayerTrack } from "@/types/player";
+import TrackPlayer, { State, Track } from "react-native-track-player";
+import type { IPlayerServiceFacade, ITrackLoadingCollaborator } from "./types";
+
+const log = logger.forTag("PlayerService");
+const diagLog = logger.forDiagnostics("PlayerService");
+
+/**
+ * Handles track loading, track list construction, and queue reload.
+ */
+export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
+  constructor(private facade: IPlayerServiceFacade) {}
+
+  /**
+   * Execute track loading (Internal - Called by Coordinator).
+   */
+  async executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void> {
+    try {
+      diagLog.info(`playTrack called for libraryItemId: ${libraryItemId}`);
+      log.info(`Loading track for library item: ${libraryItemId}`);
+
+      // Ensure downloaded files are in Documents directory before playback
+      try {
+        await ensureItemInDocuments(libraryItemId);
+      } catch (error) {
+        log.warn(`Failed to ensure item in Documents, continuing with playback: ${error}`);
+      }
+
+      // Repair download paths to account for iOS container path changes
+      try {
+        await downloadService.repairDownloadStatus(libraryItemId);
+      } catch (error) {
+        log.warn(`Failed to repair download status, continuing with playback: ${error}`);
+      }
+
+      // Get username from secure storage
+      const username = await getStoredUsername();
+      if (!username) {
+        throw new Error("No authenticated user found");
+      }
+
+      // Get user from database
+      const user = await getUserByUsername(username);
+      if (!user?.id) {
+        throw new Error("User not found in database");
+      }
+
+      // Check if already playing this item - if so, just resume
+      const store = useAppStore.getState();
+      if (store.player.currentTrack?.libraryItemId === libraryItemId) {
+        const state = await TrackPlayer.getPlaybackState();
+        const queue = await TrackPlayer.getQueue();
+
+        // Only short-circuit if we actually have tracks in the queue
+        if (queue.length > 0) {
+          if (state.state === State.Playing) {
+            log.info("Already playing this item - syncing coordinator state");
+            this.facade.dispatchEvent({ type: "PLAY" });
+            return;
+          } else if (state.state === State.Paused) {
+            log.info("Resuming paused playback via coordinator");
+            this.facade.dispatchEvent({ type: "PLAY" });
+            return;
+          }
+        } else {
+          // Queue is empty even though we have a currentTrack - need to reload
+          log.warn("Current track set but queue is empty - reloading track");
+        }
+      }
+
+      // Fetch required data from database
+      const libraryItem = await getLibraryItemById(libraryItemId);
+      if (!libraryItem) {
+        throw new Error(`Library item ${libraryItemId} not found`);
+      }
+
+      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
+      if (!metadata) {
+        throw new Error(`Metadata not found for library item ${libraryItemId}`);
+      }
+
+      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
+      if (audioFiles.length === 0) {
+        throw new Error("No audio files found for this item");
+      }
+
+      const chapters = await getChaptersForMedia(metadata.id);
+
+      // Build PlayerTrack object
+      const track: PlayerTrack = {
+        libraryItemId: libraryItem.id,
+        mediaId: metadata.id,
+        title: metadata.title || "Unknown Title",
+        author: metadata.authorName || metadata.author || "Unknown Author",
+        // Only use imageUrl for remote URLs (e.g. podcast artwork from iTunes/RSS).
+        // Local file paths stored in imageUrl may be stale after iOS app updates change
+        // the container UUID. getCoverUri() always resolves via Paths.cache (current UUID).
+        coverUri: metadata.imageUrl?.match(/^https?:\/\//)
+          ? metadata.imageUrl
+          : getCoverUri(libraryItem.id),
+        audioFiles,
+        chapters,
+        duration: audioFiles.reduce(
+          (total: number, file: AudioFileWithDownloadInfo) => total + (file.duration || 0),
+          0
+        ),
+        isDownloaded: audioFiles.some(
+          (file: AudioFileWithDownloadInfo) => file.downloadInfo?.isDownloaded
+        ),
+      };
+
+      log.info(`Built track: ${track.title}`);
+
+      // Clear current queue
+      await TrackPlayer.reset();
+
+      // Determine the audio source (local or remote)
+      const tracks = await this.buildTrackList(track);
+
+      if (tracks.length === 0) {
+        const hasDownloadedFiles = track.audioFiles.some((af) => af.downloadInfo?.isDownloaded);
+        const needsStreaming = track.audioFiles.some(
+          (audioFile) => !audioFile.downloadInfo?.isDownloaded
+        );
+
+        let errorMessage = "No playable audio files found";
+        if (hasDownloadedFiles && !needsStreaming) {
+          errorMessage +=
+            ". Downloaded files are missing from device storage. Please re-download the content.";
+        } else if (!hasDownloadedFiles && needsStreaming) {
+          errorMessage +=
+            ". Content is not downloaded and streaming is not available. Please check your internet connection.";
+        } else if (hasDownloadedFiles && needsStreaming) {
+          errorMessage +=
+            ". Downloaded files are missing and streaming failed. Please check your internet connection or re-download the content.";
+        }
+
+        log.error(
+          `No playable tracks available: ${JSON.stringify({
+            totalAudioFiles: track.audioFiles.length,
+            downloadedFiles: track.audioFiles.filter((af) => af.downloadInfo?.isDownloaded).length,
+            needsStreaming,
+          })}`
+        );
+
+        throw new Error(errorMessage);
+      }
+
+      // Update store with current track
+      store._setCurrentTrack(track);
+
+      // Add tracks to queue
+      await TrackPlayer.add(tracks);
+
+      const coordinator = getCoordinator();
+      const resumeInfo = await coordinator.resolveCanonicalPosition(libraryItemId);
+
+      // Seek to resume position first (if applicable)
+      if (resumeInfo.position > 0) {
+        await TrackPlayer.seekTo(resumeInfo.position);
+        log.info(
+          `Resuming playback from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
+        );
+      }
+
+      // Apply playback settings from store to TrackPlayer
+      const currentPlaybackRate = store.player.playbackRate;
+      const currentVolume = store.player.volume;
+
+      if (currentPlaybackRate !== 1.0) {
+        await TrackPlayer.setRate(currentPlaybackRate);
+        log.info(`Applied playback rate from store: ${currentPlaybackRate}`);
+      }
+
+      if (currentVolume !== 1.0) {
+        await TrackPlayer.setVolume(currentVolume);
+        log.info(`Applied volume from store: ${currentVolume}`);
+      }
+
+      // Dispatch PLAY so the coordinator transitions to PLAYING and calls executePlay().
+      this.facade.dispatchEvent({ type: "PLAY" });
+
+      log.info("Track loaded, PLAY dispatched to coordinator");
+    } catch (error) {
+      log.error(" Failed to load track:", error as Error);
+      // Clear loading state on error
+      const store = useAppStore.getState();
+      store._setTrackLoading(false);
+      throw error;
+    }
+  }
+
+  /**
+   * Build track list from PlayerTrack.
+   */
+  async buildTrackList(playerTrack: PlayerTrack): Promise<Track[]> {
+    const tracks: Track[] = [];
+
+    // First, check which files we have locally
+    const locallyAvailableFiles = new Set<string>();
+    for (const audioFile of playerTrack.audioFiles) {
+      if (audioFile.downloadInfo?.isDownloaded && audioFile.downloadInfo.downloadPath) {
+        const storedPath = audioFile.downloadInfo.downloadPath;
+        const fileExists = await verifyFileExists(storedPath);
+        if (fileExists) {
+          locallyAvailableFiles.add(audioFile.id);
+        } else {
+          const resolvedPath = resolveAppPath(storedPath);
+          log.warn(`File marked as downloaded but missing: ${resolvedPath}`);
+
+          // Clean up database
+          try {
+            await clearAudioFileDownloadStatus(audioFile.id);
+            log.info(`Cleared download status for missing file: ${audioFile.id}`);
+          } catch (error) {
+            log.error("Failed to clear download status", error as Error);
+          }
+        }
+      }
+    }
+
+    // Only get streaming URLs if we don't have all files locally
+    let playSession: ApiPlaySessionResponse | null = null;
+    const needsStreaming = playerTrack.audioFiles.some(
+      (audioFile) => !locallyAvailableFiles.has(audioFile.id)
+    );
+    const store = useAppStore.getState();
+
+    if (needsStreaming) {
+      try {
+        playSession = await startPlaySession(playerTrack.libraryItemId);
+        store._setPlaySessionId(playSession.id);
+        log.info(`Started play session: ${playSession.id}`);
+        log.info(`Got streaming tracks: ${playSession.audioTracks.length}`);
+
+        if (playSession.audioTracks.length > 0) {
+          log.info(
+            `Sample streaming track: ${JSON.stringify({
+              contentUrl: playSession.audioTracks[0].contentUrl,
+              filename: playSession.audioTracks[0].metadata.filename,
+              mimeType: playSession.audioTracks[0].mimeType,
+            })}`
+          );
+        }
+      } catch (error) {
+        log.error("Failed to start play session", error as Error);
+      }
+    } else if (store.player.currentPlaySessionId) {
+      log.info(
+        `Clearing stale streaming session ID before local playback for ${playerTrack.libraryItemId}`
+      );
+      store._setPlaySessionId(null);
+    }
+
+    // Get API info once for all streaming URLs
+    let cachedApiInfo = this.facade.getApiInfo();
+
+    // Process each audio file in a single loop
+    for (const audioFile of playerTrack.audioFiles) {
+      let url: string | undefined;
+      let sourceType: "local" | "streaming" = "local";
+
+      // First, try to use local file if available
+      if (locallyAvailableFiles.has(audioFile.id) && audioFile.downloadInfo?.downloadPath) {
+        url = resolveAppPath(audioFile.downloadInfo.downloadPath);
+        sourceType = "local";
+      }
+      // If no local file, try streaming
+      else if (playSession && playSession.audioTracks.length > 0) {
+        const streamingTrack = playSession.audioTracks.find(
+          (track) =>
+            track.metadata.filename === audioFile.filename || track.index === audioFile.index
+        );
+
+        if (streamingTrack && cachedApiInfo) {
+          const separator = streamingTrack.contentUrl.includes("?") ? "&" : "?";
+          url = `${cachedApiInfo.baseUrl}${streamingTrack.contentUrl}${separator}token=${cachedApiInfo.accessToken}`;
+          sourceType = "streaming";
+        }
+      }
+
+      // Add track if we have a valid URL
+      if (url) {
+        const displayUrl =
+          sourceType === "streaming"
+            ? url.replace(cachedApiInfo?.accessToken || "", "<token>")
+            : url;
+        log.info(`Using ${sourceType} file for ${audioFile.filename}: ${displayUrl}`);
+
+        tracks.push({
+          id: audioFile.id,
+          url,
+          title: audioFile.tagTitle || audioFile.filename,
+          artist: playerTrack.author,
+          album: playerTrack.title,
+          artwork: playerTrack.coverUri || undefined,
+          duration: audioFile.duration || undefined,
+        });
+      } else {
+        log.warn(`No playable source found for: ${audioFile.filename}`);
+      }
+    }
+
+    return tracks;
+  }
+
+  /**
+   * Prepare TrackPlayer queue based on the current track stored in playerSlice.
+   */
+  async reloadTrackPlayerQueue(track: PlayerTrack): Promise<boolean> {
+    // Dispatch RELOAD_QUEUE event to state machine
+    this.facade.dispatchEvent({
+      type: "RELOAD_QUEUE",
+      payload: { libraryItemId: track.libraryItemId },
+    });
+
+    let success = false;
+
+    try {
+      await TrackPlayer.reset();
+
+      const tracks = await this.buildTrackList(track);
+      if (tracks.length === 0) {
+        log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
+        return false;
+      }
+
+      await TrackPlayer.add(tracks);
+
+      const coordinator = getCoordinator();
+      const resumeInfo = await coordinator.resolveCanonicalPosition(track.libraryItemId);
+
+      if (resumeInfo.position > 0) {
+        await TrackPlayer.seekTo(resumeInfo.position);
+        log.info(
+          `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
+        );
+
+        const updatedStore = useAppStore.getState();
+        updatedStore._updateCurrentChapter(resumeInfo.position);
+      } else {
+        log.info("Prepared queue with no resume position (starting from beginning)");
+      }
+
+      const updatedStore = useAppStore.getState();
+      if (updatedStore.player.playbackRate !== 1.0) {
+        await TrackPlayer.setRate(updatedStore.player.playbackRate);
+        log.info(`Applied stored playback rate: ${updatedStore.player.playbackRate}`);
+      }
+
+      if (updatedStore.player.volume !== 1.0) {
+        await TrackPlayer.setVolume(updatedStore.player.volume);
+        log.info(`Applied stored volume: ${updatedStore.player.volume}`);
+      }
+
+      // Dispatch QUEUE_RELOADED event to state machine
+      this.facade.dispatchEvent({
+        type: "QUEUE_RELOADED",
+        payload: { position: resumeInfo.position },
+      });
+
+      success = true;
+      return true;
+    } catch (error) {
+      log.error("Failed to rebuild TrackPlayer queue", error as Error);
+      return false;
+    } finally {
+      if (!success) {
+        const updatedStore = useAppStore.getState();
+        updatedStore._setTrackLoading(false);
+      }
+    }
+  }
+}
