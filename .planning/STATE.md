@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: — Tech Cleanup
 status: planning
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-04T12:29:08.707Z"
-last_activity: 2026-02-28 — v1.2 roadmap created (Phases 10–13)
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-03-04T12:44:00Z"
+last_activity: 2026-03-04 — Plan 10-02 complete (N+1 batch upsert elimination)
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 1
-  percent: 94
+  completed_plans: 2
+  percent: 97
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 
 ## Current Position
 
-Phase: 10 of 13 (DB Quick Wins)
-Plan: 1 of 2 in current phase
+Phase: 10 of 13 (DB Quick Wins) — COMPLETE
+Plan: 2 of 2 in current phase — COMPLETE
 Status: In progress
-Last activity: 2026-03-04 — Plan 10-01 complete (WAL pragma, 4 FK indexes, DbErrorScreen)
+Last activity: 2026-03-04 — Plan 10-02 complete (N+1 batch upsert elimination, 9 helpers, 2 test files)
 
-Progress: [█████████░] 94%
+Progress: [██████████] 97%
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Progress: [█████████░] 94%
 **v1.2 (in progress):**
 
 - Plan 10-01: 4 min (2 tasks, 8 files)
+- Plan 10-02: 12 min (2 tasks, 11 files)
 
 ## Accumulated Context
 
@@ -65,6 +66,9 @@ Key decisions to carry forward:
 - WAL pragma uses execSync on raw SQLite handle (before Drizzle wraps connection); synchronous=NORMAL is connection-level so set in getSQLiteDb() guard
 - DbErrorScreen uses basic RN primitives only (safe when abs2.sqlite is broken); disk-full errors hide reset button
 - useMemo placed before early returns in DbProvider to comply with React hooks ordering rules
+- sql`excluded.col_name` uses SQL snake_case column names (not TypeScript camelCase); verified tagASIN maps to tag_asin
+- upsertGenres/Narrators/Tags wrapped in try/catch — reference data failures must not abort full item upsert
+- upsertLibraryItemTx removed after confirming zero callers outside its own file
 
 ### Pending Todos
 
@@ -78,6 +82,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T12:29:08.705Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-03-04T12:44:00Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None

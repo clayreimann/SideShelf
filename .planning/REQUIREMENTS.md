@@ -14,8 +14,8 @@ Requirements for the Tech Cleanup milestone. Each maps to roadmap phases startin
 - [x] **DB-03**: Index added on `media_metadata.library_item_id`
 - [x] **DB-04**: Index added on `audio_files.media_id`
 - [x] **DB-05**: Composite index added on `media_progress(user_id, library_item_id)`
-- [ ] **DB-06**: `upsertLibraryItems()` converted from serial for-loop to batch `onConflictDoUpdate`
-- [ ] **DB-07**: `fullLibraryItems.ts` genre/narrator/tag inserts converted to batch operations
+- [x] **DB-06**: `upsertLibraryItems()` converted from serial for-loop to batch `onConflictDoUpdate`
+- [x] **DB-07**: `fullLibraryItems.ts` genre/narrator/tag inserts converted to batch operations
 
 ### State Centralization
 
@@ -82,8 +82,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DB-03       | 10    | Complete |
 | DB-04       | 10    | Complete |
 | DB-05       | 10    | Complete |
-| DB-06       | 10    | Pending  |
-| DB-07       | 10    | Pending  |
+| DB-06       | 10    | Complete |
+| DB-07       | 10    | Complete |
 | STATE-01    | 11    | Pending  |
 | STATE-02    | 11    | Pending  |
 | STATE-03    | 11    | Pending  |
