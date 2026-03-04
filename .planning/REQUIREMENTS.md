@@ -25,11 +25,11 @@ Requirements for the Tech Cleanup milestone. Each maps to roadmap phases startin
 
 ### useEffect Cleanup
 
-- [ ] **EFFECT-01**: `ConsolidatedPlayerControls` jump interval AsyncStorage reads replaced with `useSettings()` hook (values already in `settingsSlice`)
-- [ ] **EFFECT-02**: `LibraryItemDetail` mount-time `fetchServerProgress()` removed (already triggered by home screen focus and app foreground)
-- [ ] **EFFECT-03**: `userId` added to `useAuth()` to eliminate `getUserByUsername()` DB reads scattered across 5+ components
-- [ ] **EFFECT-04**: Author/series navigation IDs moved into `libraryItemDetailsSlice.fetchItemDetails` (currently a separate component-level useEffect per item open)
-- [ ] **EFFECT-05**: `MoreScreen` app version reads converted to synchronous module-scope constants (no useEffect or useState needed)
+- [x] **EFFECT-01**: `ConsolidatedPlayerControls` jump interval AsyncStorage reads replaced with `useSettings()` hook (values already in `settingsSlice`)
+- [x] **EFFECT-02**: `LibraryItemDetail` mount-time `fetchServerProgress()` removed (already triggered by home screen focus and app foreground)
+- [x] **EFFECT-03**: `userId` added to `useAuth()` to eliminate `getUserByUsername()` DB reads scattered across 5+ components
+- [x] **EFFECT-04**: Author/series navigation IDs moved into `libraryItemDetailsSlice.fetchItemDetails` (currently a separate component-level useEffect per item open)
+- [x] **EFFECT-05**: `MoreScreen` app version reads converted to synchronous module-scope constants (no useEffect or useState needed)
 - [x] **EFFECT-06**: `getAllTags()` consolidated into `loggerSlice.availableTags` (currently fetched independently in both LogsScreen and LoggerSettingsScreen)
 
 ### Service Decomposition
@@ -87,11 +87,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STATE-01    | 11    | Complete |
 | STATE-02    | 11    | Complete |
 | STATE-03    | 11    | Complete |
-| EFFECT-01   | 11    | Pending  |
-| EFFECT-02   | 11    | Pending  |
-| EFFECT-03   | 11    | Pending  |
-| EFFECT-04   | 11    | Pending  |
-| EFFECT-05   | 11    | Pending  |
+| EFFECT-01   | 11    | Complete |
+| EFFECT-02   | 11    | Complete |
+| EFFECT-03   | 11    | Complete |
+| EFFECT-04   | 11    | Complete |
+| EFFECT-05   | 11    | Complete |
 | EFFECT-06   | 11    | Complete |
 | DECOMP-01   | 12    | Pending  |
 | DECOMP-02   | 12    | Pending  |
