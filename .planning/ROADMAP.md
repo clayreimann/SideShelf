@@ -38,7 +38,7 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full phase details.
 
 **Milestone Goal:** Reduce technical debt through a codebase-wide audit of component state patterns, SQL/DB safety, and dependency upgrades (RN Downloader mainline). All work is internal; no user-facing features.
 
-- [ ] **Phase 10: DB Quick Wins** - WAL mode, missing indexes, and N+1 upsert fixes in schema and helpers
+- [x] **Phase 10: DB Quick Wins** - WAL mode, missing indexes, and N+1 upsert fixes in schema and helpers (completed 2026-03-04)
 - [ ] **Phase 11: useEffect Cleanup + State Centralization** - Eliminate redundant effect-driven fetches and move shared state into Zustand slices
 - [ ] **Phase 12: Service Decomposition** - Split PlayerService and DownloadService into facade + focused collaborators
 - [ ] **Phase 13: RN Downloader Migration** - Exit the custom fork, adopt mainline 4.5.3 with API adapter
@@ -140,7 +140,7 @@ Plans:
 | 7. Download Tracking                         | v1.1      | 3/3            | Complete    | 2026-02-23 |
 | 8. Skip & Player Polish                      | v1.1      | 3/3            | Complete    | 2026-02-27 |
 | 9. Navigation & UI Polish                    | v1.1      | 3/3            | Complete    | 2026-02-27 |
-| 10. DB Quick Wins                            | 1/2       | In Progress    |             | -          |
+| 10. DB Quick Wins                            | 2/2       | Complete       | 2026-03-04  | -          |
 | 11. useEffect Cleanup + State Centralization | v1.2      | 0/2            | Not started | -          |
 | 12. Service Decomposition                    | v1.2      | 0/2            | Not started | -          |
 | 13. RN Downloader Migration                  | v1.2      | 0/2            | Not started | -          |
