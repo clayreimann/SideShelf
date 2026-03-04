@@ -60,7 +60,8 @@ jest.mock("@/services/ApiClientService", () => ({
 }));
 
 jest.mock("@/db/helpers/wipeUserData", () => ({
-  wipeUserData: jest.fn().mockResolvedValue(undefined),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  wipeUserData: jest.fn<() => Promise<void>>().mockResolvedValue(undefined as any),
 }));
 
 jest.mock("@/stores/appStore", () => ({
