@@ -1,7 +1,7 @@
-import { db } from '@/db/client';
-import { libraries } from '@/db/schema/libraries';
-import type { ApiLibrariesResponse, ApiLibrary } from '@/types/api';
-import { eq } from 'drizzle-orm';
+import { db } from "@/db/client";
+import { libraries } from "@/db/schema/libraries";
+import type { ApiLibrariesResponse, ApiLibrary } from "@/types/api";
+import { eq, sql } from "drizzle-orm";
 
 export type NewLibraryRow = typeof libraries.$inferInsert;
 export type LibraryRow = typeof libraries.$inferSelect;
@@ -26,36 +26,37 @@ export function marshalLibrariesFromResponse(response: ApiLibrariesResponse): Ne
 
 // Upsert a single library
 export async function upsertLibrary(row: NewLibraryRow): Promise<void> {
-  await db
-    .insert(libraries)
-    .values(row)
-    .onConflictDoUpdate({ target: libraries.id, set: row });
+  await db.insert(libraries).values(row).onConflictDoUpdate({ target: libraries.id, set: row });
 }
 
-// Upsert multiple libraries
+// Upsert multiple libraries — single-statement batch INSERT ON CONFLICT DO UPDATE
 export async function upsertLibraries(rows: NewLibraryRow[]): Promise<void> {
   if (!rows?.length) return;
 
-  for (const row of rows) {
-    await upsertLibrary(row);
-  }
+  await db
+    .insert(libraries)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: libraries.id,
+      set: {
+        name: sql`excluded.name`,
+        icon: sql`excluded.icon`,
+        displayOrder: sql`excluded.display_order`,
+        mediaType: sql`excluded.media_type`,
+        createdAt: sql`excluded.created_at`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+    });
 }
 
 // Get all libraries from database
 export async function getAllLibraries(): Promise<LibraryRow[]> {
-  return await db
-    .select()
-    .from(libraries)
-    .orderBy(libraries.displayOrder, libraries.name);
+  return await db.select().from(libraries).orderBy(libraries.displayOrder, libraries.name);
 }
 
 // Get a single library by ID
 export async function getLibraryById(id: string): Promise<LibraryRow | null> {
-  const result = await db
-    .select()
-    .from(libraries)
-    .where(eq(libraries.id, id))
-    .limit(1);
+  const result = await db.select().from(libraries).where(eq(libraries.id, id)).limit(1);
 
   return result[0] || null;
 }

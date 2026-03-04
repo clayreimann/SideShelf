@@ -5,14 +5,14 @@
  * including fetching, upserting, and transforming series data.
  */
 
-import { resolveAppPath } from '@/lib/fileSystem';
-import { desc, eq, inArray } from 'drizzle-orm';
-import { db } from '../client';
-import { libraryItems } from '../schema/libraryItems';
-import { mediaMetadata } from '../schema/mediaMetadata';
-import { mediaSeries } from '../schema/mediaJoins';
-import { localCoverCache } from '../schema/localData';
-import { series, SeriesRow } from '../schema/series';
+import { resolveAppPath } from "@/lib/fileSystem";
+import { desc, eq, inArray, sql } from "drizzle-orm";
+import { db } from "../client";
+import { libraryItems } from "../schema/libraryItems";
+import { mediaMetadata } from "../schema/mediaMetadata";
+import { mediaSeries } from "../schema/mediaJoins";
+import { localCoverCache } from "../schema/localData";
+import { series, SeriesRow } from "../schema/series";
 
 export type NewSeriesRow = typeof series.$inferInsert;
 export type { SeriesRow };
@@ -21,16 +21,13 @@ export type { SeriesRow };
  * Get all series from database, ordered by name
  */
 export async function getAllSeries(): Promise<SeriesWithBooks[]> {
-  const seriesRows = await db
-    .select()
-    .from(series)
-    .orderBy(series.name);
+  const seriesRows = await db.select().from(series).orderBy(series.name);
 
   if (!seriesRows.length) {
     return [];
   }
 
-  const seriesIds = seriesRows.map(serie => serie.id);
+  const seriesIds = seriesRows.map((serie) => serie.id);
 
   const seriesBooks = await db
     .select({
@@ -56,7 +53,7 @@ export async function getAllSeries(): Promise<SeriesWithBooks[]> {
     const book: SeriesBookRow = {
       libraryItemId: row.libraryItemId,
       mediaId: row.mediaId,
-      title: row.title || 'Unknown Title',
+      title: row.title || "Unknown Title",
       authorName: row.authorName,
       sequence: row.sequence,
       coverUrl: row.coverUrl ? resolveAppPath(row.coverUrl) : null,
@@ -71,7 +68,7 @@ export async function getAllSeries(): Promise<SeriesWithBooks[]> {
     }
   }
 
-  return seriesRows.map<SeriesWithBooks>(serie => ({
+  return seriesRows.map<SeriesWithBooks>((serie) => ({
     ...serie,
     books: booksBySeries.get(serie.id) || [],
   }));
@@ -81,11 +78,7 @@ export async function getAllSeries(): Promise<SeriesWithBooks[]> {
  * Get series by ID
  */
 export async function getSeriesById(id: string): Promise<SeriesRow | null> {
-  const result = await db
-    .select()
-    .from(series)
-    .where(eq(series.id, id))
-    .limit(1);
+  const result = await db.select().from(series).where(eq(series.id, id)).limit(1);
 
   return result[0] || null;
 }
@@ -94,10 +87,7 @@ export async function getSeriesById(id: string): Promise<SeriesRow | null> {
  * Get series ordered by most recently updated
  */
 export async function getSeriesByRecent(): Promise<SeriesRow[]> {
-  return await db
-    .select()
-    .from(series)
-    .orderBy(desc(series.updatedAt), series.name);
+  return await db.select().from(series).orderBy(desc(series.updatedAt), series.name);
 }
 
 /**
@@ -121,14 +111,22 @@ export async function upsertSeries(row: NewSeriesRow): Promise<SeriesRow> {
 }
 
 /**
- * Upsert multiple series
+ * Upsert multiple series — single-statement batch INSERT ON CONFLICT DO UPDATE
  */
 export async function upsertMultipleSeries(rows: NewSeriesRow[]): Promise<void> {
   if (rows.length === 0) return;
 
-  for (const row of rows) {
-    await upsertSeries(row);
-  }
+  await db
+    .insert(series)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: series.id,
+      set: {
+        name: sql`excluded.name`,
+        description: sql`excluded.description`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+    });
 }
 
 /**
@@ -148,9 +146,9 @@ export interface SeriesListRow {
  * Transform series for display in lists
  */
 export function transformSeriesToDisplayFormat(series: SeriesWithBooks[]): SeriesListRow[] {
-  return series.map(serie => ({
+  return series.map((serie) => ({
     id: serie.id,
-    name: serie.name || 'Unknown Series',
+    name: serie.name || "Unknown Series",
     description: serie.description,
     addedAt: serie.addedAt,
     updatedAt: serie.updatedAt,
