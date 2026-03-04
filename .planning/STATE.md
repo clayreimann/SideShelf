@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.2
+milestone_name: — Tech Cleanup
+status: planning
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-03-04T12:29:08.707Z"
+last_activity: 2026-02-28 — v1.2 roadmap created (Phases 10–13)
+progress:
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 4
+  completed_plans: 1
+  percent: 94
+---
+
 # Project State
 
 ## Project Reference
@@ -10,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Phase: 10 of 13 (DB Quick Wins)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-02-28 — v1.2 roadmap created (Phases 10–13)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-03-04 — Plan 10-01 complete (WAL pragma, 4 FK indexes, DbErrorScreen)
 
-Progress: [░░░░░░░░░░] 0% (0/8 plans complete in v1.2)
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -28,7 +44,9 @@ Progress: [░░░░░░░░░░] 0% (0/8 plans complete in v1.2)
 - Total plans completed: 11 (Phases 6–9)
 - Total execution time: 6 days (Feb 22 → Feb 27)
 
-**v1.2:** Not started
+**v1.2 (in progress):**
+
+- Plan 10-01: 4 min (2 tasks, 8 files)
 
 ## Accumulated Context
 
@@ -42,6 +60,12 @@ Key decisions to carry forward:
 - Long-press interval on skip button is one-time-apply by design — Settings controls the default
 - Partial badge (amber, top-left) pattern established for partially-downloaded items
 
+**Phase 10 decisions:**
+
+- WAL pragma uses execSync on raw SQLite handle (before Drizzle wraps connection); synchronous=NORMAL is connection-level so set in getSQLiteDb() guard
+- DbErrorScreen uses basic RN primitives only (safe when abs2.sqlite is broken); disk-full errors hide reset button
+- useMemo placed before early returns in DbProvider to comply with React hooks ordering rules
+
 ### Pending Todos
 
 None.
@@ -54,6 +78,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: v1.2 roadmap written — Phase 10 ready to plan
+Last session: 2026-03-04T12:29:08.705Z
+Stopped at: Completed 10-01-PLAN.md
 Resume file: None
