@@ -21,12 +21,17 @@ jest.mock("@/db/helpers/series", () => ({
   transformSeriesToDisplayFormat: jest.fn(),
 }));
 
+jest.mock("@/db/helpers/mediaProgress", () => ({
+  getMediaProgressForItems: jest.fn(),
+}));
+
 describe("SeriesSlice", () => {
   let store: UseBoundStore<StoreApi<SeriesSlice>>;
 
   // Get mocked functions for type safety
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
   const { getAllSeries, transformSeriesToDisplayFormat } = require("@/db/helpers/series");
+  const { getMediaProgressForItems } = require("@/db/helpers/mediaProgress");
 
   // Mock series data
   const mockSeries = [
@@ -79,6 +84,7 @@ describe("SeriesSlice", () => {
     mockedAsyncStorage.setItem.mockResolvedValue();
     getAllSeries.mockResolvedValue([]);
     transformSeriesToDisplayFormat.mockReturnValue([]);
+    getMediaProgressForItems.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -102,6 +108,8 @@ describe("SeriesSlice", () => {
         },
         initialized: false,
         ready: false,
+        progressMap: {},
+        progressMapSeriesId: null,
       });
     });
   });
@@ -414,6 +422,91 @@ describe("SeriesSlice", () => {
 
       const sortedItems = store.getState().series.items;
       expect(sortedItems.length).toBe(modifiedRawItems.length);
+    });
+  });
+
+  describe("fetchSeriesProgress", () => {
+    const mockSeriesWithBooks = [
+      {
+        id: "series-1",
+        name: "Series One",
+        books: [
+          { libraryItemId: "item-1" },
+          { libraryItemId: "item-2" },
+          { libraryItemId: "item-3" },
+        ],
+      },
+    ];
+
+    const mockProgressRow = {
+      id: "progress-1",
+      userId: "user-1",
+      libraryItemId: "item-1",
+      episodeId: null,
+      duration: 3600,
+      progress: 0.5,
+      currentTime: 1800,
+      isFinished: false,
+      hideFromContinueListening: false,
+      lastUpdate: new Date("2024-01-01"),
+      startedAt: new Date("2024-01-01"),
+      finishedAt: null,
+    };
+
+    beforeEach(async () => {
+      getAllSeries.mockResolvedValue(mockSeriesWithBooks);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+      await store.getState().initializeSeries(true, true);
+      jest.clearAllMocks();
+      getMediaProgressForItems.mockResolvedValue({});
+    });
+
+    it("fetchSeriesProgress calls getMediaProgressForItems with correct args", async () => {
+      getMediaProgressForItems.mockResolvedValue({});
+
+      await store.getState().fetchSeriesProgress("series-1", "user-1");
+
+      expect(getMediaProgressForItems).toHaveBeenCalledWith(
+        ["item-1", "item-2", "item-3"],
+        "user-1"
+      );
+    });
+
+    it("fetchSeriesProgress sets progressMap and progressMapSeriesId in state", async () => {
+      const progressMap = { "item-1": mockProgressRow };
+      getMediaProgressForItems.mockResolvedValue(progressMap);
+
+      await store.getState().fetchSeriesProgress("series-1", "user-1");
+
+      const state = store.getState();
+      expect(state.series.progressMap).toEqual(progressMap);
+      expect(state.series.progressMapSeriesId).toBe("series-1");
+    });
+
+    it("fetchSeriesProgress with empty libraryItemIds sets empty progressMap", async () => {
+      getAllSeries.mockResolvedValue([{ id: "series-empty", name: "Empty", books: [] }]);
+      await store.getState().refetchSeries();
+      getMediaProgressForItems.mockResolvedValue({});
+
+      await store.getState().fetchSeriesProgress("series-empty", "user-1");
+
+      const state = store.getState();
+      expect(state.series.progressMap).toEqual({});
+      expect(state.series.progressMapSeriesId).toBe("series-empty");
+    });
+
+    it("progressMap is keyed by libraryItemId", async () => {
+      const progressMap = {
+        "item-1": { ...mockProgressRow, libraryItemId: "item-1" },
+        "item-2": { ...mockProgressRow, id: "progress-2", libraryItemId: "item-2" },
+      };
+      getMediaProgressForItems.mockResolvedValue(progressMap);
+
+      await store.getState().fetchSeriesProgress("series-1", "user-1");
+
+      const state = store.getState();
+      expect(Object.keys(state.series.progressMap)).toEqual(["item-1", "item-2"]);
+      expect(state.series.progressMap["item-1"].libraryItemId).toBe("item-1");
     });
   });
 });
