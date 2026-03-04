@@ -4,12 +4,11 @@ import PlayPauseButton from "@/components/player/PlayPauseButton";
 import SkipButton from "@/components/player/SkipButton";
 import { ProgressBar } from "@/components/ui";
 import { translate } from "@/i18n";
-import { getJumpBackwardInterval, getJumpForwardInterval } from "@/lib/appSettings";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
-import { usePlayer, useUserProfile } from "@/stores/appStore";
+import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
 import { router } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Alert, Text, TouchableOpacity, View } from "react-native";
 
 interface ConsolidatedPlayerControlsProps {
@@ -26,25 +25,11 @@ export default function ConsolidatedPlayerControls({
   const { colors } = useThemedStyles();
   const { currentTrack, position, currentChapter, isLoadingTrack } = usePlayer();
   const { createBookmark } = useUserProfile();
-  const [jumpForwardInterval, setJumpForwardInterval] = useState(30);
-  const [jumpBackwardInterval, setJumpBackwardInterval] = useState(15);
+  const { jumpForwardInterval, jumpBackwardInterval } = useSettings();
   const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
   // Check if this is the currently playing item
   const isCurrentlyPlaying = currentTrack?.libraryItemId === libraryItemId;
-
-  // Load jump intervals from settings
-  useEffect(() => {
-    const loadIntervals = async () => {
-      const [forward, backward] = await Promise.all([
-        getJumpForwardInterval(),
-        getJumpBackwardInterval(),
-      ]);
-      setJumpForwardInterval(forward);
-      setJumpBackwardInterval(backward);
-    };
-    loadIntervals();
-  }, []);
 
   const handlePlayPause = useCallback(async () => {
     try {

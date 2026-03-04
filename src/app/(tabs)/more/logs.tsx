@@ -5,13 +5,14 @@
  * allowing users to filter by level, search, export, and clear logs.
  */
 
-import { getAllLogs, getAllTags, getLogsByLevel, logger, type LogRow } from "@/lib/logger";
+import { getAllLogs, getLogsByLevel, logger, type LogRow } from "@/lib/logger";
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useAppStore } from "@/stores/appStore";
 import { Ionicons } from "@expo/vector-icons";
 import { copyToClipboard, exportAsTextFile } from "@/lib/exportUtils";
 import { Stack, router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -286,9 +287,11 @@ export default function LogsScreen() {
   const [visibleTags, setVisibleTags] = useState<Set<string>>(new Set());
   const [searchText, setSearchText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [showTagFilter, setShowTagFilter] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  // Read availableTags from loggerSlice — stale-while-revalidate on every focus
+  const availableTags = useAppStore((state) => state.logger.availableTags);
 
   // Compute theme colors
   const themeColors: ThemeColors = useMemo(
@@ -305,19 +308,12 @@ export default function LogsScreen() {
     [colors.textPrimary, colors.background, isDark]
   );
 
-  // Load available tags and initialize all as visible
-  const loadTags = useCallback(() => {
-    try {
-      const tags = getAllTags();
-      setAvailableTags(tags);
-      // Initialize all tags as visible
-      if (visibleTags.size === 0) {
-        setVisibleTags(new Set(tags));
-      }
-    } catch (error) {
-      log.error("Failed to load tags", error as Error);
-    }
-  }, [visibleTags.size]);
+  // Refresh available tags on every screen focus (stale-while-revalidate)
+  useFocusEffect(
+    useCallback(() => {
+      useAppStore.getState().logger.refreshAvailableTags();
+    }, [])
+  );
 
   // Load logs
   const loadLogs = useCallback(() => {
@@ -362,11 +358,10 @@ export default function LogsScreen() {
     return filtered;
   }, [logs, visibleTags, availableTags.length, searchText]);
 
-  // Load tags and logs on mount
+  // Load logs on mount
   useEffect(() => {
-    loadTags();
     loadLogs();
-  }, [loadLogs, loadTags]);
+  }, [loadLogs]);
 
   // Acknowledge errors when logs screen is viewed
   useEffect(() => {

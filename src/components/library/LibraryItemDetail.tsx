@@ -9,9 +9,7 @@ import GenresTagsSection from "@/components/library/LibraryItemDetail/GenresTags
 import MetadataSection from "@/components/library/LibraryItemDetail/MetadataSection";
 import ProgressSection from "@/components/library/LibraryItemDetail/ProgressSection";
 import TitleSection from "@/components/library/LibraryItemDetail/TitleSection";
-import { getMediaAuthors, getMediaSeries } from "@/db/helpers/mediaJoins";
 import { getMediaProgressForLibraryItem, upsertMediaProgress } from "@/db/helpers/mediaProgress";
-import { getUserByUsername } from "@/db/helpers/users";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { updateMediaProgress } from "@/lib/api/endpoints";
@@ -33,7 +31,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
 import { Stack } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 interface LibraryItemDetailProps {
@@ -43,14 +41,10 @@ interface LibraryItemDetailProps {
 
 export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItemDetailProps) {
   const { styles, colors } = useThemedStyles();
-  const { username } = useAuth();
+  const { username, userId } = useAuth();
   const { currentTrack, position } = usePlayer();
   const { serverReachable } = useNetwork();
   const floatingPlayerPadding = useFloatingPlayerPadding();
-
-  // State for author and series IDs
-  const [authorId, setAuthorId] = useState<string | null>(null);
-  const [seriesId, setSeriesId] = useState<string | null>(null);
 
   // Get store hooks
   const {
@@ -100,10 +94,6 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       if (!itemId) return;
 
       try {
-        // Get user ID for progress fetching
-        const user = username ? await getUserByUsername(username) : null;
-        const userId = user?.id;
-
         // Repair download status if needed (fixes iOS container path changes)
         // This runs silently in the background and logs any repairs made
         downloadService.repairDownloadStatus(itemId).catch((error) => {
@@ -111,7 +101,8 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         });
 
         // Fetch item details (uses cache if available)
-        await fetchItemDetails(itemId, userId);
+        // userId comes from useAuth() — no DB round-trip needed here
+        await fetchItemDetails(itemId, userId ?? undefined);
 
         // Notify parent of title change for header
         const currentData = getCachedItem(itemId);
@@ -126,7 +117,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     };
 
     loadItemDetails();
-  }, [itemId, username, fetchItemDetails, getCachedItem, onTitleChange]);
+  }, [itemId, userId, fetchItemDetails, getCachedItem, onTitleChange]);
 
   // Update title when metadata changes
   useEffect(() => {
@@ -136,60 +127,9 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     }
   }, [metadata, onTitleChange]);
 
-  // Fetch author and series IDs for navigation
-  useEffect(() => {
-    const fetchRelationIds = async () => {
-      if (!metadata?.id) {
-        setAuthorId(null);
-        setSeriesId(null);
-        return;
-      }
-
-      try {
-        // Fetch authors and series in parallel
-        const [authors, series] = await Promise.all([
-          getMediaAuthors(metadata.id),
-          getMediaSeries(metadata.id),
-        ]);
-
-        // Use first author and series for navigation
-        setAuthorId(authors[0]?.authorId || null);
-        setSeriesId(series[0] || null);
-      } catch (error) {
-        console.error("[LibraryItemDetail] Error fetching author/series IDs:", error);
-        setAuthorId(null);
-        setSeriesId(null);
-      }
-    };
-
-    fetchRelationIds();
-  }, [metadata?.id]);
-
-  // User progress fetching effect - update store with latest progress
-  useEffect(() => {
-    const fetchUserProgress = async () => {
-      if (!username || !item) return;
-
-      try {
-        // Fetch latest progress from server
-        await progressService.fetchServerProgress();
-
-        // Get the local progress data
-        const user = await getUserByUsername(username);
-        if (user?.id) {
-          const progressData = await getMediaProgressForLibraryItem(item.id, user.id);
-          // Update progress in store (will trigger re-render via store subscription)
-          if (progressData) {
-            updateItemProgress(itemId, progressData);
-          }
-        }
-      } catch (error) {
-        console.error("[LibraryItemDetail] Error fetching user progress:", error);
-      }
-    };
-
-    fetchUserProgress();
-  }, [username, item?.id, itemId, updateItemProgress]);
+  // Derive authorId and seriesId from cached slice data — no separate DB fetch needed
+  const authorId = cachedData?.authorId ?? null;
+  const seriesId = cachedData?.seriesId ?? null;
 
   // Compute effective progress: use live player position if this item is playing,
   // otherwise use stored progress
@@ -225,22 +165,16 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   }, [progress, item?.id, currentTrack?.libraryItemId, position]);
 
   const handleToggleFinished = useCallback(async () => {
-    if (!item || !username || !effectiveProgress) return;
+    if (!item || !userId || !effectiveProgress) return;
 
     try {
-      const user = await getUserByUsername(username);
-      if (!user?.id) {
-        Alert.alert(translate("common.error"), translate("libraryItem.alerts.userNotFound"));
-        return;
-      }
-
       const newIsFinished = !effectiveProgress.isFinished;
       const now = new Date();
 
       // Update progress in database
       const updatedProgress = {
-        id: effectiveProgress.id || `${user.id}-${item.id}`,
-        userId: user.id,
+        id: effectiveProgress.id || `${userId}-${item.id}`,
+        userId,
         libraryItemId: item.id,
         episodeId: effectiveProgress.episodeId || null,
         duration: effectiveProgress.duration || null,
@@ -275,7 +209,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       }
 
       // Refresh progress in store
-      const refreshedProgress = await getMediaProgressForLibraryItem(item.id, user.id);
+      const refreshedProgress = await getMediaProgressForLibraryItem(item.id, userId);
       if (refreshedProgress) {
         updateItemProgress(itemId, refreshedProgress);
       }
@@ -286,7 +220,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       console.error("[LibraryItemDetail] Failed to toggle finished status:", error);
       Alert.alert(translate("common.error"), translate("libraryItem.alerts.finishedStatusFailed"));
     }
-  }, [item, username, effectiveProgress, itemId, updateItemProgress]);
+  }, [item, userId, effectiveProgress, itemId, updateItemProgress]);
 
   // Background enhancement is handled by the store automatically
   // Download subscriptions are handled by the store automatically
@@ -414,20 +348,11 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
   // Force resync position handler
   const handleForceResync = useCallback(async () => {
-    if (!item || !username) return;
+    if (!item || !userId) return;
 
     try {
-      // Get user ID from database
-      const user = await getUserByUsername(username);
-      if (!user?.id) {
-        Alert.alert(translate("common.error"), "User not found", [
-          { text: translate("common.ok") },
-        ]);
-        return;
-      }
-
       // Force resync position from server
-      await progressService.forceResyncPosition(user.id, item.id);
+      await progressService.forceResyncPosition(userId, item.id);
 
       // Refresh item details to show updated progress
       await fetchItemDetails(item.id);
@@ -446,7 +371,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         { text: translate("common.ok") },
       ]);
     }
-  }, [item, username, currentTrack, fetchItemDetails]);
+  }, [item, userId, currentTrack, fetchItemDetails]);
 
   // Menu handler
   const handleMenuAction = useCallback(
