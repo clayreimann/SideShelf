@@ -226,7 +226,7 @@ export async function processFullLibraryItem(apiItem: ApiLibraryItem): Promise<v
             target: audioFiles.id,
             set: {
               mediaId: sql`excluded.media_id`,
-              index: sql`excluded.index`,
+              index: sql`excluded."index"`,
               ino: sql`excluded.ino`,
               filename: sql`excluded.filename`,
               ext: sql`excluded.ext`,

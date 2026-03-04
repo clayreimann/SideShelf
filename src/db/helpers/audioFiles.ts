@@ -101,7 +101,7 @@ export async function upsertAudioFiles(audioFileRows: NewAudioFileRow[]): Promis
       target: audioFiles.id,
       set: {
         mediaId: sql`excluded.media_id`,
-        index: sql`excluded.index`,
+        index: sql`excluded."index"`,
         ino: sql`excluded.ino`,
         filename: sql`excluded.filename`,
         ext: sql`excluded.ext`,
