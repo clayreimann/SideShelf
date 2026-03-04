@@ -1,20 +1,29 @@
-import { LibraryItemList, LibraryPicker } from '@/components/library';
-import { HeaderControls } from '@/components/ui';
-import { translate } from '@/i18n';
-import { useThemedStyles } from '@/lib/theme';
-import { SortField, useLibrary } from '@/stores';
-import type { LibraryItemDisplayRow } from '@/types/components';
-import type { SortConfig } from '@/types/store';
-import { MenuAction } from '@react-native-menu/menu';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Platform, Text, View } from 'react-native';
+import { LibraryItemList, LibraryPicker } from "@/components/library";
+import { HeaderControls } from "@/components/ui";
+import { translate } from "@/i18n";
+import { useThemedStyles } from "@/lib/theme";
+import { SortField, useLibrary, useSettings } from "@/stores";
+import type { LibraryItemDisplayRow } from "@/types/components";
+import type { SortConfig } from "@/types/store";
+import { MenuAction } from "@react-native-menu/menu";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button, Platform, Text, View } from "react-native";
 
 export default function LibraryScreen() {
   const { styles, isDark, colors } = useThemedStyles();
-  const { libraries, items, selectLibrary, selectedLibrary, isLoadingItems, refresh, sortConfig, setSortConfig } = useLibrary();
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [searchQuery, setSearchQuery] = useState('');
+  const {
+    libraries,
+    items,
+    selectLibrary,
+    selectedLibrary,
+    isLoadingItems,
+    refresh,
+    sortConfig,
+    setSortConfig,
+  } = useLibrary();
+  const { viewMode, updateViewMode } = useSettings();
+  const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
   const { openItem } = useLocalSearchParams<{ openItem?: string | string[] }>();
   const handledOpenItemRef = useRef<string | null>(null);
@@ -23,7 +32,10 @@ export default function LibraryScreen() {
     await refresh();
   }, [refresh]);
 
-  const toggleViewMode = useCallback(() => setViewMode(viewMode === 'grid' ? 'list' : 'grid'), [viewMode]);
+  const toggleViewMode = useCallback(
+    () => updateViewMode(viewMode === "grid" ? "list" : "grid"),
+    [viewMode, updateViewMode]
+  );
 
   // Filter items based on search query
   const filteredItems = useMemo(() => {
@@ -59,34 +71,39 @@ export default function LibraryScreen() {
     router.push(`/library/${itemId}`);
   }, [openItem, router]);
 
-  const handleSortChange = useCallback((config: SortConfig) => {
-    setSortConfig(config);
-  }, [setSortConfig]);
+  const handleSortChange = useCallback(
+    (config: SortConfig) => {
+      setSortConfig(config);
+    },
+    [setSortConfig]
+  );
 
   const librarySortOptions = [
-    { field: 'title' as SortField, label: translate('library.sortOptions.title') },
-    { field: 'authorName' as SortField, label: translate('library.sortOptions.authorFirstName') },
-    { field: 'authorNameLF' as SortField, label: translate('library.sortOptions.authorLastName') },
-    { field: 'publishedYear' as SortField, label: translate('library.sortOptions.publishedYear') },
-    { field: 'addedAt' as SortField, label: translate('library.sortOptions.dateAdded') },
+    { field: "title" as SortField, label: translate("library.sortOptions.title") },
+    { field: "authorName" as SortField, label: translate("library.sortOptions.authorFirstName") },
+    { field: "authorNameLF" as SortField, label: translate("library.sortOptions.authorLastName") },
+    { field: "publishedYear" as SortField, label: translate("library.sortOptions.publishedYear") },
+    { field: "addedAt" as SortField, label: translate("library.sortOptions.dateAdded") },
   ];
 
   const controls = useCallback(() => {
-    const sortActions: Array<MenuAction> = librarySortOptions.map(option => {
+    const sortActions: Array<MenuAction> = librarySortOptions.map((option) => {
       const isActive = sortConfig.field === option.field;
-      const isAscending = sortConfig.direction === 'asc';
+      const isAscending = sortConfig.direction === "asc";
 
       return {
         id: option.field,
         title: option.label,
-        state: isActive ? 'on' : 'off',
-        ...(isActive ? {
-          image: Platform.select({
-            ios: isAscending ? 'arrowtriangle.up' : 'arrowtriangle.down',
-            android: isAscending ? 'ic_menu_sort_alphabetically' : 'ic_menu_sort_by_size',
-          }),
-          imageColor: colors.textPrimary,
-        } : {}),
+        state: isActive ? "on" : "off",
+        ...(isActive
+          ? {
+              image: Platform.select({
+                ios: isAscending ? "arrowtriangle.up" : "arrowtriangle.down",
+                android: isAscending ? "ic_menu_sort_alphabetically" : "ic_menu_sort_by_size",
+              }),
+              imageColor: colors.textPrimary,
+            }
+          : {}),
       };
     });
 
@@ -99,25 +116,24 @@ export default function LibraryScreen() {
         sortConfig={sortConfig}
         sortMenuActions={sortActions}
         onSortMenuAction={(field) => {
-          const direction: 'asc' | 'desc' =
-            sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc';
+          const direction: "asc" | "desc" =
+            sortConfig.field === field && sortConfig.direction === "asc" ? "desc" : "asc";
           handleSortChange({ field, direction });
         }}
       />
     );
   }, [isDark, viewMode, toggleViewMode, sortConfig, handleSortChange, librarySortOptions]);
 
-
   if (!libraries.length) {
     return (
       <View style={styles.container}>
-        <Text style={styles.text}>{translate('library.empty')}</Text>
-        <Button title={translate('common.refresh')} onPress={onRefresh} />
+        <Text style={styles.text}>{translate("library.empty")}</Text>
+        <Button title={translate("common.refresh")} onPress={onRefresh} />
       </View>
     );
   }
 
-  const title = selectedLibrary?.name || translate('library.title');
+  const title = selectedLibrary?.name || translate("library.title");
 
   return (
     <>

@@ -59,6 +59,23 @@ jest.mock("@/services/ApiClientService", () => ({
   },
 }));
 
+jest.mock("@/db/helpers/wipeUserData", () => ({
+  wipeUserData: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock("@/stores/appStore", () => ({
+  useAppStore: Object.assign(jest.fn(), {
+    getState: jest.fn(() => ({
+      resetLibrary: jest.fn(),
+      resetSeries: jest.fn(),
+      resetAuthors: jest.fn(),
+      resetItemDetails: jest.fn(),
+      resetUserProfile: jest.fn(),
+      resetHome: jest.fn(),
+    })),
+  }),
+}));
+
 const { getUserByUsername } = require("@/db/helpers/users");
 const { getStoredUsername, persistUsername } = require("@/lib/secureStore");
 const { apiClientService } = require("@/services/ApiClientService");
