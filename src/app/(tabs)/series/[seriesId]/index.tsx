@@ -1,18 +1,17 @@
 import { ProgressBar } from "@/components/ui";
 import CoverImage from "@/components/ui/CoverImange";
-import { getMediaProgressForLibraryItem, MediaProgressRow } from "@/db/helpers/mediaProgress";
+import { MediaProgressRow } from "@/db/helpers/mediaProgress";
 import { SeriesBookRow } from "@/db/helpers/series";
-import { getUserByUsername } from "@/db/helpers/users";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
-import { useDownloads, useNetwork, useSeries } from "@/stores";
+import { useAppStore, useDownloads, useNetwork, useSeries } from "@/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
 
 export default function SeriesDetailScreen() {
@@ -22,12 +21,21 @@ export default function SeriesDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ seriesId?: string | string[] }>();
   const seriesId = Array.isArray(params.seriesId) ? params.seriesId[0] : params.seriesId;
-  const { username, isAuthenticated } = useAuth();
+  const { userId, isAuthenticated } = useAuth();
   const { startDownload, isItemDownloaded } = useDownloads();
   const { serverReachable } = useNetwork();
+  const progressMapRaw = useAppStore((state) => state.series.progressMap);
+  const fetchSeriesProgress = useAppStore((state) => state.fetchSeriesProgress);
 
-  // State for tracking progress data for all books in the series
-  const [progressMap, setProgressMap] = useState<Map<string, MediaProgressRow>>(new Map());
+  // Convert plain object progressMap from store to Map for backward-compatible usage
+  const progressMap = useMemo(
+    () =>
+      new Map<string, MediaProgressRow>(
+        Object.entries(progressMapRaw) as [string, MediaProgressRow][]
+      ),
+    [progressMapRaw]
+  );
+
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
 
   const selectedSeries = useMemo(
@@ -44,33 +52,15 @@ export default function SeriesDetailScreen() {
     }, [ready, selectedSeries, refetchSeries])
   );
 
-  // Fetch progress data for all books in the series
-  useEffect(() => {
-    const fetchProgressData = async () => {
-      if (!selectedSeries || !username) return;
-
-      try {
-        const user = await getUserByUsername(username);
-        if (!user?.id) return;
-
-        const progressDataMap = new Map<string, MediaProgressRow>();
-
-        // Fetch progress for each book in the series
-        for (const book of selectedSeries.books) {
-          const progress = await getMediaProgressForLibraryItem(book.libraryItemId, user.id);
-          if (progress) {
-            progressDataMap.set(book.libraryItemId, progress);
-          }
-        }
-
-        setProgressMap(progressDataMap);
-      } catch (error) {
-        console.error("[SeriesDetailScreen] Failed to fetch progress data:", error);
-      }
-    };
-
-    fetchProgressData();
-  }, [selectedSeries, username]);
+  // Fetch progress data for all books in the series on every focus (stale-while-revalidate)
+  useFocusEffect(
+    useCallback(() => {
+      if (!seriesId || !userId) return;
+      fetchSeriesProgress(seriesId, userId).catch((error) => {
+        console.error("[SeriesDetailScreen] Failed to fetch series progress:", error);
+      });
+    }, [seriesId, userId, fetchSeriesProgress])
+  );
 
   // Handler for downloading all unfinished items in the series
   const handleDownloadAllUnfinished = useCallback(async () => {

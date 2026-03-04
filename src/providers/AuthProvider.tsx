@@ -1,5 +1,7 @@
 import { authHelpers, mediaProgressHelpers, userHelpers } from "@/db/helpers";
 import { getUserByUsername } from "@/db/helpers/users";
+import { wipeUserData } from "@/db/helpers/wipeUserData";
+import { useAppStore } from "@/stores/appStore";
 import { login as doLogin } from "@/lib/api/endpoints";
 import { getStoredUsername, persistUsername } from "@/lib/secureStore";
 import { useDb } from "@/providers/DbProvider";
@@ -124,6 +126,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setServerUrl = useCallback(async (url: string) => {
     await apiClientService.setBaseUrl(url);
     // State will be updated via subscription
+    // Clear all user-specific slice state and DB data when switching servers
+    void (async () => {
+      useAppStore.getState().resetLibrary();
+      useAppStore.getState().resetSeries();
+      useAppStore.getState().resetAuthors();
+      useAppStore.getState().resetItemDetails();
+      useAppStore.getState().resetUserProfile();
+      useAppStore.getState().resetHome();
+      await wipeUserData();
+    })();
   }, []);
 
   const login = useCallback(
@@ -184,6 +196,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await persistUsername(null);
     setState((s: AuthState) => ({ ...s, username: null, userId: null }));
     // Token state will be updated via subscription
+    // Clear all user-specific slice state and DB data in background (do not await)
+    void (async () => {
+      useAppStore.getState().resetLibrary();
+      useAppStore.getState().resetSeries();
+      useAppStore.getState().resetAuthors();
+      useAppStore.getState().resetItemDetails();
+      useAppStore.getState().resetUserProfile();
+      useAppStore.getState().resetHome();
+      await wipeUserData();
+    })();
   }, []);
 
   const value = useMemo<AuthContextValue>(
