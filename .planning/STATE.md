@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: — Tech Cleanup
 status: executing
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-03-04T13:39:00Z"
-last_activity: 2026-03-04 — Plan 11-01 complete (4 slice extensions, batch mediaProgress helper, 29 new tests)
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-03-04T14:00:06.344Z"
+last_activity: 2026-03-04 — Plan 11-02 complete (9 EFFECT/STATE requirements satisfied, wipeUserData helper, logout/server-switch wipe)
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 4
   percent: 97
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 ## Current Position
 
 Phase: 11 of 13 (useEffect Cleanup + State Centralization) — In Progress
-Plan: 1 of ? in current phase — COMPLETE
+Plan: 2 of 2 in current phase — COMPLETE (Phase 11 complete)
 Status: In progress
-Last activity: 2026-03-04 — Plan 11-01 complete (4 slice extensions, batch mediaProgress helper, 29 new tests)
+Last activity: 2026-03-04 — Plan 11-02 complete (9 EFFECT/STATE requirements satisfied, wipeUserData helper, logout/server-switch wipe)
 
 Progress: [██████████] 97%
 
@@ -49,6 +49,7 @@ Progress: [██████████] 97%
 - Plan 10-01: 4 min (2 tasks, 8 files)
 - Plan 10-02: 12 min (2 tasks, 11 files)
 - Plan 11-01: 8 min (3 tasks, 10 files, 29 new tests)
+- Plan 11-02: 90 min (4 tasks, 14 files, 8 new tests)
 
 ## Accumulated Context
 
@@ -77,6 +78,10 @@ Key decisions to carry forward:
 - getAuthorById existed in authors.ts; getOrFetchAuthorById uses in-memory find() first, DB fallback logs a warning
 - getMediaProgressForItems deduplicates by orderBy(desc(lastUpdate)) + first-row-wins per libraryItemId
 - loggerSlice.availableTags populated synchronously via getAllTags() in initialize() and refreshAvailableTags()
+- progressMap from seriesSlice is Record type; SeriesDetailScreen converts to Map via useMemo for backward compatibility
+- useAppStore.getState() in AuthProvider logout/setServerUrl callbacks is valid — called imperatively after StoreProvider mounts, not during render
+- wipeUserData deletes content tables in child-before-parent FK order; preserves users and logger tables
+- viewMode/updateViewMode were missing from useSettings() hook despite being in settingsSlice — added as Rule 3 auto-fix
 
 ### Pending Todos
 
@@ -90,6 +95,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T13:39:00Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-03-04T14:00:06.341Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
