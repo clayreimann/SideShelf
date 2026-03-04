@@ -19,9 +19,9 @@ Requirements for the Tech Cleanup milestone. Each maps to roadmap phases startin
 
 ### State Centralization
 
-- [ ] **STATE-01**: `viewMode` preference in library index moved to `settingsSlice` (persisted preference, not per-mount local state)
-- [ ] **STATE-02**: SeriesDetailScreen `progressMap` replaced with bulk store action (eliminates N+1 per-book DB fetch in component)
-- [ ] **STATE-03**: AuthorDetailScreen author lookup replaced with `getAuthorById` store action (cache-miss DB fetch lives in slice, not component)
+- [x] **STATE-01**: `viewMode` preference in library index moved to `settingsSlice` (persisted preference, not per-mount local state)
+- [x] **STATE-02**: SeriesDetailScreen `progressMap` replaced with bulk store action (eliminates N+1 per-book DB fetch in component)
+- [x] **STATE-03**: AuthorDetailScreen author lookup replaced with `getAuthorById` store action (cache-miss DB fetch lives in slice, not component)
 
 ### useEffect Cleanup
 
@@ -30,7 +30,7 @@ Requirements for the Tech Cleanup milestone. Each maps to roadmap phases startin
 - [ ] **EFFECT-03**: `userId` added to `useAuth()` to eliminate `getUserByUsername()` DB reads scattered across 5+ components
 - [ ] **EFFECT-04**: Author/series navigation IDs moved into `libraryItemDetailsSlice.fetchItemDetails` (currently a separate component-level useEffect per item open)
 - [ ] **EFFECT-05**: `MoreScreen` app version reads converted to synchronous module-scope constants (no useEffect or useState needed)
-- [ ] **EFFECT-06**: `getAllTags()` consolidated into `loggerSlice.availableTags` (currently fetched independently in both LogsScreen and LoggerSettingsScreen)
+- [x] **EFFECT-06**: `getAllTags()` consolidated into `loggerSlice.availableTags` (currently fetched independently in both LogsScreen and LoggerSettingsScreen)
 
 ### Service Decomposition
 
@@ -84,15 +84,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DB-05       | 10    | Complete |
 | DB-06       | 10    | Complete |
 | DB-07       | 10    | Complete |
-| STATE-01    | 11    | Pending  |
-| STATE-02    | 11    | Pending  |
-| STATE-03    | 11    | Pending  |
+| STATE-01    | 11    | Complete |
+| STATE-02    | 11    | Complete |
+| STATE-03    | 11    | Complete |
 | EFFECT-01   | 11    | Pending  |
 | EFFECT-02   | 11    | Pending  |
 | EFFECT-03   | 11    | Pending  |
 | EFFECT-04   | 11    | Pending  |
 | EFFECT-05   | 11    | Pending  |
-| EFFECT-06   | 11    | Pending  |
+| EFFECT-06   | 11    | Complete |
 | DECOMP-01   | 12    | Pending  |
 | DECOMP-02   | 12    | Pending  |
 | DWNLD-01    | 13    | Pending  |
