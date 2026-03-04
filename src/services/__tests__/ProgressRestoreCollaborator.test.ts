@@ -370,4 +370,141 @@ describe("ProgressRestoreCollaborator", () => {
       expect(result).toBe(false);
     });
   });
+
+  describe("restorePlayerServiceFromSession: additional branches", () => {
+    it("uses currentTrack.libraryItemId from store to skip getAllActiveSessionsForUser", async () => {
+      mockStore.player.currentTrack = {
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        title: "Test Book",
+        author: "Test Author",
+        coverUri: "http://example.com/cover.jpg",
+        audioFiles: mockAudioFiles,
+        chapters: [],
+        duration: 3600,
+        isDownloaded: true,
+      };
+      progressService.getCurrentSession.mockResolvedValue({
+        libraryItemId: "item-1",
+        currentTime: 200,
+      });
+
+      await collaborator.restorePlayerServiceFromSession();
+
+      expect(getAllActiveSessionsForUser).not.toHaveBeenCalled();
+      expect(mockStore._setCurrentTrack).toHaveBeenCalled();
+    });
+
+    it("returns early when getCurrentSession returns null after session lookup", async () => {
+      getAllActiveSessionsForUser.mockResolvedValue([
+        { libraryItemId: "item-1", updatedAt: new Date(), currentTime: 0 },
+      ]);
+      progressService.getCurrentSession.mockResolvedValue(null);
+
+      await collaborator.restorePlayerServiceFromSession();
+
+      expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
+    });
+
+    it("does not call _setCurrentTrack if metadata not found", async () => {
+      getAllActiveSessionsForUser.mockResolvedValue([
+        { libraryItemId: "item-1", updatedAt: new Date(), currentTime: 0 },
+      ]);
+      progressService.getCurrentSession.mockResolvedValue({
+        libraryItemId: "item-1",
+        currentTime: 0,
+      });
+      getMediaMetadataByLibraryItemId.mockResolvedValue(null);
+
+      await collaborator.restorePlayerServiceFromSession();
+
+      expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
+    });
+
+    it("does not call _setCurrentTrack if no audio files found", async () => {
+      getAllActiveSessionsForUser.mockResolvedValue([
+        { libraryItemId: "item-1", updatedAt: new Date(), currentTime: 0 },
+      ]);
+      progressService.getCurrentSession.mockResolvedValue({
+        libraryItemId: "item-1",
+        currentTime: 0,
+      });
+      getAudioFilesWithDownloadInfo.mockResolvedValue([]);
+
+      await collaborator.restorePlayerServiceFromSession();
+
+      expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
+    });
+
+    it("restores streaming track (no downloaded files)", async () => {
+      const streamingAudioFiles = [
+        {
+          ...mockAudioFiles[0],
+          downloadInfo: { isDownloaded: false, downloadPath: null },
+        },
+      ];
+      getAllActiveSessionsForUser.mockResolvedValue([
+        { libraryItemId: "item-1", updatedAt: new Date(), currentTime: 0 },
+      ]);
+      progressService.getCurrentSession.mockResolvedValue({
+        libraryItemId: "item-1",
+        currentTime: 0,
+      });
+      getAudioFilesWithDownloadInfo.mockResolvedValue(streamingAudioFiles);
+
+      await collaborator.restorePlayerServiceFromSession();
+
+      expect(mockStore._setCurrentTrack).toHaveBeenCalledWith(
+        expect.objectContaining({ isDownloaded: false })
+      );
+    });
+  });
+
+  describe("syncPositionFromDatabase: additional branches", () => {
+    it("returns early when no username found", async () => {
+      mockStore.player.currentTrack = {
+        libraryItemId: "item-1",
+        audioFiles: mockAudioFiles,
+      };
+      getStoredUsername.mockResolvedValue(null);
+
+      await collaborator.syncPositionFromDatabase();
+
+      expect(mockStore.updatePosition).not.toHaveBeenCalled();
+    });
+
+    it("returns early when user not found in DB", async () => {
+      mockStore.player.currentTrack = {
+        libraryItemId: "item-1",
+        audioFiles: mockAudioFiles,
+      };
+      getUserByUsername.mockResolvedValue(null);
+
+      await collaborator.syncPositionFromDatabase();
+
+      expect(mockStore.updatePosition).not.toHaveBeenCalled();
+    });
+
+    it("returns early when no session found for current track", async () => {
+      mockStore.player.currentTrack = {
+        libraryItemId: "item-1",
+        audioFiles: mockAudioFiles,
+      };
+      progressService.getCurrentSession.mockResolvedValue(null);
+
+      await collaborator.syncPositionFromDatabase();
+
+      expect(mockStore.updatePosition).not.toHaveBeenCalled();
+    });
+
+    it("throws on DB error", async () => {
+      mockStore.player.currentTrack = {
+        libraryItemId: "item-1",
+        audioFiles: mockAudioFiles,
+      };
+      progressService.getCurrentSession.mockRejectedValue(new Error("DB error"));
+
+      await expect(collaborator.syncPositionFromDatabase()).rejects.toThrow("DB error");
+    });
+  });
 });

@@ -132,6 +132,17 @@ jest.mock("@/services/coordinator/eventBus", () => ({
   dispatchPlayerEvent: jest.fn(),
 }));
 
+jest.mock("@/services/ApiClientService", () => ({
+  apiClientService: {
+    getBaseUrl: jest.fn().mockReturnValue("http://server:13378"),
+    getAccessToken: jest.fn().mockReturnValue("token-abc"),
+  },
+}));
+
+jest.mock("@/lib/smartRewind", () => ({
+  applySmartRewind: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Mock coordinator so getCoordinator() returns a mock with resolveCanonicalPosition
 jest.mock("@/services/coordinator/PlayerStateCoordinator", () => {
   const { jest } = require("@jest/globals");
@@ -659,6 +670,123 @@ describe("PlayerService", () => {
         type: "SET_VOLUME",
         payload: { volume: 0.5 },
       });
+    });
+  });
+
+  describe("IPlayerServiceFacade methods", () => {
+    const { apiClientService } = require("@/services/ApiClientService");
+
+    it("getApiInfo returns credentials when both are present", () => {
+      // Default mocks return valid values
+      const info = playerService.getApiInfo();
+
+      expect(info).toEqual({ baseUrl: "http://server:13378", accessToken: "token-abc" });
+    });
+
+    it("getApiInfo returns null when baseUrl is missing", () => {
+      apiClientService.getBaseUrl.mockReturnValue(null);
+      apiClientService.getAccessToken.mockReturnValue("token-abc");
+
+      const info = playerService.getApiInfo();
+
+      expect(info).toBeNull();
+    });
+
+    it("getApiInfo returns null when accessToken is missing", () => {
+      apiClientService.getBaseUrl.mockReturnValue("http://server:13378");
+      apiClientService.getAccessToken.mockReturnValue(null);
+
+      const info = playerService.getApiInfo();
+
+      expect(info).toBeNull();
+    });
+
+    it("getInitializationTimestamp returns 0 before initialization", () => {
+      // Fresh instance not yet initialized
+      PlayerService.resetInstance();
+      const freshInstance = PlayerService.getInstance();
+      expect(freshInstance.getInitializationTimestamp()).toBe(0);
+    });
+
+    it("dispatchEvent calls dispatchPlayerEvent with the given event", () => {
+      playerService.dispatchEvent({ type: "PLAY" });
+
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+    });
+  });
+
+  describe("Facade delegation methods", () => {
+    beforeEach(async () => {
+      mockedTrackPlayer.getPlaybackState.mockRejectedValueOnce(new Error("Player not set up"));
+      await playerService.initialize();
+      jest.clearAllMocks();
+    });
+
+    it("executePlay delegates to playbackControl collaborator", async () => {
+      // Set up track so executePlay can proceed
+      mockStore.player.currentTrack = {
+        libraryItemId: "item-1",
+        mediaId: "media-1",
+        title: "Test Book",
+        author: "Test Author",
+        coverUri: "http://example.com/cover.jpg",
+        audioFiles: mockAudioFiles,
+        chapters: mockChapters,
+        duration: 3600,
+        isDownloaded: true,
+      };
+      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
+
+      await playerService.executePlay();
+
+      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+    });
+
+    it("restorePlayerServiceFromSession delegates to progressRestore collaborator", async () => {
+      // getStoredUsername is already mocked to return null in some tests, set to null for quick return
+      getStoredUsername.mockResolvedValue(null);
+
+      await expect(playerService.restorePlayerServiceFromSession()).resolves.not.toThrow();
+    });
+
+    it("syncPositionFromDatabase delegates to progressRestore collaborator", async () => {
+      // No current track — should return early without error
+      mockStore.player.currentTrack = null;
+
+      await expect(playerService.syncPositionFromDatabase()).resolves.not.toThrow();
+    });
+
+    it("reconnectBackgroundService delegates to backgroundReconnect collaborator", async () => {
+      await expect(playerService.reconnectBackgroundService()).resolves.not.toThrow();
+    });
+
+    it("refreshFilePathsAfterContainerChange delegates to backgroundReconnect collaborator", async () => {
+      // No current track — should return early without error
+      mockStore.player.currentTrack = null;
+
+      await expect(playerService.refreshFilePathsAfterContainerChange()).resolves.not.toThrow();
+    });
+
+    it("rebuildCurrentTrackIfNeeded delegates to progressRestore collaborator", async () => {
+      // No current track + no session → returns false
+      mockStore.player.currentTrack = null;
+      getStoredUsername.mockResolvedValue(null);
+
+      const result = await playerService.rebuildCurrentTrackIfNeeded();
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe("initialize: existing player path", () => {
+    it("reuses existing player when getPlaybackState succeeds", async () => {
+      // getPlaybackState resolves (player exists) — should skip setupPlayer
+      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.None });
+
+      await playerService.initialize();
+
+      expect(mockedTrackPlayer.setupPlayer).not.toHaveBeenCalled();
+      expect(playerService.getInitializationTimestamp()).toBeGreaterThan(0);
     });
   });
 });

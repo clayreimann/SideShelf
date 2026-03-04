@@ -3,6 +3,9 @@ module.exports = {
   setupFiles: ["<rootDir>/src/__tests__/setup-before.js"],
   setupFilesAfterEnv: ["expo-sqlite-mock/src/setup.ts", "<rootDir>/src/__tests__/setup.ts"],
   testTimeout: 10000,
+  // Force Jest to exit after tests complete to prevent open handles (netinfo timer)
+  // from blocking the process. This is needed for lint-staged --bail invocations.
+  forceExit: true,
   testMatch: [
     "<rootDir>/src/**/__tests__/**/*.(test|spec).(ts|tsx|js|jsx)",
     "<rootDir>/src/**/?(*.)(test|spec).(ts|tsx|js|jsx)",

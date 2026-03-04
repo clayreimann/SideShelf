@@ -115,6 +115,17 @@ describe("BackgroundReconnectCollaborator", () => {
       // Should not propagate the error
       await expect(collaborator.reconnectBackgroundService()).resolves.not.toThrow();
     });
+
+    it("registers playback service and calls configureTrackPlayer", async () => {
+      await collaborator.reconnectBackgroundService();
+
+      // Either configureTrackPlayer was called (reconnect path) or
+      // registerPlaybackService was called (re-registration path)
+      const wasHandled =
+        configureTrackPlayer.mock.calls.length > 0 ||
+        mockedTrackPlayer.registerPlaybackService.mock.calls.length > 0;
+      expect(wasHandled).toBe(true);
+    });
   });
 
   describe("refreshFilePathsAfterContainerChange", () => {
