@@ -1,4 +1,5 @@
 import { authHelpers, mediaProgressHelpers, userHelpers } from "@/db/helpers";
+import { getUserByUsername } from "@/db/helpers/users";
 import { login as doLogin } from "@/lib/api/endpoints";
 import { getStoredUsername, persistUsername } from "@/lib/secureStore";
 import { useDb } from "@/providers/DbProvider";
@@ -12,6 +13,7 @@ type AuthState = {
   accessToken: string | null;
   refreshToken: string | null;
   username: string | null;
+  userId: string | null;
   loginMessage?: string;
 };
 
@@ -20,6 +22,7 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   serverUrl: string | null;
   username: string | null;
+  userId: string | null;
   loginMessage?: string;
   setServerUrl: (url: string) => Promise<void>;
   login: (params: { serverUrl: string; username: string; password: string }) => Promise<void>;
@@ -35,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     accessToken: null,
     refreshToken: null,
     username: null,
+    userId: null,
   });
   const [initialized, setInitialized] = useState(false);
 
@@ -50,12 +54,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const username = await getStoredUsername();
       await persistUsername(username);
 
+      // Load userId from DB if username is present
+      let userId: string | null = null;
+      if (username) {
+        const user = await getUserByUsername(username);
+        userId = user?.id ?? null;
+      }
+
       // Sync local state from ApiClientService
       setState({
         serverUrl: apiClientService.getBaseUrl(),
         accessToken: apiClientService.getAccessToken(),
         refreshToken: apiClientService.getRefreshToken(),
         username,
+        userId,
       });
 
       setInitialized(true);
@@ -142,10 +154,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Persist username separately
         await persistUsername(username);
 
-        // Update local state
-        setState((prev: AuthState) => ({ ...prev, username, loginMessage: undefined }));
-
         const user = userHelpers.marshalUserFromAuthResponse(response);
+
+        // Update local state — include userId from the login response
+        setState((prev: AuthState) => ({
+          ...prev,
+          username,
+          userId: user?.id ?? null,
+          loginMessage: undefined,
+        }));
         const mediaProgress = mediaProgressHelpers.marshalMediaProgressFromAuthResponse(
           response.user
         );
@@ -165,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await apiClientService.clearTokens();
     await persistUsername(null);
-    setState((s: AuthState) => ({ ...s, username: null }));
+    setState((s: AuthState) => ({ ...s, username: null, userId: null }));
     // Token state will be updated via subscription
   }, []);
 
@@ -175,6 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated,
       serverUrl: state.serverUrl,
       username: state.username,
+      userId: state.userId,
       loginMessage: state.loginMessage,
       setServerUrl,
       login,
@@ -185,6 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated,
       state.serverUrl,
       state.username,
+      state.userId,
       state.loginMessage,
       setServerUrl,
       login,
