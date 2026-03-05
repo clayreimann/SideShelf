@@ -35,7 +35,7 @@ Requirements for the Tech Cleanup milestone. Each maps to roadmap phases startin
 ### Service Decomposition
 
 - [x] **DECOMP-01**: PlayerService concern groups extracted to private collaborators behind public facade (coordinator dispatch contract and singleton interface preserved)
-- [ ] **DECOMP-02**: DownloadService concern groups extracted to private collaborators behind public facade (status queries, lifecycle, repair separated)
+- [x] **DECOMP-02**: DownloadService concern groups extracted to private collaborators behind public facade (status queries, lifecycle, repair separated)
 
 ### RN Downloader Migration
 
@@ -94,7 +94,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EFFECT-05   | 11    | Complete |
 | EFFECT-06   | 11    | Complete |
 | DECOMP-01   | 12    | Complete |
-| DECOMP-02   | 12    | Pending  |
+| DECOMP-02   | 12    | Complete |
 | DWNLD-01    | 13    | Pending  |
 | DWNLD-02    | 13    | Pending  |
 | DWNLD-03    | 13    | Pending  |
