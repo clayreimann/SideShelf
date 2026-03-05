@@ -10,7 +10,7 @@
  * - Notifying subscribers of auth state changes
  */
 
-import { authHelpers } from "@/db/helpers";
+import { extractTokensFromAuthResponse } from "@/db/helpers/tokens";
 import { getItem, saveItem, SECURE_KEYS } from "@/lib/secureStore";
 import { logger } from "@/lib/logger";
 
@@ -205,7 +205,7 @@ class ApiClientService {
       }
 
       const data = await response.json();
-      const tokens = authHelpers.extractTokensFromAuthResponse(data);
+      const tokens = extractTokensFromAuthResponse(data);
 
       if (!tokens.accessToken || !tokens.refreshToken) {
         log.error("Token refresh response missing tokens");

@@ -107,6 +107,14 @@ The app uses a **slice pattern** in Zustand to organize state by domain:
 - **Never** write inline `db.insert()` or `db.update()` in UI code or providers
 - See `.cursor/rules/db-coding-standards.mdc` for detailed examples
 
+#### No Circular Imports (Important!)
+
+Circular imports cause uninitialized values and are never acceptable. Prevent them by design:
+
+- **Prefer direct imports over barrel imports** when the barrel would create a cycle. Import from `@/db/helpers/tokens` directly rather than `@/db/helpers` if the barrel re-exports something that imports back through your module.
+- **Never import from `@/db/helpers` (barrel) inside `src/services/`** — services sit above DB helpers in the dependency graph; use direct helper file imports instead.
+- **Use dynamic `await import()` as a last resort** only in `async` functions when a mutual dependency between two services cannot otherwise be resolved (e.g., `PlayerStateCoordinator` ↔ `PlayerService`). Document the reason with a comment.
+
 #### TypeScript
 
 - Use `@/` prefix for all imports (configured in tsconfig.json)
