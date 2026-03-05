@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: — Tech Cleanup
 status: executing
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-03-04T23:36:00.000Z"
-last_activity: 2026-03-04 — Plan 12-01 complete (PlayerService facade + 4 collaborators, 92% coverage, DECOMP-01 satisfied)
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-03-05T00:03:55.781Z"
+last_activity: 2026-03-05 — Plan 12-02 complete (DownloadService facade + 2 collaborators, 91% coverage, DECOMP-02 satisfied)
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 97
+  completed_phases: 3
+  total_plans: 8
+  completed_plans: 7
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** v1.2 Tech Cleanup — Phase 11: useEffect Cleanup + State Centralization
+**Current focus:** v1.2 Tech Cleanup — Phase 12: Service Decomposition COMPLETE — Phase 13: RN Downloader Migration up next
 
 ## Current Position
 
-Phase: 12 of 13 (Service Decomposition) — In Progress
-Plan: 1 of 2 in current phase — COMPLETE (Plan 12-01 complete, Plan 12-02 up next)
-Status: In progress
-Last activity: 2026-03-04 — Plan 12-01 complete (PlayerService facade + 4 collaborators, 92% coverage, DECOMP-01 satisfied)
+Phase: 12 of 13 (Service Decomposition) — COMPLETE
+Plan: 2 of 2 in current phase — COMPLETE (Plan 12-02 complete, Phase 13 up next)
+Status: Phase 12 complete, ready for Phase 13
+Last activity: 2026-03-05 — Plan 12-02 complete (DownloadService facade + 2 collaborators, 91% coverage, DECOMP-02 satisfied)
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [██████████] 97%
 - Plan 11-01: 8 min (3 tasks, 10 files, 29 new tests)
 - Plan 11-02: 90 min (4 tasks, 14 files, 8 new tests)
 - Plan 12-01: 33 min (3 tasks [1+2 combined], 13 files, 67 new tests)
+- Plan 12-02: 20 min (3 tasks [1+2+3 combined], 7 files, 33 new tests)
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ Key decisions to carry forward:
 - rebuildCurrentTrackIfNeeded placed in ProgressRestoreCollaborator (owns session restore); exposed on IPlayerServiceFacade so PlaybackControlCollaborator can call it without importing ProgressRestoreCollaborator directly
 - BackgroundReconnectCollaborator keeps require() pattern for PlayerBackgroundService per CLAUDE.md pattern (module cache clearing in **DEV** mode)
 - forceExit added to jest.config.js — @react-native-community/netinfo starts an internet reachability timer that never unrefs; forceExit fixes lint-staged --bail invocations without changing test behavior
+- DownloadService collaborators are stateless (no facade reference) — simpler than PlayerService pattern because they query DB/filesystem independently with no callbacks to facade
+- isDownloadActive and getDownloadStatus remain as direct Map reads in DownloadService facade — delegating them would break the activeDownloads isolation goal
 
 **Phase 11 decisions:**
 
@@ -103,6 +106,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-04T23:36:00.000Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-03-05T00:03:55.779Z
+Stopped at: Completed 12-02-PLAN.md
 Resume file: None
