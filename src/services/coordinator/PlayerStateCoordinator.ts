@@ -46,7 +46,8 @@ import {
 import AsyncLock from "async-lock";
 import EventEmitter from "eventemitter3";
 import { State } from "react-native-track-player";
-import { PlayerService } from "../PlayerService";
+// PlayerService is dynamically imported in executeTransition to avoid a circular dependency:
+// PlayerStateCoordinator → PlayerService → PlayerStateCoordinator
 import { dispatchPlayerEvent, playerEventBus } from "./eventBus";
 import { validateTransition } from "./transitions";
 
@@ -942,6 +943,8 @@ export class PlayerStateCoordinator extends EventEmitter {
     event: PlayerEvent,
     nextState: PlayerState | null
   ): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PlayerService } = require("../PlayerService") as typeof import("../PlayerService");
     const playerService = PlayerService.getInstance();
 
     try {
