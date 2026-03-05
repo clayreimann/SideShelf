@@ -39,7 +39,7 @@ Requirements for the Tech Cleanup milestone. Each maps to roadmap phases startin
 
 ### RN Downloader Migration
 
-- [ ] **DWNLD-01**: Fork diff spike completed — fork API vs mainline 4.5.3 documented, `task.metadata` persistence across app restart verified
+- [x] **DWNLD-01**: Fork diff spike completed — fork API vs mainline 4.5.3 documented, `task.metadata` persistence across app restart verified
 - [ ] **DWNLD-02**: `package.json` migrated to mainline `@kesha-antonov/react-native-background-downloader@4.5.3`
 - [ ] **DWNLD-03**: `DownloadService.ts` API calls updated to mainline interface (all renamed methods, including `checkForExistingDownloads` → `getExistingDownloadTasks`)
 - [ ] **DWNLD-04**: `withExcludeFromBackup` plugin behavior verified post-migration (v1.1 iCloud exclusion fix must not regress)
@@ -95,7 +95,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EFFECT-06   | 11    | Complete |
 | DECOMP-01   | 12    | Complete |
 | DECOMP-02   | 12    | Complete |
-| DWNLD-01    | 13    | Pending  |
+| DWNLD-01    | 13    | Complete |
 | DWNLD-02    | 13    | Pending  |
 | DWNLD-03    | 13    | Pending  |
 | DWNLD-04    | 13    | Pending  |
