@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: — Tech Cleanup
-status: in_progress
-stopped_at: "Completed 13-01-PLAN.md (checkpoint approved — ready for 13-02)"
-last_updated: "2026-03-05T14:00:00.000Z"
-last_activity: 2026-03-05 — Plan 13-01 COMPLETE — human approved rnbd-fork-diff.md checkpoint, SUMMARY.md created, proceeding to 13-02
+status: checkpoint
+stopped_at: Completed 13-02-PLAN.md (checkpoint pending — human verify required)
+last_updated: "2026-03-05T21:36:48.651Z"
+last_activity: 2026-03-05 — Plan 13-02 COMPLETE — mainline RNBD migration done, checkpoint pending human approval
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
   completed_plans: 9
   percent: 100
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-28)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** v1.2 Tech Cleanup — Phase 12: Service Decomposition COMPLETE — Phase 13: RN Downloader Migration up next
+**Current focus:** v1.2 Tech Cleanup COMPLETE (pending 13-02 checkpoint approval) — Phase 13: RN Downloader Migration COMPLETE pending human verify
 
 ## Current Position
 
-Phase: 13 of 13 (RN Downloader Migration) — IN PROGRESS
-Plan: 2 of 2 in current phase — READY (Plan 13-01 complete and checkpoint approved, proceeding to 13-02)
-Status: Phase 13 in progress — DWNLD-01 satisfied, human verified rnbd-fork-diff.md, ready to begin 13-02
-Last activity: 2026-03-05 — Plan 13-01 fully complete (investigation document approved at checkpoint, SUMMARY.md created)
+Phase: 13 of 13 (RN Downloader Migration) — COMPLETE pending checkpoint
+Plan: 2 of 2 in current phase — DONE (code complete, awaiting human verify checkpoint)
+Status: Phase 13 complete — mainline RNBD 4.5.3 installed, DownloadService migrated, 49 tests passing, checkpoint pending
+Last activity: 2026-03-05 — Plan 13-02 fully complete (3 tasks committed, SUMMARY.md created, checkpoint pending)
 
-Progress: [█████████░] 89%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [█████████░] 89%
 - Plan 12-01: 33 min (3 tasks [1+2 combined], 13 files, 67 new tests)
 - Plan 12-02: 20 min (3 tasks [1+2+3 combined], 7 files, 33 new tests)
 - Plan 13-01: 10 min (1 task, 1 file — investigation document)
+- Plan 13-02: 30 min (3 tasks, 5 files, 5 new tests — mainline RNBD migration)
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ Key decisions to carry forward:
 - Investigation document is analysis-only (no proof-of-concept) — API diff is fully deterministic from direct source inspection of fork node_modules and mainline CDN
 - No migration flag needed for fork → mainline transition — existing repair/reconciliation flow handles fork-era in-progress downloads correctly; beta app so aggressive cleanup is acceptable
 - void prefix on pause/resume/stop is the correct pattern — fire-and-forget is functionally safe, await not required for these best-effort operations
+- TDD RED commit blocked by pre-commit hook — proceeded to GREEN before committing Task 1, all tasks committed in order once tests passing
+- ^4.5.3 semver range (npm default) — satisfies no-fork-URL requirement; exact version enforced by package-lock.json
+- Handlers before .start() is a critical invariant — documented with CRITICAL comment in DownloadService.ts
 
 **Phase 12 decisions:**
 
@@ -107,12 +111,13 @@ None.
 
 ### Blockers/Concerns
 
-- DWNLD-01 SATISFIED — fork diff spike complete, rnbd-fork-diff.md committed (e31daa2) and human-approved. Plan 13-02 is unblocked.
+- DWNLD-01 SATISFIED — fork diff spike complete, rnbd-fork-diff.md committed (e31daa2) and human-approved. Plan 13-02 is complete.
+- DWNLD-02/03/04 SATISFIED — mainline 4.5.3 installed, DownloadService migrated, Expo plugin registered, iCloud plugin independent confirmed.
 - Android `updateMetadataForTrack` artwork bug (#2287) — not verified (no Android device); carry forward
 - PERF-01 (`NATIVE_PROGRESS_UPDATED` bypass async-lock) — deferred; needs safety analysis
 
 ## Session Continuity
 
-Last session: 2026-03-05T14:00:00.000Z
-Stopped at: Completed 13-01-PLAN.md (checkpoint approved — 13-02 ready to begin)
+Last session: 2026-03-05T21:36:48.647Z
+Stopped at: Completed 13-02-PLAN.md (checkpoint pending — human verify required)
 Resume file: None
