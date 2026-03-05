@@ -1,4 +1,4 @@
-import { clearAudioFileDownloadStatus, markAudioFileAsDownloaded } from "@/db/helpers/audioFiles";
+import { markAudioFileAsDownloaded } from "@/db/helpers/audioFiles";
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { cacheCoverIfMissing } from "@/lib/covers";
@@ -13,12 +13,16 @@ import {
   downloadFileExists,
   ensureDownloadsDirectory,
   getDownloadPath,
-  getDownloadsDirectory,
-  verifyFileExists,
 } from "@/lib/fileSystem";
 import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 import { logger } from "@/lib/logger";
 import { apiClientService } from "@/services/ApiClientService";
+import { DownloadRepairCollaborator } from "@/services/download/DownloadRepairCollaborator";
+import { DownloadStatusCollaborator } from "@/services/download/DownloadStatusCollaborator";
+import type {
+  IDownloadRepairCollaborator,
+  IDownloadStatusCollaborator,
+} from "@/services/download/types";
 import type {
   DownloadConfig,
   DownloadInfo,
@@ -49,9 +53,13 @@ export class DownloadService {
   private activeDownloads = new Map<string, DownloadInfo>();
   private config: DownloadConfig;
   private isInitialized = false;
+  private statusCollaborator!: IDownloadStatusCollaborator;
+  private repairCollaborator!: IDownloadRepairCollaborator;
 
   private constructor(config: DownloadConfig = DEFAULT_DOWNLOAD_CONFIG) {
     this.config = config;
+    this.statusCollaborator = new DownloadStatusCollaborator();
+    this.repairCollaborator = new DownloadRepairCollaborator();
   }
 
   public static getInstance(config?: DownloadConfig): DownloadService {
@@ -429,67 +437,7 @@ export class DownloadService {
    * Check if a library item is fully downloaded
    */
   public async isLibraryItemDownloaded(libraryItemId: string): Promise<boolean> {
-    log.info(`Checking download status for library item ${libraryItemId}...`);
-
-    try {
-      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
-      if (!metadata) {
-        log.info(`No metadata found for ${libraryItemId} - not downloaded`);
-        return false;
-      }
-
-      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-      if (audioFiles.length === 0) {
-        log.info(`No audio files found for ${libraryItemId} - not downloaded`);
-        return false;
-      }
-
-      log.info(
-        `Found ${audioFiles.length} audio files for ${libraryItemId}, verifying download status...`
-      );
-
-      // Check if all audio files are marked as downloaded AND actually exist on disk
-      const downloadCheckPromises = audioFiles.map(async (file, index) => {
-        log.info(`Checking file ${index + 1}/${audioFiles.length}: ${file.filename}`);
-
-        if (!file.downloadInfo?.isDownloaded) {
-          log.info(`  ✗ File ${file.filename} not marked as downloaded in database`);
-          return false;
-        }
-
-        log.info(
-          `  ✓ File ${file.filename} marked as downloaded at: ${file.downloadInfo.downloadPath}`
-        );
-
-        // Verify the file actually exists on disk
-        const fileExists = await verifyFileExists(file.downloadInfo.downloadPath);
-        if (!fileExists) {
-          log.warn(
-            `  ✗ File ${file.filename} marked as downloaded but MISSING from disk at: ${file.downloadInfo.downloadPath}`
-          );
-          log.warn(`    This may indicate iOS cleaned up the file to free storage space`);
-          // TODO: Could mark as not downloaded in database here
-        } else {
-          log.info(`  ✓ File ${file.filename} verified on disk`);
-        }
-        return fileExists;
-      });
-
-      const downloadResults = await Promise.all(downloadCheckPromises);
-      const isDownloaded = downloadResults.every((result) => result);
-
-      const downloadedCount = downloadResults.filter((r) => r).length;
-      log.info(
-        `Download verification complete for ${libraryItemId}: ${downloadedCount}/${audioFiles.length} files present on disk`
-      );
-      log.info(`Final result: ${isDownloaded ? "FULLY DOWNLOADED" : "NOT FULLY DOWNLOADED"}`);
-
-      return isDownloaded;
-    } catch (error) {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      log.error(`Error checking download status for ${libraryItemId}:`, errorObj);
-      return false;
-    }
+    return this.statusCollaborator.isLibraryItemDownloaded(libraryItemId);
   }
 
   /**
@@ -498,176 +446,35 @@ export class DownloadService {
   public async getDownloadProgress(
     libraryItemId: string
   ): Promise<{ downloaded: number; total: number; progress: number }> {
-    try {
-      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
-      if (!metadata) return { downloaded: 0, total: 0, progress: 0 };
-
-      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-      const total = audioFiles.length;
-      const downloaded = audioFiles.filter((file) => file.downloadInfo?.isDownloaded).length;
-      const progress = total > 0 ? downloaded / total : 0;
-
-      return { downloaded, total, progress };
-    } catch (error) {
-      log.error(`Error getting download progress for ${libraryItemId}:`, error as Error);
-      return { downloaded: 0, total: 0, progress: 0 };
-    }
+    return this.statusCollaborator.getDownloadProgress(libraryItemId);
   }
 
   /**
-   * Repair download status for a library item
+   * Repair download status for a library item.
    *
    * This addresses an iOS issue where the application container path changes between
-   * app launches. When this happens, absolute file paths stored in the database become
-   * invalid even though the files still exist on disk.
-   *
-   * This function:
-   * 1. Checks all audio files marked as downloaded
-   * 2. Verifies each file exists at the stored path
-   * 3. If not, attempts to find the file using just the filename (relative to the downloads directory)
-   * 4. Updates the database with the corrected path if found
-   * 5. Clears the download status if the file truly doesn't exist
+   * app launches. Delegates to DownloadRepairCollaborator.
    *
    * @param libraryItemId The library item to repair
    * @returns Number of files repaired
    */
   public async repairDownloadStatus(libraryItemId: string): Promise<number> {
-    log.info(`[DownloadService] Repairing download status for ${libraryItemId}...`);
-
-    try {
-      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
-      if (!metadata) {
-        log.info(`No metadata found for ${libraryItemId}`);
-        return 0;
-      }
-
-      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-      if (audioFiles.length === 0) {
-        log.info(`No audio files found for ${libraryItemId}`);
-        return 0;
-      }
-
-      let repairedCount = 0;
-
-      for (const file of audioFiles) {
-        if (!file.downloadInfo?.isDownloaded) {
-          // Not marked as downloaded, skip
-          continue;
-        }
-
-        // Check if file exists at stored path
-        const existsAtStoredPath = await verifyFileExists(file.downloadInfo.downloadPath);
-
-        if (existsAtStoredPath) {
-          // File is fine, no repair needed
-          continue;
-        }
-
-        log.warn(
-          `[DownloadService] File marked as downloaded but missing at stored path: ${file.filename}`
-        );
-        log.warn(`  Stored path: ${file.downloadInfo.downloadPath}`);
-
-        // Try to find the file using the expected download path (current container)
-        const expectedPath = getDownloadPath(libraryItemId, file.filename);
-        const existsAtExpectedPath = await verifyFileExists(expectedPath);
-
-        if (existsAtExpectedPath) {
-          log.info(`  ✓ Found file at expected path: ${expectedPath}`);
-          log.info(`  Updating database with corrected path...`);
-
-          // Update the database with the corrected path
-          await markAudioFileAsDownloaded(file.id, expectedPath);
-          repairedCount++;
-
-          // Re-apply iCloud exclusion after path repair (iOS container migration re-enables backup)
-          try {
-            await setExcludeFromBackup(expectedPath);
-            log.info(`  ✓ iCloud exclusion re-applied after path repair: ${file.filename}`);
-          } catch (error) {
-            log.warn(
-              `  iCloud exclusion failed after repair for ${file.filename}: ${String(error)}`
-            );
-            // Continue - path is repaired even if exclusion fails (best-effort)
-          }
-
-          log.info(`  ✓ Repaired download path for ${file.filename}`);
-        } else {
-          log.warn(`  ✗ File not found at expected path either: ${expectedPath}`);
-          log.warn(`  File may have been deleted by iOS to free storage space`);
-          log.warn(`  Clearing download status...`);
-
-          // File truly doesn't exist, clear the download status
-          await clearAudioFileDownloadStatus(file.id);
-        }
-      }
-
-      if (repairedCount > 0) {
-        log.info(
-          `[DownloadService] Repaired ${repairedCount} file(s) for library item ${libraryItemId}`
-        );
-      } else {
-        log.info(`[DownloadService] No repairs needed for library item ${libraryItemId}`);
-      }
-
-      return repairedCount;
-    } catch (error) {
-      log.error(`Error repairing download status for ${libraryItemId}:`, error as Error);
-      return 0;
-    }
+    return this.repairCollaborator.repairDownloadStatus(libraryItemId);
   }
 
   /**
-   * Delete downloaded files for a library item
+   * Delete downloaded files for a library item and clear DB status.
+   * Delegates to DownloadRepairCollaborator.
    */
   public async deleteDownloadedLibraryItem(libraryItemId: string): Promise<void> {
-    try {
-      // Delete from both Documents and Caches directories
-      const docsDir = getDownloadsDirectory(libraryItemId, "documents");
-      if (docsDir.exists) {
-        await docsDir.delete();
-        log.info(`Deleted downloads from Documents for ${libraryItemId}`);
-      }
-
-      const cacheDir = getDownloadsDirectory(libraryItemId, "caches");
-      if (cacheDir.exists) {
-        await cacheDir.delete();
-        log.info(`Deleted downloads from Caches for ${libraryItemId}`);
-      }
-
-      // Update database to mark files as not downloaded
-      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
-      if (metadata) {
-        const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-        for (const audioFile of audioFiles) {
-          if (audioFile.downloadInfo?.isDownloaded) {
-            await clearAudioFileDownloadStatus(audioFile.id);
-          }
-        }
-      }
-    } catch (error) {
-      log.error(`Failed to delete downloads for ${libraryItemId}:`, error as Error);
-      throw error;
-    }
+    return this.repairCollaborator.deleteDownloadedLibraryItem(libraryItemId);
   }
 
   /**
    * Get total size of downloaded files for a library item
    */
   public async getDownloadedSize(libraryItemId: string): Promise<number> {
-    try {
-      // Calculate from database (works regardless of storage location)
-      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
-      if (!metadata) return 0;
-
-      const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-      return audioFiles
-        .filter((file) => file.downloadInfo?.isDownloaded)
-        .reduce((total, file) => total + (file.size || 0), 0);
-    } catch (error) {
-      log.error(`Error calculating download size for ${libraryItemId}:`, error as Error);
-      return 0;
-    }
+    return this.statusCollaborator.getDownloadedSize(libraryItemId);
   }
 
   // Private methods
