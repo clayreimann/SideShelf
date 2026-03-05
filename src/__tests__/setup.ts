@@ -133,8 +133,11 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 
 // Mock third-party native modules
 jest.mock("@kesha-antonov/react-native-background-downloader", () => ({
-  download: jest.fn(),
-  checkForExistingDownloads: jest.fn(() => Promise.resolve([])),
+  default: undefined,
+  createDownloadTask: jest.fn(),
+  getExistingDownloadTasks: jest.fn(() => Promise.resolve([])),
+  setConfig: jest.fn(),
+  completeHandler: jest.fn(),
 }));
 
 jest.mock("react-native-track-player", () => ({
