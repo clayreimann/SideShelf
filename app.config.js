@@ -60,6 +60,7 @@ module.exports = ({ config }) => {
     },
     plugins: [
       withExcludeFromBackup,
+      ["@kesha-antonov/react-native-background-downloader", {}],
       "expo-router",
       [
         "expo-splash-screen",

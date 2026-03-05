@@ -38,7 +38,7 @@
   "dependencies": {
     "@expo/config-plugins": "^54.0.1",
     "@expo/vector-icons": "^15.0.2",
-    "@kesha-antonov/react-native-background-downloader": "github:clayreimann/react-native-background-downloader#spike-event-queue",
+    "@kesha-antonov/react-native-background-downloader": "^4.5.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "^11.4.1",
     "@react-native-menu/menu": "^2.0.0",
