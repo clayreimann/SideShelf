@@ -3,11 +3,13 @@
  *
  * Focuses on:
  *   - getInstance() singleton behavior
- *   - initialize() calls RNBackgroundDownloader
+ *   - initialize() calls getExistingDownloadTasks (mainline API)
  *   - isDownloadActive() / getDownloadStatus() — direct Map reads (NOT delegated)
  *   - subscribeToProgress / unsubscribeFromProgress / getCurrentProgress / rewireProgressCallbacks
  *   - pauseDownload / resumeDownload / cancelDownload
  *   - startDownload error paths
+ *   - startDownload() calls createDownloadTask + task.start() (mainline API)
+ *   - done() handler applies iCloud exclusion via setExcludeFromBackup
  *   - Delegation: isLibraryItemDownloaded / getDownloadProgress / getDownloadedSize
  *     delegate to statusCollaborator; repairDownloadStatus / deleteDownloadedLibraryItem
  *     delegate to repairCollaborator
@@ -20,9 +22,11 @@ import { DownloadService } from "../DownloadService";
 // --- Mocks ---
 
 jest.mock("@kesha-antonov/react-native-background-downloader", () => ({
+  default: undefined,
+  createDownloadTask: jest.fn(),
+  getExistingDownloadTasks: jest.fn(() => Promise.resolve([])),
   setConfig: jest.fn(),
-  checkForExistingDownloads: jest.fn(() => Promise.resolve([])),
-  download: jest.fn(),
+  completeHandler: jest.fn(),
 }));
 
 jest.mock("@/db/helpers/audioFiles", () => ({
@@ -90,6 +94,11 @@ jest.mock("@/lib/fileSystem", () => ({
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { createSpeedTracker } from "@/lib/downloads/speedTracker";
+import {
+  createDownloadTask,
+  getExistingDownloadTasks,
+  setConfig,
+} from "@kesha-antonov/react-native-background-downloader";
 
 const mockGetMediaMetadataByLibraryItemId = getMediaMetadataByLibraryItemId as jest.MockedFunction<
   typeof getMediaMetadataByLibraryItemId
@@ -97,6 +106,11 @@ const mockGetMediaMetadataByLibraryItemId = getMediaMetadataByLibraryItemId as j
 const mockGetAudioFilesWithDownloadInfo = getAudioFilesWithDownloadInfo as jest.MockedFunction<
   typeof getAudioFilesWithDownloadInfo
 >;
+const mockCreateDownloadTask = createDownloadTask as jest.MockedFunction<typeof createDownloadTask>;
+const mockGetExistingDownloadTasks = getExistingDownloadTasks as jest.MockedFunction<
+  typeof getExistingDownloadTasks
+>;
+const mockSetConfig = setConfig as jest.MockedFunction<typeof setConfig>;
 
 // --- Test helpers ---
 
@@ -157,20 +171,31 @@ describe("DownloadService facade", () => {
   });
 
   describe("initialize()", () => {
-    it("calls RNBackgroundDownloader.setConfig and checkForExistingDownloads", async () => {
-      const RNBgDownloader = require("@kesha-antonov/react-native-background-downloader");
+    it("calls setConfig and getExistingDownloadTasks (mainline named exports)", async () => {
       const instance = DownloadService.getInstance();
       await instance.initialize();
-      expect(RNBgDownloader.setConfig).toHaveBeenCalledTimes(1);
-      expect(RNBgDownloader.checkForExistingDownloads).toHaveBeenCalledTimes(1);
+      expect(mockSetConfig).toHaveBeenCalledTimes(1);
+      expect(mockGetExistingDownloadTasks).toHaveBeenCalledTimes(1);
+    });
+
+    it("calls getExistingDownloadTasks exactly once", async () => {
+      const instance = DownloadService.getInstance();
+      await instance.initialize();
+      expect(mockGetExistingDownloadTasks).toHaveBeenCalledTimes(1);
+    });
+
+    it("completes without error when getExistingDownloadTasks returns empty array", async () => {
+      mockGetExistingDownloadTasks.mockResolvedValueOnce([]);
+      const instance = DownloadService.getInstance();
+      await expect(instance.initialize()).resolves.not.toThrow();
+      expect(mockGetExistingDownloadTasks).toHaveBeenCalledTimes(1);
     });
 
     it("does not re-initialize if already initialized", async () => {
-      const RNBgDownloader = require("@kesha-antonov/react-native-background-downloader");
       const instance = DownloadService.getInstance();
       await instance.initialize();
       await instance.initialize();
-      expect(RNBgDownloader.setConfig).toHaveBeenCalledTimes(1);
+      expect(mockSetConfig).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -576,6 +601,7 @@ describe("DownloadService facade", () => {
       setExcludeFromBackup.mockResolvedValue(undefined);
 
       // Create a chainable task mock that immediately invokes 'done' callback
+      const startSpy = jest.fn();
       const mockTask: any = {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
@@ -585,14 +611,14 @@ describe("DownloadService facade", () => {
           return mockTask;
         }),
         error: jest.fn().mockReturnThis(),
+        start: startSpy,
         state: "DONE",
         pause: jest.fn(),
         resume: jest.fn(),
         stop: jest.fn(),
       };
 
-      const RNBgDownloader = require("@kesha-antonov/react-native-background-downloader");
-      RNBgDownloader.download.mockReturnValue(mockTask);
+      mockCreateDownloadTask.mockReturnValue(mockTask);
 
       const instance = DownloadService.getInstance();
       await instance.initialize();
@@ -605,6 +631,168 @@ describe("DownloadService facade", () => {
         expect.stringContaining("chapter-1.mp3"),
         "documents"
       );
+    });
+
+    it("calls createDownloadTask with correct id, url, destination, headers, metadata shape", async () => {
+      const metadata = { id: "meta-1", libraryItemId: "item-1" };
+      mockGetMediaMetadataByLibraryItemId.mockResolvedValue(metadata as any);
+      mockGetAudioFilesWithDownloadInfo.mockResolvedValue([
+        {
+          id: "af-1",
+          ino: "ino-1",
+          filename: "chapter-1.mp3",
+          size: 1000,
+          downloadInfo: null,
+        } as any,
+      ]);
+
+      const { markAudioFileAsDownloaded } = require("@/db/helpers/audioFiles");
+      markAudioFileAsDownloaded.mockResolvedValue(undefined);
+      const { cacheCoverIfMissing } = require("@/lib/covers");
+      cacheCoverIfMissing.mockResolvedValue(undefined);
+      const { setExcludeFromBackup } = require("@/lib/iCloudBackupExclusion");
+      setExcludeFromBackup.mockResolvedValue(undefined);
+
+      const startSpy = jest.fn();
+      const mockTask: any = {
+        begin: jest.fn().mockReturnThis(),
+        progress: jest.fn().mockReturnThis(),
+        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+          return mockTask;
+        }),
+        error: jest.fn().mockReturnThis(),
+        start: startSpy,
+        state: "DONE",
+        pause: jest.fn(),
+        resume: jest.fn(),
+        stop: jest.fn(),
+      };
+      mockCreateDownloadTask.mockReturnValue(mockTask);
+
+      const instance = DownloadService.getInstance();
+      await instance.initialize();
+      await instance.startDownload("item-1");
+
+      expect(mockCreateDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: expect.stringContaining("item-1"),
+          url: expect.any(String),
+          destination: expect.any(String),
+          headers: expect.objectContaining({
+            Authorization: expect.stringContaining("Bearer"),
+          }),
+          metadata: expect.objectContaining({
+            libraryItemId: "item-1",
+            audioFileId: "af-1",
+            filename: "chapter-1.mp3",
+          }),
+        })
+      );
+    });
+
+    it("calls task.start() after handler registration", async () => {
+      const metadata = { id: "meta-1", libraryItemId: "item-1" };
+      mockGetMediaMetadataByLibraryItemId.mockResolvedValue(metadata as any);
+      mockGetAudioFilesWithDownloadInfo.mockResolvedValue([
+        {
+          id: "af-1",
+          ino: "ino-1",
+          filename: "chapter-1.mp3",
+          size: 1000,
+          downloadInfo: null,
+        } as any,
+      ]);
+
+      const { markAudioFileAsDownloaded } = require("@/db/helpers/audioFiles");
+      markAudioFileAsDownloaded.mockResolvedValue(undefined);
+      const { cacheCoverIfMissing } = require("@/lib/covers");
+      cacheCoverIfMissing.mockResolvedValue(undefined);
+      const { setExcludeFromBackup } = require("@/lib/iCloudBackupExclusion");
+      setExcludeFromBackup.mockResolvedValue(undefined);
+
+      const handlerRegistrationOrder: string[] = [];
+      const startSpy = jest.fn().mockImplementation(() => {
+        handlerRegistrationOrder.push("start");
+      });
+      const mockTask: any = {
+        begin: jest.fn().mockImplementation(() => {
+          handlerRegistrationOrder.push("begin");
+          return mockTask;
+        }),
+        progress: jest.fn().mockImplementation(() => {
+          handlerRegistrationOrder.push("progress");
+          return mockTask;
+        }),
+        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+          handlerRegistrationOrder.push("done");
+          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+          return mockTask;
+        }),
+        error: jest.fn().mockImplementation(() => {
+          handlerRegistrationOrder.push("error");
+          return mockTask;
+        }),
+        start: startSpy,
+        state: "DONE",
+        pause: jest.fn(),
+        resume: jest.fn(),
+        stop: jest.fn(),
+      };
+      mockCreateDownloadTask.mockReturnValue(mockTask);
+
+      const instance = DownloadService.getInstance();
+      await instance.initialize();
+      await instance.startDownload("item-1");
+
+      // start() must be called after all handlers are registered
+      expect(startSpy).toHaveBeenCalledTimes(1);
+      const startIndex = handlerRegistrationOrder.indexOf("start");
+      const errorIndex = handlerRegistrationOrder.indexOf("error");
+      expect(startIndex).toBeGreaterThan(errorIndex); // start comes after error (last handler)
+    });
+
+    it("done() handler calls setExcludeFromBackup with the download path", async () => {
+      const metadata = { id: "meta-1", libraryItemId: "item-1" };
+      mockGetMediaMetadataByLibraryItemId.mockResolvedValue(metadata as any);
+      mockGetAudioFilesWithDownloadInfo.mockResolvedValue([
+        {
+          id: "af-1",
+          ino: "ino-1",
+          filename: "chapter-1.mp3",
+          size: 1000,
+          downloadInfo: null,
+        } as any,
+      ]);
+
+      const { markAudioFileAsDownloaded } = require("@/db/helpers/audioFiles");
+      markAudioFileAsDownloaded.mockResolvedValue(undefined);
+      const { cacheCoverIfMissing } = require("@/lib/covers");
+      cacheCoverIfMissing.mockResolvedValue(undefined);
+      const { setExcludeFromBackup } = require("@/lib/iCloudBackupExclusion");
+      setExcludeFromBackup.mockResolvedValue(undefined);
+
+      const mockTask: any = {
+        begin: jest.fn().mockReturnThis(),
+        progress: jest.fn().mockReturnThis(),
+        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+          return mockTask;
+        }),
+        error: jest.fn().mockReturnThis(),
+        start: jest.fn(),
+        state: "DONE",
+        pause: jest.fn(),
+        resume: jest.fn(),
+        stop: jest.fn(),
+      };
+      mockCreateDownloadTask.mockReturnValue(mockTask);
+
+      const instance = DownloadService.getInstance();
+      await instance.initialize();
+      await instance.startDownload("item-1");
+
+      expect(setExcludeFromBackup).toHaveBeenCalledWith(expect.stringContaining("chapter-1.mp3"));
     });
 
     it("triggers error path when download task fires error event", async () => {
@@ -632,14 +820,14 @@ describe("DownloadService facade", () => {
           Promise.resolve().then(() => cb({ error: "Download failed" }));
           return mockTask;
         }),
+        start: jest.fn(),
         state: "FAILED",
         pause: jest.fn(),
         resume: jest.fn(),
         stop: jest.fn(),
       };
 
-      const RNBgDownloader = require("@kesha-antonov/react-native-background-downloader");
-      RNBgDownloader.download.mockReturnValue(mockTask);
+      mockCreateDownloadTask.mockReturnValue(mockTask);
 
       const instance = DownloadService.getInstance();
       await instance.initialize();
@@ -686,8 +874,7 @@ describe("DownloadService facade", () => {
   // ─── initialize() with existing tasks ────────────────────────────────────────
 
   describe("initialize() with existing background tasks", () => {
-    it("restores existing downloads and registers task event listeners", async () => {
-      const RNBgDownloader = require("@kesha-antonov/react-native-background-downloader");
+    it("re-attaches progress, done, and error handlers to restored tasks", async () => {
       let progressCallback: ((data: any) => void) | null = null;
       let doneCallback: ((data: any) => void) | null = null;
       let errorCallback: ((err: any) => void) | null = null;
@@ -711,7 +898,7 @@ describe("DownloadService facade", () => {
         resume: jest.fn(),
         stop: jest.fn(),
       };
-      RNBgDownloader.checkForExistingDownloads.mockResolvedValueOnce([mockTask]);
+      mockGetExistingDownloadTasks.mockResolvedValueOnce([mockTask] as any);
       mockGetMediaMetadataByLibraryItemId.mockResolvedValue({ id: "meta-1" } as any);
       mockGetAudioFilesWithDownloadInfo.mockResolvedValue([
         { id: "af-1", size: 1000, downloadInfo: { isDownloaded: false } },
@@ -740,7 +927,6 @@ describe("DownloadService facade", () => {
     });
 
     it("fires done callback for restored task to trigger handleTaskCompletion", async () => {
-      const RNBgDownloader = require("@kesha-antonov/react-native-background-downloader");
       const { markAudioFileAsDownloaded } = require("@/db/helpers/audioFiles");
       markAudioFileAsDownloaded.mockResolvedValue(undefined);
       const { setExcludeFromBackup } = require("@/lib/iCloudBackupExclusion");
@@ -760,7 +946,7 @@ describe("DownloadService facade", () => {
         resume: jest.fn(),
         stop: jest.fn(),
       };
-      RNBgDownloader.checkForExistingDownloads.mockResolvedValueOnce([mockTask]);
+      mockGetExistingDownloadTasks.mockResolvedValueOnce([mockTask] as any);
       mockGetMediaMetadataByLibraryItemId.mockResolvedValue({ id: "meta-1" } as any);
       mockGetAudioFilesWithDownloadInfo.mockResolvedValue([]);
 
