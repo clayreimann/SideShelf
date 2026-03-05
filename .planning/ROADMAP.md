@@ -128,19 +128,19 @@ Plans:
 
 ## Progress
 
-| Phase                                        | Milestone | Plans Complete | Status      | Completed  |
-| -------------------------------------------- | --------- | -------------- | ----------- | ---------- |
-| 1. Observer Mode                             | v1.0      | -              | Complete    | 2026-02-16 |
-| 2. Execution Control                         | v1.0      | 2/2            | Complete    | 2026-02-16 |
-| 3. Position Reconciliation                   | v1.0      | 2/2            | Complete    | 2026-02-16 |
-| 03.1. Bug Fixes                              | v1.0      | 2/2            | Complete    | 2026-02-18 |
-| 4. State Propagation                         | v1.0      | 3/3            | Complete    | 2026-02-19 |
-| 5. Cleanup                                   | v1.0      | 6/6            | Complete    | 2026-02-20 |
-| 6. iCloud Exclusion                          | v1.1      | 2/2            | Complete    | 2026-02-23 |
-| 7. Download Tracking                         | v1.1      | 3/3            | Complete    | 2026-02-23 |
-| 8. Skip & Player Polish                      | v1.1      | 3/3            | Complete    | 2026-02-27 |
-| 9. Navigation & UI Polish                    | v1.1      | 3/3            | Complete    | 2026-02-27 |
-| 10. DB Quick Wins                            | 2/2       | Complete       | 2026-03-04  | -          |
-| 11. useEffect Cleanup + State Centralization | 2/2       | Complete       | 2026-03-04  | -          |
-| 12. Service Decomposition                    | 2/2       | Complete       | 2026-03-05  | -          |
-| 13. RN Downloader Migration                  | v1.2      | 0/2            | Not started | -          |
+| Phase                                        | Milestone | Plans Complete | Status     | Completed  |
+| -------------------------------------------- | --------- | -------------- | ---------- | ---------- |
+| 1. Observer Mode                             | v1.0      | -              | Complete   | 2026-02-16 |
+| 2. Execution Control                         | v1.0      | 2/2            | Complete   | 2026-02-16 |
+| 3. Position Reconciliation                   | v1.0      | 2/2            | Complete   | 2026-02-16 |
+| 03.1. Bug Fixes                              | v1.0      | 2/2            | Complete   | 2026-02-18 |
+| 4. State Propagation                         | v1.0      | 3/3            | Complete   | 2026-02-19 |
+| 5. Cleanup                                   | v1.0      | 6/6            | Complete   | 2026-02-20 |
+| 6. iCloud Exclusion                          | v1.1      | 2/2            | Complete   | 2026-02-23 |
+| 7. Download Tracking                         | v1.1      | 3/3            | Complete   | 2026-02-23 |
+| 8. Skip & Player Polish                      | v1.1      | 3/3            | Complete   | 2026-02-27 |
+| 9. Navigation & UI Polish                    | v1.1      | 3/3            | Complete   | 2026-02-27 |
+| 10. DB Quick Wins                            | 2/2       | Complete       | 2026-03-04 | -          |
+| 11. useEffect Cleanup + State Centralization | 2/2       | Complete       | 2026-03-04 | -          |
+| 12. Service Decomposition                    | 2/2       | Complete       | 2026-03-05 | -          |
+| 13. RN Downloader Migration                  | 1/2       | In Progress    |            | -          |

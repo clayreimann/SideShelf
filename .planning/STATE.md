@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: — Tech Cleanup
-status: executing
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-03-05T00:03:55.781Z"
-last_activity: 2026-03-05 — Plan 12-02 complete (DownloadService facade + 2 collaborators, 91% coverage, DECOMP-02 satisfied)
+status: completed
+stopped_at: "Completed 13-01-PLAN.md (checkpoint: awaiting human verification of rnbd-fork-diff.md)"
+last_updated: "2026-03-05T13:29:14.023Z"
+last_activity: 2026-03-05 — Plan 13-01 complete (RNBD fork diff investigation document written, DWNLD-01 satisfied, awaiting human checkpoint)
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 7
-  percent: 100
+  total_plans: 9
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-02-28)
 
 ## Current Position
 
-Phase: 12 of 13 (Service Decomposition) — COMPLETE
-Plan: 2 of 2 in current phase — COMPLETE (Plan 12-02 complete, Phase 13 up next)
-Status: Phase 12 complete, ready for Phase 13
-Last activity: 2026-03-05 — Plan 12-02 complete (DownloadService facade + 2 collaborators, 91% coverage, DECOMP-02 satisfied)
+Phase: 13 of 13 (RN Downloader Migration) — IN PROGRESS
+Plan: 1 of 2 in current phase — COMPLETE (Plan 13-01 complete, awaiting human checkpoint to proceed to 13-02)
+Status: Phase 13 in progress — DWNLD-01 satisfied, human verification of rnbd-fork-diff.md required before 13-02
+Last activity: 2026-03-05 — Plan 13-01 complete (RNBD fork diff investigation document written, DWNLD-01 satisfied, awaiting human checkpoint)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [██████████] 100%
 - Plan 11-02: 90 min (4 tasks, 14 files, 8 new tests)
 - Plan 12-01: 33 min (3 tasks [1+2 combined], 13 files, 67 new tests)
 - Plan 12-02: 20 min (3 tasks [1+2+3 combined], 7 files, 33 new tests)
+- Plan 13-01: 10 min (1 task, 1 file — investigation document)
 
 ## Accumulated Context
 
@@ -73,6 +74,12 @@ Key decisions to carry forward:
 - sql`excluded.col_name` uses SQL snake_case column names (not TypeScript camelCase); verified tagASIN maps to tag_asin
 - upsertGenres/Narrators/Tags wrapped in try/catch — reference data failures must not abort full item upsert
 - upsertLibraryItemTx removed after confirming zero callers outside its own file
+
+**Phase 13 decisions:**
+
+- Investigation document is analysis-only (no proof-of-concept) — API diff is fully deterministic from direct source inspection of fork node_modules and mainline CDN
+- No migration flag needed for fork → mainline transition — existing repair/reconciliation flow handles fork-era in-progress downloads correctly; beta app so aggressive cleanup is acceptable
+- void prefix on pause/resume/stop is the correct pattern — fire-and-forget is functionally safe, await not required for these best-effort operations
 
 **Phase 12 decisions:**
 
@@ -100,12 +107,12 @@ None.
 
 ### Blockers/Concerns
 
-- Phase 13 (RN Downloader Migration) requires a pre-phase fork diff spike (DWNLD-01) before any package.json changes — do not begin Plan 13-02 until spike is documented
+- DWNLD-01 SATISFIED — fork diff spike complete, rnbd-fork-diff.md committed (e31daa2). Do not begin Plan 13-02 until human has verified the document via checkpoint.
 - Android `updateMetadataForTrack` artwork bug (#2287) — not verified (no Android device); carry forward
 - PERF-01 (`NATIVE_PROGRESS_UPDATED` bypass async-lock) — deferred; needs safety analysis
 
 ## Session Continuity
 
-Last session: 2026-03-05T00:03:55.779Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-03-05T13:29:14.021Z
+Stopped at: Completed 13-01-PLAN.md (checkpoint: awaiting human verification of rnbd-fork-diff.md)
 Resume file: None
