@@ -41,7 +41,7 @@ See `.planning/milestones/v1.1-ROADMAP.md` for full phase details.
 - [x] **Phase 10: DB Quick Wins** - WAL mode, missing indexes, and N+1 upsert fixes in schema and helpers (completed 2026-03-04)
 - [x] **Phase 11: useEffect Cleanup + State Centralization** - Eliminate redundant effect-driven fetches and move shared state into Zustand slices (completed 2026-03-04)
 - [x] **Phase 12: Service Decomposition** - Split PlayerService and DownloadService into facade + focused collaborators (completed 2026-03-05)
-- [ ] **Phase 13: RN Downloader Migration** - Exit the custom fork, adopt mainline 4.5.3 with API adapter
+- [x] **Phase 13: RN Downloader Migration** - Exit the custom fork, adopt mainline 4.5.3 with API adapter (completed 2026-03-05)
 
 ## Phase Details
 
@@ -143,4 +143,4 @@ Plans:
 | 10. DB Quick Wins                            | 2/2       | Complete       | 2026-03-04 | -          |
 | 11. useEffect Cleanup + State Centralization | 2/2       | Complete       | 2026-03-04 | -          |
 | 12. Service Decomposition                    | 2/2       | Complete       | 2026-03-05 | -          |
-| 13. RN Downloader Migration                  | 1/2       | In Progress    |            | -          |
+| 13. RN Downloader Migration                  | 2/2       | Complete       | 2026-03-05 | -          |
