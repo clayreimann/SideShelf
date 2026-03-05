@@ -31,9 +31,12 @@ import type {
   DownloadSpeedTracker,
   DownloadTaskInfo,
 } from "@/types/services";
-import RNBackgroundDownloader, {
-  DownloadTask,
+import {
+  setConfig,
+  getExistingDownloadTasks,
+  createDownloadTask,
 } from "@kesha-antonov/react-native-background-downloader";
+import type { DownloadTask } from "@kesha-antonov/react-native-background-downloader";
 
 // Create cached sublogger for this service
 const log = logger.forTag("DownloadService");
@@ -77,13 +80,13 @@ export class DownloadService {
 
     try {
       // Configure background downloader
-      RNBackgroundDownloader.setConfig({
+      setConfig({
         progressInterval: this.config.progressInterval,
         isLogsEnabled: false,
       });
 
       log.info("Checking for existing background downloads...");
-      const existingTasks = await RNBackgroundDownloader.checkForExistingDownloads();
+      const existingTasks = await getExistingDownloadTasks();
 
       if (existingTasks.length > 0) {
         log.info(`Found ${existingTasks.length} existing background downloads`);
@@ -372,7 +375,7 @@ export class DownloadService {
     const downloadInfo = this.activeDownloads.get(libraryItemId);
     if (downloadInfo && !downloadInfo.isPaused) {
       downloadInfo.tasks.forEach((taskInfo) => {
-        taskInfo.task.pause();
+        void taskInfo.task.pause();
       });
       downloadInfo.isPaused = true;
       log.info(`Paused download for ${libraryItemId}`);
@@ -389,7 +392,7 @@ export class DownloadService {
     const downloadInfo = this.activeDownloads.get(libraryItemId);
     if (downloadInfo && downloadInfo.isPaused) {
       downloadInfo.tasks.forEach((taskInfo) => {
-        taskInfo.task.resume();
+        void taskInfo.task.resume();
       });
       downloadInfo.isPaused = false;
       log.info(`Resumed download for ${libraryItemId}`);
@@ -410,7 +413,7 @@ export class DownloadService {
 
       // Stop all tasks for this library item
       downloadInfo.tasks.forEach((taskInfo) => {
-        taskInfo.task.stop();
+        void taskInfo.task.stop();
       });
       this.activeDownloads.delete(libraryItemId);
       log.info(`Cancelled download for ${libraryItemId}`);
@@ -517,7 +520,7 @@ export class DownloadService {
       size: audioFile.size || 0,
     };
 
-    const task = RNBackgroundDownloader.download({
+    const task = createDownloadTask({
       id: `${libraryItemId}_${audioFile.id}`,
       url: downloadUrl,
       destination: destPath,
@@ -529,7 +532,11 @@ export class DownloadService {
         audioFileId: audioFile.id,
         filename: audioFile.filename,
       },
-    })
+    });
+
+    // CRITICAL: Register ALL handlers BEFORE calling task.start()
+    // The `begin` event fires immediately on start and will be missed if handlers register after.
+    task
       .begin((data) => {
         log.info(`Download begin for ${audioFile.filename}: ${JSON.stringify(data)}`);
       })
@@ -556,6 +563,8 @@ export class DownloadService {
       .error((data) => {
         log.info(`*** DOWNLOAD ERROR EVENT FIRED ***: ${JSON.stringify(data)}`);
       });
+
+    task.start(); // explicit start — required by mainline v4 API
 
     // Now set the task reference in taskInfo
     taskInfo.task = task;
