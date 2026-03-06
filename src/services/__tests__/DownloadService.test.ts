@@ -544,11 +544,12 @@ describe("DownloadService facade", () => {
       );
     });
 
-    it("returns without error when download is already in progress (reconnects callback)", async () => {
+    it("throws when download is already in progress", async () => {
       const instance = DownloadService.getInstance();
       injectActiveDownload(instance, "item-1");
-      // Should resolve silently, not throw
-      await expect(instance.startDownload("item-1")).resolves.toBeUndefined();
+      await expect(instance.startDownload("item-1")).rejects.toThrow(
+        "Download already in progress"
+      );
     });
 
     it("throws when metadata is not found", async () => {
