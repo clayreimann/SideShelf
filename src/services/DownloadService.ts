@@ -202,8 +202,18 @@ export class DownloadService {
 
     // Check if already downloading
     if (this.isDownloadActive(libraryItemId)) {
-      log.warn(`Download already in progress for ${libraryItemId}, rejecting new download request`);
-      throw new Error("Download already in progress for this item");
+      if (options?.forceRedownload) {
+        log.info(`Force redownload requested for ${libraryItemId}, cancelling existing download`);
+        await this.cancelDownload(libraryItemId);
+      } else {
+        log.info(
+          `Download already in progress for ${libraryItemId}, reconnecting progress callback`
+        );
+        if (onProgress) {
+          this.subscribeToProgress(libraryItemId, onProgress);
+        }
+        return;
+      }
     }
 
     log.info(`Starting download for library item ${libraryItemId}`);
