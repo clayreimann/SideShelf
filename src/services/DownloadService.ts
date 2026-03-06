@@ -206,13 +206,10 @@ export class DownloadService {
         log.info(`Force redownload requested for ${libraryItemId}, cancelling existing download`);
         await this.cancelDownload(libraryItemId);
       } else {
-        log.info(
-          `Download already in progress for ${libraryItemId}, reconnecting progress callback`
+        log.warn(
+          `Download already in progress for ${libraryItemId}, rejecting new download request`
         );
-        if (onProgress) {
-          this.subscribeToProgress(libraryItemId, onProgress);
-        }
-        return;
+        throw new Error("Download already in progress for this item");
       }
     }
 
@@ -444,6 +441,14 @@ export class DownloadService {
     const isActive = this.activeDownloads.has(libraryItemId);
     log.info(`Checking if download is active for ${libraryItemId}: ${isActive}`);
     return isActive;
+  }
+
+  /**
+   * Get IDs of all library items with active (in-progress) downloads.
+   * Used by DownloadSlice on init to sync Zustand state with restored downloads.
+   */
+  public getActiveDownloadIds(): string[] {
+    return Array.from(this.activeDownloads.keys());
   }
 
   /**

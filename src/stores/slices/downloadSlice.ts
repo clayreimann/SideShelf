@@ -113,8 +113,29 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
     }));
 
     try {
-      // Ensure download service is initialized
+      // Ensure download service is initialized (restores any in-progress NSURLSession tasks)
       await downloadService.initialize();
+
+      // Sync Zustand state with any downloads restored from the native layer.
+      // DownloadService.initialize() re-attaches native event handlers but has no way to
+      // push state back up to Zustand. We pull active IDs here so the UI immediately
+      // reflects in-progress downloads after a relaunch.
+      const restoredIds = downloadService.getActiveDownloadIds();
+      if (restoredIds.length > 0) {
+        log.info(
+          `Subscribing to ${restoredIds.length} restored active download(s): ${restoredIds.join(", ")}`
+        );
+        for (const itemId of restoredIds) {
+          downloadService.subscribeToProgress(itemId, (progress) => {
+            get().updateDownloadProgress(itemId, progress);
+            if (progress.status === "completed") {
+              get().completeDownload(itemId);
+            } else if (progress.status === "error" || progress.status === "cancelled") {
+              get().removeActiveDownload(itemId);
+            }
+          });
+        }
+      }
 
       // Load list of downloaded items from database
       // Query for library items that have at least one downloaded audio file
