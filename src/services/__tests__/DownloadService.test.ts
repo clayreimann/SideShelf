@@ -932,15 +932,12 @@ describe("DownloadService facade", () => {
       const { setExcludeFromBackup } = require("@/lib/iCloudBackupExclusion");
       setExcludeFromBackup.mockResolvedValue(undefined);
 
-      let doneCallback: ((data: any) => void) | null = null;
       const mockTask: any = {
         metadata: { libraryItemId: "item-restored", audioFileId: "af-1", filename: "ch1.mp3" },
         state: "DONE",
+        bytesDownloaded: 1000,
         progress: jest.fn().mockReturnThis(),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
-          doneCallback = cb;
-          return mockTask;
-        }),
+        done: jest.fn().mockReturnThis(),
         error: jest.fn().mockReturnThis(),
         pause: jest.fn(),
         resume: jest.fn(),
@@ -952,16 +949,16 @@ describe("DownloadService facade", () => {
 
       const instance = DownloadService.getInstance();
       await instance.initialize();
-      expect(instance.isDownloadActive("item-restored")).toBe(true);
 
-      // Fire the done callback to trigger handleTaskCompletion
-      if (doneCallback) {
-        doneCallback({ bytesDownloaded: 1000, bytesTotal: 1000 });
-        // Allow async operations (markAudioFileAsDownloaded + setExcludeFromBackup) to complete
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      // Allow the async completion chain (markAudioFileAsDownloaded + setExcludeFromBackup) to resolve
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
-      // After completion, item should be removed
+      // DONE tasks are handled immediately at restore time — no event callback needed.
+      // markAudioFileAsDownloaded and iCloud exclusion should have been applied.
+      expect(markAudioFileAsDownloaded).toHaveBeenCalled();
+      expect(setExcludeFromBackup).toHaveBeenCalled();
+
+      // After handling, the item should be removed from activeDownloads
       expect(instance.isDownloadActive("item-restored")).toBe(false);
     });
   });
