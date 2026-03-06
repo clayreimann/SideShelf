@@ -134,6 +134,33 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
               get().removeActiveDownload(itemId);
             }
           });
+
+          // subscribeToProgress only fires immediately if the service already has a
+          // lastProgressUpdate. On relaunch that's null until the first native event
+          // arrives. Seed Zustand now so the UI immediately reflects the in-progress
+          // state — real values arrive with the next native progress event.
+          const currentProgress = downloadService.getCurrentProgress(itemId);
+          if (currentProgress) {
+            get().updateDownloadProgress(itemId, currentProgress);
+          } else {
+            get().updateDownloadProgress(itemId, {
+              libraryItemId: itemId,
+              status: "downloading",
+              totalFiles: 1,
+              downloadedFiles: 0,
+              currentFile: "",
+              fileProgress: 0,
+              totalProgress: 0,
+              bytesDownloaded: 0,
+              totalBytes: 0,
+              fileBytesDownloaded: 0,
+              fileTotalBytes: 0,
+              downloadSpeed: 0,
+              speedSampleCount: 0,
+              canPause: true,
+              canResume: false,
+            });
+          }
         }
       }
 
