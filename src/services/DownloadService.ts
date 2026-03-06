@@ -56,6 +56,7 @@ export class DownloadService {
   private activeDownloads = new Map<string, DownloadInfo>();
   private config: DownloadConfig;
   private isInitialized = false;
+  private initializePromise: Promise<void> | null = null;
   private statusCollaborator!: IDownloadStatusCollaborator;
   private repairCollaborator!: IDownloadRepairCollaborator;
 
@@ -77,7 +78,13 @@ export class DownloadService {
    */
   public async initialize(): Promise<void> {
     if (this.isInitialized) return;
+    if (this.initializePromise) return this.initializePromise;
 
+    this.initializePromise = this._doInitialize();
+    return this.initializePromise;
+  }
+
+  private async _doInitialize(): Promise<void> {
     try {
       // Configure background downloader
       setConfig({
@@ -800,6 +807,31 @@ export class DownloadService {
           log.error(`Restored task error for ${taskInfo.filename}:`, error);
           this.handleDownloadError(libraryItemId, error);
         });
+
+        // If the download completed while the app was killed, the native
+        // downloadComplete event was already emitted and won't fire again.
+        // Handle completion immediately so the task doesn't stay stuck in activeDownloads.
+        if (taskInfo.task.state === "DONE") {
+          log.info(
+            `Task ${taskInfo.filename} already completed (done while app was killed), handling completion now`
+          );
+          const downloadPath = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
+          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPath, "documents")
+            .then(async () => {
+              try {
+                await setExcludeFromBackup(downloadPath);
+              } catch (error) {
+                log.error(
+                  `Failed to set iCloud exclusion for ${taskInfo.filename}:`,
+                  error as Error
+                );
+              }
+              this.handleTaskCompletion(libraryItemId, taskInfo, taskInfo.task.bytesDownloaded);
+            })
+            .catch((error: any) => {
+              log.error(`Error handling already-completed task ${taskInfo.filename}:`, error);
+            });
+        }
       }
 
       log.info(`Restored ${tasks.length} tasks for library item ${libraryItemId}`);
