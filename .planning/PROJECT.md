@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An Expo-based React Native mobile client for the Audiobookshelf self-hosted audiobook and podcast server. The app provides offline downloads, audio playback with chapter navigation, and progress synchronization across devices. The player system has been fully migrated to an event-driven coordinator architecture (v1.0), with bug fixes and polish applied in v1.1 — the coordinator is the single source of truth for all playback state, downloads are tracked accurately, and the UI is polished.
+An Expo-based React Native mobile client for the Audiobookshelf self-hosted audiobook and podcast server. The app provides offline downloads, audio playback with chapter navigation, and progress synchronization across devices. The coordinator owns all player state (v1.0), UI and downloads are polished (v1.1), and the codebase has undergone a full internal cleanup — SQLite performance, Zustand state centralization, service decomposition, and mainline RNBD migration (v1.2).
 
 ## Core Value
 
@@ -45,38 +45,51 @@ The coordinator owns player state — services execute its commands and report r
 - ✓ Tab reorder screen has drag handle visual affordance — v1.1 Phase 9
 - ✓ Cover art startup repair scan re-downloads missing covers after iOS app updates — v1.1 Phase 9
 
+**v1.2 — Tech Cleanup**
+
+- ✓ WAL journal mode + `synchronous=NORMAL` + 4 FK indexes — ~4x write throughput; DB errors show recovery UI — v1.2 Phase 10
+- ✓ Batch upserts across all DB helpers — 500-item sync: 1,000 queries → 1 batch operation — v1.2 Phase 10
+- ✓ `viewMode`, `progressMap`, `availableTags`, `userId` centralized into Zustand slices — v1.2 Phase 11
+- ✓ Redundant mount-time DB fetches removed from 5+ components; `wipeUserData` cleans in FK order — v1.2 Phase 11
+- ✓ PlayerService decomposed: facade + 4 collaborators at 92% coverage — v1.2 Phase 12
+- ✓ DownloadService decomposed: facade + 2 stateless collaborators at 91% coverage — v1.2 Phase 12
+- ✓ Custom RNBD fork (`spike-event-queue`) replaced by mainline 4.5.3; iCloud exclusion decode bug fixed — v1.2 Phase 13
+
 ### Active
 
-_No active requirements — v1.2 not yet defined._
+_No active requirements — v1.3 not yet defined._
 
 ### Out of Scope
 
 - Full playerSlice removal — Zustand/React integration is valuable; stays as read-only proxy
 - Changing the state machine topology — Phase 1 validated the transition matrix; it stays
-- Configurable smart-rewind/jump intervals — logic + settings UI needed; deferred to v1.2
-- RN Downloader upgrade to mainline — maintenance upgrade, not blocking; deferred to v1.2
 - iOS native intents, Siri shortcuts — deferred to a future features milestone
 - Cloudflare feedback worker — deferred to a future milestone
 - PERF-01: NATIVE_PROGRESS_UPDATED bypass of async-lock — requires explicit safety analysis; deferred
 - DIAG-01/02: Coordinator diagnostics to crash reporting — deferred
+- Expo SDK 55 upgrade — gated on RNTP Android bridgeless compatibility (issue #2443)
+- ProgressService decomposition (DECOMP-03) — deferred; background service contract complexity warrants standalone phase
 
 ## Context
 
-**Post-v1.1 codebase state:**
+**Post-v1.2 codebase state:**
 
-- ~50,175 lines TypeScript/TSX across `src/`
-- Tech stack: Expo 54, React Native, Zustand, SQLite/Drizzle, react-native-track-player, Expo Router
+- ~55,702 lines TypeScript/TSX across `src/`
+- Tech stack: Expo 54, React Native, Zustand, SQLite/Drizzle, react-native-track-player, Expo Router, mainline RNBD 4.5.3
 - Coordinator migration (v1.0) complete — coordinator is single executor of playback state transitions
-- Bug fixes (v1.1) complete — downloads, iCloud, skip button, navigation, home screen all polished
-- PlayerService: ~1,097 lines (down from ~1,640 post-migration)
-- Coordinator test coverage: 92.83%; playerSlice: 91.62%
+- Bug fixes + polish (v1.1) complete — downloads, iCloud, skip button, navigation, home screen all polished
+- Tech cleanup (v1.2) complete — DB performance, state centralization, service decomposition, fork elimination
+- PlayerService: facade + 4 collaborators at 92% coverage
+- DownloadService: facade + 2 stateless collaborators at 91% coverage
 - observerMode flag preserved as instant rollback mechanism
 
-**Known technical debt going into v1.2:**
+**Known technical debt going into v1.3:**
 
 - `PERF-01`: `NATIVE_PROGRESS_UPDATED` events go through async-lock — lower latency possible with safety analysis
 - Android `updateMetadataForTrack` artwork bug (#2287) — not verified (no Android device available)
-- Long-press interval selection on skip button is now one-time-apply (not persistent) — by design; Settings controls default
+- Path standardization: encoding mismatch between `file://` URIs, POSIX paths, and `D:/C:` prefixed DB paths
+- Orphan download reassociation UI: delete-only; user cannot link orphaned files to known library items
+- Expo SDK 55 upgrade blocked by RNTP Android bridgeless compatibility (issue #2443)
 
 Key architecture files:
 
@@ -95,22 +108,27 @@ Key architecture files:
 
 ## Key Decisions
 
-| Decision                                  | Rationale                                                                                   | Outcome                                         |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| Event bus decoupling                      | Prevents circular dependencies between coordinator and services                             | ✓ Good — Phase 1 validated                      |
-| Serial event processing                   | Guarantees no race conditions, simpler reasoning                                            | ✓ Good — <10ms average, no issues               |
-| Observer mode first                       | Zero-risk validation of state machine logic in production                                   | ✓ Good — 122+ tests, minimal rejections         |
-| playerSlice as read-only proxy            | Zustand/React integration too valuable to remove; make it reflect coordinator               | ✓ Good — Phase 4 shipped cleanly                |
-| YOLO rollback posture                     | 122+ tests + Phase 1 production validation provides sufficient confidence                   | ✓ Good — migration shipped without rollback     |
-| Continuous delivery between phases        | Artificial wait periods add no value given test coverage                                    | ✓ Good — 20 plans completed across 2 milestones |
-| Custom FSM over XState                    | Production-validated, XState adds 16.7kB with no functional gain                            | ✓ Good — no regrets                             |
-| Pressable-outside-MenuView (SkipButton)   | shouldOpenOnLongPress alone insufficient on iOS 18 — UIContextMenuInteraction swallows taps | ✓ Good — Phase 8 device-verified                |
-| suppressNextPress ref on SkipButton       | Prevents onPress firing on long-press release (Pressable fires both events)                 | ✓ Good — clean gesture semantics                |
-| SEEK_COMPLETE dispatch in executeSeek     | Keeps event dispatch at execution layer where TrackPlayer.seekTo actually runs              | ✓ Good — unconditional lock screen refresh      |
-| Dynamic import in repairMissingCoverArt() | mediaMetadata.ts statically imports covers.ts — dynamic import breaks the circular dep      | ✓ Good — no circular dependency at runtime      |
-| Re-export screens for More stack nav      | Expo Router treats each file's default export as the screen — re-export to share components | ✓ Good — series/authors cross-stack nav works   |
-| Long-press interval as one-time-apply     | User intent in Settings controls default; long press is per-skip override                   | ✓ Good — cleaner UX semantics                   |
+| Decision                                  | Rationale                                                                                             | Outcome                                         |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Event bus decoupling                      | Prevents circular dependencies between coordinator and services                                       | ✓ Good — Phase 1 validated                      |
+| Serial event processing                   | Guarantees no race conditions, simpler reasoning                                                      | ✓ Good — <10ms average, no issues               |
+| Observer mode first                       | Zero-risk validation of state machine logic in production                                             | ✓ Good — 122+ tests, minimal rejections         |
+| playerSlice as read-only proxy            | Zustand/React integration too valuable to remove; make it reflect coordinator                         | ✓ Good — Phase 4 shipped cleanly                |
+| YOLO rollback posture                     | 122+ tests + Phase 1 production validation provides sufficient confidence                             | ✓ Good — migration shipped without rollback     |
+| Continuous delivery between phases        | Artificial wait periods add no value given test coverage                                              | ✓ Good — 20 plans completed across 2 milestones |
+| Custom FSM over XState                    | Production-validated, XState adds 16.7kB with no functional gain                                      | ✓ Good — no regrets                             |
+| Pressable-outside-MenuView (SkipButton)   | shouldOpenOnLongPress alone insufficient on iOS 18 — UIContextMenuInteraction swallows taps           | ✓ Good — Phase 8 device-verified                |
+| suppressNextPress ref on SkipButton       | Prevents onPress firing on long-press release (Pressable fires both events)                           | ✓ Good — clean gesture semantics                |
+| SEEK_COMPLETE dispatch in executeSeek     | Keeps event dispatch at execution layer where TrackPlayer.seekTo actually runs                        | ✓ Good — unconditional lock screen refresh      |
+| Dynamic import in repairMissingCoverArt() | mediaMetadata.ts statically imports covers.ts — dynamic import breaks the circular dep                | ✓ Good — no circular dependency at runtime      |
+| Re-export screens for More stack nav      | Expo Router treats each file's default export as the screen — re-export to share components           | ✓ Good — series/authors cross-stack nav works   |
+| Long-press interval as one-time-apply     | User intent in Settings controls default; long press is per-skip override                             | ✓ Good — cleaner UX semantics                   |
+| WAL pragma via execSync before Drizzle    | Must run on raw SQLite handle before Drizzle wraps connection; synchronous=NORMAL is connection-level | ✓ Good — ~4x write throughput                   |
+| IPlayerServiceFacade in types.ts          | Both facade and collaborators import from one file — prevents circular imports                        | ✓ Good — zero import cycles                     |
+| DownloadService collaborators stateless   | Simpler than PlayerService pattern; query DB/filesystem independently with no callbacks               | ✓ Good — collaborators independently testable   |
+| No fork migration flag                    | Repair/reconciliation handles fork-era downloads; beta app so aggressive cleanup acceptable           | ✓ Good — no special-case code needed            |
+| forceExit: true in jest.config.js         | @react-native-community/netinfo reachability timer doesn't unref; fixes lint-staged --bail            | ✓ Good — no test behavior change                |
 
 ---
 
-_Last updated: 2026-02-27 after v1.1 milestone_
+_Last updated: 2026-03-08 after v1.2 milestone_
