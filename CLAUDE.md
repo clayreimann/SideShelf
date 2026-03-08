@@ -4,202 +4,153 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a React Native app built with Expo for Audiobookshelf - a self-hosted audiobook and podcast server. The app provides offline downloads, audio playback, and progress synchronization across devices.
+React Native app built with Expo for Audiobookshelf — a self-hosted audiobook/podcast server. Provides offline downloads, audio playback, and progress synchronization.
 
-## Common Commands
-
-### Development
+## Agent Commands
 
 ```bash
-npx expo start              # Start development server
-npm run ios                 # Build and run on iOS simulator (includes prebuild --clean)
-npm run ios:device          # Build and run on physical iOS device
-npm run android             # Build and run on Android emulator
-```
-
-### Testing
-
-```bash
-npm test                    # Run all tests once
-npm run test:watch          # Run tests in watch mode
-npm run test:coverage       # Generate coverage report
-npm run test:report         # Generate HTML test report + coverage (opens test-report.html)
-jest path/to/file.test.ts   # Run a single test file
-```
-
-### Database
-
-```bash
-npm run drizzle:generate    # Generate database migrations from schema changes
-```
-
-### Linting
-
-```bash
-npm run lint                # Run ESLint
-npm run lint:complexity     # Generate complexity report
+npm test                                    # Run all tests
+jest path/to/file.test.ts                  # Run single test file
+jest --findRelatedTests path/to/file.ts    # Run tests related to a file
+npm run drizzle:generate                   # Generate migrations after schema changes
+npm run lint                               # Run ESLint
+npx dpdm --circular src/services/X.ts     # Check for circular import cycles
 ```
 
 ## Architecture
 
-### Tech Stack
+### Layers (top → bottom, no reverse imports)
 
-- **Framework**: React Native with Expo 54
-- **Navigation**: Expo Router (file-based routing in `src/app/`)
-- **State Management**: Zustand with slice pattern (see `src/stores/`)
-- **Database**: SQLite with Drizzle ORM
-- **Audio**: react-native-track-player
-- **Downloads**: @kesha-antonov/react-native-background-downloader (custom fork)
+| Layer       | Location                      | Purpose                                                                                       |
+| ----------- | ----------------------------- | --------------------------------------------------------------------------------------------- |
+| Routes / UI | `src/app/`, `src/components/` | Screens, navigation, components                                                               |
+| State       | `src/stores/`                 | Zustand slices — read by UI, mutated by services                                              |
+| Services    | `src/services/`               | Business logic singletons (PlayerService, ProgressService, DownloadService, ApiClientService) |
+| Providers   | `src/providers/`              | React context: DbProvider → AuthProvider → StoreProvider                                      |
+| Data Access | `src/db/`                     | Drizzle/SQLite helpers — called only by services and slices                                   |
+| Lib / Utils | `src/lib/`, `src/utils/`      | API client, logger, formatters, file system — no business logic                               |
 
 ### Project Structure
 
 ```
 src/
-├── app/                    # Expo Router file-based routes
-│   ├── (tabs)/            # Tab navigation screens
-│   ├── FullScreenPlayer/  # Player modal
-│   └── _layout.tsx        # Root layout
-├── components/            # Reusable UI components
-│   ├── ui/               # Generic UI components
-│   ├── library/          # Library-specific components
-│   ├── player/           # Player controls & UI
-│   └── home/             # Home screen components
-├── db/                    # Database layer
-│   ├── schema/           # Drizzle table schemas
-│   ├── migrations/       # Generated migration files
-│   └── helpers/          # DB helper functions (see DB Guidelines below)
-├── lib/                   # Utilities and API clients
-│   ├── api/              # Audiobookshelf API client (api.ts, endpoints.ts)
-│   ├── downloads/        # Download management utilities
-│   └── logger/           # Logging configuration
-├── providers/             # React context providers (e.g., AuthProvider)
-├── services/              # Business logic and background services
-│   ├── PlayerService.ts          # Audio playback with TrackPlayer
-│   ├── DownloadService.ts        # Download management & progress
-│   ├── ProgressService.ts        # Progress sync with server
-│   ├── ApiClientService.ts       # API wrapper service
-│   └── coordinator/              # Service coordination
-├── stores/                # Zustand state slices
-│   ├── appStore.ts       # Main store combining all slices
-│   └── slices/           # Individual domain slices (library, player, etc.)
-├── types/                 # TypeScript type definitions
-└── i18n/                  # Internationalization (locales/)
+├── app/              # Expo Router file-based routes
+│   ├── (tabs)/       # Tab screens (home, library, series, authors, more)
+│   ├── FullScreenPlayer/
+│   └── _layout.tsx   # Root layout — provider hierarchy + app init
+├── components/       # UI: ui/, library/, player/, home/, errors/, diagnostics/
+├── db/               # schema/, helpers/, migrations/, client.ts
+├── lib/              # api/ (api.ts + endpoints.ts), logger/, fileSystem.ts, theme.ts
+├── providers/        # AuthProvider, DbProvider, StoreProvider
+├── services/         # Service singletons + coordinator/
+├── stores/           # appStore.ts + slices/
+├── types/            # api.ts, database.ts, player.ts, store.ts, coordinator.ts
+└── i18n/             # locales/
 ```
 
-### Key Patterns
+## Key Patterns
 
-#### State Management (Zustand Slices)
+### Database (Important!)
 
-The app uses a **slice pattern** in Zustand to organize state by domain:
+- **ALL database writes and queries go through helpers in `src/db/helpers/`** — never inline `db.insert()` or `db.update()` in UI or services
+- One helper file per entity (e.g., `users.ts`, `libraries.ts`, `mediaProgress.ts`)
+- Helpers export: `marshal...FromApi()` (pure transform), `upsert...()`, `insert...()`, `get...()`, and `...Tx()` transaction variants
+- When adding a column to an existing table: always include `.default()` in the schema — SQLite's `ALTER TABLE ADD COLUMN NOT NULL` without a default fails on existing rows
 
-- Each slice (e.g., `librarySlice`, `playerSlice`) manages a specific concern
-- Slices are combined in `appStore.ts` to form the main store
-- Use `subscribeWithSelector` middleware for selective subscriptions
+### No Circular Imports (Important!)
 
-#### Database Guidelines (Important!)
+Circular imports cause uninitialized values at runtime. Never allow them:
 
-- **ALL database marshalling and writes must go through helpers in `src/db/helpers/`**
-- One helper file per entity/table (e.g., `users.ts`, `libraries.ts`)
-- Helpers export:
-  - `marshal...FromApi()` functions (pure transformations)
-  - `upsert...()` and `insert...()` functions for writes
-  - Transaction variants (`...Tx()`) for batch operations
-- **Never** write inline `db.insert()` or `db.update()` in UI code or providers
-- See `.cursor/rules/db-coding-standards.mdc` for detailed examples
+- **Never import from `@/db/helpers` barrel inside `src/services/`** — import from the specific file (e.g., `@/db/helpers/tokens`)
+- When splitting a service, helpers must take explicit arguments — never call `ServiceClass.getInstance()` inside a helper (creates a hidden singleton cycle)
+- Verify with `npx dpdm --circular src/services/PlayerService.ts` before and after any service file split
+- Use `await import()` only as a last resort for mutual service dependencies; document the reason
 
-#### No Circular Imports (Important!)
+### Zustand Slices
 
-Circular imports cause uninitialized values and are never acceptable. Prevent them by design:
+- Slice pattern: `createXSlice(set, get)` combined in `appStore.ts`
+- **Always use `get()` inside action bodies to read current state** — closure variables capture initial state and go stale
+- **Never use object-returning selectors** — they create a new reference on every render and re-trigger on every store tick (including 1Hz position updates from player)
 
-- **Prefer direct imports over barrel imports** when the barrel would create a cycle. Import from `@/db/helpers/tokens` directly rather than `@/db/helpers` if the barrel re-exports something that imports back through your module.
-- **Never import from `@/db/helpers` (barrel) inside `src/services/`** — services sit above DB helpers in the dependency graph; use direct helper file imports instead.
-- **Use dynamic `await import()` as a last resort** only in `async` functions when a mutual dependency between two services cannot otherwise be resolved (e.g., `PlayerStateCoordinator` ↔ `PlayerService`). Document the reason with a comment.
+  ```typescript
+  // BAD — re-renders every position tick
+  const { a, b } = useAppStore((state) => ({ a: state.x.a, b: state.x.b }));
 
-#### TypeScript
+  // GOOD — individual selectors
+  const a = useAppStore((state) => state.x.a);
+  const b = useAppStore((state) => state.x.b);
+  ```
 
-- Use `@/` prefix for all imports (configured in tsconfig.json)
-- Strict mode enabled
-- Imports at top of file unless avoiding circular dependencies
-- Document types with JSDoc
+- Use existing `use*()` hooks from `appStore.ts` (`usePlayer()`, `useLibrary()`, `useSettings()`, etc.) instead of writing new selectors inline
+- Use `subscribeWithSelector` for side-effect subscriptions outside React
 
-#### API Integration
+### Services
 
-- Audiobookshelf API documentation: https://api.audiobookshelf.org/
-- API client in `src/lib/api/api.ts`
-- API endpoints defined in `src/lib/api/endpoints.ts`
-- Use `ApiClientService` for authenticated requests
+- Singleton pattern: exported as lowercase instance (`playerService`, `progressService`, `downloadService`)
+- `PlayerStateCoordinator` in `src/services/coordinator/` manages state machine; dispatch events via `dispatchPlayerEvent()` from `eventBus.ts` — never call TrackPlayer directly from UI
+- `eventBus.ts` is a leaf node — safe to import anywhere without creating cycles
 
-### Services Architecture
+### TypeScript & Imports
 
-#### PlayerService
+- Use `@/` for all imports (maps to `src/`) — never relative paths
+- Strict mode enabled — no `any` without a comment explaining why
+- File naming: Services → PascalCase + `Service.ts`; slices → camelCase + `Slice.ts`; DB helpers → camelCase plural; components → PascalCase
+- Type naming: `{Domain}SliceState`, `{Domain}SliceActions`, `{Entity}Row`, `Api{Action}{Entity}`
+- Private service methods: underscore prefix (`_setCurrentTrack`)
+- Constants: `UPPER_SNAKE_CASE`
 
-Manages audio playback using react-native-track-player:
+### Logging
 
-- Playback controls (play, pause, seek, speed)
-- Progress tracking and sync
-- Chapter navigation
-- Background audio support
+Always use tagged logger — never `console.log`:
 
-#### DownloadService
+```typescript
+const log = logger.forTag("FileName");
+log.info("[functionName] description");
+```
 
-Handles content downloads with background support:
+### API Endpoints
 
-- Queue management
-- Progress tracking
-- Auto-repair for iOS path changes (container path migrations)
-- Storage cleanup
+- Define typed endpoint functions in `src/lib/api/endpoints.ts` using `apiFetch()`
+- All authenticated requests go through `ApiClientService`
+- API docs: https://api.audiobookshelf.org/
 
-#### ProgressService
+## Testing
 
-Synchronizes playback progress with Audiobookshelf server:
-
-- Session management (local vs playback sessions)
-- Periodic sync intervals
-- Conflict resolution
+- Jest + React Native Testing Library; `jest-expo` preset
+- Test files: co-located in `__tests__/` subdirectories, suffix `.test.ts` / `.integration.test.ts`
+- Global setup: `src/__tests__/setup.ts` (mocks TrackPlayer, AsyncStorage, file system)
+- Test fixtures: `src/__tests__/fixtures/index.ts`
+- Test DB helper: `src/__tests__/utils/testDb.ts` — always use for DB helper tests
+- Mock external dependencies; do **not** mock the logic under test
+- Coverage excludes `src/app/` and `src/components/` (routes and components tested separately)
 
 ## Development Workflow
 
-### Making Changes
+1. Read existing code before proposing changes — make one change at a time
+2. Write tests for expected behavior; ensure they fail first
+3. Implement the change
+4. Run `npm test` and ensure all tests pass
+5. Follow existing patterns — do not add features beyond what was requested
 
-1. Read existing code before proposing changes
-   1. make only a single change at a time
-   2. do not add nice to have features until the initial, requested change is complete
-2. Write tests for expected behavior, ensure they fail
-3. Write code to implement features
-4. Run tests after changes: `npm test`, ensure these tests pass
-5. Use the TodoWrite tool to track multi-step tasks
-6. Follow existing patterns and architecture
+## Adding New Code
 
-### Testing
+**New feature (e.g., Bookmarks):**
 
-- Unit tests use Jest + React Native Testing Library
-- Mock setup in `src/__tests__/setup.ts` and `src/__tests__/mocks/`
-- Test utilities in `src/__tests__/utils/`
-- Run related tests: `jest --findRelatedTests path/to/file.ts`
+1. DB schema: `src/db/schema/bookmarks.ts`
+2. DB helpers: `src/db/helpers/bookmarks.ts`
+3. Store slice: `src/stores/slices/bookmarksSlice.ts`
+4. Register in: `src/stores/appStore.ts`
+5. Service (if needed): `src/services/BookmarkService.ts`
+6. Route: `src/app/(tabs)/more/bookmarks.tsx`
+7. Tests: `src/stores/slices/__tests__/bookmarksSlice.test.ts`
 
-### Database Changes
+**New API endpoint:** add to `src/lib/api/endpoints.ts`; types in `src/types/api.ts`
 
-1. Modify schema in `src/db/schema/`
-2. Run `npm run drizzle:generate` to create migration
-3. Create/update helpers in `src/db/helpers/` for the entity
-4. Test marshalling and write operations
+**New utility:** pure functions in `src/lib/helpers/`; file operations in `src/lib/fileSystem.ts`
 
-### Documentation
+## Documentation
 
-- Architecture docs go in `docs/architecture/` (strategy and rationale)
-- Investigation reports in `docs/investigation/`
-- Don't prompt to create docs - just write them
-- Code-level advice belongs in JSDoc comments, not markdown docs
-- You may create intermediate markdown files to track investigation, but these files should be cleaned up after the feature is complete
-
-## Tools and Environment
-
-- Use `mise` for managing development tooling (Node.js versions, etc.)
-- Pre-commit hooks configured via Husky (lint-staged runs prettier + tests)
-
-## External References
-
-- Audiobookshelf API: https://api.audiobookshelf.org/
-- Expo Router docs: https://docs.expo.dev/router/introduction/
-- Drizzle ORM: https://orm.drizzle.team/
-- react-native-track-player: https://react-native-track-player.js.org/
+- Architecture docs → `docs/architecture/`
+- Investigation reports → `docs/investigation/`
+- Code-level advice → JSDoc comments, not markdown
+- Clean up intermediate investigation files after the feature is complete
