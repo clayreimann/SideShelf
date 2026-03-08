@@ -301,14 +301,20 @@ export class DownloadService {
               log.info(
                 `*** TASK COMPLETION HANDLER CALLED *** ${audioFile.filename}: ${data.bytesDownloaded} bytes`
               );
-              const downloadPath = getDownloadPath(libraryItemId, audioFile.filename, "documents");
-              markAudioFileAsDownloaded(audioFile.id, downloadPath, "documents")
+              const downloadPathUri = getDownloadPath(
+                libraryItemId,
+                audioFile.filename,
+                "documents"
+              );
+              // Decode percent-encoding: files are saved at decoded POSIX paths (see downloadAudioFile).
+              const downloadPathFs = decodeURIComponent(downloadPathUri.replace(/^file:\/\//, ""));
+              markAudioFileAsDownloaded(audioFile.id, downloadPathUri, "documents")
                 .then(async () => {
                   log.info(`File marked as downloaded, applying iCloud exclusion`);
 
                   // Apply iCloud backup exclusion
                   try {
-                    await setExcludeFromBackup(downloadPath);
+                    await setExcludeFromBackup(downloadPathFs);
                     log.info(`iCloud exclusion applied to ${audioFile.filename}`);
                   } catch (error) {
                     log.error(
@@ -518,7 +524,13 @@ export class DownloadService {
     }
     // Download to Documents directory for persistence
     await ensureDownloadsDirectory(libraryItemId, "documents");
-    const destPath = getDownloadPath(libraryItemId, audioFile.filename, "documents");
+    // getDownloadPath returns a file:// URI; RNBD's JS layer strips "file://" before passing to
+    // native, which would create a URL-encoded POSIX path. [NSURL fileURLWithPath: encoded_path]
+    // treats %20 as a literal character, so the file lands with percent signs in the filename
+    // (e.g. "Columbus%20Day.m4b"). Decode the URI to get the actual POSIX path so the file
+    // is saved with the real filename that our existence checks can find.
+    const destUri = getDownloadPath(libraryItemId, audioFile.filename, "documents");
+    const destPath = decodeURIComponent(destUri.replace(/^file:\/\//, ""));
 
     // Check if file already exists and handle accordingly
     if (downloadFileExists(libraryItemId, audioFile.filename, "documents")) {
@@ -794,14 +806,16 @@ export class DownloadService {
           log.info(
             `*** TASK DONE EVENT FIRED *** ${taskInfo.filename}: ${data.bytesDownloaded} bytes`
           );
-          const downloadPath = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
-          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPath, "documents")
+          const downloadPathUri = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
+          // Decode percent-encoding: files are saved at decoded POSIX paths (see downloadAudioFile).
+          const downloadPathFs = decodeURIComponent(downloadPathUri.replace(/^file:\/\//, ""));
+          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri, "documents")
             .then(async () => {
               log.info(`File marked as downloaded, applying iCloud exclusion`);
 
               // Apply iCloud backup exclusion
               try {
-                await setExcludeFromBackup(downloadPath);
+                await setExcludeFromBackup(downloadPathFs);
                 log.info(`iCloud exclusion applied to ${taskInfo.filename}`);
               } catch (error) {
                 log.error(
@@ -830,11 +844,13 @@ export class DownloadService {
           log.info(
             `Task ${taskInfo.filename} already completed (done while app was killed), handling completion now`
           );
-          const downloadPath = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
-          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPath, "documents")
+          const downloadPathUri = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
+          // Decode percent-encoding: files are saved at decoded POSIX paths (see downloadAudioFile).
+          const downloadPathFs = decodeURIComponent(downloadPathUri.replace(/^file:\/\//, ""));
+          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri, "documents")
             .then(async () => {
               try {
-                await setExcludeFromBackup(downloadPath);
+                await setExcludeFromBackup(downloadPathFs);
               } catch (error) {
                 log.error(
                   `Failed to set iCloud exclusion for ${taskInfo.filename}:`,
@@ -846,6 +862,12 @@ export class DownloadService {
             .catch((error: any) => {
               log.error(`Error handling already-completed task ${taskInfo.filename}:`, error);
             });
+        } else {
+          // Resume the task to reconnect JS progress events to the native URLSession download.
+          // getExistingDownloadTasks() returns restored tasks in a paused state at the JS layer;
+          // resume() is required to start receiving progress/done/error events again.
+          taskInfo.task.resume();
+          log.info(`Resuming restored task for ${taskInfo.filename}`);
         }
       }
 
