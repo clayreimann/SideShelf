@@ -107,7 +107,8 @@ Key decisions to carry forward:
 
 ### Pending Todos
 
-None.
+1. **Standardize path handling, storage, and persistence across the app** — encoding mismatch between file:// URIs, POSIX paths, and D:/C: prefixed DB paths; discovered during Phase 13 smoke testing (`src/lib/fileSystem.ts`, `src/lib/iCloudBackupExclusion.ts`, `src/services/DownloadService.ts`)
+2. **Add reassociation option to orphan download screen** — allow user to link orphaned downloaded files to a known library item instead of delete-only
 
 ### Blockers/Concerns
 
