@@ -910,6 +910,9 @@ describe("DownloadService facade", () => {
       // After restore, the item should be tracked in activeDownloads
       expect(instance.isDownloadActive("item-restored")).toBe(true);
 
+      // resume() must be called to reconnect JS progress events to the native download
+      expect(mockTask.resume).toHaveBeenCalledTimes(1);
+
       // Fire the progress callback to cover handleTaskProgress
       if (progressCallback) {
         progressCallback({ bytesDownloaded: 500, bytesTotal: 1000 });
