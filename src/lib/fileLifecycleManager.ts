@@ -30,7 +30,7 @@ import {
 } from "@/db/helpers/localData";
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { downloadService } from "@/services/DownloadService";
-import RNBackgroundDownloader from "@kesha-antonov/react-native-background-downloader";
+import { getExistingDownloadTasks } from "@kesha-antonov/react-native-background-downloader";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 
@@ -395,7 +395,7 @@ export async function runDownloadReconciliationScan(): Promise<void> {
     }
 
     // --- Step 3: Zombie detection ---
-    const existingTasks = await RNBackgroundDownloader.checkForExistingDownloads();
+    const existingTasks = await getExistingDownloadTasks();
 
     for (const task of existingTasks) {
       // Parse libraryItemId from task ID format: "${libraryItemId}_${audioFile.id}"

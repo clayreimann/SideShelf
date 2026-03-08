@@ -76,9 +76,7 @@ jest.mock("@/services/DownloadService", () => ({
 // Mock @kesha-antonov/react-native-background-downloader (used by reconciliation scan)
 jest.mock("@kesha-antonov/react-native-background-downloader", () => ({
   __esModule: true,
-  default: {
-    checkForExistingDownloads: jest.fn(() => Promise.resolve([])),
-  },
+  getExistingDownloadTasks: jest.fn(() => Promise.resolve([])),
 }));
 
 // Mock @/stores/appStore (dynamic import in reconciliation scan)
