@@ -140,6 +140,26 @@ This is mandatory — the Expo plugin registers AppDelegate changes for iOS back
 - v1.2 milestone complete after checkpoint approval
 - Key follow-up (not part of v1.2): After native rebuild, run smoke test to verify restart recovery with mainline 4.5.3
 
+## Self-Check: PASSED
+
+| Item                                              | Status |
+| ------------------------------------------------- | ------ |
+| `src/services/DownloadService.ts`                 | FOUND  |
+| `src/__tests__/setup.ts`                          | FOUND  |
+| `src/services/__tests__/DownloadService.test.ts`  | FOUND  |
+| `app.config.js`                                   | FOUND  |
+| `13-02-SUMMARY.md`                                | FOUND  |
+| Commit b2ef01e (Task 1)                           | FOUND  |
+| Commit 8a2e112 (Task 2)                           | FOUND  |
+| Commit cf2abec (Task 3)                           | FOUND  |
+| Commit f470773 (metadata)                         | FOUND  |
+| No `RNBackgroundDownloader` in DownloadService.ts | PASS   |
+| `task.start()` present                            | PASS   |
+| No fork URL in package.json                       | PASS   |
+| Plugin registered in app.config.js                | PASS   |
+| withExcludeFromBackup plugin independent          | PASS   |
+| All 732 tests passing                             | PASS   |
+
 ---
 
 _Phase: 13-rn-downloader-migration_

@@ -1,5 +1,30 @@
 # Milestones
 
+## v1.2 — Tech Cleanup
+
+**Completed:** 2026-03-08
+**Phases:** 10–13 (4 phases, 8 plans, 21 tasks)
+
+**Goal:** Reduce technical debt through targeted codebase cleanup — SQLite performance, redundant component state fetches, service file decomposition, and dependency modernization. No user-facing features.
+
+**What shipped:**
+
+- Phase 10: WAL journal mode + 4 FK indexes + DbErrorScreen; batch upserts eliminated N+1 query loops in all DB helpers
+- Phase 11: viewMode, progressMap, availableTags, and userId centralized into Zustand slices; redundant mount-time DB fetches removed from 5+ components
+- Phase 12: PlayerService decomposed into facade + 4 collaborators (92% coverage); DownloadService decomposed into facade + 2 stateless collaborators (91% coverage)
+- Phase 13: Custom RNBD `spike-event-queue` fork replaced by mainline 4.5.3; iCloud exclusion decode bug fixed during migration smoke test
+
+**Key outcomes:**
+
+- 22/22 v1.2 requirements delivered
+- 160 files changed, 20,897 insertions, 4,460 deletions
+- 7 days execution (Feb 28 → Mar 7); 101 commits
+- ~55,702 lines TypeScript/TSX at completion
+- No private fork dependencies remaining
+- Services properly decomposed with 90%+ coverage maintained
+
+---
+
 ## v1.0 — Player State Machine Migration
 
 **Completed:** 2026-02-20

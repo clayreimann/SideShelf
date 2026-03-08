@@ -1,36 +1,31 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: — Tech Cleanup
-status: completed
-stopped_at: Completed 13-02-PLAN.md (checkpoint pending — human verify required)
-last_updated: "2026-03-08T02:58:18.955Z"
-last_activity: 2026-03-05 — Plan 13-02 fully complete (3 tasks committed, SUMMARY.md created, checkpoint pending)
+milestone: v1.3
+milestone_name: TBD
+status: planning
+stopped_at: v1.2 milestone archived — ready for /gsd:new-milestone
+last_updated: "2026-03-08T03:30:00.000Z"
+last_activity: 2026-03-08 — v1.2 milestone archived, git tagged v1.2
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-28)
+See: .planning/PROJECT.md (updated 2026-03-08)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** v1.2 Tech Cleanup COMPLETE (pending 13-02 checkpoint approval) — Phase 13: RN Downloader Migration COMPLETE pending human verify
+**Current focus:** Planning next milestone — run `/gsd:new-milestone` to start v1.3
 
 ## Current Position
 
-Phase: 13 of 13 (RN Downloader Migration) — COMPLETE pending checkpoint
-Plan: 2 of 2 in current phase — DONE (code complete, awaiting human verify checkpoint)
-Status: Phase 13 complete — mainline RNBD 4.5.3 installed, DownloadService migrated, 49 tests passing, checkpoint pending
-Last activity: 2026-03-05 — Plan 13-02 fully complete (3 tasks committed, SUMMARY.md created, checkpoint pending)
-
-Progress: [██████████] 100%
+v1.2 milestone archived 2026-03-08. Ready to start v1.3.
 
 ## Performance Metrics
 
@@ -44,81 +39,37 @@ Progress: [██████████] 100%
 - Total plans completed: 11 (Phases 6–9)
 - Total execution time: 6 days (Feb 22 → Feb 27)
 
-**v1.2 (in progress):**
+**Velocity (v1.2):**
 
+- Total plans completed: 8 (Phases 10–13)
+- Total execution time: 7 days (Feb 28 → Mar 7)
 - Plan 10-01: 4 min (2 tasks, 8 files)
 - Plan 10-02: 12 min (2 tasks, 11 files)
 - Plan 11-01: 8 min (3 tasks, 10 files, 29 new tests)
 - Plan 11-02: 90 min (4 tasks, 14 files, 8 new tests)
-- Plan 12-01: 33 min (3 tasks [1+2 combined], 13 files, 67 new tests)
-- Plan 12-02: 20 min (3 tasks [1+2+3 combined], 7 files, 33 new tests)
+- Plan 12-01: 33 min (3 tasks, 13 files, 67 new tests)
+- Plan 12-02: 20 min (3 tasks, 7 files, 33 new tests)
 - Plan 13-01: 10 min (1 task, 1 file — investigation document)
-- Plan 13-02: 30 min (3 tasks, 5 files, 5 new tests — mainline RNBD migration)
+- Plan 13-02: 30 min (3 tasks, 5 files, 5 new tests)
 
 ## Accumulated Context
 
-### Decisions — carried forward to v1.2
+### Key Decisions — carry forward to v1.3
 
 Full decision log is in PROJECT.md Key Decisions table.
-
-Key decisions to carry forward:
 
 - observerMode flag preserved for instant rollback — remove only when coordinator stable for 2+ releases
 - Long-press interval on skip button is one-time-apply by design — Settings controls the default
 - Partial badge (amber, top-left) pattern established for partially-downloaded items
-
-**Phase 10 decisions:**
-
-- WAL pragma uses execSync on raw SQLite handle (before Drizzle wraps connection); synchronous=NORMAL is connection-level so set in getSQLiteDb() guard
-- DbErrorScreen uses basic RN primitives only (safe when abs2.sqlite is broken); disk-full errors hide reset button
-- useMemo placed before early returns in DbProvider to comply with React hooks ordering rules
-- sql`excluded.col_name` uses SQL snake_case column names (not TypeScript camelCase); verified tagASIN maps to tag_asin
-- upsertGenres/Narrators/Tags wrapped in try/catch — reference data failures must not abort full item upsert
-- upsertLibraryItemTx removed after confirming zero callers outside its own file
-
-**Phase 13 decisions:**
-
-- Investigation document is analysis-only (no proof-of-concept) — API diff is fully deterministic from direct source inspection of fork node_modules and mainline CDN
-- No migration flag needed for fork → mainline transition — existing repair/reconciliation flow handles fork-era in-progress downloads correctly; beta app so aggressive cleanup is acceptable
-- void prefix on pause/resume/stop is the correct pattern — fire-and-forget is functionally safe, await not required for these best-effort operations
-- TDD RED commit blocked by pre-commit hook — proceeded to GREEN before committing Task 1, all tasks committed in order once tests passing
-- ^4.5.3 semver range (npm default) — satisfies no-fork-URL requirement; exact version enforced by package-lock.json
-- Handlers before .start() is a critical invariant — documented with CRITICAL comment in DownloadService.ts
-
-**Phase 12 decisions:**
-
-- IPlayerServiceFacade placed in types.ts — both PlayerService.ts and collaborators import from the same file, preventing circular imports; no collaborator imports from PlayerService.ts
-- rebuildCurrentTrackIfNeeded placed in ProgressRestoreCollaborator (owns session restore); exposed on IPlayerServiceFacade so PlaybackControlCollaborator can call it without importing ProgressRestoreCollaborator directly
-- BackgroundReconnectCollaborator keeps require() pattern for PlayerBackgroundService per CLAUDE.md pattern (module cache clearing in **DEV** mode)
-- forceExit added to jest.config.js — @react-native-community/netinfo starts an internet reachability timer that never unrefs; forceExit fixes lint-staged --bail invocations without changing test behavior
-- DownloadService collaborators are stateless (no facade reference) — simpler than PlayerService pattern because they query DB/filesystem independently with no callbacks to facade
-- isDownloadActive and getDownloadStatus remain as direct Map reads in DownloadService facade — delegating them would break the activeDownloads isolation goal
-
-**Phase 11 decisions:**
-
-- viewMode uses manual AsyncStorage helper pattern (not Zustand persist middleware) — consistent with all other settings in settingsSlice
-- getAuthorById existed in authors.ts; getOrFetchAuthorById uses in-memory find() first, DB fallback logs a warning
-- getMediaProgressForItems deduplicates by orderBy(desc(lastUpdate)) + first-row-wins per libraryItemId
-- loggerSlice.availableTags populated synchronously via getAllTags() in initialize() and refreshAvailableTags()
-- progressMap from seriesSlice is Record type; SeriesDetailScreen converts to Map via useMemo for backward compatibility
-- useAppStore.getState() in AuthProvider logout/setServerUrl callbacks is valid — called imperatively after StoreProvider mounts, not during render
-- wipeUserData deletes content tables in child-before-parent FK order; preserves users and logger tables
-- viewMode/updateViewMode were missing from useSettings() hook despite being in settingsSlice — added as Rule 3 auto-fix
+- Handlers-before-`.start()` is a critical invariant in DownloadService — documented with CRITICAL comment
 
 ### Pending Todos
 
-1. **Standardize path handling, storage, and persistence across the app** — encoding mismatch between file:// URIs, POSIX paths, and D:/C: prefixed DB paths; discovered during Phase 13 smoke testing (`src/lib/fileSystem.ts`, `src/lib/iCloudBackupExclusion.ts`, `src/services/DownloadService.ts`)
+1. **Standardize path handling, storage, and persistence across the app** — encoding mismatch between file:// URIs, POSIX paths, and D:/C: prefixed DB paths; discovered during Phase 13 smoke testing
 2. **Add reassociation option to orphan download screen** — allow user to link orphaned downloaded files to a known library item instead of delete-only
 
-### Blockers/Concerns
+### Open Concerns
 
-- DWNLD-01 SATISFIED — fork diff spike complete, rnbd-fork-diff.md committed (e31daa2) and human-approved. Plan 13-02 is complete.
-- DWNLD-02/03/04 SATISFIED — mainline 4.5.3 installed, DownloadService migrated, Expo plugin registered, iCloud plugin independent confirmed.
 - Android `updateMetadataForTrack` artwork bug (#2287) — not verified (no Android device); carry forward
 - PERF-01 (`NATIVE_PROGRESS_UPDATED` bypass async-lock) — deferred; needs safety analysis
-
-## Session Continuity
-
-Last session: 2026-03-05T21:36:48.647Z
-Stopped at: Completed 13-02-PLAN.md (checkpoint pending — human verify required)
-Resume file: None
+- Expo SDK 55 upgrade blocked by RNTP Android bridgeless compatibility (issue #2443)
