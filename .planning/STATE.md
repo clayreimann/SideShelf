@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: planning
-stopped_at: Completed 14-01-PLAN.md
-last_updated: "2026-03-09T21:39:38.039Z"
+stopped_at: Completed 14-02-PLAN.md
+last_updated: "2026-03-09T21:44:00.000Z"
 last_activity: 2026-03-09 — Roadmap created, all 42 v1.3 requirements mapped
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 14 of 22 (Progress Display Format)
-Plan: —
-Status: Ready to plan
-Last activity: 2026-03-09 — Roadmap created, all 42 v1.3 requirements mapped
+Plan: 2 of 4
+Status: In progress
+Last activity: 2026-03-09 — Completed 14-02 (settings persistence layer for progressFormat)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Recent Trend:** Stable (~20–50 min per plan depending on test surface)
 | Phase 14-progress-display-format P01 | 2 | 1 tasks | 2 files |
+| Phase 14-progress-display-format P02 | 4 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,7 @@ Full decision log is in PROJECT.md Key Decisions table.
 - Long-press interval on skip button is one-time-apply by design — Settings controls the default
 - Partial badge (amber, top-left) pattern established for partially-downloaded items
 - Handlers-before-`.start()` is a critical invariant in DownloadService — documented with CRITICAL comment
+- progressFormat default is 'remaining' — zero visual change on first launch; stored under '@app/progressFormat'
 
 ### Pending Todos
 
@@ -76,6 +78,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-09T21:39:38.038Z
-Stopped at: Completed 14-01-PLAN.md
+Last session: 2026-03-09T21:44:00.000Z
+Stopped at: Completed 14-02-PLAN.md
 Resume file: None
