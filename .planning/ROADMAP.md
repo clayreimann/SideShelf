@@ -268,7 +268,7 @@ Plans:
 | 11. useEffect Cleanup + State Centralization      | v1.2      | 2/2            | Complete    | 2026-03-04 |
 | 12. Service Decomposition                         | v1.2      | 2/2            | Complete    | 2026-03-05 |
 | 13. RN Downloader Migration                       | v1.2      | 2/2            | Complete    | 2026-03-07 |
-| 14. Progress Display Format                       | 2/4       | In Progress    |             | -          |
+| 14. Progress Display Format                       | 3/4       | In Progress    |             | -          |
 | 15. Collapsible Section Redesign                  | v1.3      | 0/TBD          | Not started | -          |
 | 16. Full Screen Player Redesign + AirPlay         | v1.3      | 0/TBD          | Not started | -          |
 | 17. Bookmarks                                     | v1.3      | 0/TBD          | Not started | -          |
