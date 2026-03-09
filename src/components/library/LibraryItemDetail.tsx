@@ -7,7 +7,6 @@ import DescriptionSection from "@/components/library/LibraryItemDetail/Descripti
 import DownloadProgressView from "@/components/library/LibraryItemDetail/DownloadProgressView";
 import GenresTagsSection from "@/components/library/LibraryItemDetail/GenresTagsSection";
 import MetadataSection from "@/components/library/LibraryItemDetail/MetadataSection";
-import ProgressSection from "@/components/library/LibraryItemDetail/ProgressSection";
 import TitleSection from "@/components/library/LibraryItemDetail/TitleSection";
 import { getMediaProgressForLibraryItem, upsertMediaProgress } from "@/db/helpers/mediaProgress";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
@@ -511,7 +510,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         {/* Title */}
         <TitleSection title={title} />
 
-        {/* Author, Narrator, Series, Duration, Year, Download Status */}
+        {/* Author, Narrator, Series, Duration, Year, Download Status, and Inline Progress */}
         <MetadataSection
           author={author}
           narrator={narrator}
@@ -521,6 +520,8 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           isDownloaded={isDownloaded}
           authorId={authorId}
           seriesId={seriesId}
+          progressCurrentTime={effectiveProgress?.currentTime}
+          progressDuration={effectiveProgress?.duration}
         />
 
         {/* Download Section */}
@@ -543,9 +544,6 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
             serverReachable={serverReachable ?? false}
           />
         )}
-
-        {/* Progress display */}
-        {effectiveProgress && <ProgressSection progress={effectiveProgress} />}
 
         {/* Genres and Tags */}
         <GenresTagsSection genres={genres} tags={tags} />
