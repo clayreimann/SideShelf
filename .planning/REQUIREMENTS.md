@@ -1,0 +1,162 @@
+# Requirements: Audiobookshelf React Native
+
+**Defined:** 2026-03-09
+**Core Value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
+
+## v1.3 Requirements
+
+Requirements for the Beta Polish milestone. Each maps to roadmap phases.
+
+### Full Screen Player (PLAYER)
+
+- [ ] **PLAYER-01**: Full screen player navigation bar is removed (no navigation controller chrome)
+- [ ] **PLAYER-02**: Full screen player has a chevron-down button on the left that dismisses the player
+- [ ] **PLAYER-03**: Full screen player Done button is replaced with a UIMenu settings button containing playback actions (add bookmark, sleep timer, progress format)
+- [ ] **PLAYER-04**: Full screen player has an AirPlay route picker button in the header
+- [ ] **PLAYER-05**: Floating player has an AirPlay route picker button
+- [ ] **PLAYER-06**: Item details screen player controls have an AirPlay route picker button
+
+### Progress Display (PROGRESS)
+
+- [ ] **PROGRESS-01**: User can select a progress display format in Settings (time remaining, % complete, elapsed / total duration)
+- [ ] **PROGRESS-02**: Full screen player middle area displays the selected progress format
+- [ ] **PROGRESS-03**: Floating player displays the selected progress format
+- [ ] **PROGRESS-04**: Item details player controls display the selected progress format
+
+### Collapsible Sections (SECTION)
+
+- [ ] **SECTION-01**: Collapsed sections show approximately the first 100px of content with a bottom fade-to-transparent overlay
+- [ ] **SECTION-02**: Expanding/collapsing sections animate height on the UI thread (Reanimated withTiming)
+- [ ] **SECTION-03**: Expanded sections show full content with no bottom fade
+
+### Bookmarks (BOOKMARK)
+
+- [ ] **BOOKMARK-01**: User can add a bookmark at the current playback position (with optional title)
+- [ ] **BOOKMARK-02**: User can view all bookmarks for an item on the item detail screen
+- [ ] **BOOKMARK-03**: User can rename a bookmark
+- [ ] **BOOKMARK-04**: User can delete a bookmark
+- [ ] **BOOKMARK-05**: Bookmarks are synced with the ABS server via API (create, read, delete)
+- [ ] **BOOKMARK-06**: Bookmarks are cached in a local SQLite table for offline viewing
+
+### Navigation (NAVIGATION)
+
+- [ ] **NAVIGATION-01**: Series list viewed from the More tab navigates to series detail on tap
+- [ ] **NAVIGATION-02**: Authors list viewed from the More tab navigates to author detail on tap
+- [ ] **NAVIGATION-03**: App registers a `sideshelf://` URL scheme and deep links navigate to all main screens
+
+### Sleep Timer (SLEEP)
+
+- [ ] **SLEEP-01**: Playback volume fades out over the last 30 seconds before the sleep timer stops playback
+
+### Performance (PERF)
+
+- [ ] **PERF-01**: LibraryItemList uses FlashList with `estimatedItemSize` and `getItemType` for grid/list modes
+- [ ] **PERF-02**: ChapterList `renderItem` is memoized with `useCallback` and has `getItemLayout` for fixed-height rows
+- [ ] **PERF-03**: Expo tree shaking enabled via `.env` flags and `metro.config.js` transformer config
+- [ ] **PERF-04**: Root layout uses direct icon imports; AuthProvider and statisticsSlice use direct `@/db/helpers` imports
+- [ ] **PERF-05**: TTI baseline established with `react-native-performance` — `performance.mark('screenInteractive')` added to home screen
+- [ ] **PERF-06**: AuthProvider secure storage reads run concurrently via `Promise.all`
+- [ ] **PERF-07**: Coordinator instantiation deferred from module scope into `initializeApp()`
+- [ ] **PERF-08**: `CoverImage` component uses `expo-image` for memory + disk caching
+- [ ] **PERF-09**: ChapterList `useEffect` setTimeout calls return cleanup functions
+- [ ] **PERF-10**: `NetInfo.addEventListener` unsubscribe is captured and called in `resetNetwork()`; `initializeNetwork()` clears existing intervals before creating new ones
+- [ ] **PERF-11**: FullScreenPlayer panel open/close animations use Reanimated `useAnimatedStyle`
+
+### Technical Debt (DEBT)
+
+- [ ] **DEBT-01**: File paths are stored and compared in a consistent normalized format (POSIX, no `file://` prefix) across DB, downloads, and filesystem operations
+- [ ] **DEBT-02**: User can associate an orphaned downloaded file with a known library item from the orphan management screen
+- [ ] **DEBT-03**: ProgressService is decomposed into a facade and collaborators with 90%+ test coverage maintained
+
+### UI Testing (TESTING)
+
+- [ ] **TESTING-01**: Login screen inputs have `testID` attributes enabling automated authentication in Maestro
+- [ ] **TESTING-02**: Maestro `_login.yaml` subflow authenticates from environment variable credentials and is idempotent (safe to call when already logged in)
+- [ ] **TESTING-03**: Key interactive elements have `testID` attributes (play-resume-button, player-done-button, seek-slider, speed-control, download-button, library-search-input)
+- [ ] **TESTING-04**: Maestro flows decomposed into reusable subflows (`_login`, `_start-playback`) and standalone screen flows
+- [ ] **TESTING-05**: Maestro regression suite covers library navigation, playback, and download flows as independently executable test files
+
+## v2 Requirements
+
+Deferred to future release.
+
+### Platform
+
+- **PLATFORM-01**: Siri shortcuts / iOS native intents
+- **PLATFORM-02**: Cloudflare feedback worker
+- **PLATFORM-03**: Expo SDK 55 upgrade (blocked on RNTP Android bridgeless compatibility, issue #2443)
+
+### Diagnostics
+
+- **DIAG-01**: Coordinator diagnostics forwarded to crash reporting service
+- **DIAG-02**: Coordinator performance metrics in crash reports
+
+## Out of Scope
+
+| Feature                                             | Reason                                                          |
+| --------------------------------------------------- | --------------------------------------------------------------- |
+| Full playerSlice removal                            | Zustand/React integration is valuable; stays as read-only proxy |
+| State machine topology changes                      | Transition matrix validated by 122+ tests; no changes           |
+| PERF-01 (NATIVE_PROGRESS_UPDATED async-lock bypass) | Requires explicit safety analysis; deferred beyond v1.3         |
+| react-native-render-html JS-thread HTML parsing     | Only investigate if detail screen performance becomes a concern |
+| Android updateMetadataForTrack artwork bug (#2287)  | Not verified (no Android device); carry forward as open concern |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement   | Phase | Status  |
+| ------------- | ----- | ------- |
+| PLAYER-01     | —     | Pending |
+| PLAYER-02     | —     | Pending |
+| PLAYER-03     | —     | Pending |
+| PLAYER-04     | —     | Pending |
+| PLAYER-05     | —     | Pending |
+| PLAYER-06     | —     | Pending |
+| PROGRESS-01   | —     | Pending |
+| PROGRESS-02   | —     | Pending |
+| PROGRESS-03   | —     | Pending |
+| PROGRESS-04   | —     | Pending |
+| SECTION-01    | —     | Pending |
+| SECTION-02    | —     | Pending |
+| SECTION-03    | —     | Pending |
+| BOOKMARK-01   | —     | Pending |
+| BOOKMARK-02   | —     | Pending |
+| BOOKMARK-03   | —     | Pending |
+| BOOKMARK-04   | —     | Pending |
+| BOOKMARK-05   | —     | Pending |
+| BOOKMARK-06   | —     | Pending |
+| NAVIGATION-01 | —     | Pending |
+| NAVIGATION-02 | —     | Pending |
+| NAVIGATION-03 | —     | Pending |
+| SLEEP-01      | —     | Pending |
+| PERF-01       | —     | Pending |
+| PERF-02       | —     | Pending |
+| PERF-03       | —     | Pending |
+| PERF-04       | —     | Pending |
+| PERF-05       | —     | Pending |
+| PERF-06       | —     | Pending |
+| PERF-07       | —     | Pending |
+| PERF-08       | —     | Pending |
+| PERF-09       | —     | Pending |
+| PERF-10       | —     | Pending |
+| PERF-11       | —     | Pending |
+| DEBT-01       | —     | Pending |
+| DEBT-02       | —     | Pending |
+| DEBT-03       | —     | Pending |
+| TESTING-01    | —     | Pending |
+| TESTING-02    | —     | Pending |
+| TESTING-03    | —     | Pending |
+| TESTING-04    | —     | Pending |
+| TESTING-05    | —     | Pending |
+
+**Coverage:**
+
+- v1.3 requirements: 43 total
+- Mapped to phases: 0
+- Unmapped: 43 ⚠️
+
+---
+
+_Requirements defined: 2026-03-09_
+_Last updated: 2026-03-09 after initial definition_
