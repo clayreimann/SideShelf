@@ -51,7 +51,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 
 **Milestone Goal:** Ship the app to beta — UI polish on the player and library surfaces, performance improvements from the RN audit, bookmark management, sleep timer volume fade, UI testing infrastructure, and remaining tech debt.
 
-- [ ] **Phase 14: Progress Display Format** — User-selectable progress format across all three player surfaces
+- [x] **Phase 14: Progress Display Format** — User-selectable progress format across all three player surfaces (completed 2026-03-09)
 - [ ] **Phase 15: Collapsible Section Redesign** — Reanimated probe: peek-and-fade with UI-thread height animation
 - [ ] **Phase 16: Full Screen Player Redesign + AirPlay** — Nav bar removal, chevron dismiss, settings UIMenu, AirPlay on all surfaces, Reanimated panel animation
 - [ ] **Phase 17: Bookmarks** — Add/view/rename/delete with server sync and SQLite offline cache
@@ -268,7 +268,7 @@ Plans:
 | 11. useEffect Cleanup + State Centralization      | v1.2      | 2/2            | Complete    | 2026-03-04 |
 | 12. Service Decomposition                         | v1.2      | 2/2            | Complete    | 2026-03-05 |
 | 13. RN Downloader Migration                       | v1.2      | 2/2            | Complete    | 2026-03-07 |
-| 14. Progress Display Format                       | 3/4       | In Progress    |             | -          |
+| 14. Progress Display Format                       | 4/4       | Complete       | 2026-03-09  | -          |
 | 15. Collapsible Section Redesign                  | v1.3      | 0/TBD          | Not started | -          |
 | 16. Full Screen Player Redesign + AirPlay         | v1.3      | 0/TBD          | Not started | -          |
 | 17. Bookmarks                                     | v1.3      | 0/TBD          | Not started | -          |
