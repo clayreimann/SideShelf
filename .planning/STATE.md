@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.3
-milestone_name: TBD
+milestone_name: Beta Polish
 status: planning
-stopped_at: v1.2 milestone archived — ready for /gsd:new-milestone
-last_updated: "2026-03-08T03:30:00.000Z"
-last_activity: 2026-03-08 — v1.2 milestone archived, git tagged v1.2
+stopped_at: requirements defined — ready for roadmap creation
+last_updated: "2026-03-09T00:00:00.000Z"
+last_activity: 2026-03-09 — Milestone v1.3 started, requirements defined
 progress:
   total_phases: 0
   completed_phases: 0
@@ -18,14 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-08)
+See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Planning next milestone — run `/gsd:new-milestone` to start v1.3
+**Current focus:** Defining requirements — Status: Defining requirements
 
 ## Current Position
 
-v1.2 milestone archived 2026-03-08. Ready to start v1.3.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-09 — Milestone v1.3 started
 
 ## Performance Metrics
 
