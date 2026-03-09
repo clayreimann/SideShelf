@@ -814,6 +814,7 @@ export function useSettings() {
   const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
   const customUpdateUrl = useAppStore((state) => state.settings.customUpdateUrl);
   const viewMode = useAppStore((state) => state.settings.viewMode);
+  const progressFormat = useAppStore((state) => state.settings.progressFormat);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -828,6 +829,7 @@ export function useSettings() {
   const updateHiddenTabs = useAppStore((state) => state.updateHiddenTabs);
   const updateCustomUpdateUrl = useAppStore((state) => state.updateCustomUpdateUrl);
   const updateViewMode = useAppStore((state) => state.updateViewMode);
+  const updateProgressFormat = useAppStore((state) => state.updateProgressFormat);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -841,6 +843,7 @@ export function useSettings() {
       hiddenTabs,
       customUpdateUrl,
       viewMode,
+      progressFormat,
       initialized,
       isLoading,
       initializeSettings,
@@ -853,6 +856,7 @@ export function useSettings() {
       updateHiddenTabs,
       updateCustomUpdateUrl,
       updateViewMode,
+      updateProgressFormat,
       resetSettings,
     }),
     [
@@ -865,6 +869,7 @@ export function useSettings() {
       hiddenTabs,
       customUpdateUrl,
       viewMode,
+      progressFormat,
       initialized,
       isLoading,
       initializeSettings,
@@ -877,6 +882,7 @@ export function useSettings() {
       updateHiddenTabs,
       updateCustomUpdateUrl,
       updateViewMode,
+      updateProgressFormat,
       resetSettings,
     ]
   );
