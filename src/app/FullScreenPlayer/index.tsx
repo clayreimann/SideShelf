@@ -18,6 +18,7 @@ import SkipButton from "@/components/player/SkipButton";
 import SleepTimerControl from "@/components/player/SleepTimerControl";
 import { ProgressBar } from "@/components/ui";
 import CoverImage from "@/components/ui/CoverImange";
+import { formatProgress } from "@/lib/helpers/progressFormat";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
@@ -33,22 +34,16 @@ import {
   Alert,
 } from "react-native";
 
-function durationToUnits(seconds: number): number[] {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  return [hours, minutes, secs];
-}
-
-function formatTimeWithUnits(seconds: number, includeSeconds: boolean = true): string {
-  const [hours, minutes, secs] = durationToUnits(seconds);
-
-  const secondsString = `${secs.toString().padStart(2, "0")}s`;
+function formatBookmarkTime(seconds: number): string {
+  const totalSecs = Math.floor(seconds);
+  const hours = Math.floor(totalSecs / 3600);
+  const minutes = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  const secsStr = `${secs.toString().padStart(2, "0")}s`;
   if (hours > 0) {
-    return `${hours}h ${minutes}m ${includeSeconds ? secondsString : ""}`;
-  } else {
-    return `${minutes}m ${secondsString}`;
+    return `${hours}h ${minutes}m ${secsStr}`;
   }
+  return `${minutes}m ${secsStr}`;
 }
 
 export default function FullScreenPlayer() {
@@ -57,7 +52,7 @@ export default function FullScreenPlayer() {
 
   const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
   const { createBookmark } = useUserProfile();
-  const { jumpForwardInterval, jumpBackwardInterval } = useSettings();
+  const { jumpForwardInterval, jumpBackwardInterval, progressFormat } = useSettings();
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const [showChapterList, setShowChapterList] = useState(false);
@@ -209,7 +204,7 @@ export default function FullScreenPlayer() {
     setIsCreatingBookmark(true);
     try {
       const bookmark = await createBookmark(currentTrack.libraryItemId, position);
-      Alert.alert("Bookmark Created", `Bookmark created at ${formatTimeWithUnits(position, true)}`);
+      Alert.alert("Bookmark Created", `Bookmark created at ${formatBookmarkTime(position)}`);
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to create bookmark:", error);
       Alert.alert("Error", "Failed to create bookmark. Please try again.");
@@ -334,7 +329,7 @@ export default function FullScreenPlayer() {
             duration={chapterDuration}
             containerStyle={{ marginBottom: 8 }}
             showPercentage={true}
-            customPercentageText={`${formatTimeWithUnits(duration - currentPosition, false)} remaining`}
+            customPercentageText={formatProgress(progressFormat, currentPosition, duration)}
           />
         </View>
 

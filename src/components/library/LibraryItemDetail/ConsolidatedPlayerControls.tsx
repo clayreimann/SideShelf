@@ -4,6 +4,7 @@ import PlayPauseButton from "@/components/player/PlayPauseButton";
 import SkipButton from "@/components/player/SkipButton";
 import { ProgressBar } from "@/components/ui";
 import { translate } from "@/i18n";
+import { formatProgress } from "@/lib/helpers/progressFormat";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
@@ -25,7 +26,7 @@ export default function ConsolidatedPlayerControls({
   const { colors } = useThemedStyles();
   const { currentTrack, position, currentChapter, isLoadingTrack } = usePlayer();
   const { createBookmark } = useUserProfile();
-  const { jumpForwardInterval, jumpBackwardInterval } = useSettings();
+  const { jumpForwardInterval, jumpBackwardInterval, progressFormat } = useSettings();
   const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
   // Check if this is the currently playing item
@@ -145,14 +146,27 @@ export default function ConsolidatedPlayerControls({
         </View>
         {/* Chapter Progress - only show if this item is currently playing */}
         {isCurrentlyPlaying && (
-          <ProgressBar
-            progress={chapterProgress}
-            variant="medium"
-            showTimeLabels={true}
-            currentTime={chapterPosition}
-            duration={chapterDuration}
-            showPercentage={false}
-          />
+          <>
+            <ProgressBar
+              progress={chapterProgress}
+              variant="medium"
+              showTimeLabels={true}
+              currentTime={chapterPosition}
+              duration={chapterDuration}
+              showPercentage={false}
+            />
+            <Text
+              style={{
+                fontSize: 13,
+                textAlign: "center",
+                marginTop: 4,
+                opacity: 0.7,
+                color: colors.textPrimary,
+              }}
+            >
+              {formatProgress(progressFormat, position, currentTrack?.duration ?? 0)}
+            </Text>
+          </>
         )}
 
         {/* Player Controls */}
