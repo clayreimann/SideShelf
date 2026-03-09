@@ -75,7 +75,14 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 3. Full screen player middle area shows progress in the selected format
 4. Floating player shows progress in the selected format
 5. Item details player controls show progress in the selected format
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
+- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
+- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
+- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
 
 ### Phase 15: Collapsible Section Redesign
 
@@ -88,7 +95,14 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 2. Tapping to expand or collapse animates the height smoothly on the UI thread (no JS-thread jank)
 3. Expanded sections show full content with no fade overlay
 4. Content is always mounted (no disappearing-children flash on toggle)
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
+- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
+- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
+- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
 
 ### Phase 16: Full Screen Player Redesign + AirPlay
 
@@ -102,7 +116,14 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 3. A settings button in the header opens a UIMenu containing at minimum: add bookmark, sleep timer, and progress format actions
 4. AirPlay route picker button is present in the full screen player header, the floating player, and the item details controls
 5. Full screen player panel open/close animation runs on the UI thread via Reanimated
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
+- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
+- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
+- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
 
 ### Phase 17: Bookmarks
 
@@ -117,7 +138,14 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 4. User can delete a bookmark from the item detail screen
 5. Bookmarks created, renamed, or deleted while online are immediately reflected on the ABS server
 6. Bookmarks are visible on the item detail screen when the device is offline (loaded from local SQLite cache)
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
+- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
+- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
+- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
 
 ### Phase 18: Sleep Timer Fade + Navigation + Path Standardization
 
@@ -132,7 +160,14 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 4. Tapping an author from the More tab opens the author detail screen
 5. Tapping a sideshelf:// deep link from outside the app navigates to the correct screen
 6. File paths written to the database and compared in filesystem operations use a consistent normalized format (POSIX, no file:// prefix)
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
+- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
+- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
+- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
 
 ### Phase 19: Performance Quick Wins + Orphan Reassociation
 
@@ -147,7 +182,14 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 4. A TTI baseline mark fires when the home screen becomes interactive, visible in performance tooling
 5. Auth startup reads credentials concurrently (no sequential await chaining)
 6. From the orphan management screen, user can associate an orphaned file with a known library item (not only delete it)
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
+- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
+- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
+- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
 
 ### Phase 20: Tree Shaking
 
@@ -159,7 +201,14 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 1. Tree shaking is enabled in the metro config and a production build is submitted to TestFlight
 2. All Reanimated animations (CollapsibleSection, FullScreenPlayer panels) work correctly in the TestFlight build
 3. The app launches and plays audio without crashes in the TestFlight build
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
+- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
+- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
+- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
 
 ### Phase 21: Maestro UI Testing Infrastructure
 
@@ -173,7 +222,14 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 3. Key player and library elements have testID attributes enabling Maestro element targeting: play-resume-button, player-done-button, seek-slider, speed-control, download-button, library-search-input
 4. Maestro flows are split into reusable subflows (\_login, \_start-playback) and standalone screen flows that can run independently
 5. A regression suite of independently executable test files covers library navigation, playback, and download flows
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
+- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
+- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
+- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
 
 ### Phase 22: ProgressService Decomposition
 
@@ -185,7 +241,14 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 1. ProgressService exists as a facade delegating to SessionTrackingCollaborator and SessionSyncCollaborator
 2. Test coverage for all ProgressService files is 90% or above
 3. Progress is saved correctly after 5+ minutes of uninterrupted playback (background sync timer path intact)
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
+- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
+- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
+- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
 
 ## Progress
 
