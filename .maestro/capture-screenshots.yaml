@@ -1,0 +1,64 @@
+appId: cloud.madtown.sideshelf
+---
+
+# ── Library: grid view ───────────────────────────────
+- tapOn: "Library"
+- waitForAnimationToEnd
+# Double-tap: first tap activates the tab (may restore a deep stack from a
+# previous run), second tap pops back to the list root (Expo Router's default
+# tab-press behavior when the tab is already active).
+- tapOn: "Library"
+- waitForAnimationToEnd
+# Normalize to grid mode. The toggle button shows the OTHER mode's name.
+# If we're in list mode, "Grid" is visible and tapping it switches to grid.
+# If we're already in grid mode, "Grid" is not in the tree — optional skips it.
+- tapOn:
+    text: "Grid"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: screenshot-library-grid
+# takeScreenshot briefly invalidates the XCTest accessibility tree on iOS.
+# A JS busy-wait blocks flow execution until the tree recovers.
+- runScript: wait.js
+
+# ── Library: list view ───────────────────────────────
+- tapOn: "List"
+- waitForAnimationToEnd
+- takeScreenshot: screenshot-library-list
+- runScript: wait.js
+
+# ── Restore grid + initiate playback ─────────────────
+# Switch back to grid so library-item index: 0 is the first cover.
+- tapOn: "Grid"
+- waitForAnimationToEnd
+- tapOn:
+    id: "library-item"
+    index: 0
+- waitForAnimationToEnd
+# "optional: true" so the second (light) run doesn't fail if playback is
+# already going and the label has changed to "Resume".
+- tapOn:
+    text: "Play"
+    optional: true
+- waitForAnimationToEnd
+
+# ── Full-screen player ───────────────────────────────
+# FloatingPlayer hides itself on the item detail page (/library/[item]).
+# Navigate to Home first so the component mounts before we tap it.
+- tapOn: "Home"
+- waitForAnimationToEnd
+- tapOn:
+    id: "floating-player"
+- waitForAnimationToEnd
+- takeScreenshot: screenshot-player
+- runScript: wait.js
+
+# ── Home / Downloads ─────────────────────────────────
+# Dismiss the full-screen player modal via the "Done" button in the header,
+# then navigate to the Home tab (tab bar is hidden while the modal is open).
+- tapOn: "Done"
+- waitForAnimationToEnd
+- tapOn: "Home"
+- waitForAnimationToEnd
+- assertVisible: "Continue Listening"
+- takeScreenshot: screenshot-downloads

@@ -67,7 +67,11 @@ export default function FloatingPlayer() {
       ]}
     >
       {/* Tappable area for opening modal */}
-      <Pressable style={componentStyles.pressableArea} onPress={handlePlayerPress}>
+      <Pressable
+        style={componentStyles.pressableArea}
+        onPress={handlePlayerPress}
+        testID="floating-player"
+      >
         {/* Cover Image */}
         <View style={componentStyles.coverContainer}>
           <CoverImage
