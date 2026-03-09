@@ -105,58 +105,58 @@ Deferred to future release.
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement   | Phase | Status  |
-| ------------- | ----- | ------- |
-| PLAYER-01     | —     | Pending |
-| PLAYER-02     | —     | Pending |
-| PLAYER-03     | —     | Pending |
-| PLAYER-04     | —     | Pending |
-| PLAYER-05     | —     | Pending |
-| PLAYER-06     | —     | Pending |
-| PROGRESS-01   | —     | Pending |
-| PROGRESS-02   | —     | Pending |
-| PROGRESS-03   | —     | Pending |
-| PROGRESS-04   | —     | Pending |
-| SECTION-01    | —     | Pending |
-| SECTION-02    | —     | Pending |
-| SECTION-03    | —     | Pending |
-| BOOKMARK-01   | —     | Pending |
-| BOOKMARK-02   | —     | Pending |
-| BOOKMARK-03   | —     | Pending |
-| BOOKMARK-04   | —     | Pending |
-| BOOKMARK-05   | —     | Pending |
-| BOOKMARK-06   | —     | Pending |
-| NAVIGATION-01 | —     | Pending |
-| NAVIGATION-02 | —     | Pending |
-| NAVIGATION-03 | —     | Pending |
-| SLEEP-01      | —     | Pending |
-| PERF-01       | —     | Pending |
-| PERF-02       | —     | Pending |
-| PERF-03       | —     | Pending |
-| PERF-04       | —     | Pending |
-| PERF-05       | —     | Pending |
-| PERF-06       | —     | Pending |
-| PERF-07       | —     | Pending |
-| PERF-08       | —     | Pending |
-| PERF-09       | —     | Pending |
-| PERF-10       | —     | Pending |
-| PERF-11       | —     | Pending |
-| DEBT-01       | —     | Pending |
-| DEBT-02       | —     | Pending |
-| DEBT-03       | —     | Pending |
-| TESTING-01    | —     | Pending |
-| TESTING-02    | —     | Pending |
-| TESTING-03    | —     | Pending |
-| TESTING-04    | —     | Pending |
-| TESTING-05    | —     | Pending |
+| Requirement   | Phase    | Status  |
+| ------------- | -------- | ------- |
+| PLAYER-01     | Phase 16 | Pending |
+| PLAYER-02     | Phase 16 | Pending |
+| PLAYER-03     | Phase 16 | Pending |
+| PLAYER-04     | Phase 16 | Pending |
+| PLAYER-05     | Phase 16 | Pending |
+| PLAYER-06     | Phase 16 | Pending |
+| PROGRESS-01   | Phase 14 | Pending |
+| PROGRESS-02   | Phase 14 | Pending |
+| PROGRESS-03   | Phase 14 | Pending |
+| PROGRESS-04   | Phase 14 | Pending |
+| SECTION-01    | Phase 15 | Pending |
+| SECTION-02    | Phase 15 | Pending |
+| SECTION-03    | Phase 15 | Pending |
+| BOOKMARK-01   | Phase 17 | Pending |
+| BOOKMARK-02   | Phase 17 | Pending |
+| BOOKMARK-03   | Phase 17 | Pending |
+| BOOKMARK-04   | Phase 17 | Pending |
+| BOOKMARK-05   | Phase 17 | Pending |
+| BOOKMARK-06   | Phase 17 | Pending |
+| NAVIGATION-01 | Phase 18 | Pending |
+| NAVIGATION-02 | Phase 18 | Pending |
+| NAVIGATION-03 | Phase 18 | Pending |
+| SLEEP-01      | Phase 18 | Pending |
+| PERF-01       | Phase 19 | Pending |
+| PERF-02       | Phase 19 | Pending |
+| PERF-03       | Phase 20 | Pending |
+| PERF-04       | Phase 19 | Pending |
+| PERF-05       | Phase 19 | Pending |
+| PERF-06       | Phase 19 | Pending |
+| PERF-07       | Phase 19 | Pending |
+| PERF-08       | Phase 19 | Pending |
+| PERF-09       | Phase 19 | Pending |
+| PERF-10       | Phase 19 | Pending |
+| PERF-11       | Phase 16 | Pending |
+| DEBT-01       | Phase 18 | Pending |
+| DEBT-02       | Phase 19 | Pending |
+| DEBT-03       | Phase 22 | Pending |
+| TESTING-01    | Phase 21 | Pending |
+| TESTING-02    | Phase 21 | Pending |
+| TESTING-03    | Phase 21 | Pending |
+| TESTING-04    | Phase 21 | Pending |
+| TESTING-05    | Phase 21 | Pending |
 
 **Coverage:**
 
-- v1.3 requirements: 43 total
-- Mapped to phases: 0
-- Unmapped: 43 ⚠️
+- v1.3 requirements: 42 total
+- Mapped to phases: 42
+- Unmapped: 0 ✓
 
 ---
 
 _Requirements defined: 2026-03-09_
-_Last updated: 2026-03-09 after initial definition_
+_Last updated: 2026-03-09 after roadmap creation — all requirements mapped to phases 14–22_

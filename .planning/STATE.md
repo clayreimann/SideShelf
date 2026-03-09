@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Beta Polish
-status: planning
-stopped_at: requirements defined — ready for roadmap creation
+status: ready_to_plan
+stopped_at: roadmap created — Phase 14 ready to plan
 last_updated: "2026-03-09T00:00:00.000Z"
-last_activity: 2026-03-09 — Milestone v1.3 started, requirements defined
+last_activity: 2026-03-09 — Roadmap created for v1.3 (Phases 14–22, 42 requirements)
 progress:
-  total_phases: 0
+  total_phases: 9
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,43 +21,38 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Defining requirements — Status: Defining requirements
+**Current focus:** Phase 14 — Progress Display Format (ready to plan)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 14 of 22 (Progress Display Format)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-09 — Milestone v1.3 started
+Status: Ready to plan
+Last activity: 2026-03-09 — Roadmap created, all 42 v1.3 requirements mapped
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
-
-**Velocity (v1.0):**
-
-- Total plans completed: 16 (Phases 2–5 including 03.1)
-- Total execution time: ~1 month
-
-**Velocity (v1.1):**
-
-- Total plans completed: 11 (Phases 6–9)
-- Total execution time: 6 days (Feb 22 → Feb 27)
 
 **Velocity (v1.2):**
 
 - Total plans completed: 8 (Phases 10–13)
 - Total execution time: 7 days (Feb 28 → Mar 7)
-- Plan 10-01: 4 min (2 tasks, 8 files)
-- Plan 10-02: 12 min (2 tasks, 11 files)
-- Plan 11-01: 8 min (3 tasks, 10 files, 29 new tests)
-- Plan 11-02: 90 min (4 tasks, 14 files, 8 new tests)
-- Plan 12-01: 33 min (3 tasks, 13 files, 67 new tests)
-- Plan 12-02: 20 min (3 tasks, 7 files, 33 new tests)
-- Plan 13-01: 10 min (1 task, 1 file — investigation document)
-- Plan 13-02: 30 min (3 tasks, 5 files, 5 new tests)
+
+**By Phase:**
+
+| Phase | Plans | Total Time | Avg/Plan |
+| ----- | ----- | ---------- | -------- |
+| 10    | 2     | ~16 min    | ~8 min   |
+| 11    | 2     | ~98 min    | ~49 min  |
+| 12    | 2     | ~53 min    | ~27 min  |
+| 13    | 2     | ~40 min    | ~20 min  |
+
+**Recent Trend:** Stable (~20–50 min per plan depending on test surface)
 
 ## Accumulated Context
 
-### Key Decisions — carry forward to v1.3
+### Key Decisions — carry forward
 
 Full decision log is in PROJECT.md Key Decisions table.
 
@@ -68,11 +63,18 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
-1. **Standardize path handling, storage, and persistence across the app** — encoding mismatch between file:// URIs, POSIX paths, and D:/C: prefixed DB paths; discovered during Phase 13 smoke testing
-2. **Add reassociation option to orphan download screen** — allow user to link orphaned downloaded files to a known library item instead of delete-only
+1. **Standardize path handling** (now Phase 18 / DEBT-01) — encoding mismatch between file:// URIs, POSIX paths, and D:/C: prefixed DB paths
+2. **Orphan reassociation UI** (now Phase 19 / DEBT-02) — allow user to link orphaned files to known library items
 
-### Open Concerns
+### Blockers/Concerns
 
-- Android `updateMetadataForTrack` artwork bug (#2287) — not verified (no Android device); carry forward
-- PERF-01 (`NATIVE_PROGRESS_UPDATED` bypass async-lock) — deferred; needs safety analysis
-- Expo SDK 55 upgrade blocked by RNTP Android bridgeless compatibility (issue #2443)
+- AirPlay package new-arch compatibility: `@douglowder/expo-av-route-picker-view` not verified against SDK 54 + newArchEnabled — confirm with device build before Phase 16 planning; local Expo Module fallback documented
+- Tree shaking (Phase 20): `inlineRequires` + Reanimated 4 + React Compiler triple interaction undocumented; treat as exploratory; have revert plan ready
+- ABS bookmark PATCH endpoint: `PATCH /api/me/item/:id/bookmark/:bookmarkId` inferred, not verified from ABS docs — confirm before Phase 17 planning
+- URL scheme mismatch: app.json has `"scheme": "side-shelf"` (hyphen) but docs use `sideshelf://` — resolve at start of Phase 21; run `xcrun simctl openurl` to confirm
+
+## Session Continuity
+
+Last session: 2026-03-09
+Stopped at: Roadmap created — ready to plan Phase 14
+Resume file: None
