@@ -14,6 +14,7 @@ import {
   getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
+  getProgressFormat,
   getSmartRewindEnabled,
   getTabOrder,
   getViewMode,
@@ -23,11 +24,13 @@ import {
   setHomeLayout,
   setJumpBackwardInterval,
   setJumpForwardInterval,
+  setProgressFormat,
   setSmartRewindEnabled,
   setTabOrder,
   setViewMode,
 } from "@/lib/appSettings";
 import { logger } from "@/lib/logger";
+import type { ProgressFormat } from "@/lib/helpers/progressFormat";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import type { SliceCreator } from "@/types/store";
 
@@ -57,6 +60,8 @@ export interface SettingsSliceState {
     customUpdateUrl: string | null;
     /** Library view mode preference */
     viewMode: "list" | "grid";
+    /** Progress display format preference */
+    progressFormat: ProgressFormat;
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -89,6 +94,8 @@ export interface SettingsSliceActions {
   updateCustomUpdateUrl: (url: string | null) => Promise<void>;
   /** Update library view mode preference */
   updateViewMode: (mode: "list" | "grid") => Promise<void>;
+  /** Update progress display format preference */
+  updateProgressFormat: (format: ProgressFormat) => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -111,6 +118,7 @@ const DEFAULT_SETTINGS = {
   hiddenTabs: [] as string[],
   customUpdateUrl: null,
   viewMode: "list" as const,
+  progressFormat: "remaining" as const satisfies ProgressFormat,
 };
 
 /**
@@ -164,6 +172,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         hiddenTabs,
         customUpdateUrl,
         viewMode,
+        progressFormat,
       ] = await Promise.all([
         getJumpForwardInterval(),
         getJumpBackwardInterval(),
@@ -174,6 +183,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         getHiddenTabs(),
         getCustomUpdateUrl(),
         getViewMode(),
+        getProgressFormat(),
       ]);
 
       set((state: SettingsSlice) => ({
@@ -188,6 +198,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           hiddenTabs: hiddenTabs,
           customUpdateUrl: customUpdateUrl,
           viewMode: viewMode,
+          progressFormat: progressFormat,
           initialized: true,
           isLoading: false,
         },
@@ -561,6 +572,45 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           viewMode: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update progress display format preference
+   */
+  updateProgressFormat: async (format: ProgressFormat) => {
+    log.info(`Updating progress format to ${format}`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.progressFormat;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        progressFormat: format,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setProgressFormat(format);
+
+      log.info(`Progress format updated to ${format}`);
+    } catch (error) {
+      log.error("Failed to update progress format setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          progressFormat: previousValue,
         },
       }));
 

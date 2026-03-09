@@ -17,6 +17,7 @@ jest.mock("@/lib/appSettings", () => ({
   getHiddenTabs: jest.fn(),
   getCustomUpdateUrl: jest.fn(),
   getViewMode: jest.fn(),
+  getProgressFormat: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
@@ -26,6 +27,7 @@ jest.mock("@/lib/appSettings", () => ({
   setHiddenTabs: jest.fn(),
   setCustomUpdateUrl: jest.fn(),
   setViewMode: jest.fn(),
+  setProgressFormat: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
 }));
@@ -49,6 +51,7 @@ describe("SettingsSlice", () => {
     getHiddenTabs,
     getCustomUpdateUrl,
     getViewMode,
+    getProgressFormat,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
@@ -58,6 +61,7 @@ describe("SettingsSlice", () => {
     setHiddenTabs,
     setCustomUpdateUrl,
     setViewMode,
+    setProgressFormat,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
 
@@ -89,6 +93,8 @@ describe("SettingsSlice", () => {
     setCustomUpdateUrl.mockResolvedValue();
     getViewMode.mockResolvedValue("list");
     setViewMode.mockResolvedValue();
+    getProgressFormat.mockResolvedValue("remaining");
+    setProgressFormat.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
 
@@ -110,6 +116,7 @@ describe("SettingsSlice", () => {
         hiddenTabs: [],
         customUpdateUrl: null,
         viewMode: "list",
+        progressFormat: "remaining",
         initialized: false,
         isLoading: false,
       });
@@ -492,6 +499,66 @@ describe("SettingsSlice", () => {
 
       const state = store.getState();
       expect(state.settings.viewMode).toBe("list");
+    });
+  });
+
+  describe("progressFormat", () => {
+    describe("initializeSettings", () => {
+      it("loads progressFormat from storage via getProgressFormat", async () => {
+        getProgressFormat.mockResolvedValue("elapsed");
+
+        await store.getState().initializeSettings();
+
+        expect(getProgressFormat).toHaveBeenCalled();
+        expect(store.getState().settings.progressFormat).toBe("elapsed");
+      });
+
+      it("defaults to 'remaining' when getProgressFormat returns 'remaining' (storage null fallback handled by appSettings)", async () => {
+        getProgressFormat.mockResolvedValue("remaining");
+
+        await store.getState().initializeSettings();
+
+        expect(store.getState().settings.progressFormat).toBe("remaining");
+      });
+    });
+
+    describe("updateProgressFormat", () => {
+      it("optimistically sets progressFormat before persisting", async () => {
+        let optimisticValue: string | undefined;
+
+        setProgressFormat.mockImplementation(async () => {
+          optimisticValue = store.getState().settings.progressFormat;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+
+        await store.getState().updateProgressFormat("elapsed");
+
+        expect(optimisticValue).toBe("elapsed");
+        expect(setProgressFormat).toHaveBeenCalledWith("elapsed");
+      });
+
+      it("reverts to previous value when setProgressFormat throws", async () => {
+        expect(store.getState().settings.progressFormat).toBe("remaining");
+
+        setProgressFormat.mockRejectedValue(new Error("Storage error"));
+
+        await expect(store.getState().updateProgressFormat("elapsed")).rejects.toThrow(
+          "Storage error"
+        );
+
+        expect(store.getState().settings.progressFormat).toBe("remaining");
+      });
+    });
+
+    describe("resetSettings", () => {
+      it("restores progressFormat to 'remaining'", async () => {
+        await store.getState().updateProgressFormat("percent");
+        expect(store.getState().settings.progressFormat).toBe("percent");
+
+        store.getState().resetSettings();
+
+        expect(store.getState().settings.progressFormat).toBe("remaining");
+      });
     });
   });
 

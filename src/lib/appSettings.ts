@@ -6,6 +6,8 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import type { ProgressFormat } from "@/lib/helpers/progressFormat";
+
 const SETTINGS_KEYS = {
   jumpForwardInterval: "@app/jumpForwardInterval",
   jumpBackwardInterval: "@app/jumpBackwardInterval",
@@ -18,7 +20,10 @@ const SETTINGS_KEYS = {
   customUpdateUrl: "@app/customUpdateUrl",
   lastHomeSectionCount: "@app/lastHomeSectionCount",
   viewMode: "@app/viewMode",
+  progressFormat: "@app/progressFormat",
 } as const;
+
+const DEFAULT_PROGRESS_FORMAT = "remaining" as const satisfies ProgressFormat;
 
 // Default values
 const DEFAULT_JUMP_FORWARD_INTERVAL = 30;
@@ -352,6 +357,35 @@ export async function setViewMode(mode: "list" | "grid"): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.viewMode, mode);
   } catch (error) {
     console.error("[AppSettings] Failed to save view mode setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get progress display format preference
+ * Default: 'remaining' — shows time remaining (e.g. "2h 21m remaining")
+ */
+export async function getProgressFormat(): Promise<ProgressFormat> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.progressFormat);
+    if (value === "remaining" || value === "elapsed" || value === "percent") {
+      return value;
+    }
+    return DEFAULT_PROGRESS_FORMAT;
+  } catch (error) {
+    console.error("[AppSettings] Failed to get progress format setting:", error);
+    return DEFAULT_PROGRESS_FORMAT;
+  }
+}
+
+/**
+ * Set progress display format preference
+ */
+export async function setProgressFormat(format: ProgressFormat): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.progressFormat, format);
+  } catch (error) {
+    console.error("[AppSettings] Failed to save progress format setting:", error);
     throw error;
   }
 }
