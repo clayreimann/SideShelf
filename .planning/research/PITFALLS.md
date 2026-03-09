@@ -1,381 +1,382 @@
 # Pitfalls Research
 
-**Domain:** React Native Expo audiobook app — v1.2 Tech Cleanup milestone
-**Researched:** 2026-02-28
-**Confidence:** HIGH — grounded in direct codebase analysis, official changelogs, and verified library issue reports
+**Domain:** React Native Expo audiobook app — v1.3 Beta Polish milestone
+**Researched:** 2026-03-09
+**Confidence:** HIGH — grounded in direct codebase inspection, official issue trackers, and verified library behaviour
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Expo 55 Mandates New Architecture — react-native-track-player Events Broken in Bridgeless Mode
+### Pitfall 1: React Compiler Extracts Worklet Functions, Breaking Reanimated at Runtime
 
 **What goes wrong:**
-Expo SDK 55 drops the Legacy Architecture entirely. React Native 0.83 (bundled in SDK 55) always enables the New Architecture; there is no opt-out. The current codebase uses `react-native-track-player` 4.1.2. In early 4.x builds, events emitted from the headless audio service on Android do not fire when running under the New Architecture bridgeless mode. The coordinator depends critically on `NATIVE_STATE_CHANGED`, `NATIVE_TRACK_CHANGED`, `NATIVE_PROGRESS_UPDATED`, `NATIVE_PLAYBACK_ERROR`, and `NATIVE_QUEUE_ENDED` events. If any of these fail to reach the coordinator, the state machine stalls silently — no user-visible error, just a frozen player state.
+React Compiler (enabled via `app.json` `experiments.reactCompiler: true`) aggressively extracts inline functions passed to hooks like `useDerivedValue`, `useAnimatedStyle`, and `useAnimatedScrollHandler`. Reanimated's worklet system requires these functions to be inline (or explicitly `'worklet'`-marked) at the call site so the Reanimated Babel plugin can hoist them to the UI thread. When React Compiler extracts them into a separate `_temp` helper, they become regular JS functions, not worklets. At runtime, Reanimated throws: `[Reanimated] Tried to synchronously call a non-worklet function on the UI thread.`
+
+This is a confirmed, unresolved conflict between React Compiler and Reanimated (github.com/software-mansion/react-native-reanimated/issues/6826). This codebase already has React Compiler enabled AND Reanimated 4.1.1. Every new `useAnimatedStyle` or `useDerivedValue` written for CollapsibleSection or FullScreenPlayer is exposed to this.
 
 **Why it happens:**
-The underlying issue is `RCTDeviceEventEmitter` (used by Android's headless service) not propagating events through the bridgeless interop layer. This was a known React Native issue (facebook/react-native#44255, #46050). RNTP fixed this in a subsequent release, but version 4.1.2 (currently installed) predates a confirmed-clean bridgeless fix. The exact minimum version with confirmed bridgeless stability is not pinnable from documentation alone — it requires a test on the actual device post-upgrade.
+React Compiler treats `useDerivedValue(() => value.value * 2)` as "a callback that can be memoized", extracts the arrow function, and passes a reference to the extracted copy. Reanimated never sees the inline arrow function it expects to mark as a worklet. The Babel worklet transform ran at compile time on the original source — the extracted function never gets the `__workletContextObject` property the UI thread runtime checks for.
 
 **How to avoid:**
-Before upgrading Expo SDK, upgrade `react-native-track-player` to the latest 4.x release and run the full coordinator event sequence on an Android device: launch → play → skip → seek → pause → resume → queue end. Check the coordinator's `totalEventsProcessed` metric (visible in the diagnostics UI) against the number of expected events. If events are missing, the state machine will reject transitions and `rejectedTransitionCount` will spike with no corresponding action.
+Test every new `useAnimatedStyle`/`useDerivedValue` addition by running the app in development and triggering the animation. If it crashes with "non-worklet function", add an explicit `'worklet';` directive as the first line of the callback body. This forces Reanimated's Babel plugin to mark it regardless of what React Compiler does with the surrounding code. Document this in the migration PR so it is not treated as a one-time fluke.
 
 **Warning signs:**
 
-- Player plays audio natively (OS controls work) but the coordinator shows stale state in the diagnostics UI
-- `rejectedTransitionCount` rises but `stateTransitionCount` stays flat
-- `NATIVE_STATE_CHANGED` events absent from the coordinator's transition history during playback
-- Android notification controls work but the in-app UI does not update position
+- Red screen crash with `[Reanimated] Tried to synchronously call a non-worklet function on the UI thread`
+- Animation works in development (Metro + Hermes debug, where React Compiler may behave differently) but crashes in production build
+- Only affects new Reanimated code — existing `tab-bar-settings.tsx` usages predate this conflict and may work due to their specific structure
 
-**Phase to address:** Expo upgrade phase. Block the Expo bump until RNTP compatibility is verified on Android. iOS is lower risk (bridgeless issues are predominantly Android-side).
+**Phase to address:** CollapsibleSection Reanimated migration phase and FullScreenPlayer animation migration phase. Add `'worklet';` directives proactively rather than reactively.
 
 ---
 
-### Pitfall 2: Expo 55 Changes NativeTabs API — Tab Layout Will Not Compile After Upgrade
+### Pitfall 2: FlashList Does Not Support `columnWrapperStyle` — Grid Spacing Breaks on Migration
 
 **What goes wrong:**
-SDK 55 restructures the `NativeTabs` unstable API. In particular, `Icon`, `Label`, and `Badge` sub-components moved to be accessed via `NativeTabs.Trigger.*` — any direct imports of these components from `expo-router/unstable-native-tabs` will fail to resolve post-upgrade. This codebase uses `NativeTabs` in `src/app/(tabs)/_layout.tsx` for the custom tab order / hidden tabs feature. A compile-time import change in a layout file will make the entire tab navigator fail to render, which means the app opens to a blank screen or crashes at startup.
+`LibraryItemList.tsx` currently uses FlatList with `columnWrapperStyle={componentStyles.gridColumnWrapper}` to add `gap: spacing.md` between grid items. FlashList does not support `columnWrapperStyle` at all (github.com/Shopify/flash-list/issues/686). Passing it does nothing and a warning appears in development. The 3-column grid layout will lose all inter-item spacing on migration, making covers run flush against each other.
+
+Additionally, FlashList and FlatList differ fundamentally in how they handle multi-column layouts: FlatList wraps three items in a row View; FlashList treats each item as an individual cell and manages column layout internally. Width-based styling that assumed "this item is 1/3 of the parent in FlatList" is still correct in FlashList with `numColumns={3}` (FlashList honours `numColumns` for width division), but any `StyleSheet.create` entry that references a gap via `columnWrapperStyle` must be replaced.
 
 **Why it happens:**
-`NativeTabs` is still marked `unstable` in the API surface, meaning it is explicitly not covered by Expo's stability guarantees between SDK versions. The v1.1 milestone made significant investment in the custom tab reorder feature (`tabOrder`, `hiddenTabs` in settingsSlice) that depends directly on this API. SDK 55 also changes `resetOnFocus` (previously `reset`) on headless tabs.
+The FlashList architecture recycles individual cells, not row-wrapper Views. There is no row wrapper to apply `columnWrapperStyle` to. This is a documented limitation, not a bug — FlashList explicitly does not implement this prop.
 
 **How to avoid:**
-Before running `npx expo install --fix` (which updates package versions), read the SDK 55 changelog's `expo-router` section in full and grep `src/app/(tabs)/_layout.tsx` for all `NativeTabs` API usages. Map each usage against the new API surface. Do this as a pure reading exercise before touching any files — it costs 30 minutes and avoids a silent tab-break that is hard to diagnose in a partially-upgraded state.
+Replace `columnWrapperStyle` with per-item horizontal padding calculated from the item's column index. Use `overrideItemLayout` if needed for the grid/list mode switch (`getItemType` is the correct FlashList mechanism for telling the recycler that grid items and list items are different component types and should not be recycled into each other). Verify the grid visually at all three column counts: 3 items (full grid), 2 items (partial last row), 1 item (degenerate case). Also add `estimatedItemSize` — without it, FlashList warns and estimates poorly, causing layout jumps on first render.
 
 **Warning signs:**
 
-- After `npx expo install --fix`, TypeScript errors in `_layout.tsx` referencing `NativeTabs` sub-components
-- App opens to blank tab content area with no crash log (layout render fails silently in some Expo versions)
-- Custom tab ordering stops working (tabs appear but in hardcoded order)
+- Grid items have no gap after migration (covers flush against each other)
+- Warning in Metro logs: `columnWrapperStyle is not supported in FlashList`
+- Grid layout jumps or flashes on first scroll (missing `estimatedItemSize`)
+- Items rendered in wrong component template when switching grid/list mode (missing `getItemType`)
 
-**Phase to address:** Expo upgrade phase, immediately after running `npx expo install --fix` and before `expo prebuild --clean`.
+**Phase to address:** FlashList migration phase (PERF-01). Measure average item height in both grid and list modes for `estimatedItemSize` before implementation.
 
 ---
 
-### Pitfall 3: Expo 55 Requires Xcode 26 — Build Fails on Older Xcode Without Clear Error
+### Pitfall 3: AirPlay AVRoutePickerView Requires a Native Module — Not Available in Expo Managed Workflow Without Prebuild
 
 **What goes wrong:**
-SDK 55 (React Native 0.83, Swift Concurrency / MainActor isolation enforcement) requires Xcode 26. Building with an older Xcode produces Swift compiler errors originating in `expo-modules-core`, specifically errors related to `MainActor` isolation — not in application code, but deep in Expo's own iOS layer. The errors look like library bugs, not toolchain issues, causing wasted time investigating RNTP or custom native modules.
+`AVRoutePickerView` is an iOS native UI component. There is no Expo SDK built-in for it. Using it requires a third-party native module (`@douglowder/expo-av-route-picker-view` or `react-native-avroutepickerview`). Both libraries require native code and cannot be used with Expo Go — they require `expo prebuild` to compile into the native project.
+
+The app already uses `expo-dev-client` and prebuild (`npm run ios` runs `expo prebuild --clean && expo run:ios`), so this is not a hard blocker. However: the `scheme` in `app.json` is currently `"side-shelf"` (with a hyphen). Hyphens are valid in iOS URL schemes (RFC 2396), so this is not a bug — but it must match what Maestro deep link tests use. The `ui-testing.md` plan uses `sideshelf://` (no hyphen); this mismatch means all Maestro `openLink` commands will fail silently until corrected.
 
 **Why it happens:**
-Swift 6 strict concurrency checking is enforced by Xcode 26. `expo-modules-core` 55.x uses Swift features that require the newer compiler. The `npm run ios` script already runs `expo prebuild --clean` but prebuild does not check Xcode version — the failure surface is at compile time inside Xcode, after 5-10 minutes of build time.
+Two separate naming decisions were made independently: the `app.json` scheme was set to `side-shelf` (matching the app name), and the UI testing plan was written assuming `sideshelf` (no hyphen). Neither was wrong in isolation; the conflict only surfaces when deep link tests run.
 
 **How to avoid:**
-Run `xcode-select --version` and check the Xcode version before starting the upgrade. If not on Xcode 26, install it first. Do this as the first step of the upgrade phase, before changing any package.json versions.
+Pick one scheme and use it everywhere. The AirPlay module requires an explicit pod install or CNG dependency declaration in `app.json`'s `plugins` array. Verify the module renders on device (not simulator — the iOS simulator does not show the AirPlay picker popup). For the URL scheme conflict: run `xcrun simctl openurl booted "side-shelf:///(tabs)/library"` and `xcrun simctl openurl booted "sideshelf:///(tabs)/library"` to determine which the app actually responds to before writing any Maestro flows.
 
 **Warning signs:**
 
-- Xcode build fails with Swift compiler errors in `expo-modules-core` or other Expo packages
-- Errors reference `MainActor` isolation or `async` annotation issues, not in app code
-- `expo-modules-core` is not listed in any custom native code and was not recently changed
+- AirPlay button renders but tapping does nothing (module not installed or pod not linked)
+- `@douglowder/expo-av-route-picker-view` throws "Unrecognized RCT module" at runtime (pod install ran but native module not registered)
+- Maestro `openLink` commands time out with no navigation (scheme mismatch between `app.json` and YAML)
+- AirPlay button shows in development build but is invisible on TestFlight (missing config plugin declaration for EAS build)
 
-**Phase to address:** Expo upgrade phase, as a pre-flight check before any code changes.
+**Phase to address:** AirPlay/player UI redesign phase. Verify scheme consistency before writing any Maestro flows.
 
 ---
 
-### Pitfall 4: RN Downloader Mainline Renames `checkForExistingDownloads` to `getExistingDownloadTasks` — Silent Runtime Failure
+### Pitfall 4: Expo Tree Shaking Crashes Production Builds When Reanimated Is Present
 
 **What goes wrong:**
-The codebase is pinned to a custom fork (`github:clayreimann/react-native-background-downloader#spike-event-queue`) of the `@kesha-antonov/react-native-background-downloader` library. The mainline `@kesha-antonov` package uses `getExistingDownloadTasks()` instead of `checkForExistingDownloads()` (the legacy EkoLabs API surface). The `DownloadService.initialize()` method calls `RNBackgroundDownloader.checkForExistingDownloads()` at startup. If the mainline package does not expose this name, the call at `DownloadService.ts:78` returns `undefined` instead of an empty array, and `existingTasks.length` throws `TypeError: Cannot read property 'length' of undefined`. This crashes the download service initialization silently (the error is caught at line 89 and logged but the service marks itself as failed to initialize).
+Expo's `EXPO_UNSTABLE_TREE_SHAKING=1` flag is marked unstable for a reason: it has a confirmed bug where it can tree-shake away the initialization side effects of `react-native-reanimated`, leaving the native Worklets module uninitialized in production builds. The app crashes on launch with a Worklets initialization error. This is tracked in expo/expo#41620 and software-mansion/react-native-reanimated#8752. This codebase uses Reanimated 4.1.1, which splits worklet runtime into the `react-native-worklets` package — the surface for this bug is larger than in Reanimated 3.x.
+
+Additionally, `EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1` changes Metro's module resolution ordering. Modules with initialization side effects (like `react-native-gesture-handler`'s `GestureHandlerRootView`, `react-native-screens`, and `async-lock`) may initialize in a different order than expected, causing subtle runtime failures unrelated to Reanimated.
 
 **Why it happens:**
-The original EkoLabs fork used `checkForExistingDownloads`. The kesha-antonov fork/rename updated the API surface but the function name changed. The custom fork (`spike-event-queue` branch) may re-expose the old name as an alias or may use the new name — this needs direct inspection of the branch's index.ts before attempting the migration.
+Tree shaking identifies imports with no "live bindings" (nothing imported from the module is used in the final bundle) and removes the entire module, including any `import 'some-module'` side-effect imports. Reanimated's initialization works via side-effect imports in its entry point. If tree shaking incorrectly classifies these as dead code, the native side is never initialized.
 
 **How to avoid:**
-Before switching the package.json reference, clone or inspect the `@kesha-antonov/react-native-background-downloader` mainline source and diff its exported API against the current fork's exports. Specifically: compare `checkForExistingDownloads` vs `getExistingDownloadTasks`, compare task lifecycle events (`done`, `error`, `progress`, `begin`) against what `DownloadService.ts:274-330` registers, and compare `setConfig` options (specifically `progressInterval` and `isLogsEnabled` at lines 72-75). Any API surface difference must be adapter-wrapped in `DownloadService.ts` before the fork switch.
+Enable tree shaking incrementally. First enable only `EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH=1` (the graph optimization, lower risk). Then add `EXPO_UNSTABLE_TREE_SHAKING=1` in a separate commit and test a production build (`eas build --platform ios --profile production --local`). Do NOT test only with `expo start` — tree shaking only applies to production bundles. Verify the production build launches, plays audio, and the Reanimated animation on CollapsibleSection works. If Worklets crashes, the workaround is to add a dummy `Animated.View` import in `_layout.tsx` to force Reanimated into the bundle (confirmed workaround from the GitHub issue).
 
 **Warning signs:**
 
-- After switching to mainline, `DownloadService` logs `Error during initialization` on startup
-- Downloads appear to start but never complete (progress callbacks not registered)
-- `isInitialized` stays `false` → subsequent `startDownload` calls call `initialize()` again on every download attempt
-- `checkForExistingDownloads is not a function` error in logs
+- Production build crashes immediately on launch with `Worklets native module not initialized` or similar
+- Development build (from `expo start`) works fine — tree shaking does not apply to dev bundles
+- Reanimated animations stop working in production but work in development
+- `async-lock` throws `Cannot read property 'acquire' of undefined` (lock singleton not initialized due to module ordering change)
 
-**Phase to address:** RN Downloader migration phase. Treat as API migration, not a simple dependency swap.
+**Phase to address:** Tree shaking phase (PERF-03). This must be a standalone phase that ships a production build to TestFlight for smoke testing before being considered done.
 
 ---
 
-### Pitfall 5: RN Downloader Migration Breaks iOS Path Repair Logic If Task IDs Change
+### Pitfall 5: CollapsibleSection Height Animation Requires Measuring Dynamic Content Height — Cannot Animate to "auto"
 
 **What goes wrong:**
-The `DownloadService` uses task IDs derived from `libraryItemId` and audio file `ino` to match restored background tasks to in-progress downloads at startup. If the mainline downloader generates task IDs differently (e.g., using a different concatenation format, adding a prefix, or using a UUID), `restoreExistingDownloads()` at line 79 will find existing tasks but fail to match them to any known audio file. The orphaned tasks will re-download files that already exist on disk, doubling bandwidth usage. More critically: if the task completes and `markAudioFileAsDownloaded` is called for a file that already has a correct `localAudioFileDownloads` record, Drizzle's `onConflictDoUpdate` handles the duplicate gracefully — but the progress callbacks will not fire for any UI that was waiting (the original subscription was on the old task ID).
+The current `CollapsibleSection` uses the legacy `Animated` API and simply shows/hides content by toggling `isExpanded`. The new design (SECTION-01–03) requires showing the first ~100px of content in collapsed state and animating to the full height when expanding. Reanimated's `withTiming` cannot animate to `'auto'` height — it requires a numeric value. If the content height is not measured first, the animation either jumps to a hardcoded estimate or does not animate at all.
+
+The standard Reanimated pattern for animating to a dynamic height is: render the content offscreen/invisible → measure its height via `onLayout` → store the height in a `useRef` → animate `sharedValue` from collapsed height (100) to measured height. This requires a two-pass render: the content must be rendered before its height is known.
 
 **Why it happens:**
-The `spike-event-queue` fork was custom-built for this codebase's event queue pattern. Its task ID format may be a deliberate divergence from the mainline. The mainline's `getExistingDownloadTasks()` returns task objects whose `id` field format is library-defined. If the format differs, the `restoreExistingDownloads` logic (which looks up tasks by ID in `activeDownloads`) will miss all in-flight downloads.
+React Native layout is asynchronous. There is no synchronous way to know a component's layout dimensions before it renders. `useAnimatedStyle` with `height: withTiming(targetHeight)` will produce a zero-height animation if `targetHeight` is 0 when the animation starts (before `onLayout` fires).
 
 **How to avoid:**
-Test the mainline's task ID format by starting a download, force-quitting the app, relaunching, and logging the `id` field from each task returned by `getExistingDownloadTasks()`. Compare this against the IDs stored in `activeDownloads`. If they differ, add a lookup-by-audio-file-path fallback in `restoreExistingDownloads` that matches tasks by comparing the download URL pattern against the expected download URL for each pending audio file.
+Render the full content with `position: 'absolute'` and `opacity: 0` to measure its height via `onLayout`, then animate once the height is known. Alternatively, use a fixed peek height for the collapsed state (100px as specified) and animate to the measured full height. Guard the animation start: only call `withTiming` after `measuredHeight > 0`. If `measuredHeight` is 0 at expand time, show content without animation rather than showing nothing.
 
 **Warning signs:**
 
-- After migrating to mainline: restart during active download → files re-download from zero rather than resuming
-- `restoreExistingDownloads` logs found X tasks but then immediately logs "no matching download info found" for each one
-- `activeDownloads` Map is empty after restart despite files being partially present on disk
+- Collapsed section shows nothing instead of the first 100px (wrong initial height)
+- Expand animation plays but content snaps to wrong final height (measuring before layout)
+- Section height is correct for the first item but wrong for subsequent items in a list (recycled component with stale `measuredHeight` from previous item)
 
-**Phase to address:** RN Downloader migration phase. Test specifically with the app-restart-during-download scenario before considering the migration complete.
+**Phase to address:** CollapsibleSection redesign phase (SECTION-01–03). Write the height measurement pattern before implementing the animation.
 
 ---
 
-### Pitfall 6: Moving Local State to Zustand Causes Coordinator Event Storms If State Drives Side Effects
+### Pitfall 6: Sleep Timer Volume Fade Interval Not Cleared on Playback Stop or App Backgrounding
 
 **What goes wrong:**
-If a component's local `useState` drives a side effect (e.g., `useEffect(() => { doSomething(localVal); }, [localVal])`), moving that state to Zustand without re-examining the effect dependency chain creates a new failure mode: every Zustand subscriber that touches the same slice will now re-trigger the effect. In the player context, the `playerSlice` has high write frequency (position updates at 1Hz from `NATIVE_PROGRESS_UPDATED`). If any component moves local state that depends on player position into Zustand without a precise selector, that component's `useEffect` fires every second — potentially dispatching coordinator events or re-initializing services on each tick.
+The sleep timer volume fade (SLEEP-01) requires a `setInterval` that calls `TrackPlayer.setVolume()` every ~300ms for the last 30 seconds. If the user manually stops playback before the sleep timer fires, or the app is backgrounded, or the sleep timer is cancelled, this interval must be explicitly cleared. If it is not:
+
+1. The interval continues calling `TrackPlayer.setVolume()` on a stopped player — no crash, but volume is stuck at the faded value when the user next plays
+2. If a new sleep timer is set while the old interval is still running, two intervals race to set volume simultaneously, creating non-monotonic volume behaviour
+3. After the volume reaches 0 and the sleep timer stops playback, the volume stays at 0 permanently (the interval was not cleared, but it has already reached 0)
+
+The current `SleepTimerControl` component and its underlying slice/service do not implement volume restoration. Any refactoring of the sleep timer to add fade must also ensure volume is restored to 1.0 when: timer cancelled, playback manually stopped, or app relaunches.
 
 **Why it happens:**
-Local `useState` is component-scoped. Zustand state is process-scoped. A component that reads `useAppStore(state => state.player.position)` will re-render on every position update (once per second during playback). Any `useEffect` that lists this selector's output as a dependency fires once per second. In the current architecture, `playerSlice` position is updated at 1Hz specifically to avoid Zustand re-render storms — the `NATIVE_PROGRESS_UPDATED` event uses a separate "position-only" sync path (`syncPositionToStore`). Any new Zustand state that incorrectly listens to `state.player.position` directly in a `useEffect` dependency array breaks this two-tier sync guarantee.
+Interval cleanup is easy to forget when the cleanup trigger is "any of three different events". Volume state is not tracked in `playerSlice` — the coordinator does not know what volume level TrackPlayer is at. There is no `TrackPlayer.getVolume()` in RNTP's API surface, so the app cannot read the current volume to restore it; it must store the pre-fade volume itself.
 
 **How to avoid:**
-Audit every `useEffect` in the component being refactored: replace any `state.player.position` dependency with a stable value (e.g., `state.player.currentChapter?.id`) or remove the dependency if the effect does not actually need to track position. Use `useAppStore.getState().player.position` inside the effect body (snapshot access) rather than subscribing to it. If the effect truly needs to react to position, use `subscribeWithSelector` outside React (in a service) rather than in a component effect.
+Implement the fade interval in a service method (not a component), store the interval ID in the service, and clear it from all three exit paths: `cancelSleepTimer()`, `stopPlayback()`, and app foreground restore. Store the pre-fade volume in the sleep timer state and call `TrackPlayer.setVolume(storedVolume)` on cancel and on playback stop. Add a unit test that verifies: volume is 1.0 after cancel, volume is 1.0 after `stopPlayback()` is called during fade.
 
 **Warning signs:**
 
-- After moving state to Zustand: performance profiler shows the affected component re-rendering at 1Hz during playback
-- Coordinator `totalEventsProcessed` spikes during playback (events being dispatched from component effects)
-- Excessive network requests or DB writes correlating with playback (1Hz side effect firing)
+- After sleep timer fires: subsequent playback sessions start at volume 0 (silent)
+- Rapid cancel/restart of sleep timer: volume changes erratically
+- Background + foreground during fade: app continues at reduced volume with no user indication
 
-**Phase to address:** State audit phase. For any component state being centralized, write a test that verifies the component does not re-render during normal position-update ticks before committing the change.
+**Phase to address:** Sleep timer phase (SLEEP-01). Treat volume as explicit state owned by the sleep timer service logic.
 
 ---
 
-### Pitfall 7: Zustand Slice Actions Captured in Closures Become Stale If Not Accessed via `get()`
+### Pitfall 7: Bookmark Sync Creates Duplicate Records on Server When Offline Create Is Followed by Sync
 
 **What goes wrong:**
-When adding new Zustand slice actions that internally call other slice methods (e.g., a new action in `downloadSlice` that calls `get().startDownload()` or references state from `playerSlice`), the action must use `get()` to access current state — not a closure over the initial `state` parameter. If a new action is written as:
+The ABS bookmark API creates a bookmark server-side with a server-assigned ID. The local SQLite cache will need to store a bookmark immediately when the user taps "Add Bookmark" (for offline viewing). At that point, the server ID is not known — the local record must use a local placeholder ID. When the device comes online and the bookmark is synced, the server creates the record and returns a server ID. If the sync logic does not update the local record's server ID (and instead re-creates a new local record on the next fetch), there will be duplicates.
 
-```typescript
-const myAction = (id: string) => {
-  if (state.downloads.initialized) {
-    // BUG: `state` is stale
-    downloadService.startDownload(id);
-  }
-};
-```
-
-...the `state` reference is from slice creation time (always the initial state). The action will always see `initialized: false` even after initialization completes.
+A second scenario: the user creates a bookmark offline, then the same bookmark timestamp gets a server-assigned ID after sync. If the app then calls `GET /api/me/items/:id/bookmarks` and upserts all returned bookmarks, it will insert the server version (with server ID) as a new record while the local-ID placeholder still exists.
 
 **Why it happens:**
-The slice creator pattern `(set, get) => ({...})` requires `get()` to read current state inside actions. This is well-documented in the Zustand README but easy to miss when copying action patterns from a code base where the distinction matters less (e.g., actions that only call `set()` without reading state first). The v1.2 audit will produce new actions in existing slices — each one is a chance to introduce a stale closure if `get()` is forgotten.
+The ABS API does not have an "update bookmark" endpoint — only create and delete. The local cache must track whether a bookmark is "pending sync" (created locally, no server ID yet) vs "synced" (server ID known). Without this flag, every sync is ambiguous: is this server bookmark the same as the local one, or a different one that happens to be at the same position?
 
 **How to avoid:**
-Every new action body that reads state before calling `set()` must use `const state = get()` at the start of the action, not a closure variable. In the existing codebase, this pattern is already consistently applied (e.g., `downloadSlice.ts:97-98`). New actions added during the audit should copy this exact pattern. Add ESLint or a code-review checklist item: "Does this action read state? If yes, does it use `get()` not a closure?"
+Add a `syncStatus` column to the bookmarks schema with values: `pending_create`, `synced`, `pending_delete`. On local creation: insert with `syncStatus = 'pending_create'` and a UUID as the local ID. On sync: POST to server → receive server ID → update local record's `serverId` and `syncStatus = 'synced'`. On server fetch: upsert by `serverId` (not by local ID or position). This requires the bookmarks schema and helper to be designed with this state machine in mind from the start — retrofitting it is painful.
 
 **Warning signs:**
 
-- New action always behaves as if slice is uninitialized regardless of app state
-- Action fires successfully in unit tests (where initial state is the test's setup state) but fails silently in production
-- Condition checks on slice state inside new actions always evaluate to their initial values
+- After reconnecting: bookmark list shows the same bookmark twice at the same position
+- Server bookmark list has duplicates for items bookmarked offline
+- Deleting a bookmark offline: the bookmark reappears on next sync (pending_delete status not respected)
 
-**Phase to address:** State audit and centralization phase.
+**Phase to address:** Bookmark phase (BOOKMARK-01–06). Design the schema with `syncStatus` before writing any sync logic.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 8: SQLite `ALTER TABLE ADD COLUMN NOT NULL` Fails on Existing Rows Without a Default
+### Pitfall 8: FullScreenPlayer Reanimated Migration Conflicts with PanResponder Swipe-to-Dismiss
 
 **What goes wrong:**
-Drizzle generates a migration like `ALTER TABLE audio_files ADD COLUMN new_col text NOT NULL` when a new required column is added to a schema without a `.default()`. In PostgreSQL, this is handled with a table rewrite. In SQLite (used by `expo-sqlite`), adding a `NOT NULL` column without a `DEFAULT` clause raises `table audio_files has N rows of data but only M values provided` and the migration fails. When Drizzle's migration runner on `expo-sqlite` encounters this error mid-migration, the migration is not marked as applied, but any DDL statements that ran before the failure have already executed (SQLite DDL is not transactional in older SQLite versions). The database can end up in a half-migrated state.
+`FullScreenPlayer/index.tsx` uses `PanResponder` (from React Native core) for the swipe-down-to-dismiss gesture. It also uses `Animated` API for the cover size and chapter list panel animations. The migration (PERF-11) replaces the `Animated` values with Reanimated `useSharedValue`. `PanResponder` is incompatible with Reanimated gesture values — they live on different threads. Animating a Reanimated `useSharedValue` from inside a `PanResponder.onPanResponderMove` callback (which runs on the JS thread) defeats the purpose of Reanimated and creates a janky animation.
+
+The correct solution is to replace `PanResponder` with Reanimated's `Gesture.Pan()` + `GestureDetector`. But this changes the gesture handling architecture, not just the animation values. It is a larger scope change than "just migrate the animations."
 
 **Why it happens:**
-The codebase already has 12 migration files — the pattern of adding optional columns (`ALTER TABLE ... ADD ... integer`) is established. Adding a genuinely non-null column without a SQLite-compatible default is a first-time edge case that has not been encountered yet. The schema audit phase may identify columns that "should be" NOT NULL but currently have NULL values in production databases.
+The migration requirement (PERF-11) says "migrate panel open/close animations to Reanimated". It does not say "migrate gestures." If implemented naively (replace `Animated.Value` → `useSharedValue`, keep `PanResponder`), the animation moves to Reanimated but the gesture update path remains on the JS thread, providing no meaningful performance improvement for the dismissal gesture.
 
 **How to avoid:**
-For any new column added to an existing table, always add a SQLite-compatible `.default()` in the Drizzle schema definition — even if the application logic would never store NULL. Use the `DEFAULT` to make the migration safe, then enforce the constraint in application code or helpers. Run `drizzle-kit generate` on a copy of the database with existing rows before shipping any migration, not just on an empty test database. The migration file should be inspected for `NOT NULL` without `DEFAULT` before merging.
+Scope the migration explicitly: either migrate both gestures and animations to Reanimated's Gesture API, or defer gesture migration and only migrate the cover size / chapter list panel animations (which are triggered by `setShowChapterList` state, not gesture-driven). The latter is lower risk and still eliminates the most common jank path (chapter list toggle on a busy JS thread).
 
 **Warning signs:**
 
-- Migration runner throws `table has N rows of data but only M values provided` on app startup
-- App starts but some features are missing (migrated to the partially-applied state)
-- `migrations.js` does not show the new migration as applied, but attempting to re-run it fails because some statements already executed
+- Swipe-to-dismiss becomes jittery after migration (PanResponder driving a Reanimated value from JS thread)
+- Gesture conflicts: `GestureDetector` and `PanResponder` both trying to handle touch events on the same View
 
-**Phase to address:** DB audit phase. Review every schema file for columns that would generate a `NOT NULL` without `DEFAULT` migration, and add a safe default before generating.
+**Phase to address:** FullScreenPlayer redesign phase (PERF-11). Document the scope decision explicitly in the phase plan.
 
 ---
 
-### Pitfall 9: DB Index Migration Locks the Table for Multi-Second Reads on Large Libraries
+### Pitfall 9: `key` Prop Strategy for Grid/List Mode Switch Is Incompatible with FlashList
 
 **What goes wrong:**
-`CREATE INDEX` on a table with hundreds of thousands of rows blocks all other read/write operations on that table for the duration of the index build. The `local_listening_sessions` and `local_progress_snapshots` tables in a power user's database could contain tens of thousands of rows (hourly progress snapshots for a large library). The index creation runs during `migrate()` at app startup — before the user sees the home screen. On a mid-range Android device with older storage, a multi-column index on `local_progress_snapshots(sessionId, timestamp)` could take 2-4 seconds, during which any concurrent DB query (e.g., `initializeDownloads` running in parallel) will be blocked.
+`LibraryItemList.tsx` line 98 uses a `key` prop on FlatList: `key={\`${viewMode}-${numColumns}\`}`to force a full re-render when view mode changes. This is the correct FlatList workaround for`numColumns`changes (FlatList does not support dynamic`numColumns`). FlashList supports dynamic `numColumns`changes without needing to remount — passing a`key` prop to force remount would throw away FlashList's recycled view pool, negating the performance benefit of the migration.
+
+Remove the `key` prop when migrating to FlashList. Instead, let FlashList handle the `numColumns` change natively, and use `getItemType` to tell the recycler that grid-mode and list-mode items are different component types so they are not recycled into each other.
 
 **Why it happens:**
-`expo-sqlite` runs on a single-file SQLite database. SQLite's `CREATE INDEX` requires a full table scan and acquires a write lock. There is no `CREATE INDEX CONCURRENTLY` in SQLite (that is a PostgreSQL feature). Drizzle's `migrate()` runs all pending migrations synchronously in sequence.
+The key-to-force-remount pattern is a known FlatList workaround that is copy-pasted into migrations. It looks harmless but actively degrades FlashList performance.
 
 **How to avoid:**
-Add indexes only where query analysis confirms they are needed (check `EXPLAIN QUERY PLAN` output first). Prefer `CREATE INDEX IF NOT EXISTS` in the migration SQL to make it safe to re-run. For very large tables, consider whether the index should be created in a deferred background task rather than synchronously in `migrate()`. Measure migration time on a database seeded with realistic row counts before shipping.
+Remove the `key` prop entirely when migrating to FlashList. Add `getItemType` returning different strings for grid vs list mode. Verify visually that switching between grid and list mode is smooth and that items render in the correct template after switching.
 
 **Warning signs:**
 
-- App startup takes 2-4 seconds longer after deploying the migration
-- `initializeDownloads` or `initializeLibrarySlice` timeout or return stale data on first run after upgrade
+- Switching between grid and list modes has a visible flash/blank (remount happening)
+- React DevTools shows the entire list unmounting and remounting on view mode switch
 
-**Phase to address:** DB audit phase.
+**Phase to address:** FlashList migration phase (PERF-01).
 
 ---
 
-### Pitfall 10: PlayerService Decomposition Creates a New Import Cycle if Helpers Import from the Service
+### Pitfall 10: Deep Link Scheme Mismatch Between `app.json` and Maestro YAML
 
 **What goes wrong:**
-The current dependency graph for `PlayerService.ts` imports from `DownloadService`, `ProgressService`, `coordinator/PlayerStateCoordinator`, and `coordinator/eventBus`. If `PlayerService` is split into domain-specific files (e.g., `playerPlaybackHelpers.ts`, `playerTrackHelpers.ts`), any helper that needs to call back into the coordinator or dispatch events will import `dispatchPlayerEvent` from `eventBus.ts`. This is safe — the eventBus is a leaf node with no upstream imports. However, if a helper is written to import `PlayerService.getInstance()` to call another method (the "split but not refactored" pattern), a cycle is introduced: `PlayerService` → `playerTrackHelpers` → `PlayerService`.
+`app.json` defines `"scheme": "side-shelf"` (hyphen). The `ui-testing.md` plan uses `sideshelf://` throughout (no hyphen). Every `openLink` command in the Maestro flows will fail silently: Maestro sends the URL, iOS does not recognize the scheme, and the app is not opened. The test appears to "work" (no error thrown) but navigates nowhere — subsequent `assertVisible` checks fail with confusing "element not found" errors unrelated to the scheme issue.
 
 **Why it happens:**
-Large service files are split by copy-pasting methods into helper files. Methods that call `this.someOtherMethod()` are rewritten to call `PlayerService.getInstance().someOtherMethod()` to avoid passing `this` as a parameter. This is the fastest path to a split that compiles, and it introduces a hidden singleton cycle that Metro bundler resolves non-deterministically (one import may be `undefined` at module evaluation time).
+The deep linking scheme was specified in `app.json` during setup and documented separately in the testing plan without cross-reference. Both decisions were reasonable individually.
 
 **How to avoid:**
-When splitting `PlayerService`, use pure function helpers that take explicit arguments — they should not import the service class. If a helper needs coordinator access, it should accept the coordinator or `dispatchPlayerEvent` as a parameter, not import them directly (they are already available at the `PlayerService` call site). Use `eslint-plugin-import/no-cycle` to fail the build on any new import cycle introduced during the split.
+Before writing any Maestro flows, run `xcrun simctl openurl booted "side-shelf:///(tabs)/library"` and verify the app navigates to the library. Then update all Maestro YAML files to use `side-shelf://` consistently. Add a comment at the top of `_login.yaml` citing the scheme and where it is defined.
 
 **Warning signs:**
 
-- After splitting, a method in the new helper file throws `TypeError: PlayerService.getInstance is not a function` or similar at startup
-- Jest imports of the helper file trigger "circular dependency" warnings in the test runner
-- `dispatchPlayerEvent` is `undefined` in a helper file that imports it at module top level (the cycle resolved in the wrong order)
+- Maestro `openLink` commands complete without error but the app does not navigate
+- Screenshots show the app in its previous state rather than the navigated screen
+- `assertVisible` fails with "No element found" after `openLink`
 
-**Phase to address:** PlayerService decomposition phase. Run `npx dpdm --circular src/services/PlayerService.ts` before and after each file split to verify no cycles are introduced.
+**Phase to address:** Deep link and Maestro infrastructure phase (NAVIGATION-03, TESTING-01–05). Verify scheme before writing any flows.
 
 ---
 
-### Pitfall 11: `useCallback` Anti-Pattern in Zustand Selectors Creates Unnecessary Re-renders on Centralized State
+### Pitfall 11: expo-image Placeholder Sizing Is Broken with Non-square CoverImage Dimensions
 
 **What goes wrong:**
-When component local state is moved to Zustand, the refactoring often introduces object-returning selectors:
+`CoverImange.tsx` renders cover art at various sizes (48px in FloatingPlayer, fullCoverSize up to 40% of screen height in FullScreenPlayer). `expo-image`'s blurhash placeholder always renders as square (1:1) — if the Image component has non-square dimensions and `contentFit` is set to anything other than `'fill'`, the placeholder renders at the wrong size and may flicker incorrectly when the real image loads. This is a confirmed expo/expo issue (#21677).
 
-```typescript
-const { activeDownloads, isLoading } = useAppStore((state) => ({
-  activeDownloads: state.downloads.activeDownloads,
-  isLoading: state.downloads.isLoading,
-}));
-```
+The current code uses React Native's `Image` component with no placeholder. The migration to `expo-image` for the disk-caching benefit is correct — but if a blurhash placeholder is added (the natural next step after switching to expo-image), the placeholder sizing bug will appear.
 
-Zustand uses strict equality (`===`) to compare the selector's return value. An object literal returned from a selector is always a new reference — so every store update (including unrelated slices like position ticks from `playerSlice`) re-renders the component. The existing codebase correctly uses individual selectors in the `use*` hooks in `appStore.ts`, but new components added during the audit may not follow this pattern.
+**Why it happens:**
+expo-image's placeholder system was designed assuming 1:1 aspect ratio. The bug is known and tracked upstream but not fixed as of SDK 54.
 
 **How to avoid:**
-Use individual selectors, one per state field:
-
-```typescript
-const activeDownloads = useAppStore((state) => state.downloads.activeDownloads);
-const isLoading = useAppStore((state) => state.downloads.isLoading);
-```
-
-Or use `useShallow` if multiple fields from the same slice are needed in an object. The existing slice hooks (`useDownloads()`, `useSettings()`, `usePlayer()`) already wrap state in `React.useMemo` with individual selectors — new code should use these hooks rather than writing new object-returning selectors inline.
+Use `expo-image` for the caching benefit only. Do not add blurhash placeholders in this phase. If a placeholder is desired, use a solid colour `placeholder` (not a blurhash string) — colour placeholders are not affected by the sizing bug. The `CoverImage` component already renders a fallback View with text initials when no URI is provided — keep this as the pre-load state rather than adding a blurhash.
 
 **Warning signs:**
 
-- Component profiler shows re-renders at 1Hz during playback (position ticks triggering everything)
-- React DevTools "Why did this render?" shows `store` as the cause on every tick
+- After expo-image migration: placeholder appears stretched or at wrong size while image loads
+- Cover art flickers or shows an incorrectly-sized blurred preview
 
-**Phase to address:** State audit phase. Code review checklist: "Does this component use an object-returning selector? If yes, convert to individual selectors or use the existing slice hook."
+**Phase to address:** expo-image migration phase (PERF-08). Document the placeholder decision explicitly.
 
 ---
 
-### Pitfall 12: Expo Upgrade Invalidates All Prebuild Artifacts — Custom Plugin Must Re-Run Correctly
+### Pitfall 12: ProgressService Decomposition Requires Understanding Background Sync Contract Before Splitting
 
 **What goes wrong:**
-The `withExcludeFromBackup` plugin (added in v1.1) copies `ICloudBackupExclusion.m` and `ICloudBackupExclusion.h` into `ios/SideShelf/Modules/` and registers them in the Xcode project during `expo prebuild`. After upgrading Expo SDK, `expo prebuild --clean` wipes the `ios/` directory entirely and regenerates it. The plugin must re-run cleanly for the native module to be available. If the plugin has any path assumptions or version-specific Xcode project structure assumptions, it may silently fail to register the files in the new Xcode project format — `NativeModules.ICloudBackupExclusion` resolves to `null` again, and iCloud exclusion silently stops working.
+`ProgressService` runs sync operations triggered by both foreground events (play/pause/seek via coordinator events) and background timers (periodic sync). Unlike `PlayerService` (which was decomposed into collaborators that receive explicit arguments), `ProgressService` has a background service contract: it must be able to sync progress even when no coordinator event has fired recently. Any collaborator split that moves state out of `ProgressService` into pure functions must ensure the background sync path can still access the necessary state.
+
+If the decomposition is done mechanically (copy methods into helpers, inject dependencies), without mapping the background sync trigger paths, the background sync may silently stop working — no crash, no error, just progress not being saved during long listening sessions when the user does not seek or change chapters.
 
 **Why it happens:**
-Expo config plugins use `@expo/config-plugins` APIs that may change between SDK versions. The Xcode project format also evolves. A plugin that worked with SDK 54's Xcode project structure may produce incorrect Xcode project modifications for SDK 55's structure.
+`PlayerService` decomposition was straightforward because all collaborator calls originated from coordinator events (explicitly dispatched). `ProgressService` has timers — the split must carry the timer management into the facade cleanly, and collaborators must not hold timer state.
 
 **How to avoid:**
-After the Expo upgrade and `expo prebuild --clean`, verify that `ios/SideShelf/Modules/ICloudBackupExclusion.m` exists in the new `ios/` directory. Run the app and check that `NativeModules.ICloudBackupExclusion` is not null (add a log line to `iCloudBackupExclusion.ts` at startup if needed). Do not assume the prebuild succeeded because it produced no errors — the plugin could write files but fail to register them in the Xcode project.
+Before splitting, draw the call graph: which methods are called by coordinator event handlers, which are called by timers, and which are called by external callers (other services). The facade must own all timers. Collaborators receive the data they need as parameters, not via shared singleton state. Write a test that verifies background sync fires correctly after the split (simulate a 5-minute timer expiry without any coordinator events).
 
 **Warning signs:**
 
-- After Expo upgrade and prebuild, iCloud exclusion logs show "ICloudBackupExclusion module not available" (from the null-check guard in `iCloudBackupExclusion.ts`)
-- `ios/SideShelf/Modules/` directory is absent after prebuild
-- The Xcode project (`ios/SideShelf.xcodeproj/project.pbxproj`) does not contain `ICloudBackupExclusion` references
+- After decomposition: progress syncs correctly during active interaction (seeking, chapter changes) but stops after several minutes of uninterrupted listening
+- Background sync timer interval appears in the facade but the actual `syncProgress()` call silently no-ops
 
-**Phase to address:** Expo upgrade phase. This is a post-prebuild verification step that must be checked before marking the Expo upgrade complete.
+**Phase to address:** ProgressService decomposition phase (DEBT-03).
 
 ---
 
 ## Technical Debt Patterns
 
-Shortcuts that seem reasonable but create long-term problems.
-
-| Shortcut                                                         | Immediate Benefit                               | Long-term Cost                                                                             | When Acceptable                                                               |
-| ---------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| Object-returning Zustand selector                                | Less boilerplate                                | Re-renders on every store tick, breaks `playerSlice` two-tier sync                         | Never — use individual selectors or `useShallow`                              |
-| Calling `PlayerService.getInstance()` inside a split helper file | Avoids refactoring `this` references            | Hidden singleton import cycle; Metro resolution is non-deterministic                       | Never during decomposition — pass dependencies explicitly                     |
-| `ALTER TABLE ADD COLUMN NOT NULL` without `DEFAULT`              | Mirrors intended constraint                     | Migration fails on existing rows; database left in half-migrated state                     | Never — always add a SQLite-safe default                                      |
-| Skipping `expo-doctor` after SDK bump                            | Faster iteration                                | Missing dependency mismatches surface as runtime errors, not build errors                  | Never — run `expo-doctor` immediately after `npx expo install --fix`          |
-| Testing only on iOS simulator after Expo upgrade                 | RNTP + coordinator events easy to verify on iOS | Android bridgeless event routing is a different code path — silent failure on Android only | Never — verify coordinator event sequence on physical Android before shipping |
+| Shortcut                                                              | Immediate Benefit              | Long-term Cost                                                                | When Acceptable                                               |
+| --------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Keeping `PanResponder` when migrating animations to Reanimated        | Smaller diff for PERF-11       | JS-thread dismissal gesture defeats Reanimated's purpose; jank on swipe       | Never — migrate gesture and animation together, or defer both |
+| Using `key` prop to remount FlashList on mode switch                  | Exact copy of FlatList pattern | Destroys recycled view pool; negates FlashList performance benefit            | Never in FlashList                                            |
+| Object-returning Zustand selector in new bookmark/progress components | Less boilerplate               | Re-renders at 1Hz during playback; existing `use*()` hooks already solve this | Never                                                         |
+| Adding blurhash placeholder to expo-image in this phase               | Better perceived loading       | expo-image blurhash sizing bug (expo/expo#21677) causes visual glitches       | Acceptable only if solid-colour placeholder used instead      |
+| Not adding `syncStatus` to bookmark schema                            | Faster initial implementation  | Duplicate records after offline→online sync; requires schema migration to fix | Never — design the schema correctly from the start            |
 
 ---
 
 ## Integration Gotchas
 
-Common mistakes when connecting to external services or libraries.
-
-| Integration                                                  | Common Mistake                                    | Correct Approach                                                                                                                              |
-| ------------------------------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@kesha-antonov/react-native-background-downloader` mainline | Treat as drop-in swap of the fork                 | Diff the exported API surface; adapter-wrap changed method names in `DownloadService.ts` before switching the package reference               |
-| `react-native-track-player` 4.x post-New Architecture        | Assume 4.1.2 behavior is stable on SDK 55         | Upgrade RNTP first, separately from Expo SDK bump; verify all coordinator event types fire on Android before combining upgrades               |
-| Drizzle `migrate()` on live user database                    | Test only on empty database during development    | Seed a test database with realistic row counts; run `EXPLAIN QUERY PLAN` on common queries before adding indexes                              |
-| Expo config plugin `withExcludeFromBackup`                   | Assume prebuild success = plugin success          | Post-prebuild, verify `ios/SideShelf/Modules/ICloudBackupExclusion.m` exists and `NativeModules.ICloudBackupExclusion` is not null at runtime |
-| Zustand slice actions calling other slices                   | Use closure variables for cross-slice state reads | Always call `get()` inside the action body to access current state; cross-slice reads via `get()` are documented behavior                     |
+| Integration                           | Common Mistake                                         | Correct Approach                                                                                     |
+| ------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| FlashList + `columnWrapperStyle`      | Copy `columnWrapperStyle` from FlatList migration      | Remove `columnWrapperStyle`; apply per-item margins via `renderItem` index math                      |
+| FlashList + `key` to force remount    | Copy key prop from FlatList migration                  | Remove `key` prop; use `getItemType` to prevent cross-mode recycling                                 |
+| Reanimated 4 + React Compiler         | Assume inline worklet lambdas work as in Reanimated 3  | Add explicit `'worklet';` directive in all new `useAnimatedStyle`/`useDerivedValue` callbacks        |
+| AirPlay module + EAS build            | Install library, works in dev build, not in production | Declare the config plugin in `app.json` `plugins` array so EAS CNG includes it                       |
+| expo-image + blurhash placeholder     | Add blurhash for perceived performance                 | Use solid-colour placeholder only; blurhash sizing is broken for non-1:1 images                      |
+| Expo tree shaking + Reanimated 4      | Enable both `.env` flags, test with `expo start`       | Test with a production build only; tree shaking does not apply in dev; add `Animated.View` safeguard |
+| ABS bookmark create API + offline     | Store bookmark locally using server ID as key          | Use local UUID + `syncStatus` field; update server ID after successful sync POST                     |
+| Sleep timer volume fade + manual stop | Clear only the fade interval                           | Also restore volume to 1.0 and clear the stored pre-fade volume on stop                              |
+| Deep links + Maestro                  | Use `sideshelf://` in YAML                             | Verify actual scheme from `app.json` with `xcrun simctl openurl` before writing flows                |
 
 ---
 
 ## Performance Traps
 
-Patterns that work at small scale but fail as usage grows.
-
-| Trap                                                               | Symptoms                                                                      | Prevention                                                                               | When It Breaks                           |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `CREATE INDEX` in startup migration                                | 2-4s hang on first app open after upgrade for power users                     | Measure on a seeded database; consider deferred creation for large tables                | Libraries > ~5,000 rows in indexed table |
-| Object selector in Zustand on position-heavy slice                 | Component re-renders 1Hz during playback regardless of what it actually needs | Individual selectors; use existing `use*()` hooks                                        | Any playback session                     |
-| Full table scan in `initializeDownloads` without index             | Startup slows linearly with downloaded item count                             | Add indexes on join columns: `audioFiles.mediaId`, `localAudioFileDownloads.audioFileId` | Libraries > ~500 downloaded items        |
-| `verifyFileExists` in startup reconciliation scan with no batching | JS thread blocked for several seconds with large downloaded libraries         | Batch 20 items per tick with `await new Promise(r => setTimeout(r, 0))` between batches  | Libraries > ~100 downloaded books        |
+| Trap                                          | Symptoms                                                            | Prevention                                                                             | When It Breaks                                    |
+| --------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| FlashList without `estimatedItemSize`         | List renders but jumps on first scroll; warning in logs             | Measure average item height in grid and list mode before migration                     | Every render — FlashList warns and guesses poorly |
+| Reanimated `height` animation vs `scaleY`     | Layout-affecting height animation can cause parent relayout jank    | Prefer `scaleY` + `overflow: 'hidden'` for collapse animations where possible          | Any device under JS thread load                   |
+| Sleep timer interval leak                     | Silent: volume stays at 0 after sleep fires; active on next session | Capture interval ID; clear from all three exit paths                                   | First use after sleep timer fires                 |
+| `useEffect` with position in dependency array | Component re-renders at 1Hz during playback                         | Use `useAppStore.getState()` snapshot inside effect body; do not subscribe to position | Any playback session                              |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
-
-- [ ] **Expo upgrade:** `expo-doctor` passes with no warnings — do not skip, dependency mismatches are silent until runtime
-- [ ] **Expo upgrade:** Physical Android device confirms coordinator receives all event types during a full play → seek → pause → resume → queue-end session
-- [ ] **Expo upgrade:** `NativeModules.ICloudBackupExclusion` is not null on device after `expo prebuild --clean`
-- [ ] **Expo upgrade:** `NativeTabs` custom tab order and hidden tabs still work after SDK bump (v1.1 feature)
-- [ ] **RN Downloader migration:** App-restart-during-active-download test: kill app mid-download → relaunch → download resumes from where it stopped (not from zero)
-- [ ] **RN Downloader migration:** `checkForExistingDownloads` (or its mainline equivalent) returns the expected task type and the `done`/`error`/`progress` callbacks register correctly
-- [ ] **State audit:** No component that subscribes to `state.player.position` has a `useEffect` with position in its dependency array (would fire 1Hz during playback)
-- [ ] **State audit:** Every new slice action that reads state before calling `set()` uses `get()` not a closure variable
-- [ ] **DB audit:** Every `ALTER TABLE ADD COLUMN` migration generated has a `DEFAULT` clause (no NOT NULL without DEFAULT)
-- [ ] **PlayerService decomposition:** `npx dpdm --circular src/services/PlayerService.ts` reports no new circular dependencies vs pre-decomposition baseline
+- [ ] **FlashList migration:** Grid spacing is visible (no flush cover art) — `columnWrapperStyle` gap must be replaced with per-item margin
+- [ ] **FlashList migration:** Grid/list mode switch is smooth with no remount flash — `key` prop removed, `getItemType` added
+- [ ] **FlashList migration:** `estimatedItemSize` is set — check for warning `FlashList's rendered size is not usable` in dev logs
+- [ ] **Reanimated migration:** New `useAnimatedStyle`/`useDerivedValue` callbacks tested in production build (not just dev) for React Compiler worklet extraction crash
+- [ ] **AirPlay button:** Tested on a physical device (not simulator) — simulator does not show AirPlay picker popup
+- [ ] **AirPlay button:** Visible in TestFlight/production build — config plugin declared in `app.json` `plugins` array
+- [ ] **Deep links:** `xcrun simctl openurl booted "side-shelf:///(tabs)/library"` navigates correctly before any Maestro flows are written
+- [ ] **Maestro flows:** All `openLink` URLs use `side-shelf://` (with hyphen) matching `app.json` scheme
+- [ ] **Tree shaking:** Verified via production build to TestFlight, not just `expo start`
+- [ ] **Tree shaking:** Reanimated animations work in production build (worklets initialized)
+- [ ] **Bookmarks:** Adding a bookmark offline → going online → sync does not create duplicate bookmarks
+- [ ] **Bookmarks:** Deleting a bookmark offline → going online → bookmark does not reappear after sync
+- [ ] **Sleep timer fade:** After fade completes and playback stops, next play session starts at full volume (not 0)
+- [ ] **Sleep timer fade:** Cancelling the timer while fade is in progress restores volume to 1.0
+- [ ] **CollapsibleSection:** Section with dynamic content height expands to the correct height (onLayout measured, not hardcoded)
+- [ ] **ProgressService decomposition:** Background sync still fires after 5+ minutes of uninterrupted playback (timer path tested)
 
 ---
 
 ## Recovery Strategies
 
-When pitfalls occur despite prevention, how to recover.
-
-| Pitfall                                       | Recovery Cost | Recovery Steps                                                                                                                                                                                    |
-| --------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Coordinator silent event loss after SDK bump  | HIGH          | Revert to Expo 54 by restoring `package.json` and `ios/` from git; upgrade RNTP independently; retest; retry Expo bump                                                                            |
-| NativeTabs API break after SDK bump           | MEDIUM        | Restore `_layout.tsx` from git; read SDK 55 changelog `expo-router` section; patch API usage; rebuild                                                                                             |
-| Half-migrated SQLite database on user device  | HIGH          | Requires manual migration recovery helper (drop/recreate affected table using `getSQLiteDb().execSync`); cannot be patched remotely via OTA update; user must reinstall or receive a hotfix build |
-| Import cycle from PlayerService decomposition | LOW           | `git revert` the split commit; re-split using explicit argument passing rather than singleton access                                                                                              |
-| Re-render storm from object selector          | LOW           | Convert to individual selectors; existing `use*()` hooks already have the correct pattern — inline selectors should be replaced with hook calls                                                   |
+| Pitfall                                    | Recovery Cost | Recovery Steps                                                                                                             |
+| ------------------------------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| React Compiler + Reanimated worklet crash  | LOW           | Add `'worklet';` directive to affected callback; rebuild                                                                   |
+| Tree shaking crashes production build      | MEDIUM        | Disable `EXPO_UNSTABLE_TREE_SHAKING=1`; add `Animated.View` safeguard; re-enable and rebuild                               |
+| FlashList grid spacing lost                | LOW           | Remove `columnWrapperStyle`; add per-item margin in `renderItem` based on index                                            |
+| Bookmark duplicates after offline sync     | HIGH          | Requires schema migration to add `syncStatus` column; existing duplicates must be deduplicated by position + creation time |
+| Sleep timer volume stuck at 0              | LOW           | Add `TrackPlayer.setVolume(1.0)` to `stopPlayback()` and `cancelSleepTimer()`; deploy OTA                                  |
+| Deep link scheme mismatch in Maestro       | LOW           | Update YAML files to use correct scheme; no code change needed                                                             |
+| AirPlay button missing in production build | MEDIUM        | Add config plugin to `app.json` `plugins`; rebuild with EAS                                                                |
 
 ---
 
 ## Pitfall-to-Phase Mapping
 
-How roadmap phases should address these pitfalls.
-
-| Pitfall                                                        | Prevention Phase                                | Verification                                                                                         |
-| -------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| RNTP events broken in bridgeless mode (Pitfall 1)              | Expo upgrade phase                              | Play → seek → pause → queue-end on physical Android; check `totalEventsProcessed` in diagnostics     |
-| NativeTabs API break (Pitfall 2)                               | Expo upgrade phase (pre-flight)                 | TypeScript compiles cleanly; custom tab order works in UI                                            |
-| Xcode version requirement (Pitfall 3)                          | Expo upgrade phase (pre-flight checklist)       | `xcode-select --version` before any code changes                                                     |
-| Downloader API surface mismatch (Pitfall 4)                    | RN Downloader migration phase                   | `DownloadService.initialize()` completes without error; existing tasks detected on restart           |
-| Task ID format change breaking restart recovery (Pitfall 5)    | RN Downloader migration phase                   | Kill-and-restart mid-download test                                                                   |
-| Coordinator event storms from Zustand side effects (Pitfall 6) | State audit phase                               | React profiler shows component does not re-render at 1Hz during playback                             |
-| Stale closure in new slice actions (Pitfall 7)                 | State audit phase                               | Unit test: action called after initialization reads current state, not initial state                 |
-| NOT NULL column migration fails on existing rows (Pitfall 8)   | DB audit phase                                  | Run migration on seeded test database before shipping                                                |
-| Index creation blocking startup (Pitfall 9)                    | DB audit phase                                  | Time startup with realistic row counts (5,000+ in indexed tables)                                    |
-| Import cycle from service decomposition (Pitfall 10)           | PlayerService decomposition phase               | `dpdm --circular` baseline + post-split comparison                                                   |
-| Object-returning selector re-renders (Pitfall 11)              | State audit phase                               | React DevTools profiler during playback: target component render frequency                           |
-| iCloud exclusion plugin regression after prebuild (Pitfall 12) | Expo upgrade phase (post-prebuild verification) | Check `ios/SideShelf/Modules/` contents; runtime null check on `NativeModules.ICloudBackupExclusion` |
+| Pitfall                                                            | Prevention Phase                                             | Verification                                                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| React Compiler + Reanimated worklet extraction (Pitfall 1)         | CollapsibleSection + FullScreenPlayer animation phases       | Build production binary; trigger each animation; confirm no "non-worklet function" crash |
+| FlashList missing `columnWrapperStyle` (Pitfall 2)                 | FlashList migration phase (PERF-01)                          | Visual check: grid items have visible spacing between covers                             |
+| AirPlay native module + scheme mismatch (Pitfall 3)                | AirPlay/player UI phase + Maestro deep link phase            | Device test: picker shows; `xcrun simctl openurl` test before writing YAML               |
+| Tree shaking crashes Reanimated in production (Pitfall 4)          | Tree shaking phase (PERF-03)                                 | TestFlight build: launch, play audio, open CollapsibleSection                            |
+| CollapsibleSection height animation to dynamic content (Pitfall 5) | CollapsibleSection phase (SECTION-01–03)                     | Expand section with varying content lengths; measure vs visual height match              |
+| Sleep timer volume fade interval leak (Pitfall 6)                  | Sleep timer phase (SLEEP-01)                                 | Cancel timer mid-fade: volume restored; restart playback: full volume                    |
+| Bookmark offline sync duplicates (Pitfall 7)                       | Bookmark phase (BOOKMARK-01–06)                              | Add bookmark offline; go online; sync; verify single record on server and locally        |
+| PanResponder + Reanimated incompatibility (Pitfall 8)              | FullScreenPlayer animation phase (PERF-11)                   | Swipe-to-dismiss is smooth during JS thread load                                         |
+| FlashList `key` prop remount (Pitfall 9)                           | FlashList migration phase (PERF-01)                          | Grid/list switch: no blank flash; React DevTools confirms no unmount                     |
+| Deep link scheme mismatch (Pitfall 10)                             | Deep link phase (NAVIGATION-03) + Maestro phase (TESTING-01) | `xcrun simctl openurl` with both scheme variants; confirm which one works                |
+| expo-image blurhash sizing bug (Pitfall 11)                        | expo-image migration phase (PERF-08)                         | Use solid-colour placeholder only; no blurhash                                           |
+| ProgressService decomposition timer path (Pitfall 12)              | ProgressService decomposition phase (DEBT-03)                | Test: 5 minutes of playback with no user interaction; confirm progress synced            |
 
 ---
 
@@ -383,33 +384,31 @@ How roadmap phases should address these pitfalls.
 
 ### Direct Codebase Analysis (HIGH confidence)
 
-- `src/services/DownloadService.ts` — `checkForExistingDownloads` call at line 78; `restoreExistingDownloads` logic; `setConfig` options at lines 72-75; `done` callback at lines 275-330; task ID usage
-- `src/services/coordinator/PlayerStateCoordinator.ts` — event type dependencies (`NATIVE_STATE_CHANGED`, `NATIVE_TRACK_CHANGED`, `NATIVE_PROGRESS_UPDATED`); two-tier sync: `syncPositionToStore` vs `syncStateToStore`; `totalEventsProcessed` metric
-- `src/services/coordinator/eventBus.ts` — leaf node with no upstream service imports; `dispatchPlayerEvent` is the safe decoupling point for split service helpers
-- `src/stores/appStore.ts` — existing `use*()` hooks use individual selectors + `React.useMemo` (the correct pattern); `useDownloads.isItemPartiallyDownloaded` uses `useAppStore.getState()` snapshot access (correct pattern)
-- `src/stores/slices/downloadSlice.ts` — correct `get()` usage in all existing actions (lines 97-98, 205-207); `initializeDownloads` query pattern (multi-join without indexes)
-- `src/db/schema/audioFiles.ts`, `localData.ts` — no existing indexes on join columns (`mediaId`, `audioFileId`)
-- `src/db/migrations/` — 12 existing migration files; all use `ADD COLUMN ... DEFAULT` for non-null additions; this pattern is established
-- `src/db/helpers/migrationHelpers.ts` — precedent for data-preservation helper before destructive migration; pattern should be reused if any schema changes require data transformation
-- `package.json` — `"@kesha-antonov/react-native-background-downloader": "github:clayreimann/react-native-background-downloader#spike-event-queue"` — confirms custom fork, non-standard branch name
+- `src/components/library/LibraryItemList.tsx` — FlatList with `columnWrapperStyle`, `key` prop for remount, inline `renderItem`, `numColumns={3}` grid layout
+- `src/components/ui/CollapsibleSection.tsx` — legacy `Animated.timing` with `useNativeDriver: false`; `isExpanded` toggle without height measurement
+- `src/app/FullScreenPlayer/index.tsx` — `Animated.parallel` with `useNativeDriver: false` at lines 93–105; `PanResponder` for swipe-to-dismiss
+- `app.json` — `"scheme": "side-shelf"` (hyphen); `experiments.reactCompiler: true`; confirms scheme mismatch with `ui-testing.md` plan
+- `package.json` — `react-native-reanimated: ~4.1.1`, `react-native-worklets: 0.5.1`, `expo: 54.0.21`; no `@shopify/flash-list` yet installed
+- `docs/investigation/rn-best-practices-audit.md` — Area 6 confirms both CollapsibleSection and FullScreenPlayer use legacy Animated with `useNativeDriver: false`
+- `docs/plans/ui-testing.md` — Uses `sideshelf://` scheme throughout (no hyphen), conflicting with `app.json`
 
-### Official Documentation (HIGH confidence)
+### Confirmed Library Issues (HIGH confidence)
 
-- Expo SDK 55 changelog: New Architecture required (Old Architecture removed); NativeTabs `Icon/Label/Badge` moved to `NativeTabs.Trigger.*`; `resetOnFocus` replaces `reset` on headless tabs; Xcode 26 required — [expo.dev/changelog/sdk-55](https://expo.dev/changelog/sdk-55)
-- Expo "How to upgrade to SDK 55" — `npx expo install --fix` + `expo-doctor` workflow; delete `android/` and `ios/` before prebuild — [expo.dev/blog/upgrading-to-sdk-55](https://expo.dev/blog/upgrading-to-sdk-55)
-- Zustand documentation — selectors with object returns trigger re-renders on every store update; `useShallow` or individual selectors required for stability — [github.com/pmndrs/zustand](https://github.com/pmndrs/zustand)
+- `software-mansion/react-native-reanimated#6826` — React Compiler extracts inline worklet functions, causing "Tried to synchronously call a non-worklet function on the UI thread" — confirmed open as of 2025
+- `Shopify/flash-list#686` — `columnWrapperStyle` not supported in FlashList — confirmed limitation
+- `expo/expo#41620` — Expo tree shaking crashes production with latest react-native-reanimated — reported 2025-12-14
+- `software-mansion/react-native-reanimated#8752` — "Native part of Worklets doesn't seem to be initialized due to tree shaking" — cross-linked with expo issue
+- `expo/expo#21677` — expo-image blurhash placeholder size incorrect with non-1:1 aspect ratio content fit settings
 
-### Library Issues and Community (MEDIUM confidence)
+### Documentation and Community (MEDIUM confidence)
 
-- react-native-track-player issue #2443: New Architecture support tracking — [github.com/doublesymmetry/react-native-track-player/issues/2443](https://github.com/doublesymmetry/react-native-track-player/issues/2443)
-- react-native-track-player issue #2389: Crash with RN 0.76 (New Architecture) — confirmed as a real compatibility risk for older 4.x versions — [github.com/doublesymmetry/react-native-track-player/issues/2389](https://github.com/doublesymmetry/react-native-track-player/issues/2389)
-- facebook/react-native #44255, #46050: `RCTDeviceEventEmitter` events not propagating from headless tasks in bridgeless mode — root cause of RNTP event loss on Android New Architecture — [github.com/facebook/react-native/issues/44255](https://github.com/facebook/react-native/issues/44255)
-- expo/expo issue #42525: Swift MainActor isolation build failures with Xcode 15+ and expo-modules-core 55.x — [github.com/expo/expo/issues/42525](https://github.com/expo/expo/issues/42525)
-- expo/expo issue #39587: NativeTabs animation property on Tabs broke navigation in SDK 54 — precedent for NativeTabs API instability across SDK bumps — [github.com/expo/expo/issues/39587](https://github.com/expo/expo/issues/39587)
-- kesha-antonov/react-native-background-downloader releases: v4.4.1 fix for `getExistingDownloadTasks()` not returning paused tasks after restart — confirms API surface change from `checkForExistingDownloads` — [github.com/kesha-antonov/react-native-background-downloader/releases](https://github.com/kesha-antonov/react-native-background-downloader/releases)
-- 2025 Expo Spring Hackathon investigation: Metro `inlineRequires` timing differences between Expo and RN CLI can make circular dependency resolution non-deterministic — directly relevant to service decomposition safety
+- Expo tree shaking guide (docs.expo.dev/guides/tree-shaking) — confirms feature is "experimental" and `EXPO_UNSTABLE_TREE_SHAKING=1` syntax
+- FlashList usage docs (shopify.github.io/flash-list/docs/usage) — `getItemType`, `estimatedItemSize`, `overrideItemLayout` documented
+- ABS bookmark API (api.audiobookshelf.org) — create/delete endpoints exist; no "upsert by local ID" endpoint confirmed; offline pattern requires local ID → server ID update on sync
+- AirPlay in Expo — `@douglowder/expo-av-route-picker-view` and `react-native-avroutepickerview` are the two viable options; both require prebuild
+- RFC 2396 — Hyphens are valid in URI scheme names; `side-shelf://` is a valid scheme
 
 ---
 
-_Pitfalls research for: v1.2 Tech Cleanup milestone_
-_Researched: 2026-02-28_
+_Pitfalls research for: v1.3 Beta Polish milestone_
+_Researched: 2026-03-09_
