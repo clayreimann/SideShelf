@@ -9,6 +9,7 @@ import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useLibrary, useSettings } from "@/stores";
+import type { ProgressFormat } from "@/lib/helpers/progressFormat";
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
 import { Stack, useRouter } from "expo-router";
@@ -16,6 +17,12 @@ import { useCallback } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 const INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90];
+
+const PROGRESS_FORMAT_LABELS: Record<ProgressFormat, string> = {
+  remaining: "Time Remaining",
+  elapsed: "Elapsed / Total",
+  percent: "% Complete",
+};
 
 export default function SettingsScreen() {
   const { colors, isDark } = useThemedStyles();
@@ -27,6 +34,7 @@ export default function SettingsScreen() {
     smartRewindEnabled,
     diagnosticsEnabled,
     isLoading,
+    progressFormat,
     updateJumpForwardInterval,
     updateJumpBackwardInterval,
     updateSmartRewindEnabled,
@@ -220,6 +228,52 @@ export default function SettingsScreen() {
               </Text>
               <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
                 {translate("settings.tabBar.subtitle")}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={textSecondary} />
+          </Pressable>
+        </View>
+
+        {/* Player Section */}
+        <View style={{ padding: 16 }}>
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "600",
+              color: textSecondary,
+              marginBottom: 12,
+              textTransform: "uppercase",
+            }}
+          >
+            PLAYER
+          </Text>
+
+          {/* Progress Format */}
+          <Pressable
+            onPress={() => router.push("/more/progress-format")}
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+              borderRadius: 10,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  color: colors.textPrimary,
+                  fontWeight: "500",
+                  marginBottom: 4,
+                }}
+              >
+                Progress Format
+              </Text>
+              <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
+                {PROGRESS_FORMAT_LABELS[progressFormat]}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={textSecondary} />
