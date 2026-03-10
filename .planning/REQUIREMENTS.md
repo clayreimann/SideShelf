@@ -25,9 +25,9 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 
 ### Collapsible Sections (SECTION)
 
-- [ ] **SECTION-01**: Collapsed sections show approximately the first 100px of content with a bottom fade-to-transparent overlay
+- [x] **SECTION-01**: Collapsed sections show approximately the first 100px of content with a bottom fade-to-transparent overlay
 - [ ] **SECTION-02**: Expanding/collapsing sections animate height on the UI thread (Reanimated withTiming)
-- [ ] **SECTION-03**: Expanded sections show full content with no bottom fade
+- [x] **SECTION-03**: Expanded sections show full content with no bottom fade
 
 ### Bookmarks (BOOKMARK)
 
@@ -117,9 +117,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROGRESS-02   | Phase 14 | Complete |
 | PROGRESS-03   | Phase 14 | Complete |
 | PROGRESS-04   | Phase 14 | Complete |
-| SECTION-01    | Phase 15 | Pending  |
+| SECTION-01    | Phase 15 | Complete |
 | SECTION-02    | Phase 15 | Pending  |
-| SECTION-03    | Phase 15 | Pending  |
+| SECTION-03    | Phase 15 | Complete |
 | BOOKMARK-01   | Phase 17 | Pending  |
 | BOOKMARK-02   | Phase 17 | Pending  |
 | BOOKMARK-03   | Phase 17 | Pending  |
