@@ -119,10 +119,10 @@ Plans:
 
 Plans:
 
-- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
-- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
-- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
-- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
+- [ ] 16-01-PLAN.md — Settings data layer (TDD: chapterBarShowRemaining + keepScreenAwake in appSettings + settingsSlice)
+- [ ] 16-02-PLAN.md — AirPlay integration (AirPlayButton component + FloatingPlayer + ConsolidatedPlayerControls)
+- [ ] 16-03-PLAN.md — FullScreenPlayer redesign (nav chrome removal, custom header, UIMenu gear button, ProgressBar rightLabel)
+- [ ] 16-04-PLAN.md — Reanimated chapter panel migration + visual verification checkpoint
 
 ### Phase 17: Bookmarks
 
