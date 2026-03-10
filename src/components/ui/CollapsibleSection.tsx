@@ -1,91 +1,162 @@
-import { useThemedStyles } from '@/lib/theme';
-import React, { useEffect, useState } from 'react';
-import { Animated, Pressable, Text, View } from 'react-native';
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { useThemedStyles } from "@/lib/theme";
 
 interface CollapsibleSectionProps {
-  title: string;
+  title?: string;
   children: React.ReactNode;
   defaultExpanded?: boolean;
-  icon?: string;
 }
+
+const PEEK_HEIGHT = 100;
+const ANIMATION_DURATION = 280;
+const GRADIENT_HEIGHT = 48;
 
 export function CollapsibleSection({
   title,
   children,
   defaultExpanded = false,
-  icon = '▶'
 }: CollapsibleSectionProps) {
-  const { styles, isDark } = useThemedStyles();
+  const { colors } = useThemedStyles();
+
+  // layoutMeasured: true after first onLayout fires
+  const [layoutMeasured, setLayoutMeasured] = useState(false);
+  // isCollapsible: true only when measured height > PEEK_HEIGHT
+  const [isCollapsible, setIsCollapsible] = useState(false);
+  // isExpanded: React state drives gradient conditional render
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const [animation] = useState(new Animated.Value(defaultExpanded ? 1 : 0));
 
-  // Ensure animation value matches initial expanded state
-  useEffect(() => {
-    animation.setValue(defaultExpanded ? 1 : 0);
-  }, [defaultExpanded, animation]);
+  // Reanimated shared values for animation
+  const measuredHeight = useSharedValue(0);
+  const isExpandedSV = useSharedValue(defaultExpanded ? 1 : 0);
 
-  const toggleExpanded = () => {
-    const toValue = isExpanded ? 0 : 1;
-    setIsExpanded(!isExpanded);
-
-    Animated.timing(animation, {
-      toValue,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
+  const toggle = () => {
+    const nowExpanding = !isExpanded;
+    setIsExpanded(nowExpanding);
+    isExpandedSV.value = withTiming(nowExpanding ? 1 : 0, {
+      duration: ANIMATION_DURATION,
+    });
   };
 
-  const rotateInterpolate = animation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '90deg'],
-  });
+  const containerStyle = useAnimatedStyle(() => ({
+    height: withTiming(isExpandedSV.value >= 0.5 ? measuredHeight.value : PEEK_HEIGHT, {
+      duration: ANIMATION_DURATION,
+    }),
+    overflow: "hidden" as const,
+  }));
 
-  const heightInterpolate = animation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        rotate: withTiming(isExpandedSV.value >= 0.5 ? "90deg" : "0deg", {
+          duration: ANIMATION_DURATION,
+        }),
+      },
+    ],
+  }));
 
-  return (
-    <View style={{ marginBottom: 16 }}>
-      <Pressable
-        onPress={toggleExpanded}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingVertical: 12,
-          paddingHorizontal: 16,
-          backgroundColor: isDark ? '#333' : '#f5f5f5',
-          borderRadius: 8,
-          marginBottom: isExpanded ? 8 : 0,
-        }}
-      >
-        <Animated.Text
-          style={{
-            transform: [{ rotate: rotateInterpolate }],
-            marginRight: 12,
-            fontSize: 16,
-            color: styles.text.color,
-          }}
-        >
-          {icon}
-        </Animated.Text>
-        <Text style={[styles.text, { fontSize: 18, fontWeight: '600', flex: 1 }]}>
-          {title}
-        </Text>
-      </Pressable >
+  const handleLayout = (event: { nativeEvent: { layout: { height: number } } }) => {
+    if (layoutMeasured) return;
+    const height = event.nativeEvent.layout.height;
+    measuredHeight.value = height;
+    const collapsible = height > PEEK_HEIGHT;
+    setIsCollapsible(collapsible);
+    setLayoutMeasured(true);
 
-      <Animated.View
-        style={{
-          overflow: 'hidden',
-          opacity: heightInterpolate,
-        }}
-      >
-        {isExpanded && (
-          <View style={{ paddingHorizontal: 16 }}>
-            {children}
-          </View>
+    if (!collapsible) {
+      // Short content: auto-expand, disable collapsing
+      isExpandedSV.value = 1;
+      setIsExpanded(true);
+    }
+  };
+
+  // Gradient renders when: section is collapsible AND currently collapsed
+  const showGradient = layoutMeasured && isCollapsible && !isExpanded;
+
+  // The inner content area — always mounts children (never conditional unmount)
+  // Pre-measurement: plain View so onLayout captures natural height
+  // Post-measurement + collapsible: Animated.View with height constraint
+  // Post-measurement + non-collapsible: plain View
+  const innerContent =
+    !layoutMeasured || !isCollapsible ? (
+      <View testID="collapsible-content" onLayout={handleLayout}>
+        {children}
+      </View>
+    ) : (
+      <Animated.View style={containerStyle}>
+        <View testID="collapsible-content" onLayout={handleLayout}>
+          {children}
+        </View>
+        {showGradient && (
+          <Animated.View
+            testID="collapsible-gradient"
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: GRADIENT_HEIGHT,
+            }}
+            pointerEvents="none"
+          >
+            <LinearGradient
+              colors={["transparent", colors.background]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{ flex: 1 }}
+            />
+          </Animated.View>
         )}
       </Animated.View>
-    </View>
-  );
+    );
+
+  // With title: only the header row is the tap target
+  if (title) {
+    return (
+      <View style={{ marginBottom: 16 }}>
+        <Pressable
+          testID="collapsible-header"
+          onPress={isCollapsible ? toggle : undefined}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingVertical: 8,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "500",
+              flex: 1,
+              color: colors.textPrimary,
+            }}
+          >
+            {title}
+          </Text>
+          {isCollapsible && (
+            <Animated.View style={chevronStyle}>
+              <Ionicons name="chevron-forward" size={16} color={colors.textPrimary} />
+            </Animated.View>
+          )}
+        </Pressable>
+        {innerContent}
+      </View>
+    );
+  }
+
+  // Without title AND collapsible: entire section is a tap target
+  // We wrap the Animated container in a Pressable
+  if (layoutMeasured && isCollapsible) {
+    return (
+      <View style={{ marginBottom: 16 }}>
+        <Pressable onPress={toggle}>{innerContent}</Pressable>
+      </View>
+    );
+  }
+
+  // Without title, not yet collapsible (pre-measurement or short content)
+  return <View style={{ marginBottom: 16 }}>{innerContent}</View>;
 }
