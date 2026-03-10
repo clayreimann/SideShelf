@@ -268,7 +268,7 @@ Plans:
 | 12. Service Decomposition                         | v1.2      | 2/2            | Complete    | 2026-03-05 |
 | 13. RN Downloader Migration                       | v1.2      | 2/2            | Complete    | 2026-03-07 |
 | 14. Progress Display Format                       | 4/4       | Complete       | 2026-03-09  | -          |
-| 15. Collapsible Section Redesign                  | 1/3 | In Progress|  | -          |
+| 15. Collapsible Section Redesign                  | 2/3       | In Progress    |             | -          |
 | 16. Full Screen Player Redesign + AirPlay         | v1.3      | 0/TBD          | Not started | -          |
 | 17. Bookmarks                                     | v1.3      | 0/TBD          | Not started | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | v1.3      | 0/TBD          | Not started | -          |

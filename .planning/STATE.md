@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: executing
-stopped_at: Completed 15-01-PLAN.md
-last_updated: "2026-03-10T03:18:43.497Z"
-last_activity: 2026-03-09 — Completed 14-03 (wired progress format to all player surfaces + Settings UI)
+stopped_at: Completed 15-02-PLAN.md
+last_updated: "2026-03-10T03:25:00.000Z"
+last_activity: 2026-03-09 — Completed 15-02 (rewrote CollapsibleSection with Reanimated + peek-fade design)
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 75
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 14 of 22 (Progress Display Format)
-Plan: 3 of 4
+Phase: 15 of 22 (Collapsible Section Redesign)
+Plan: 2 of 3
 Status: In progress
-Last activity: 2026-03-09 — Completed 14-03 (wired progress format to all player surfaces + Settings UI)
+Last activity: 2026-03-09 — Completed 15-02 (rewrote CollapsibleSection with Reanimated + peek-fade design)
 
 Progress: [████████░░] 75%
 
@@ -54,6 +54,7 @@ Progress: [████████░░] 75%
 | Phase 14-progress-display-format P03 | 216 | 2 tasks | 5 files |
 | Phase 14-progress-display-format P04 | 3 | 1 tasks | 2 files |
 | Phase 15-collapsible-section-redesign P01 | 5 | 1 tasks | 1 files |
+| Phase 15-collapsible-section-redesign P02 | 25 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Full decision log is in PROJECT.md Key Decisions table.
 - Handlers-before-`.start()` is a critical invariant in DownloadService — documented with CRITICAL comment
 - progressFormat default is 'remaining' — zero visual change on first launch; stored under '@app/progressFormat'
 - formatBookmarkTime kept local in FullScreenPlayer — needs second-level precision; shared formatProgress helper uses minute-granular friendly strings
+- CollapsibleSection: gradient visibility driven by React state not animation opacity — enables queryByTestId null assertions in tests
+- CollapsibleSection: two-phase render (measure first, animate second) avoids animating to unknown height on initial render
 
 ### Pending Todos
 
@@ -82,6 +85,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-10T03:18:43.495Z
-Stopped at: Completed 15-01-PLAN.md
+Last session: 2026-03-10T03:25:00.000Z
+Stopped at: Completed 15-02-PLAN.md
 Resume file: None
