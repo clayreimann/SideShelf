@@ -95,14 +95,13 @@ Plans:
 2. Tapping to expand or collapse animates the height smoothly on the UI thread (no JS-thread jank)
 3. Expanded sections show full content with no fade overlay
 4. Content is always mounted (no disappearing-children flash on toggle)
-   **Plans**: 4 plans
+   **Plans**: 3 plans
 
 Plans:
 
-- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
-- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
-- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
-- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
+- [ ] 15-01-PLAN.md — Test scaffold for CollapsibleSection (Wave 0, RED state)
+- [ ] 15-02-PLAN.md — Rewrite CollapsibleSection with Reanimated + expo-linear-gradient
+- [ ] 15-03-PLAN.md — Update DescriptionSection call site + simulator visual verification
 
 ### Phase 16: Full Screen Player Redesign + AirPlay
 
