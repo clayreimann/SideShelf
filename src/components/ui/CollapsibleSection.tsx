@@ -15,6 +15,9 @@ const PEEK_HEIGHT = 100;
 const ANIMATION_DURATION = 280;
 const GRADIENT_HEIGHT = 48;
 
+// Large sentinel used when defaultExpanded=true before real height is measured.
+const EXPANDED_MAX = 99999;
+
 export function CollapsibleSection({
   title,
   children,
@@ -27,10 +30,7 @@ export function CollapsibleSection({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   const measuredHeight = useSharedValue(0);
-  // heightSV drives the clip container height — withTiming called once per toggle, not per frame
-  const heightSV = useSharedValue(PEEK_HEIGHT);
-  // constrainedSV: 0 = no clip (during initial measurement), 1 = apply height + overflow:hidden
-  const constrainedSV = useSharedValue(0);
+  const heightSV = useSharedValue(defaultExpanded ? EXPANDED_MAX : PEEK_HEIGHT);
   const chevronSV = useSharedValue(defaultExpanded ? 1 : 0);
 
   const toggle = () => {
@@ -39,98 +39,81 @@ export function CollapsibleSection({
     heightSV.value = withTiming(nowExpanding ? measuredHeight.value : PEEK_HEIGHT, {
       duration: ANIMATION_DURATION,
     });
-    chevronSV.value = withTiming(nowExpanding ? 1 : 0, {
-      duration: ANIMATION_DURATION,
-    });
+    chevronSV.value = withTiming(nowExpanding ? 1 : 0, { duration: ANIMATION_DURATION });
   };
 
-  // Clip container: no constraint before measurement (children render at natural height).
-  // After measurement: apply height + overflow:hidden so animation only moves the clip boundary.
-  // The inner content layout is stable throughout — Yoga skips subtree re-layout on every frame.
-  const containerStyle = useAnimatedStyle(() => {
-    if (constrainedSV.value === 0) return {};
-    return { height: heightSV.value, overflow: "hidden" as const };
-  });
+  // maxHeight clips the container without constraining child layout in Yoga —
+  // but to be safe against Fabric propagation we measure via a separate sizer.
+  const containerStyle = useAnimatedStyle(() => ({
+    maxHeight: heightSV.value,
+    overflow: "hidden" as const,
+  }));
 
   const chevronStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${chevronSV.value * 90}deg` }],
   }));
 
-  const handleLayout = (event: { nativeEvent: { layout: { height: number } } }) => {
+  // Sizer is absolutely positioned and invisible — Yoga never applies the clip
+  // container's maxHeight to it, so onLayout always reports the real content height.
+  // This is the single source of truth for measuredHeight; the visible inner view
+  // does not have an onLayout handler.
+  const handleSizerLayout = (event: { nativeEvent: { layout: { height: number } } }) => {
     const height = event.nativeEvent.layout.height;
     if (height <= 0) return;
 
-    const prevHeight = measuredHeight.value;
     measuredHeight.value = height;
 
     if (!layoutMeasured) {
       const collapsible = height > PEEK_HEIGHT;
       setIsCollapsible(collapsible);
       setLayoutMeasured(true);
-
-      if (!collapsible) {
-        // Short content: show fully, disable toggle
+      if (defaultExpanded && collapsible) {
+        // Replace the sentinel with the real measured height.
         heightSV.value = height;
-        setIsExpanded(true);
-        chevronSV.value = 1;
-      } else if (defaultExpanded) {
-        // Long content starting expanded: clip container starts at full height (no visible snap)
-        heightSV.value = height;
-      } else {
-        // Long content starting collapsed: clip container snaps to PEEK_HEIGHT
-        heightSV.value = PEEK_HEIGHT;
       }
-
-      // Apply the clip constraint now that we have the correct target height.
-      // Since heightSV is already at the target, this causes at most a one-frame snap.
-      constrainedSV.value = 1;
-    } else if (height !== prevHeight) {
-      // Height changed after initial measurement — re-evaluate collapsibility.
-      // Handles async renderers like RenderHtml that report a near-zero placeholder height
-      // on first pass, then fire onLayout again once the real content is measured.
-      const collapsible = height > PEEK_HEIGHT;
-      if (collapsible !== isCollapsible) {
-        setIsCollapsible(collapsible);
+    } else {
+      // Subsequent passes (e.g. RenderHtml async completion).
+      // Only upgrade isCollapsible — never downgrade on a transient small reading.
+      if (height > PEEK_HEIGHT && !isCollapsible) {
+        setIsCollapsible(true);
       }
-      if (!collapsible) {
-        heightSV.value = height;
-        setIsExpanded(true);
-        chevronSV.value = 1;
-      } else if (isExpanded) {
+      if (isExpanded) {
         heightSV.value = withTiming(height, { duration: ANIMATION_DURATION });
-      } else {
-        // Collapsed — ensure clip height is at PEEK_HEIGHT (not a stale small value)
-        heightSV.value = PEEK_HEIGHT;
       }
     }
   };
 
   const showGradient = layoutMeasured && isCollapsible && !isExpanded;
 
-  // Children are always mounted inside the same Animated.View — no remounting.
-  // Before measurement (constrainedSV=0): Animated.View has no style, children render at
-  // full natural height so onLayout captures the true measurement.
-  // After measurement (constrainedSV=1): height+overflow:hidden applied; children stay mounted
-  // and their layout is stable, so RenderHtml doesn't re-render during animation.
-  const innerContent = (
+  // Expand shorthand hex (#abc → #aabbcc00) for a hue-matched transparent stop.
+  const bg = colors.background;
+  const bgTransparent =
+    bg.length === 4 ? `#${bg[1]}${bg[1]}${bg[2]}${bg[2]}${bg[3]}${bg[3]}00` : `${bg}00`;
+
+  // Invisible, unconstrained sizer — measures true natural content height.
+  const sizer = (
+    <View
+      testID="collapsible-sizer"
+      style={{ position: "absolute", opacity: 0, left: 0, right: 0 }}
+      pointerEvents="none"
+      onLayout={handleSizerLayout}
+    >
+      {children}
+    </View>
+  );
+
+  // Visible clipped content.
+  const clippedContent = (
     <Animated.View style={containerStyle}>
-      <View testID="collapsible-content" onLayout={handleLayout}>
-        {children}
-      </View>
+      <View testID="collapsible-content">{children}</View>
       {showGradient && (
         <Animated.View
           testID="collapsible-gradient"
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: GRADIENT_HEIGHT,
-          }}
+          style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: GRADIENT_HEIGHT }}
           pointerEvents="none"
         >
           <LinearGradient
-            colors={["transparent", colors.background]}
+            colors={[bgTransparent, colors.background]}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={{ flex: 1 }}
@@ -143,14 +126,7 @@ export function CollapsibleSection({
   if (title) {
     const headerContent = (
       <>
-        <Text
-          style={{
-            fontSize: 16,
-            fontWeight: "500",
-            flex: 1,
-            color: colors.textPrimary,
-          }}
-        >
+        <Text style={{ fontSize: 16, fontWeight: "500", flex: 1, color: colors.textPrimary }}>
           {title}
         </Text>
         {isCollapsible && (
@@ -161,45 +137,42 @@ export function CollapsibleSection({
       </>
     );
 
-    // Collapsed: entire section is tap target — children non-interactive
+    // Collapsed: whole section (header + content) is the tap target.
     if (isCollapsible && !isExpanded) {
       return (
-        <Pressable testID="collapsible-header" onPress={toggle} style={{ marginBottom: 16 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8 }}>
-            {headerContent}
-          </View>
-          <View pointerEvents="none">{innerContent}</View>
-        </Pressable>
+        <View style={{ marginBottom: 16 }}>
+          {sizer}
+          <Pressable testID="collapsible-header" onPress={toggle}>
+            <View style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8 }}>
+              {headerContent}
+            </View>
+            <View pointerEvents="none">{clippedContent}</View>
+          </Pressable>
+        </View>
       );
     }
 
-    // Expanded or pre-measurement: header-only toggle, children interactive
+    // Expanded or pre-measurement: only the header is the tap target.
     return (
       <View style={{ marginBottom: 16 }}>
+        {sizer}
         <Pressable
           testID="collapsible-header"
           onPress={isCollapsible ? toggle : undefined}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            paddingVertical: 8,
-          }}
+          style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8 }}
         >
           {headerContent}
         </Pressable>
-        {innerContent}
+        {clippedContent}
       </View>
     );
   }
 
-  // Without title AND collapsible: entire section is tap target
-  if (layoutMeasured && isCollapsible) {
-    return (
-      <View style={{ marginBottom: 16 }}>
-        <Pressable onPress={toggle}>{innerContent}</Pressable>
-      </View>
-    );
-  }
-
-  return <View style={{ marginBottom: 16 }}>{innerContent}</View>;
+  // No title: whole section is the tap target when collapsible.
+  return (
+    <View style={{ marginBottom: 16 }}>
+      {sizer}
+      {isCollapsible ? <Pressable onPress={toggle}>{clippedContent}</Pressable> : clippedContent}
+    </View>
+  );
 }
