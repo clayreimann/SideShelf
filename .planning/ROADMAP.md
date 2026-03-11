@@ -137,14 +137,15 @@ Plans:
 4. User can delete a bookmark from the item detail screen
 5. Bookmarks created, renamed, or deleted while online are immediately reflected on the ABS server
 6. Bookmarks are visible on the item detail screen when the device is offline (loaded from local SQLite cache)
-   **Plans**: 4 plans
+   **Plans**: 5 plans
 
 Plans:
 
-- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
-- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
-- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
-- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
+- [ ] 17-01-PLAN.md — DB schema + helpers + migration (bookmarks + pending_bookmark_ops tables, wipeUserData)
+- [ ] 17-02-PLAN.md — Settings data layer (bookmarkTitleMode in appSettings + settingsSlice)
+- [ ] 17-03-PLAN.md — API fixes + slice extension + offline sync queue (deleteBookmark fix, renameBookmark, offline-aware actions, drain on network restore)
+- [ ] 17-04-PLAN.md — UI layer (BookmarkButton long-press, FullScreenPlayer first-tap + modes, BookmarksSection rewrite, Settings row)
+- [ ] 17-05-PLAN.md — Visual verification checkpoint (simulator flow verification)
 
 ### Phase 18: Sleep Timer Fade + Navigation + Path Standardization
 
@@ -270,7 +271,7 @@ Plans:
 | 14. Progress Display Format                       | 4/4       | Complete       | 2026-03-09  | -          |
 | 15. Collapsible Section Redesign                  | 2/3       | In Progress    |             | -          |
 | 16. Full Screen Player Redesign + AirPlay         | 4/4       | Complete       | 2026-03-11  | -          |
-| 17. Bookmarks                                     | v1.3      | 0/TBD          | Not started | -          |
+| 17. Bookmarks                                     | v1.3      | 0/5            | Not started | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | v1.3      | 0/TBD          | Not started | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/TBD          | Not started | -          |
 | 20. Tree Shaking                                  | v1.3      | 0/TBD          | Not started | -          |
