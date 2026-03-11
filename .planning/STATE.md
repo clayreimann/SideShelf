@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: executing
-stopped_at: Completed 16-03-PLAN.md
-last_updated: "2026-03-11T14:02:32.997Z"
-last_activity: 2026-03-11 — Completed Phase 16 Plan 02 (AirPlay package verified, AirPlayButton component, wired into FloatingPlayer + ConsolidatedPlayerControls)
+stopped_at: Completed 16-04-PLAN.md (pending Task 3 human-verify checkpoint)
+last_updated: "2026-03-11T14:10:17.007Z"
+last_activity: 2026-03-11 — Completed Phase 16 Plan 04 (Reanimated chapter panel migration; pending human-verify checkpoint)
 progress:
   total_phases: 9
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 10
-  percent: 77
+  completed_plans: 11
+  percent: 91
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 16 of 22 (Full Screen Player Redesign + AirPlay)
-Plan: 3 of 4
-Status: In Progress — Plan 03 complete
-Last activity: 2026-03-11 — Completed Phase 16 Plan 03 (custom header row, drag pill, AirPlay, UIMenu gear, ProgressBar rightLabel, KeepAwakeGuard)
+Plan: 4 of 4 (awaiting Task 3 human-verify checkpoint)
+Status: In Progress — Plan 04 code complete, pending device verification
+Last activity: 2026-03-11 — Completed Phase 16 Plan 04 (Reanimated chapter panel migration; pending human-verify checkpoint)
 
-Progress: [█████████░] 91%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [█████████░] 91%
 | Phase 16-full-screen-player-redesign-airplay P01 | 3 | 1 tasks | 3 files |
 | Phase 16-full-screen-player-redesign-airplay P02 | 4 | 2 tasks | 4 files |
 | Phase 16-full-screen-player-redesign-airplay P03 | 3 | 2 tasks | 4 files |
+| Phase 16-full-screen-player-redesign-airplay P04 | 6 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,8 @@ Full decision log is in PROJECT.md Key Decisions table.
 - AirPlay: npm package path taken (@douglowder/expo-av-route-picker-view) — builds on SDK 54 + newArch; AirPlayButton at src/components/ui/AirPlayButton.tsx; plan 03 imports from @/components/ui/AirPlayButton
 - KeepAwakeGuard guard-component pattern: top-level function component holds useKeepAwake; conditionally rendered via {keepScreenAwake && isPlaying && <KeepAwakeGuard />} — avoids conditional hook violation
 - ProgressBar rightLabel=undefined means fall back to formatTime(duration); callers pass undefined rather than explicit fallback string
+- Reanimated cross-component animated style prop type: use AnimatedStyle<ViewStyle> not ReturnType<typeof useAnimatedStyle> — the latter resolves to DefaultStyle (TextStyle union) which fails Animated.View type check
+- Static styles (marginBottom, overflow) that accompany Reanimated animations: include inside useAnimatedStyle worklet rather than array-merging at call site — avoids Reanimated style prop type errors
 
 ### Pending Todos
 
@@ -92,6 +95,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-11T14:02:32.995Z
-Stopped at: Completed 16-03-PLAN.md
+Last session: 2026-03-11T14:10:17.004Z
+Stopped at: Completed 16-04-PLAN.md (pending Task 3 human-verify checkpoint)
 Resume file: None

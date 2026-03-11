@@ -60,7 +60,7 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 - [ ] **PERF-08**: `CoverImage` component uses `expo-image` for memory + disk caching
 - [ ] **PERF-09**: ChapterList `useEffect` setTimeout calls return cleanup functions
 - [ ] **PERF-10**: `NetInfo.addEventListener` unsubscribe is captured and called in `resetNetwork()`; `initializeNetwork()` clears existing intervals before creating new ones
-- [ ] **PERF-11**: FullScreenPlayer panel open/close animations use Reanimated `useAnimatedStyle`
+- [x] **PERF-11**: FullScreenPlayer panel open/close animations use Reanimated `useAnimatedStyle`
 
 ### Technical Debt (DEBT)
 
@@ -140,7 +140,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PERF-08       | Phase 19 | Pending  |
 | PERF-09       | Phase 19 | Pending  |
 | PERF-10       | Phase 19 | Pending  |
-| PERF-11       | Phase 16 | Pending  |
+| PERF-11       | Phase 16 | Complete |
 | DEBT-01       | Phase 18 | Pending  |
 | DEBT-02       | Phase 19 | Pending  |
 | DEBT-03       | Phase 22 | Pending  |

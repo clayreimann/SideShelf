@@ -53,7 +53,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 
 - [x] **Phase 14: Progress Display Format** — User-selectable progress format across all three player surfaces (completed 2026-03-09)
 - [ ] **Phase 15: Collapsible Section Redesign** — Reanimated probe: peek-and-fade with UI-thread height animation
-- [ ] **Phase 16: Full Screen Player Redesign + AirPlay** — Nav bar removal, chevron dismiss, settings UIMenu, AirPlay on all surfaces, Reanimated panel animation
+- [x] **Phase 16: Full Screen Player Redesign + AirPlay** — Nav bar removal, chevron dismiss, settings UIMenu, AirPlay on all surfaces, Reanimated panel animation (completed 2026-03-11)
 - [ ] **Phase 17: Bookmarks** — Add/view/rename/delete with server sync and SQLite offline cache
 - [ ] **Phase 18: Sleep Timer Fade + Navigation + Path Standardization** — Volume fade, Series/Authors More tab fix, deep linking, path normalization
 - [ ] **Phase 19: Performance Quick Wins** — FlashList, expo-image, TTI measurement, memory leak fixes, orphan reassociation UI
@@ -269,7 +269,7 @@ Plans:
 | 13. RN Downloader Migration                       | v1.2      | 2/2            | Complete    | 2026-03-07 |
 | 14. Progress Display Format                       | 4/4       | Complete       | 2026-03-09  | -          |
 | 15. Collapsible Section Redesign                  | 2/3       | In Progress    |             | -          |
-| 16. Full Screen Player Redesign + AirPlay         | 3/4       | In Progress    |             | -          |
+| 16. Full Screen Player Redesign + AirPlay         | 4/4       | Complete       | 2026-03-11  | -          |
 | 17. Bookmarks                                     | v1.3      | 0/TBD          | Not started | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | v1.3      | 0/TBD          | Not started | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/TBD          | Not started | -          |
