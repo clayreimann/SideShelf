@@ -2,6 +2,7 @@
  * FullScreenPlayer - Full-screen modal audio player controller
  *
  * This component provides comprehensive audio controls including:
+ * - Drag pill (iOS) + custom header row (chevron dismiss, AirPlay, UIMenu gear)
  * - Large cover image
  * - Progress bar with seek functionality
  * - Current time and chapter information
@@ -17,22 +18,29 @@ import PlayPauseButton from "@/components/player/PlayPauseButton";
 import SkipButton from "@/components/player/SkipButton";
 import SleepTimerControl from "@/components/player/SleepTimerControl";
 import { ProgressBar } from "@/components/ui";
+import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import CoverImage from "@/components/ui/CoverImange";
+import { formatTime } from "@/lib/helpers/formatters";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
-import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
-import { router, Stack } from "expo-router";
+import { useAppStore, usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
+import { Ionicons } from "@expo/vector-icons";
+import { MenuView } from "@react-native-menu/menu";
+import { useKeepAwake } from "expo-keep-awake";
+import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   PanResponder,
+  Platform,
   Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
-  Alert,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function formatBookmarkTime(seconds: number): string {
   const totalSecs = Math.floor(seconds);
@@ -46,13 +54,33 @@ function formatBookmarkTime(seconds: number): string {
   return `${minutes}m ${secsStr}`;
 }
 
+/**
+ * Guard component that activates keep-awake using a hook.
+ * Defined outside FullScreenPlayer to avoid conditional hook rules.
+ */
+function KeepAwakeGuard() {
+  useKeepAwake("sideshelf-player");
+  return null;
+}
+
 export default function FullScreenPlayer() {
   const { styles, isDark, colors } = useThemedStyles();
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
   const { createBookmark } = useUserProfile();
-  const { jumpForwardInterval, jumpBackwardInterval, progressFormat } = useSettings();
+  const {
+    jumpForwardInterval,
+    jumpBackwardInterval,
+    progressFormat,
+    chapterBarShowRemaining,
+    keepScreenAwake,
+    updateProgressFormat,
+    updateChapterBarShowRemaining,
+    updateKeepScreenAwake,
+  } = useSettings();
+
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const [showChapterList, setShowChapterList] = useState(false);
@@ -236,6 +264,25 @@ export default function FullScreenPlayer() {
     }
   }, [currentChapter]);
 
+  const handleMenuAction = useCallback(
+    (actionId: string) => {
+      if (actionId === "progressFormat-remaining") updateProgressFormat("remaining");
+      else if (actionId === "progressFormat-elapsed") updateProgressFormat("elapsed");
+      else if (actionId === "progressFormat-percent") updateProgressFormat("percent");
+      else if (actionId === "chapterBar-total") updateChapterBarShowRemaining(false);
+      else if (actionId === "chapterBar-remaining") updateChapterBarShowRemaining(true);
+      else if (actionId === "keepAwake") updateKeepScreenAwake(!keepScreenAwake);
+    },
+    [
+      progressFormat,
+      chapterBarShowRemaining,
+      keepScreenAwake,
+      updateProgressFormat,
+      updateChapterBarShowRemaining,
+      updateKeepScreenAwake,
+    ]
+  );
+
   if (!currentTrack) {
     return null;
   }
@@ -262,18 +309,104 @@ export default function FullScreenPlayer() {
 
   const chapters = currentTrack?.chapters || [];
 
+  // Compute rightLabel for chapter progress bar based on setting
+  const chapterBarRightLabel = chapterBarShowRemaining
+    ? `-${formatTime(chapterDuration - chapterPosition)}`
+    : undefined; // undefined = ProgressBar uses its default formatTime(duration)
+
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: currentTrack.title,
-          headerRight: () => (
-            <TouchableOpacity onPress={handleClose}>
-              <Text style={{ fontSize: 16, color: isDark ? "white" : "black" }}>Done</Text>
-            </TouchableOpacity>
-          ),
+      {/* Keep screen awake during active playback when setting is enabled */}
+      {keepScreenAwake && isPlaying && <KeepAwakeGuard />}
+
+      {/* Drag pill — iOS only, sits above the header row */}
+      {Platform.OS === "ios" && (
+        <View style={{ alignItems: "center", paddingTop: insets.top + 4 }}>
+          <View
+            style={{
+              width: 36,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: "rgba(128,128,128,0.4)",
+              marginBottom: 6,
+            }}
+          />
+        </View>
+      )}
+
+      {/* Custom header row */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 16,
+          marginBottom: 8,
+          ...(Platform.OS !== "ios" ? { paddingTop: insets.top + 4 } : {}),
         }}
-      />
+      >
+        <TouchableOpacity
+          onPress={handleClose}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="chevron-down" size={28} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }} />
+        <AirPlayButton style={{ width: 32, height: 32, marginRight: 12 }} />
+        <MenuView
+          title=""
+          shouldOpenOnLongPress={false}
+          onPressAction={({ nativeEvent }) => handleMenuAction(nativeEvent.event)}
+          actions={[
+            {
+              id: "progressFormat",
+              title: "Progress Format",
+              subactions: [
+                {
+                  id: "progressFormat-remaining",
+                  title: "Time Remaining",
+                  state: progressFormat === "remaining" ? "on" : "off",
+                },
+                {
+                  id: "progressFormat-elapsed",
+                  title: "Elapsed",
+                  state: progressFormat === "elapsed" ? "on" : "off",
+                },
+                {
+                  id: "progressFormat-percent",
+                  title: "Percent Complete",
+                  state: progressFormat === "percent" ? "on" : "off",
+                },
+              ],
+            },
+            {
+              id: "chapterBarTime",
+              title: "Chapter Bar Time",
+              subactions: [
+                {
+                  id: "chapterBar-total",
+                  title: "Show Total Duration",
+                  state: !chapterBarShowRemaining ? "on" : "off",
+                },
+                {
+                  id: "chapterBar-remaining",
+                  title: "Show Time Remaining",
+                  state: chapterBarShowRemaining ? "on" : "off",
+                },
+              ],
+            },
+            {
+              id: "keepAwake",
+              title: "Keep Screen Awake",
+              state: keepScreenAwake ? "on" : "off",
+            },
+          ]}
+        >
+          <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="settings-outline" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </MenuView>
+      </View>
+
       {/* Content */}
       <View
         style={{
@@ -305,7 +438,6 @@ export default function FullScreenPlayer() {
                 styles.text,
                 {
                   fontSize: 24,
-                  // fontWeight: '700',
                   textAlign: "center",
                   marginBottom: 8,
                 },
@@ -330,6 +462,7 @@ export default function FullScreenPlayer() {
             containerStyle={{ marginBottom: 8 }}
             showPercentage={true}
             customPercentageText={formatProgress(progressFormat, currentPosition, duration)}
+            rightLabel={chapterBarRightLabel}
           />
         </View>
 
@@ -344,7 +477,7 @@ export default function FullScreenPlayer() {
                 alignItems: "center",
               }}
             >
-              <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
+              <Text style={[styles.text, { fontSize: 12, opacity: 0.5 }]}>
                 {showChapterList ? "Hide Chapters" : `Show Chapters (${chapters.length})`}
               </Text>
             </TouchableOpacity>
