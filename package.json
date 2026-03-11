@@ -37,6 +37,7 @@
     "screenshots": "bash scripts/run-screenshots.sh"
   },
   "dependencies": {
+    "@douglowder/expo-av-route-picker-view": "^0.0.5",
     "@expo/config-plugins": "^54.0.1",
     "@expo/vector-icons": "^15.0.2",
     "@kesha-antonov/react-native-background-downloader": "^4.5.3",
