@@ -29,10 +29,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import React, { useCallback, useRef, useState } from "react";
 import {
   Alert,
-  Animated,
   PanResponder,
   Platform,
   Text,
@@ -86,9 +86,10 @@ export default function FullScreenPlayer() {
   const [showChapterList, setShowChapterList] = useState(false);
   const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
-  // Animation values
-  const coverSizeAnim = useRef(new Animated.Value(0)).current; // 0 = full size, 1 = minimized
-  const chapterListAnim = useRef(new Animated.Value(0)).current; // 0 = hidden, 1 = visible
+  // Reanimated shared values — run on UI thread (no JS bridge per frame)
+  const PANEL_DURATION = 300;
+  const coverSizeSV = useSharedValue(0); // 0 = full size, 1 = minimized
+  const chapterPanelSV = useSharedValue(0); // 0 = hidden, 1 = visible
 
   // Swipe down gesture handler - only applies to cover/title/progress area
   const panResponder = useRef(
@@ -111,25 +112,12 @@ export default function FullScreenPlayer() {
     })
   ).current;
 
-  // Animate chapter list visibility
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(coverSizeAnim, {
-        toValue: showChapterList ? 1 : 0,
-        duration: 300,
-        useNativeDriver: false, // Cannot use native driver for width/height
-      }),
-      Animated.timing(chapterListAnim, {
-        toValue: showChapterList ? 1 : 0,
-        duration: 300,
-        useNativeDriver: false, // Need to animate height, so can't use native driver
-      }),
-    ]).start();
-  }, [showChapterList, coverSizeAnim, chapterListAnim]);
-
   const toggleChapterList = useCallback(() => {
-    setShowChapterList((prev) => !prev);
-  }, []);
+    const next = !showChapterList;
+    setShowChapterList(next);
+    coverSizeSV.value = withTiming(next ? 1 : 0, { duration: PANEL_DURATION });
+    chapterPanelSV.value = withTiming(next ? 1 : 0, { duration: PANEL_DURATION });
+  }, [showChapterList, coverSizeSV, chapterPanelSV]);
 
   const handleChapterPress = useCallback(async (chapterStart: number) => {
     try {
@@ -283,6 +271,37 @@ export default function FullScreenPlayer() {
     ]
   );
 
+  // Computed sizes — must be before animated style hooks (hooks must be unconditional)
+  const fullCoverSize = Math.min(width - 64, height * 0.4);
+  const minimizedCoverSize = 60;
+  const containerHeight = height * 0.4;
+
+  // Cover animated style: interpolates size and margin on the UI thread
+  const coverAnimStyle = useAnimatedStyle(() => {
+    "worklet";
+    const sz = fullCoverSize + (minimizedCoverSize - fullCoverSize) * coverSizeSV.value;
+    const mb = 24 - 16 * coverSizeSV.value; // 24 at full size, 8 at minimized
+    return {
+      width: sz,
+      height: sz,
+      marginBottom: mb,
+      borderRadius: 12,
+      overflow: "hidden" as const,
+    };
+  });
+
+  // Chapter panel animated style (passed to ChapterList): animates height, opacity, translateY
+  const chapterPanelStyle = useAnimatedStyle(() => {
+    "worklet";
+    return {
+      height: chapterPanelSV.value * containerHeight,
+      opacity: chapterPanelSV.value,
+      transform: [{ translateY: (1 - chapterPanelSV.value) * 20 }],
+      marginBottom: 16,
+      overflow: "hidden" as const,
+    };
+  });
+
   if (!currentTrack) {
     return null;
   }
@@ -292,20 +311,6 @@ export default function FullScreenPlayer() {
   const chapterTitle = currentChapter?.chapter.title || "Loading...";
   const chapterPosition = currentChapter?.positionInChapter || 0;
   const chapterDuration = currentChapter?.chapterDuration || 0;
-
-  const fullCoverSize = Math.min(width - 64, height * 0.4);
-  const minimizedCoverSize = 60;
-
-  // Interpolate cover size based on animation
-  const animatedCoverSize = coverSizeAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [fullCoverSize, minimizedCoverSize],
-  });
-
-  const animatedCoverMarginBottom = coverSizeAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [24, 8],
-  });
 
   const chapters = currentTrack?.chapters || [];
 
@@ -419,16 +424,8 @@ export default function FullScreenPlayer() {
         <View {...panResponder.panHandlers}>
           {/* Cover and Track Info */}
           <View style={{ alignItems: "center" }}>
-            {/* Cover Image - Animated */}
-            <Animated.View
-              style={{
-                width: animatedCoverSize,
-                height: animatedCoverSize,
-                borderRadius: 12,
-                marginBottom: animatedCoverMarginBottom,
-                overflow: "hidden",
-              }}
-            >
+            {/* Cover Image - Animated via Reanimated (UI thread) */}
+            <Animated.View style={coverAnimStyle}>
               <CoverImage uri={currentTrack.coverUri} title={currentTrack.title} fontSize={48} />
             </Animated.View>
 
@@ -489,8 +486,7 @@ export default function FullScreenPlayer() {
             position={position}
             onChapterPress={handleChapterPress}
             showChapterList={showChapterList}
-            chapterListAnim={chapterListAnim}
-            containerHeight={height * 0.4}
+            animatedStyle={chapterPanelStyle}
           />
         </View>
 
