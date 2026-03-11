@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: verifying
-stopped_at: Completed 16-01-PLAN.md
-last_updated: "2026-03-11T13:48:59.436Z"
-last_activity: 2026-03-10 — Completed Phase 15 (visual verification approved, all SECTION requirements satisfied)
+stopped_at: Completed 16-02-PLAN.md
+last_updated: "2026-03-11T13:55:00Z"
+last_activity: 2026-03-11 — Completed Phase 16 Plan 02 (AirPlay integration on FloatingPlayer + ConsolidatedPlayerControls)
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
-  percent: 75
+  completed_plans: 9
+  percent: 77
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 16 of 22 (Full Screen Player Redesign + AirPlay)
-Plan: 1 of 4
-Status: In Progress — Plan 01 complete
-Last activity: 2026-03-11 — Completed Phase 16 Plan 01 (settings data layer for chapterBarShowRemaining + keepScreenAwake)
+Plan: 2 of 4
+Status: In Progress — Plan 02 complete
+Last activity: 2026-03-11 — Completed Phase 16 Plan 02 (AirPlay package verified, AirPlayButton component, wired into FloatingPlayer + ConsolidatedPlayerControls)
 
-Progress: [███████░░░] 73%
+Progress: [████████░░] 77%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [███████░░░] 73%
 | Phase 15-collapsible-section-redesign P01 | 5 | 1 tasks | 1 files |
 | Phase 15-collapsible-section-redesign P02 | 25 | 1 tasks | 3 files |
 | Phase 16-full-screen-player-redesign-airplay P01 | 3 | 1 tasks | 3 files |
+| Phase 16-full-screen-player-redesign-airplay P02 | 4 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,7 @@ Full decision log is in PROJECT.md Key Decisions table.
 - CollapsibleSection: gradient visibility driven by React state not animation opacity — enables queryByTestId null assertions in tests
 - CollapsibleSection: two-phase render (measure first, animate second) avoids animating to unknown height on initial render
 - chapterBarShowRemaining defaults false (show total duration); keepScreenAwake defaults false (battery-friendly); both stored under '@app/' prefix
+- AirPlay: npm package path taken (@douglowder/expo-av-route-picker-view) — builds on SDK 54 + newArch; AirPlayButton at src/components/ui/AirPlayButton.tsx; plan 03 imports from @/components/ui/AirPlayButton
 
 ### Pending Todos
 
@@ -80,13 +82,13 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ### Blockers/Concerns
 
-- AirPlay package new-arch compatibility: `@douglowder/expo-av-route-picker-view` not verified against SDK 54 + newArchEnabled — confirm with device build before Phase 16 planning; local Expo Module fallback documented
+- AirPlay package new-arch compatibility: RESOLVED — `@douglowder/expo-av-route-picker-view` builds on SDK 54 + newArchEnabled (prebuild --clean exit 0 confirmed in Plan 02)
 - Tree shaking (Phase 20): `inlineRequires` + Reanimated 4 + React Compiler triple interaction undocumented; treat as exploratory; have revert plan ready
 - ABS bookmark PATCH endpoint: `PATCH /api/me/item/:id/bookmark/:bookmarkId` inferred, not verified from ABS docs — confirm before Phase 17 planning
 - URL scheme mismatch: app.json has `"scheme": "side-shelf"` (hyphen) but docs use `sideshelf://` — resolve at start of Phase 21; run `xcrun simctl openurl` to confirm
 
 ## Session Continuity
 
-Last session: 2026-03-11T13:48:59.434Z
-Stopped at: Completed 16-01-PLAN.md
+Last session: 2026-03-11T13:55:00Z
+Stopped at: Completed 16-02-PLAN.md
 Resume file: None
