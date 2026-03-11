@@ -9,6 +9,7 @@
  */
 
 import PlayPauseButton from "@/components/player/PlayPauseButton";
+import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import CoverImage from "@/components/ui/CoverImange";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { borderRadius, floatingPlayer, spacing } from "@/lib/styles";
@@ -94,6 +95,7 @@ export default function FloatingPlayer() {
         </View>
       </Pressable>
 
+      <AirPlayButton style={{ width: 32, height: 32, marginRight: 8 }} />
       <PlayPauseButton onPress={handlePlayPausePress} iconSize={32} />
     </View>
   );

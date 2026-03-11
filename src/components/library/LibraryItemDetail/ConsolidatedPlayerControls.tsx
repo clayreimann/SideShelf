@@ -1,7 +1,7 @@
 import BookmarkButton from "@/components/player/BookmarkButton";
-import FullScreenButton from "@/components/player/FullScreenButton";
 import PlayPauseButton from "@/components/player/PlayPauseButton";
 import SkipButton from "@/components/player/SkipButton";
+import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import { ProgressBar } from "@/components/ui";
 import { translate } from "@/i18n";
 import { formatProgress } from "@/lib/helpers/progressFormat";
@@ -10,7 +10,7 @@ import { playerService } from "@/services/PlayerService";
 import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
 import { router } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Alert, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Pressable, Text, TouchableOpacity, View } from "react-native";
 
 interface ConsolidatedPlayerControlsProps {
   libraryItemId: string;
@@ -124,7 +124,8 @@ export default function ConsolidatedPlayerControls({
   }
 
   return (
-    <View
+    <Pressable
+      onPress={handleOpenFullScreenPlayer}
       style={{
         marginBottom: 16,
         paddingHorizontal: 16,
@@ -208,10 +209,10 @@ export default function ConsolidatedPlayerControls({
             hitBoxSize={48}
           />
 
-          {/* Open Full Screen Player Button - only show if currently playing */}
-          <FullScreenButton onPress={handleOpenFullScreenPlayer} iconSize={24} hitBoxSize={48} />
+          {/* AirPlay route picker */}
+          <AirPlayButton style={{ width: 48, height: 48 }} />
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
