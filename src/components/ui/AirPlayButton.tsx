@@ -9,8 +9,13 @@
  */
 
 import { ExpoAvRoutePickerView } from "@douglowder/expo-av-route-picker-view";
-import { ViewProps } from "react-native";
+import { ColorValue, ViewProps } from "react-native";
 
-export function AirPlayButton(props: ViewProps) {
+type AirPlayButtonProps = ViewProps & {
+  tintColor?: ColorValue;
+  activeTintColor?: ColorValue;
+};
+
+export function AirPlayButton(props: AirPlayButtonProps) {
   return <ExpoAvRoutePickerView {...props} />;
 }

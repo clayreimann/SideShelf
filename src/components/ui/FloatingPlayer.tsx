@@ -95,7 +95,11 @@ export default function FloatingPlayer() {
         </View>
       </Pressable>
 
-      <AirPlayButton style={{ width: 32, height: 32, marginRight: 8 }} />
+      <AirPlayButton
+        style={{ width: 36, height: 36, marginRight: 8 }}
+        tintColor={colors.textPrimary}
+        activeTintColor={colors.textPrimary}
+      />
       <PlayPauseButton onPress={handlePlayPausePress} iconSize={32} />
     </View>
   );

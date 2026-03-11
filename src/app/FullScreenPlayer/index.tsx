@@ -356,7 +356,11 @@ export default function FullScreenPlayer() {
           <Ionicons name="chevron-down" size={28} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={{ flex: 1 }} />
-        <AirPlayButton style={{ width: 32, height: 32, marginRight: 12 }} />
+        <AirPlayButton
+          style={{ width: 40, height: 40, marginRight: 12 }}
+          tintColor={colors.textPrimary}
+          activeTintColor={colors.textPrimary}
+        />
         <MenuView
           title=""
           shouldOpenOnLongPress={false}
