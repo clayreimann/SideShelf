@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: verifying
-stopped_at: Phase 16 context gathered
-last_updated: "2026-03-10T21:59:11.674Z"
+stopped_at: Completed 16-01-PLAN.md
+last_updated: "2026-03-11T13:48:59.436Z"
 last_activity: 2026-03-10 — Completed Phase 15 (visual verification approved, all SECTION requirements satisfied)
 progress:
   total_phases: 9
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 11
+  completed_plans: 8
   percent: 75
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Phase 15 — Collapsible Section Redesign (complete, pending verification)
+**Current focus:** Phase 16 — Full Screen Player Redesign + AirPlay
 
 ## Current Position
 
-Phase: 15 of 22 (Collapsible Section Redesign)
-Plan: 3 of 3
-Status: Complete — awaiting phase verification
-Last activity: 2026-03-10 — Completed Phase 15 (visual verification approved, all SECTION requirements satisfied)
+Phase: 16 of 22 (Full Screen Player Redesign + AirPlay)
+Plan: 1 of 4
+Status: In Progress — Plan 01 complete
+Last activity: 2026-03-11 — Completed Phase 16 Plan 01 (settings data layer for chapterBarShowRemaining + keepScreenAwake)
 
-Progress: [████████░░] 75%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [████████░░] 75%
 | Phase 14-progress-display-format P04 | 3 | 1 tasks | 2 files |
 | Phase 15-collapsible-section-redesign P01 | 5 | 1 tasks | 1 files |
 | Phase 15-collapsible-section-redesign P02 | 25 | 1 tasks | 3 files |
+| Phase 16-full-screen-player-redesign-airplay P01 | 3 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,7 @@ Full decision log is in PROJECT.md Key Decisions table.
 - formatBookmarkTime kept local in FullScreenPlayer — needs second-level precision; shared formatProgress helper uses minute-granular friendly strings
 - CollapsibleSection: gradient visibility driven by React state not animation opacity — enables queryByTestId null assertions in tests
 - CollapsibleSection: two-phase render (measure first, animate second) avoids animating to unknown height on initial render
+- chapterBarShowRemaining defaults false (show total duration); keepScreenAwake defaults false (battery-friendly); both stored under '@app/' prefix
 
 ### Pending Todos
 
@@ -85,6 +87,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-10T21:59:11.671Z
-Stopped at: Phase 16 context gathered
-Resume file: .planning/phases/16-full-screen-player-redesign-airplay/16-CONTEXT.md
+Last session: 2026-03-11T13:48:59.434Z
+Stopped at: Completed 16-01-PLAN.md
+Resume file: None
