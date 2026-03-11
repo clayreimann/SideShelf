@@ -9,10 +9,10 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 
 ### Full Screen Player (PLAYER)
 
-- [ ] **PLAYER-01**: Full screen player navigation bar is removed (no navigation controller chrome)
-- [ ] **PLAYER-02**: Full screen player has a chevron-down button on the left that dismisses the player
+- [x] **PLAYER-01**: Full screen player navigation bar is removed (no navigation controller chrome)
+- [x] **PLAYER-02**: Full screen player has a chevron-down button on the left that dismisses the player
 - [x] **PLAYER-03**: Full screen player Done button is replaced with a UIMenu settings button containing playback actions (add bookmark, sleep timer, progress format)
-- [ ] **PLAYER-04**: Full screen player has an AirPlay route picker button in the header
+- [x] **PLAYER-04**: Full screen player has an AirPlay route picker button in the header
 - [x] **PLAYER-05**: Floating player has an AirPlay route picker button
 - [x] **PLAYER-06**: Item details screen player controls have an AirPlay route picker button
 
@@ -107,10 +107,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement   | Phase    | Status   |
 | ------------- | -------- | -------- |
-| PLAYER-01     | Phase 16 | Pending  |
-| PLAYER-02     | Phase 16 | Pending  |
+| PLAYER-01     | Phase 16 | Complete |
+| PLAYER-02     | Phase 16 | Complete |
 | PLAYER-03     | Phase 16 | Complete |
-| PLAYER-04     | Phase 16 | Pending  |
+| PLAYER-04     | Phase 16 | Complete |
 | PLAYER-05     | Phase 16 | Complete |
 | PLAYER-06     | Phase 16 | Complete |
 | PROGRESS-01   | Phase 14 | Complete |

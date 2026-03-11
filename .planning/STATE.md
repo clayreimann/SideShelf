@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
-status: verifying
-stopped_at: Completed 16-02-PLAN.md
-last_updated: "2026-03-11T13:55:00Z"
-last_activity: 2026-03-11 — Completed Phase 16 Plan 02 (AirPlay integration on FloatingPlayer + ConsolidatedPlayerControls)
+status: executing
+stopped_at: Completed 16-03-PLAN.md
+last_updated: "2026-03-11T14:02:32.997Z"
+last_activity: 2026-03-11 — Completed Phase 16 Plan 02 (AirPlay package verified, AirPlayButton component, wired into FloatingPlayer + ConsolidatedPlayerControls)
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 77
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 16 of 22 (Full Screen Player Redesign + AirPlay)
-Plan: 2 of 4
-Status: In Progress — Plan 02 complete
-Last activity: 2026-03-11 — Completed Phase 16 Plan 02 (AirPlay package verified, AirPlayButton component, wired into FloatingPlayer + ConsolidatedPlayerControls)
+Plan: 3 of 4
+Status: In Progress — Plan 03 complete
+Last activity: 2026-03-11 — Completed Phase 16 Plan 03 (custom header row, drag pill, AirPlay, UIMenu gear, ProgressBar rightLabel, KeepAwakeGuard)
 
-Progress: [████████░░] 77%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [████████░░] 77%
 | Phase 15-collapsible-section-redesign P02 | 25 | 1 tasks | 3 files |
 | Phase 16-full-screen-player-redesign-airplay P01 | 3 | 1 tasks | 3 files |
 | Phase 16-full-screen-player-redesign-airplay P02 | 4 | 2 tasks | 4 files |
+| Phase 16-full-screen-player-redesign-airplay P03 | 3 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,8 @@ Full decision log is in PROJECT.md Key Decisions table.
 - CollapsibleSection: two-phase render (measure first, animate second) avoids animating to unknown height on initial render
 - chapterBarShowRemaining defaults false (show total duration); keepScreenAwake defaults false (battery-friendly); both stored under '@app/' prefix
 - AirPlay: npm package path taken (@douglowder/expo-av-route-picker-view) — builds on SDK 54 + newArch; AirPlayButton at src/components/ui/AirPlayButton.tsx; plan 03 imports from @/components/ui/AirPlayButton
+- KeepAwakeGuard guard-component pattern: top-level function component holds useKeepAwake; conditionally rendered via {keepScreenAwake && isPlaying && <KeepAwakeGuard />} — avoids conditional hook violation
+- ProgressBar rightLabel=undefined means fall back to formatTime(duration); callers pass undefined rather than explicit fallback string
 
 ### Pending Todos
 
@@ -89,6 +92,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-11T13:55:00Z
-Stopped at: Completed 16-02-PLAN.md
+Last session: 2026-03-11T14:02:32.995Z
+Stopped at: Completed 16-03-PLAN.md
 Resume file: None
