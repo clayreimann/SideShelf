@@ -5,23 +5,18 @@
  * and auto-scroll functionality.
  */
 
-import { getCurrentChapterIndex } from '@/db/helpers/chapters';
-import { formatTime } from '@/lib/helpers/formatters';
-import { useThemedStyles } from '@/lib/theme';
-import type { CurrentChapter, PlayerTrack } from '@/types/player';
-import React, { useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  FlatList,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View
-} from 'react-native';
+import { getCurrentChapterIndex } from "@/db/helpers/chapters";
+import { formatTime } from "@/lib/helpers/formatters";
+import { useThemedStyles } from "@/lib/theme";
+import type { CurrentChapter, PlayerTrack } from "@/types/player";
+import React, { useEffect, useRef, useState } from "react";
+import { FlatList, Text, TouchableOpacity, View } from "react-native";
+import Animated, { AnimatedStyle, useAnimatedStyle } from "react-native-reanimated";
+import type { ViewStyle } from "react-native";
 
 interface ChapterListProps {
   /** Chapters to display */
-  chapters: PlayerTrack['chapters'];
+  chapters: PlayerTrack["chapters"];
   /** Current chapter information */
   currentChapter: CurrentChapter | null;
   /** Current playback position in seconds */
@@ -30,10 +25,8 @@ interface ChapterListProps {
   onChapterPress: (start: number) => void;
   /** Whether the chapter list is visible */
   showChapterList: boolean;
-  /** Animation value for chapter list visibility (0 = hidden, 1 = visible) */
-  chapterListAnim: Animated.Value;
-  /** Container height for the list */
-  containerHeight: number;
+  /** Reanimated animated style for chapter list visibility (height, opacity, translateY) */
+  animatedStyle: AnimatedStyle<ViewStyle>;
 }
 
 export default function ChapterList({
@@ -42,26 +35,11 @@ export default function ChapterList({
   position,
   onChapterPress,
   showChapterList,
-  chapterListAnim,
-  containerHeight,
+  animatedStyle,
 }: ChapterListProps) {
   const { styles, isDark } = useThemedStyles();
   const chapterListRef = useRef<FlatList>(null);
   const [hasScrolledToChapter, setHasScrolledToChapter] = useState(false);
-
-  // Interpolate chapter list opacity, translateY, and height
-  const chapterListOpacity = chapterListAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-  const chapterListTranslateY = chapterListAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [20, 0], // Slide up from 20px below
-  });
-  const chapterListHeight = chapterListAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, containerHeight], // Animate height from 0 to maxHeight
-  });
 
   // Auto-scroll to current chapter when list opens (only once per open)
   useEffect(() => {
@@ -115,15 +93,7 @@ export default function ChapterList({
   }
 
   return (
-    <Animated.View
-      style={{
-        height: chapterListHeight,
-        opacity: chapterListOpacity,
-        transform: [{ translateY: chapterListTranslateY }],
-        marginBottom: 16,
-        overflow: 'hidden',
-      }}
-    >
+    <Animated.View style={animatedStyle}>
       <FlatList
         ref={chapterListRef}
         data={chapters}
@@ -143,21 +113,23 @@ export default function ChapterList({
                 paddingVertical: 12,
                 paddingHorizontal: 16,
                 backgroundColor: isCurrentChapter
-                  ? (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)')
-                  : 'transparent',
+                  ? isDark
+                    ? "rgba(255, 255, 255, 0.1)"
+                    : "rgba(0, 0, 0, 0.05)"
+                  : "transparent",
                 borderLeftWidth: isCurrentChapter ? 3 : 0,
-                borderLeftColor: isDark ? '#007AFF' : '#007AFF',
+                borderLeftColor: isDark ? "#007AFF" : "#007AFF",
                 borderBottomWidth: index < chapters.length - 1 ? 1 : 0,
-                borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                borderBottomColor: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)",
               }}
             >
-              <View style={{ flexDirection: 'column', justifyContent: 'space-between' }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: "column", justifyContent: "space-between" }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                   <Text
                     style={[
                       styles.text,
                       {
-                        fontWeight: isCurrentChapter ? '600' : '400',
+                        fontWeight: isCurrentChapter ? "600" : "400",
                         fontSize: 14,
                         marginBottom: 4,
                       },
@@ -172,7 +144,7 @@ export default function ChapterList({
                         width: 8,
                         height: 8,
                         borderRadius: 4,
-                        backgroundColor: '#007AFF',
+                        backgroundColor: "#007AFF",
                         marginLeft: 12,
                       }}
                     />
@@ -182,13 +154,13 @@ export default function ChapterList({
                         width: 8,
                         height: 8,
                         borderRadius: 4,
-                        backgroundColor: 'transparent',
+                        backgroundColor: "transparent",
                         marginLeft: 12,
                       }}
                     />
                   )}
                 </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                   <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>
                     {formatTime(item.start)} - {formatTime(item.end)}
                   </Text>
