@@ -24,7 +24,9 @@
         "UIBackgroundModes": ["audio"],
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "cloud.madtown.sideshelf"
+      "bundleIdentifier": "cloud.madtown.sideshelf",
+      "buildNumber": "1",
+      "appleTeamId": "PQMW4AT355"
     },
     "android": {
       "adaptiveIcon": {
