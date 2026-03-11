@@ -815,6 +815,8 @@ export function useSettings() {
   const customUpdateUrl = useAppStore((state) => state.settings.customUpdateUrl);
   const viewMode = useAppStore((state) => state.settings.viewMode);
   const progressFormat = useAppStore((state) => state.settings.progressFormat);
+  const chapterBarShowRemaining = useAppStore((state) => state.settings.chapterBarShowRemaining);
+  const keepScreenAwake = useAppStore((state) => state.settings.keepScreenAwake);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -830,6 +832,8 @@ export function useSettings() {
   const updateCustomUpdateUrl = useAppStore((state) => state.updateCustomUpdateUrl);
   const updateViewMode = useAppStore((state) => state.updateViewMode);
   const updateProgressFormat = useAppStore((state) => state.updateProgressFormat);
+  const updateChapterBarShowRemaining = useAppStore((state) => state.updateChapterBarShowRemaining);
+  const updateKeepScreenAwake = useAppStore((state) => state.updateKeepScreenAwake);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -844,6 +848,8 @@ export function useSettings() {
       customUpdateUrl,
       viewMode,
       progressFormat,
+      chapterBarShowRemaining,
+      keepScreenAwake,
       initialized,
       isLoading,
       initializeSettings,
@@ -857,6 +863,8 @@ export function useSettings() {
       updateCustomUpdateUrl,
       updateViewMode,
       updateProgressFormat,
+      updateChapterBarShowRemaining,
+      updateKeepScreenAwake,
       resetSettings,
     }),
     [
@@ -870,6 +878,8 @@ export function useSettings() {
       customUpdateUrl,
       viewMode,
       progressFormat,
+      chapterBarShowRemaining,
+      keepScreenAwake,
       initialized,
       isLoading,
       initializeSettings,
@@ -883,6 +893,8 @@ export function useSettings() {
       updateCustomUpdateUrl,
       updateViewMode,
       updateProgressFormat,
+      updateChapterBarShowRemaining,
+      updateKeepScreenAwake,
       resetSettings,
     ]
   );
