@@ -18,6 +18,8 @@ jest.mock("@/lib/appSettings", () => ({
   getCustomUpdateUrl: jest.fn(),
   getViewMode: jest.fn(),
   getProgressFormat: jest.fn(),
+  getChapterBarShowRemaining: jest.fn(),
+  getKeepScreenAwake: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
@@ -28,6 +30,8 @@ jest.mock("@/lib/appSettings", () => ({
   setCustomUpdateUrl: jest.fn(),
   setViewMode: jest.fn(),
   setProgressFormat: jest.fn(),
+  setChapterBarShowRemaining: jest.fn(),
+  setKeepScreenAwake: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
 }));
@@ -52,6 +56,8 @@ describe("SettingsSlice", () => {
     getCustomUpdateUrl,
     getViewMode,
     getProgressFormat,
+    getChapterBarShowRemaining,
+    getKeepScreenAwake,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
@@ -62,6 +68,8 @@ describe("SettingsSlice", () => {
     setCustomUpdateUrl,
     setViewMode,
     setProgressFormat,
+    setChapterBarShowRemaining,
+    setKeepScreenAwake,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
 
@@ -95,6 +103,10 @@ describe("SettingsSlice", () => {
     setViewMode.mockResolvedValue();
     getProgressFormat.mockResolvedValue("remaining");
     setProgressFormat.mockResolvedValue();
+    getChapterBarShowRemaining.mockResolvedValue(false);
+    setChapterBarShowRemaining.mockResolvedValue();
+    getKeepScreenAwake.mockResolvedValue(false);
+    setKeepScreenAwake.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
 
@@ -117,6 +129,8 @@ describe("SettingsSlice", () => {
         customUpdateUrl: null,
         viewMode: "list",
         progressFormat: "remaining",
+        chapterBarShowRemaining: false,
+        keepScreenAwake: false,
         initialized: false,
         isLoading: false,
       });
@@ -590,6 +604,136 @@ describe("SettingsSlice", () => {
 
       // Should be reverted to original value
       expect(store.getState().settings.jumpForwardInterval).toBe(originalValue);
+    });
+  });
+
+  describe("chapterBarShowRemaining", () => {
+    describe("initializeSettings", () => {
+      it("defaults chapterBarShowRemaining to false when storage returns false", async () => {
+        getChapterBarShowRemaining.mockResolvedValue(false);
+
+        await store.getState().initializeSettings();
+
+        expect(getChapterBarShowRemaining).toHaveBeenCalled();
+        expect(store.getState().settings.chapterBarShowRemaining).toBe(false);
+      });
+
+      it("loads chapterBarShowRemaining=true from storage", async () => {
+        getChapterBarShowRemaining.mockResolvedValue(true);
+
+        await store.getState().initializeSettings();
+
+        expect(store.getState().settings.chapterBarShowRemaining).toBe(true);
+      });
+    });
+
+    describe("updateChapterBarShowRemaining", () => {
+      it("optimistically sets chapterBarShowRemaining before persisting", async () => {
+        let optimisticValue: boolean | undefined;
+
+        setChapterBarShowRemaining.mockImplementation(async () => {
+          optimisticValue = store.getState().settings.chapterBarShowRemaining;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+
+        await store.getState().updateChapterBarShowRemaining(true);
+
+        expect(optimisticValue).toBe(true);
+        expect(setChapterBarShowRemaining).toHaveBeenCalledWith(true);
+      });
+
+      it("does not revert on success", async () => {
+        await store.getState().updateChapterBarShowRemaining(true);
+
+        expect(store.getState().settings.chapterBarShowRemaining).toBe(true);
+      });
+
+      it("reverts to previous value when setChapterBarShowRemaining throws", async () => {
+        expect(store.getState().settings.chapterBarShowRemaining).toBe(false);
+
+        setChapterBarShowRemaining.mockRejectedValue(new Error("Storage error"));
+
+        await expect(store.getState().updateChapterBarShowRemaining(true)).rejects.toThrow(
+          "Storage error"
+        );
+
+        expect(store.getState().settings.chapterBarShowRemaining).toBe(false);
+      });
+    });
+
+    describe("resetSettings", () => {
+      it("resets chapterBarShowRemaining to false", async () => {
+        await store.getState().updateChapterBarShowRemaining(true);
+        expect(store.getState().settings.chapterBarShowRemaining).toBe(true);
+
+        store.getState().resetSettings();
+
+        expect(store.getState().settings.chapterBarShowRemaining).toBe(false);
+      });
+    });
+  });
+
+  describe("keepScreenAwake", () => {
+    describe("initializeSettings", () => {
+      it("defaults keepScreenAwake to false when storage returns false", async () => {
+        getKeepScreenAwake.mockResolvedValue(false);
+
+        await store.getState().initializeSettings();
+
+        expect(getKeepScreenAwake).toHaveBeenCalled();
+        expect(store.getState().settings.keepScreenAwake).toBe(false);
+      });
+
+      it("loads keepScreenAwake=true from storage", async () => {
+        getKeepScreenAwake.mockResolvedValue(true);
+
+        await store.getState().initializeSettings();
+
+        expect(store.getState().settings.keepScreenAwake).toBe(true);
+      });
+    });
+
+    describe("updateKeepScreenAwake", () => {
+      it("optimistically sets keepScreenAwake before persisting", async () => {
+        let optimisticValue: boolean | undefined;
+
+        setKeepScreenAwake.mockImplementation(async () => {
+          optimisticValue = store.getState().settings.keepScreenAwake;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+
+        await store.getState().updateKeepScreenAwake(true);
+
+        expect(optimisticValue).toBe(true);
+        expect(setKeepScreenAwake).toHaveBeenCalledWith(true);
+      });
+
+      it("does not revert on success", async () => {
+        await store.getState().updateKeepScreenAwake(true);
+
+        expect(store.getState().settings.keepScreenAwake).toBe(true);
+      });
+
+      it("reverts to previous value when setKeepScreenAwake throws", async () => {
+        expect(store.getState().settings.keepScreenAwake).toBe(false);
+
+        setKeepScreenAwake.mockRejectedValue(new Error("Storage error"));
+
+        await expect(store.getState().updateKeepScreenAwake(true)).rejects.toThrow("Storage error");
+
+        expect(store.getState().settings.keepScreenAwake).toBe(false);
+      });
+    });
+
+    describe("resetSettings", () => {
+      it("resets keepScreenAwake to false", async () => {
+        await store.getState().updateKeepScreenAwake(true);
+        expect(store.getState().settings.keepScreenAwake).toBe(true);
+
+        store.getState().resetSettings();
+
+        expect(store.getState().settings.keepScreenAwake).toBe(false);
+      });
     });
   });
 

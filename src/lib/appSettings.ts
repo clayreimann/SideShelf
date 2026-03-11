@@ -21,6 +21,8 @@ const SETTINGS_KEYS = {
   lastHomeSectionCount: "@app/lastHomeSectionCount",
   viewMode: "@app/viewMode",
   progressFormat: "@app/progressFormat",
+  chapterBarShowRemaining: "@app/chapterBarShowRemaining",
+  keepScreenAwake: "@app/keepScreenAwake",
 } as const;
 
 const DEFAULT_PROGRESS_FORMAT = "remaining" as const satisfies ProgressFormat;
@@ -386,6 +388,64 @@ export async function setProgressFormat(format: ProgressFormat): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.progressFormat, format);
   } catch (error) {
     console.error("[AppSettings] Failed to save progress format setting:", error);
+    throw error;
+  }
+}
+
+const DEFAULT_CHAPTER_BAR_SHOW_REMAINING = false;
+const DEFAULT_KEEP_SCREEN_AWAKE = false;
+
+/**
+ * Get whether the chapter bar right-label shows time remaining (true) or total duration (false)
+ * Default: false (show total duration)
+ */
+export async function getChapterBarShowRemaining(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.chapterBarShowRemaining);
+    return value === null ? DEFAULT_CHAPTER_BAR_SHOW_REMAINING : value === "true";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get chapter bar show remaining setting:", error);
+    return DEFAULT_CHAPTER_BAR_SHOW_REMAINING;
+  }
+}
+
+/**
+ * Set whether the chapter bar right-label shows time remaining or total duration
+ */
+export async function setChapterBarShowRemaining(showRemaining: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      SETTINGS_KEYS.chapterBarShowRemaining,
+      showRemaining ? "true" : "false"
+    );
+  } catch (error) {
+    console.error("[AppSettings] Failed to save chapter bar show remaining setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get whether the screen should stay awake during playback
+ * Default: false (allow screen to sleep normally)
+ */
+export async function getKeepScreenAwake(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.keepScreenAwake);
+    return value === null ? DEFAULT_KEEP_SCREEN_AWAKE : value === "true";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get keep screen awake setting:", error);
+    return DEFAULT_KEEP_SCREEN_AWAKE;
+  }
+}
+
+/**
+ * Set whether the screen should stay awake during playback
+ */
+export async function setKeepScreenAwake(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.keepScreenAwake, enabled ? "true" : "false");
+  } catch (error) {
+    console.error("[AppSettings] Failed to save keep screen awake setting:", error);
     throw error;
   }
 }

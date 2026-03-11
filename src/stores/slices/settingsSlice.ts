@@ -8,22 +8,26 @@
  */
 
 import {
+  getChapterBarShowRemaining,
   getCustomUpdateUrl,
   getDiagnosticsEnabled,
   getHiddenTabs,
   getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
+  getKeepScreenAwake,
   getProgressFormat,
   getSmartRewindEnabled,
   getTabOrder,
   getViewMode,
+  setChapterBarShowRemaining,
   setCustomUpdateUrl,
   setDiagnosticsEnabled,
   setHiddenTabs,
   setHomeLayout,
   setJumpBackwardInterval,
   setJumpForwardInterval,
+  setKeepScreenAwake,
   setProgressFormat,
   setSmartRewindEnabled,
   setTabOrder,
@@ -62,6 +66,10 @@ export interface SettingsSliceState {
     viewMode: "list" | "grid";
     /** Progress display format preference */
     progressFormat: ProgressFormat;
+    /** Whether the chapter bar right-label shows time remaining (true) or total duration (false) */
+    chapterBarShowRemaining: boolean;
+    /** Whether the screen should stay awake during playback */
+    keepScreenAwake: boolean;
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -96,6 +104,10 @@ export interface SettingsSliceActions {
   updateViewMode: (mode: "list" | "grid") => Promise<void>;
   /** Update progress display format preference */
   updateProgressFormat: (format: ProgressFormat) => Promise<void>;
+  /** Update whether the chapter bar right-label shows time remaining or total duration */
+  updateChapterBarShowRemaining: (showRemaining: boolean) => Promise<void>;
+  /** Update whether the screen should stay awake during playback */
+  updateKeepScreenAwake: (enabled: boolean) => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -119,6 +131,8 @@ const DEFAULT_SETTINGS = {
   customUpdateUrl: null,
   viewMode: "list" as const,
   progressFormat: "remaining" as const satisfies ProgressFormat,
+  chapterBarShowRemaining: false,
+  keepScreenAwake: false,
 };
 
 /**
@@ -173,6 +187,8 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         customUpdateUrl,
         viewMode,
         progressFormat,
+        chapterBarShowRemaining,
+        keepScreenAwake,
       ] = await Promise.all([
         getJumpForwardInterval(),
         getJumpBackwardInterval(),
@@ -184,6 +200,8 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         getCustomUpdateUrl(),
         getViewMode(),
         getProgressFormat(),
+        getChapterBarShowRemaining(),
+        getKeepScreenAwake(),
       ]);
 
       set((state: SettingsSlice) => ({
@@ -199,6 +217,8 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           customUpdateUrl: customUpdateUrl,
           viewMode: viewMode,
           progressFormat: progressFormat,
+          chapterBarShowRemaining: chapterBarShowRemaining,
+          keepScreenAwake: keepScreenAwake,
           initialized: true,
           isLoading: false,
         },
@@ -611,6 +631,84 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           progressFormat: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update whether the chapter bar right-label shows time remaining or total duration
+   */
+  updateChapterBarShowRemaining: async (showRemaining: boolean) => {
+    log.info(`${showRemaining ? "Enabling" : "Disabling"} chapter bar show remaining`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.chapterBarShowRemaining;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        chapterBarShowRemaining: showRemaining,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setChapterBarShowRemaining(showRemaining);
+
+      log.info(`Chapter bar show remaining ${showRemaining ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update chapter bar show remaining setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          chapterBarShowRemaining: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update whether the screen should stay awake during playback
+   */
+  updateKeepScreenAwake: async (enabled: boolean) => {
+    log.info(`${enabled ? "Enabling" : "Disabling"} keep screen awake`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.keepScreenAwake;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        keepScreenAwake: enabled,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setKeepScreenAwake(enabled);
+
+      log.info(`Keep screen awake ${enabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update keep screen awake setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          keepScreenAwake: previousValue,
         },
       }));
 
