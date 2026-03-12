@@ -14,6 +14,7 @@ import { translate } from "@/i18n";
 import { updateMediaProgress } from "@/lib/api/endpoints";
 import { ASYNC_KEYS, saveItem } from "@/lib/asyncStore";
 import { getCoverUri } from "@/lib/covers";
+import { logger } from "@/lib/logger";
 import { spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
@@ -38,6 +39,8 @@ interface LibraryItemDetailProps {
   onTitleChange?: (title: string) => void;
 }
 
+const log = logger.forTag("LibraryItemDetail");
+
 export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItemDetailProps) {
   const { styles, colors } = useThemedStyles();
   const { username, userId } = useAuth();
@@ -59,7 +62,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     startDownload,
     deleteDownload,
   } = useDownloads();
-  const { getItemBookmarks, deleteBookmark } = useUserProfile();
+  const { getItemBookmarks, deleteBookmark, renameBookmark } = useUserProfile();
 
   // Get cached item data or null
   const cachedData = getCachedItem(itemId);
@@ -96,7 +99,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         // Repair download status if needed (fixes iOS container path changes)
         // This runs silently in the background and logs any repairs made
         downloadService.repairDownloadStatus(itemId).catch((error) => {
-          console.error("[LibraryItemDetail] Download status repair failed:", error);
+          log.error("[loadItemDetails] Download status repair failed", error as Error);
         });
 
         // Fetch item details (uses cache if available)
@@ -110,7 +113,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           onTitleChange?.(title);
         }
       } catch (error) {
-        console.error("[LibraryItemDetail] Error fetching item details:", error);
+        log.error("[loadItemDetails] Error fetching item details", error as Error);
         onTitleChange?.(translate("libraryItem.itemNotFound"));
       }
     };
@@ -203,7 +206,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           newIsFinished
         );
       } catch (apiError) {
-        console.error("[LibraryItemDetail] Failed to update progress on server:", apiError);
+        log.error("[handleToggleFinished] Failed to update progress on server", apiError as Error);
         // Continue even if API update fails - local update succeeded
       }
 
@@ -216,7 +219,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       // Refresh server progress to sync
       await progressService.fetchServerProgress();
     } catch (error) {
-      console.error("[LibraryItemDetail] Failed to toggle finished status:", error);
+      log.error("[handleToggleFinished] Failed to toggle finished status", error as Error);
       Alert.alert(translate("common.error"), translate("libraryItem.alerts.finishedStatusFailed"));
     }
   }, [item, userId, effectiveProgress, itemId, updateItemProgress]);
@@ -226,29 +229,27 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
   // Download handlers - use store actions
   const handleDownload = useCallback(async () => {
-    console.log("[LibraryItemDetail] Download button clicked", {
-      hasItem: !!item,
-      itemId: item?.id,
-      isDownloading,
-    });
+    log.info(
+      `[handleDownload] Download button clicked hasItem=${String(!!item)} itemId=${item?.id ?? "none"} isDownloading=${String(isDownloading)}`
+    );
 
     if (!item) {
-      console.warn("[LibraryItemDetail] Cannot download: no item");
+      log.warn("[handleDownload] Cannot download: no item");
       return;
     }
 
     if (isDownloading) {
-      console.warn("[LibraryItemDetail] Cannot download: download already in progress");
+      log.warn("[handleDownload] Cannot download: download already in progress");
       return;
     }
 
-    console.log("[LibraryItemDetail] Starting download for item:", item.id);
+    log.info(`[handleDownload] Starting download for item ${item.id}`);
 
     try {
       await startDownload(item.id);
-      console.log("[LibraryItemDetail] Download started successfully");
+      log.info(`[handleDownload] Download started successfully for item ${item.id}`);
     } catch (error) {
-      console.error("[LibraryItemDetail] Download failed:", error);
+      log.error("[handleDownload] Download failed", error as Error);
       Alert.alert(
         translate("common.error"),
         translate("libraryItem.alerts.downloadFailed", { error: String(error) }),
@@ -272,7 +273,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
             try {
               await deleteDownload(item.id);
             } catch (error) {
-              console.error("[LibraryItemDetail] Delete download failed:", error);
+              log.error("[handleDeleteDownload] Delete download failed", error as Error);
               Alert.alert(
                 translate("common.error"),
                 translate("libraryItem.alerts.deleteFailed", { error: String(error) }),
@@ -303,7 +304,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           try {
             await startDownload(item.id);
           } catch (error) {
-            console.error("[LibraryItemDetail] Re-download failed:", error);
+            log.error("[handlePartialDownloadAction] Re-download failed", error as Error);
             Alert.alert(
               translate("common.error"),
               translate("libraryItem.alerts.downloadFailed", { error: String(error) }),
@@ -319,7 +320,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           try {
             await deleteDownload(item.id);
           } catch (error) {
-            console.error("[LibraryItemDetail] Clear download failed:", error);
+            log.error("[handlePartialDownloadAction] Clear download failed", error as Error);
             Alert.alert(
               translate("common.error"),
               translate("libraryItem.alerts.deleteFailed", { error: String(error) }),
@@ -365,7 +366,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         { text: translate("common.ok") },
       ]);
     } catch (error) {
-      console.error("[LibraryItemDetail] Force resync failed:", error);
+      log.error("[handleForceResync] Force resync failed", error as Error);
       Alert.alert(translate("common.error"), `Failed to resync position: ${String(error)}`, [
         { text: translate("common.ok") },
       ]);
@@ -570,6 +571,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           libraryItemId={itemId}
           isCurrentlyPlaying={currentTrack?.libraryItemId === itemId}
           onDeleteBookmark={deleteBookmark}
+          onRenameBookmark={renameBookmark}
         />
 
         {/* Audio Files */}

@@ -7,6 +7,7 @@
 import Toggle from "@/components/ui/Toggle";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
+import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
 import { useLibrary, useSettings } from "@/stores";
 import type { ProgressFormat } from "@/lib/helpers/progressFormat";
@@ -24,6 +25,8 @@ const PROGRESS_FORMAT_LABELS: Record<ProgressFormat, string> = {
   percent: "% Complete",
 };
 
+const log = logger.forTag("SettingsScreen");
+
 export default function SettingsScreen() {
   const { colors, isDark } = useThemedStyles();
   const router = useRouter();
@@ -35,10 +38,12 @@ export default function SettingsScreen() {
     diagnosticsEnabled,
     isLoading,
     progressFormat,
+    bookmarkTitleMode,
     updateJumpForwardInterval,
     updateJumpBackwardInterval,
     updateSmartRewindEnabled,
     updateDiagnosticsEnabled,
+    updateBookmarkTitleMode,
   } = useSettings();
   const { libraries, selectedLibrary, selectLibrary } = useLibrary();
 
@@ -52,7 +57,10 @@ export default function SettingsScreen() {
       try {
         await updateJumpForwardInterval(seconds);
       } catch (error) {
-        console.error("Failed to update jump forward interval", error);
+        log.error(
+          "[handleJumpForwardChange] Failed to update jump forward interval",
+          error as Error
+        );
         Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
       }
     },
@@ -65,7 +73,10 @@ export default function SettingsScreen() {
       try {
         await updateJumpBackwardInterval(seconds);
       } catch (error) {
-        console.error("Failed to update jump backward interval", error);
+        log.error(
+          "[handleJumpBackwardChange] Failed to update jump backward interval",
+          error as Error
+        );
         Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
       }
     },
@@ -78,7 +89,7 @@ export default function SettingsScreen() {
       try {
         await updateSmartRewindEnabled(value);
       } catch (error) {
-        console.error("Failed to update smart rewind setting", error);
+        log.error("[toggleSmartRewind] Failed to update smart rewind setting", error as Error);
         Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
       }
     },
@@ -91,7 +102,7 @@ export default function SettingsScreen() {
       try {
         await updateDiagnosticsEnabled(value);
       } catch (error) {
-        console.error("Failed to update diagnostics setting", error);
+        log.error("[toggleDiagnostics] Failed to update diagnostics setting", error as Error);
         Alert.alert(translate("common.error"), translate("settings.error.saveFailed"));
       }
     },
@@ -259,6 +270,7 @@ export default function SettingsScreen() {
               paddingHorizontal: 16,
               backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
               borderRadius: 10,
+              marginBottom: 8,
             }}
           >
             <View style={{ flex: 1 }}>
@@ -274,6 +286,51 @@ export default function SettingsScreen() {
               </Text>
               <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
                 {PROGRESS_FORMAT_LABELS[progressFormat]}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={textSecondary} />
+          </Pressable>
+
+          {/* Bookmark Title Mode */}
+          <Pressable
+            onPress={() => {
+              Alert.alert("Bookmark Title Mode", "How to create bookmark titles", [
+                {
+                  text: "Auto-create",
+                  onPress: () => void updateBookmarkTitleMode("auto"),
+                },
+                {
+                  text: "Always Prompt",
+                  onPress: () => void updateBookmarkTitleMode("prompt"),
+                },
+                { text: "Cancel", style: "cancel" },
+              ]);
+            }}
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+              borderRadius: 10,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  color: colors.textPrimary,
+                  fontWeight: "500",
+                  marginBottom: 4,
+                }}
+              >
+                Bookmark Title Mode
+              </Text>
+              <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
+                {bookmarkTitleMode === "prompt"
+                  ? "Always prompt for title"
+                  : "Auto-create from chapter"}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={textSecondary} />
