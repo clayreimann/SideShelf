@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: executing
-stopped_at: Completed 17-bookmarks-17-03-PLAN.md
-last_updated: "2026-03-12T01:14:30.638Z"
-last_activity: "2026-03-12 — Phase 17 Plan 03 complete: deleteBookmark fix, renameBookmark, offline sync queue, network restore drain"
+stopped_at: Completed 17-bookmarks-17-04-PLAN.md
+last_updated: "2026-03-12T13:07:47.978Z"
+last_activity: "2026-03-12 — Phase 17 Plan 04 complete: bookmark title mode UX, rename/delete controls, and settings row"
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 16
-  completed_plans: 14
-  percent: 88
+  completed_plans: 15
+  percent: 94
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 17 of 22 (Bookmarks) — In Progress
-Plan: 3 of 5 complete (17-03 done: deleteBookmark fix, renameBookmark, offline sync queue, network restore drain)
-Status: Executing — Phase 17 Plans 01–03 complete, Plans 04–05 remaining
-Last activity: 2026-03-12 — Phase 17 Plan 03 complete: offline-aware bookmark CRUD + drain on reconnect
+Plan: 4 of 5 complete (17-04 done: bookmark title mode UX, rename/delete controls, settings row)
+Status: Executing — Phase 17 Plans 01–04 complete, Plan 05 remaining
+Last activity: 2026-03-12 — Phase 17 Plan 04 complete: bookmark title mode UX, rename/delete controls, and settings row
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [█████████░] 88%
 | Phase 17-bookmarks P01 | 4 | 2 tasks | 8 files |
 | Phase 17-bookmarks P02 | 20 | 2 tasks | 3 files |
 | Phase 17-bookmarks P03 | 11 | 3 tasks | 5 files |
+| Phase 17-bookmarks P04 | 18 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,9 @@ Full decision log is in PROJECT.md Key Decisions table.
 - drainPendingBookmarkOps stops on first failure to preserve FIFO ordering of queued offline ops
 - Offline createBookmark generates temp UUID as optimistic id — reconciled via refreshBookmarks after drain succeeds
 - ABS bookmark PATCH endpoint: PATCH /api/me/item/:id/bookmark with {time, title} body (implemented and tested)
+- bookmarkTitleMode null remains the first-run sentinel only; the settings screen now exposes explicit auto and prompt modes
+- Bookmark rename/delete actions use ActionSheetIOS on iOS and Alert plus bottom-sheet modal flows on Android
+- Bookmark creation branching stays in a pure helper so the full-screen player logic remains unit-testable
 
 ### Pending Todos
 
@@ -106,6 +110,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-12T01:14:30.636Z
-Stopped at: Completed 17-bookmarks-17-03-PLAN.md
+Last session: 2026-03-12T13:07:47.978Z
+Stopped at: Completed 17-bookmarks-17-04-PLAN.md
 Resume file: None
