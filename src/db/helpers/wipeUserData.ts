@@ -5,6 +5,7 @@
  * previous user/server leaks into a new session.
  *
  * Tables wiped (all rows deleted, no WHERE clause):
+ *   pending_bookmark_ops, bookmarks,
  *   media_progress, library_items, media_metadata, audio_files, chapters,
  *   authors, series, media_genres, media_tags, media_authors, media_series,
  *   media_narrators
@@ -16,6 +17,7 @@
 
 import { db } from "../client";
 import { audioFiles } from "../schema/audioFiles";
+import { bookmarks, pendingBookmarkOps } from "../schema/bookmarks";
 import { authors } from "../schema/authors";
 import { chapters } from "../schema/chapters";
 import { genres } from "../schema/genres";
@@ -41,6 +43,10 @@ import { tags } from "../schema/tags";
  * most tables use ON DELETE CASCADE — being explicit here avoids surprises.
  */
 export async function wipeUserData(): Promise<void> {
+  // Bookmark sync queue first (references users only, no FK to content tables)
+  await db.delete(pendingBookmarkOps);
+  await db.delete(bookmarks);
+
   // Join tables first (reference mediaMetadata, authors, series, etc.)
   await db.delete(mediaAuthors);
   await db.delete(mediaGenres);

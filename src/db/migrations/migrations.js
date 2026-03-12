@@ -14,6 +14,7 @@ import m0009 from "./0009_messy_madame_masque.sql";
 import m0010 from "./0010_melted_microchip.sql";
 import m0011 from "./0011_natural_betty_ross.sql";
 import m0012 from "./0012_hot_stellaris.sql";
+import m0013 from "./0013_giant_lucky_pierre.sql";
 
 export default {
   journal,
@@ -31,5 +32,6 @@ export default {
     m0010,
     m0011,
     m0012,
+    m0013,
   },
 };
