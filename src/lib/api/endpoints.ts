@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/api/api";
 import { logger } from "@/lib/logger";
 import type {
+  ApiAudioBookmark,
   ApiError,
   ApiLibrariesResponse,
   ApiLibraryItem,
@@ -522,19 +523,37 @@ export async function createBookmark(
 }
 
 /**
- * Delete a bookmark
+ * Delete a bookmark by its time position
  * @param libraryItemId - The library item ID
- * @param bookmarkId - The bookmark ID to delete
+ * @param time - The bookmark time position in seconds (numeric, matches ABS API)
  */
-export async function deleteBookmark(
-  libraryItemId: string,
-  bookmarkId: string
-): Promise<void> {
-  const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark/${bookmarkId}`, {
+export async function deleteBookmark(libraryItemId: string, time: number): Promise<void> {
+  const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark/${time}`, {
     method: "DELETE",
   });
 
   await handleResponseError(response, "Failed to delete bookmark");
+}
+
+/**
+ * Rename a bookmark by updating its title
+ * @param libraryItemId - The library item ID
+ * @param time - The time position of the bookmark to rename
+ * @param title - The new title for the bookmark
+ * @returns The updated bookmark
+ */
+export async function renameBookmark(
+  libraryItemId: string,
+  time: number,
+  title: string
+): Promise<{ bookmark: ApiAudioBookmark }> {
+  const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ time, title }),
+  });
+  await handleResponseError(response, "Failed to rename bookmark");
+  return response.json();
 }
 
 // Helper function to format time for bookmark titles
