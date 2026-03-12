@@ -31,7 +31,7 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 
 ### Bookmarks (BOOKMARK)
 
-- [ ] **BOOKMARK-01**: User can add a bookmark at the current playback position (with optional title)
+- [x] **BOOKMARK-01**: User can add a bookmark at the current playback position (with optional title)
 - [x] **BOOKMARK-02**: User can view all bookmarks for an item on the item detail screen
 - [ ] **BOOKMARK-03**: User can rename a bookmark
 - [ ] **BOOKMARK-04**: User can delete a bookmark
@@ -120,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SECTION-01    | Phase 15 | Complete |
 | SECTION-02    | Phase 15 | Complete |
 | SECTION-03    | Phase 15 | Complete |
-| BOOKMARK-01   | Phase 17 | Pending  |
+| BOOKMARK-01   | Phase 17 | Complete |
 | BOOKMARK-02   | Phase 17 | Complete |
 | BOOKMARK-03   | Phase 17 | Pending  |
 | BOOKMARK-04   | Phase 17 | Pending  |
