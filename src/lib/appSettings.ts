@@ -23,6 +23,7 @@ const SETTINGS_KEYS = {
   progressFormat: "@app/progressFormat",
   chapterBarShowRemaining: "@app/chapterBarShowRemaining",
   keepScreenAwake: "@app/keepScreenAwake",
+  bookmarkTitleMode: "@app/bookmarkTitleMode",
 } as const;
 
 const DEFAULT_PROGRESS_FORMAT = "remaining" as const satisfies ProgressFormat;
@@ -446,6 +447,35 @@ export async function setKeepScreenAwake(enabled: boolean): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.keepScreenAwake, enabled ? "true" : "false");
   } catch (error) {
     console.error("[AppSettings] Failed to save keep screen awake setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get bookmark title mode preference
+ * Returns null when the user has never made a choice (triggers first-tap alert in FullScreenPlayer)
+ * Default: null (not yet set)
+ */
+export async function getBookmarkTitleMode(): Promise<"auto" | "prompt" | null> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.bookmarkTitleMode);
+    if (value === "prompt") return "prompt";
+    if (value === "auto") return "auto";
+    return null; // null = user has never made a choice (triggers first-tap alert)
+  } catch (error) {
+    console.error("[AppSettings] Failed to get bookmark title mode:", error);
+    return null;
+  }
+}
+
+/**
+ * Set bookmark title mode preference
+ */
+export async function setBookmarkTitleMode(mode: "auto" | "prompt"): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.bookmarkTitleMode, mode);
+  } catch (error) {
+    console.error("[AppSettings] Failed to save bookmark title mode:", error);
     throw error;
   }
 }
