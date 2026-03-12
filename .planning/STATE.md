@@ -100,6 +100,7 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 1. **Standardize path handling** (now Phase 18 / DEBT-01) — encoding mismatch between file:// URIs, POSIX paths, and D:/C: prefixed DB paths
 2. **Orphan reassociation UI** (now Phase 19 / DEBT-02) — allow user to link orphaned files to known library items
+3. **Preserve resume position and skip smart rewind on explicit seeks** — cold-start play sometimes resumes from 0:00, and chapter/bookmark jumps should bypass the smart rewind phase
 
 ### Blockers/Concerns
 
