@@ -179,6 +179,9 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
         `Network state updated: connected=${isConnected}, reachable=${isInternetReachable}, type=${connectionType}`
       );
 
+      // Capture previous state before updating (to detect restore transition)
+      const wasConnected = get().network.isConnected;
+
       set((state: NetworkSlice) => ({
         ...state,
         network: {
@@ -191,10 +194,23 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
 
       // Check server reachability when network becomes available
       if (isConnected && isInternetReachable !== false) {
-        log.debug("Network available, checking server reachability");
+        const isRestoreTransition = !wasConnected;
+        log.debug(
+          `Network available, checking server reachability (restore=${isRestoreTransition})`
+        );
         get()
           .checkServerReachability()
-          .catch((error) => {
+          .then(() => {
+            // Drain pending ops only when transitioning from disconnected → connected
+            if (isRestoreTransition) {
+              // drainPendingBookmarkOps is on UserProfileSlice — combined in AppStore
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (get() as any)
+                .drainPendingBookmarkOps()
+                .catch((e: unknown) => log.warn(`[networkSlice] drain failed: ${e}`));
+            }
+          })
+          .catch((error: unknown) => {
             log.warn(`Server reachability check failed after network change: ${error}`);
           });
       } else {
