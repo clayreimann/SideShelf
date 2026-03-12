@@ -817,6 +817,7 @@ export function useSettings() {
   const progressFormat = useAppStore((state) => state.settings.progressFormat);
   const chapterBarShowRemaining = useAppStore((state) => state.settings.chapterBarShowRemaining);
   const keepScreenAwake = useAppStore((state) => state.settings.keepScreenAwake);
+  const bookmarkTitleMode = useAppStore((state) => state.settings.bookmarkTitleMode);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -834,6 +835,7 @@ export function useSettings() {
   const updateProgressFormat = useAppStore((state) => state.updateProgressFormat);
   const updateChapterBarShowRemaining = useAppStore((state) => state.updateChapterBarShowRemaining);
   const updateKeepScreenAwake = useAppStore((state) => state.updateKeepScreenAwake);
+  const updateBookmarkTitleMode = useAppStore((state) => state.updateBookmarkTitleMode);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -850,6 +852,7 @@ export function useSettings() {
       progressFormat,
       chapterBarShowRemaining,
       keepScreenAwake,
+      bookmarkTitleMode,
       initialized,
       isLoading,
       initializeSettings,
@@ -865,6 +868,7 @@ export function useSettings() {
       updateProgressFormat,
       updateChapterBarShowRemaining,
       updateKeepScreenAwake,
+      updateBookmarkTitleMode,
       resetSettings,
     }),
     [
@@ -880,6 +884,7 @@ export function useSettings() {
       progressFormat,
       chapterBarShowRemaining,
       keepScreenAwake,
+      bookmarkTitleMode,
       initialized,
       isLoading,
       initializeSettings,
@@ -895,6 +900,7 @@ export function useSettings() {
       updateProgressFormat,
       updateChapterBarShowRemaining,
       updateKeepScreenAwake,
+      updateBookmarkTitleMode,
       resetSettings,
     ]
   );
@@ -928,6 +934,7 @@ export function useUserProfile() {
   const refreshBookmarks = useAppStore((state) => state.refreshBookmarks);
   const createBookmark = useAppStore((state) => state.createBookmark);
   const deleteBookmark = useAppStore((state) => state.deleteBookmark);
+  const renameBookmark = useAppStore((state) => state.renameBookmark);
   const getItemBookmarks = useAppStore((state) => state.getItemBookmarks);
   const resetUserProfile = useAppStore((state) => state.resetUserProfile);
 
@@ -946,6 +953,7 @@ export function useUserProfile() {
       refreshBookmarks,
       createBookmark,
       deleteBookmark,
+      renameBookmark,
       getItemBookmarks,
       resetUserProfile,
     }),
@@ -963,6 +971,7 @@ export function useUserProfile() {
       refreshBookmarks,
       createBookmark,
       deleteBookmark,
+      renameBookmark,
       getItemBookmarks,
       resetUserProfile,
     ]

@@ -21,6 +21,8 @@ export interface BookmarkButtonProps {
   iconSize?: number;
   /** Callback when button is pressed */
   onPress: () => void;
+  /** Callback when button is long-pressed */
+  onLongPress?: () => void;
   /** Whether the button is disabled */
   disabled?: boolean;
 }
@@ -30,6 +32,7 @@ export default function BookmarkButton({
   hitBoxSize = 44,
   iconSize = 24,
   onPress,
+  onLongPress,
   disabled = false,
 }: BookmarkButtonProps) {
   const { colors } = useThemedStyles();
@@ -37,6 +40,7 @@ export default function BookmarkButton({
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       disabled={disabled}
       style={({ pressed }) => ({
         width: hitBoxSize,

@@ -22,9 +22,14 @@ import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import CoverImage from "@/components/ui/CoverImange";
 import { formatTime } from "@/lib/helpers/formatters";
 import { formatProgress } from "@/lib/helpers/progressFormat";
+import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
-import { useAppStore, usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
+import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
+import {
+  handleCreateBookmarkLogic,
+  handleLongPressBookmarkLogic,
+} from "@/app/FullScreenPlayer/handleCreateBookmarkLogic";
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
 import { useKeepAwake } from "expo-keep-awake";
@@ -33,14 +38,18 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-na
 import React, { useCallback, useRef, useState } from "react";
 import {
   Alert,
+  Modal,
   PanResponder,
   Platform,
   Text,
+  TextInput,
   TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const log = logger.forTag("FullScreenPlayer");
 
 function formatBookmarkTime(seconds: number): string {
   const totalSecs = Math.floor(seconds);
@@ -76,15 +85,21 @@ export default function FullScreenPlayer() {
     progressFormat,
     chapterBarShowRemaining,
     keepScreenAwake,
+    bookmarkTitleMode,
     updateProgressFormat,
     updateChapterBarShowRemaining,
     updateKeepScreenAwake,
+    updateBookmarkTitleMode,
   } = useSettings();
 
   const [isSeekingSlider, setIsSeekingSlider] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const [showChapterList, setShowChapterList] = useState(false);
   const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
+  // Android prompt modal state (iOS uses Alert.prompt)
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [promptValue, setPromptValue] = useState("");
+  const promptConfirmRef = useRef<((title: string) => void) | null>(null);
 
   // Reanimated shared values — run on UI thread (no JS bridge per frame)
   const PANEL_DURATION = 300;
@@ -212,22 +227,92 @@ export default function FullScreenPlayer() {
     }
   }, []);
 
-  const handleCreateBookmark = useCallback(async () => {
+  const getAutoTitle = useCallback(() => {
+    if (currentChapter?.chapter.title) {
+      return `${currentChapter.chapter.title} \u2014 ${formatBookmarkTime(position)}`;
+    }
+    return `Bookmark at ${formatBookmarkTime(position)}`;
+  }, [currentChapter, position]);
+
+  const doCreate = useCallback(
+    async (title: string) => {
+      setIsCreatingBookmark(true);
+      try {
+        await createBookmark(currentTrack!.libraryItemId, position, title);
+      } catch (error) {
+        log.error("[handleCreateBookmark] Failed to create bookmark", error as Error);
+        Alert.alert("Error", "Failed to create bookmark. Please try again.");
+      } finally {
+        setIsCreatingBookmark(false);
+      }
+    },
+    [currentTrack, position, createBookmark]
+  );
+
+  const showPromptInput = useCallback((prefill: string, onConfirm: (title: string) => void) => {
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        "Bookmark Title",
+        undefined,
+        (text) => {
+          if (text) onConfirm(text);
+        },
+        "plain-text",
+        prefill
+      );
+    } else {
+      // Android: show the prompt modal
+      setPromptValue(prefill);
+      promptConfirmRef.current = onConfirm;
+      setShowPromptModal(true);
+    }
+  }, []);
+
+  const handleCreateBookmark = useCallback(() => {
     if (!currentTrack || isCreatingBookmark) {
       return;
     }
+    const autoTitle = getAutoTitle();
+    handleCreateBookmarkLogic({
+      bookmarkTitleMode,
+      createBookmark: (title: string) => {
+        void doCreate(title);
+      },
+      autoTitle,
+      showPromptInput,
+      updateBookmarkTitleMode,
+    });
+  }, [
+    currentTrack,
+    isCreatingBookmark,
+    bookmarkTitleMode,
+    getAutoTitle,
+    doCreate,
+    showPromptInput,
+    updateBookmarkTitleMode,
+  ]);
 
-    setIsCreatingBookmark(true);
-    try {
-      const bookmark = await createBookmark(currentTrack.libraryItemId, position);
-      Alert.alert("Bookmark Created", `Bookmark created at ${formatBookmarkTime(position)}`);
-    } catch (error) {
-      console.error("[FullScreenPlayer] Failed to create bookmark:", error);
-      Alert.alert("Error", "Failed to create bookmark. Please try again.");
-    } finally {
-      setIsCreatingBookmark(false);
+  const handleLongPressBookmark = useCallback(() => {
+    if (!currentTrack || isCreatingBookmark) {
+      return;
     }
-  }, [currentTrack, position, createBookmark, isCreatingBookmark]);
+    const autoTitle = getAutoTitle();
+    handleLongPressBookmarkLogic({
+      bookmarkTitleMode,
+      autoTitle,
+      showPromptInput: (prefill, _onConfirm) =>
+        showPromptInput(prefill, (title: string) => {
+          void doCreate(title);
+        }),
+    });
+  }, [
+    currentTrack,
+    isCreatingBookmark,
+    bookmarkTitleMode,
+    getAutoTitle,
+    showPromptInput,
+    doCreate,
+  ]);
 
   const handleStartOfChapter = useCallback(async () => {
     if (!currentChapter) {
@@ -323,6 +408,77 @@ export default function FullScreenPlayer() {
     <>
       {/* Keep screen awake during active playback when setting is enabled */}
       {keepScreenAwake && isPlaying && <KeepAwakeGuard />}
+
+      {/* Android prompt modal for bookmark title input */}
+      {Platform.OS !== "ios" && (
+        <Modal
+          visible={showPromptModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPromptModal(false)}
+        >
+          <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" }}>
+            <View
+              style={{
+                backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+                padding: 16,
+                borderTopLeftRadius: 16,
+                borderTopRightRadius: 16,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: "600",
+                  marginBottom: 12,
+                }}
+              >
+                Bookmark Title
+              </Text>
+              <TextInput
+                value={promptValue}
+                onChangeText={setPromptValue}
+                autoFocus
+                returnKeyType="done"
+                style={{
+                  borderWidth: 1,
+                  borderColor: isDark ? "#444" : "#ccc",
+                  borderRadius: 8,
+                  padding: 10,
+                  color: colors.textPrimary,
+                  fontSize: 15,
+                  marginBottom: 16,
+                }}
+                onSubmitEditing={() => {
+                  const trimmed = promptValue.trim();
+                  if (trimmed && promptConfirmRef.current) {
+                    promptConfirmRef.current(trimmed);
+                  }
+                  setShowPromptModal(false);
+                }}
+              />
+              <View style={{ flexDirection: "row", gap: 12, justifyContent: "flex-end" }}>
+                <TouchableOpacity onPress={() => setShowPromptModal(false)} style={{ padding: 8 }}>
+                  <Text style={{ color: colors.textPrimary, fontSize: 15 }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    const trimmed = promptValue.trim();
+                    if (trimmed && promptConfirmRef.current) {
+                      promptConfirmRef.current(trimmed);
+                    }
+                    setShowPromptModal(false);
+                  }}
+                  style={{ padding: 8 }}
+                >
+                  <Text style={{ color: colors.link, fontSize: 15, fontWeight: "600" }}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Drag pill — iOS only, sits above the header row */}
       {Platform.OS === "ios" && (
@@ -566,6 +722,7 @@ export default function FullScreenPlayer() {
               <BookmarkButton
                 isCreating={isCreatingBookmark}
                 onPress={handleCreateBookmark}
+                onLongPress={handleLongPressBookmark}
                 disabled={isCreatingBookmark}
                 iconSize={24}
                 hitBoxSize={48}
