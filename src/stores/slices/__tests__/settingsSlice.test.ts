@@ -20,6 +20,7 @@ jest.mock("@/lib/appSettings", () => ({
   getProgressFormat: jest.fn(),
   getChapterBarShowRemaining: jest.fn(),
   getKeepScreenAwake: jest.fn(),
+  getBookmarkTitleMode: jest.fn(),
   setJumpForwardInterval: jest.fn(),
   setJumpBackwardInterval: jest.fn(),
   setSmartRewindEnabled: jest.fn(),
@@ -32,6 +33,7 @@ jest.mock("@/lib/appSettings", () => ({
   setProgressFormat: jest.fn(),
   setChapterBarShowRemaining: jest.fn(),
   setKeepScreenAwake: jest.fn(),
+  setBookmarkTitleMode: jest.fn(),
   getPeriodicNowPlayingUpdatesEnabled: jest.fn(),
   setPeriodicNowPlayingUpdatesEnabled: jest.fn(),
 }));
@@ -58,6 +60,7 @@ describe("SettingsSlice", () => {
     getProgressFormat,
     getChapterBarShowRemaining,
     getKeepScreenAwake,
+    getBookmarkTitleMode,
     setJumpForwardInterval,
     setJumpBackwardInterval,
     setSmartRewindEnabled,
@@ -70,6 +73,7 @@ describe("SettingsSlice", () => {
     setProgressFormat,
     setChapterBarShowRemaining,
     setKeepScreenAwake,
+    setBookmarkTitleMode,
   } = require("@/lib/appSettings");
   const { configureTrackPlayer } = require("@/lib/trackPlayerConfig");
 
@@ -107,6 +111,8 @@ describe("SettingsSlice", () => {
     setChapterBarShowRemaining.mockResolvedValue();
     getKeepScreenAwake.mockResolvedValue(false);
     setKeepScreenAwake.mockResolvedValue();
+    getBookmarkTitleMode.mockResolvedValue(null);
+    setBookmarkTitleMode.mockResolvedValue();
     configureTrackPlayer.mockResolvedValue();
   });
 
@@ -131,6 +137,7 @@ describe("SettingsSlice", () => {
         progressFormat: "remaining",
         chapterBarShowRemaining: false,
         keepScreenAwake: false,
+        bookmarkTitleMode: null,
         initialized: false,
         isLoading: false,
       });
