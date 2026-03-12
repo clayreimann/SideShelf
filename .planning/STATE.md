@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: executing
-stopped_at: Completed 17-bookmarks-17-02-PLAN.md
-last_updated: "2026-03-12T00:57:56.954Z"
-last_activity: "2026-03-12 — Phase 17 Plan 02 complete: bookmarkTitleMode AsyncStorage + settingsSlice"
+stopped_at: Completed 17-bookmarks-17-03-PLAN.md
+last_updated: "2026-03-12T01:14:30.638Z"
+last_activity: "2026-03-12 — Phase 17 Plan 03 complete: deleteBookmark fix, renameBookmark, offline sync queue, network restore drain"
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 16
-  completed_plans: 13
-  percent: 81
+  completed_plans: 14
+  percent: 88
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 17 of 22 (Bookmarks) — In Progress
-Plan: 2 of 5 complete (17-02 done: bookmarkTitleMode settings data layer)
-Status: Executing — Phase 17 Plans 01–02 complete, Plans 03–05 remaining
-Last activity: 2026-03-12 — Phase 17 Plan 02 complete: bookmarkTitleMode AsyncStorage + settingsSlice
+Plan: 3 of 5 complete (17-03 done: deleteBookmark fix, renameBookmark, offline sync queue, network restore drain)
+Status: Executing — Phase 17 Plans 01–03 complete, Plans 04–05 remaining
+Last activity: 2026-03-12 — Phase 17 Plan 03 complete: offline-aware bookmark CRUD + drain on reconnect
 
-Progress: [████████░░] 81%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [████████░░] 81%
 | Phase 16-full-screen-player-redesign-airplay P04 | 6 | 2 tasks | 2 files |
 | Phase 17-bookmarks P01 | 4 | 2 tasks | 8 files |
 | Phase 17-bookmarks P02 | 20 | 2 tasks | 3 files |
+| Phase 17-bookmarks P03 | 11 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,11 @@ Full decision log is in PROJECT.md Key Decisions table.
 - pendingBookmarkOps: no FK to users (plain text userId) — avoids cascade complications; clearPendingOps filters by userId+ids to prevent cross-user deletion
 - upsertAllBookmarks sets syncedAt=now() at import — records when ABS server data was last fetched
 - bookmarkTitleMode null sentinel: null means never-set (triggers first-tap alert in FullScreenPlayer); 'auto' means explicit user choice — stored under '@app/bookmarkTitleMode'
+- deleteBookmark API URL uses numeric time not bookmarkId: DELETE /api/me/item/:id/bookmark/:time (ABS confirmed)
+- wasConnected captured before set() in networkSlice.\_updateNetworkState to detect restore transition — after set() the state is already updated
+- drainPendingBookmarkOps stops on first failure to preserve FIFO ordering of queued offline ops
+- Offline createBookmark generates temp UUID as optimistic id — reconciled via refreshBookmarks after drain succeeds
+- ABS bookmark PATCH endpoint: PATCH /api/me/item/:id/bookmark with {time, title} body (implemented and tested)
 
 ### Pending Todos
 
@@ -95,11 +101,11 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 - AirPlay package new-arch compatibility: RESOLVED — `@douglowder/expo-av-route-picker-view` builds on SDK 54 + newArchEnabled (prebuild --clean exit 0 confirmed in Plan 02)
 - Tree shaking (Phase 20): `inlineRequires` + Reanimated 4 + React Compiler triple interaction undocumented; treat as exploratory; have revert plan ready
-- ABS bookmark PATCH endpoint: `PATCH /api/me/item/:id/bookmark/:bookmarkId` inferred, not verified from ABS docs — confirm before Phase 17 planning
+- ABS bookmark PATCH endpoint: RESOLVED — PATCH /api/me/item/:id/bookmark with {time, title} body (implemented in Plan 03)
 - URL scheme mismatch: app.json has `"scheme": "side-shelf"` (hyphen) but docs use `sideshelf://` — resolve at start of Phase 21; run `xcrun simctl openurl` to confirm
 
 ## Session Continuity
 
-Last session: 2026-03-12T00:57:56.952Z
-Stopped at: Completed 17-bookmarks-17-02-PLAN.md
+Last session: 2026-03-12T01:14:30.636Z
+Stopped at: Completed 17-bookmarks-17-03-PLAN.md
 Resume file: None

@@ -271,7 +271,7 @@ Plans:
 | 14. Progress Display Format                       | 4/4       | Complete       | 2026-03-09  | -          |
 | 15. Collapsible Section Redesign                  | 2/3       | In Progress    |             | -          |
 | 16. Full Screen Player Redesign + AirPlay         | 4/4       | Complete       | 2026-03-11  | -          |
-| 17. Bookmarks                                     | 2/5       | In Progress    |             | -          |
+| 17. Bookmarks                                     | 3/5       | In Progress    |             | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | v1.3      | 0/TBD          | Not started | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/TBD          | Not started | -          |
 | 20. Tree Shaking                                  | v1.3      | 0/TBD          | Not started | -          |
