@@ -32,11 +32,11 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 ### Bookmarks (BOOKMARK)
 
 - [ ] **BOOKMARK-01**: User can add a bookmark at the current playback position (with optional title)
-- [ ] **BOOKMARK-02**: User can view all bookmarks for an item on the item detail screen
+- [x] **BOOKMARK-02**: User can view all bookmarks for an item on the item detail screen
 - [ ] **BOOKMARK-03**: User can rename a bookmark
 - [ ] **BOOKMARK-04**: User can delete a bookmark
-- [ ] **BOOKMARK-05**: Bookmarks are synced with the ABS server via API (create, read, delete)
-- [ ] **BOOKMARK-06**: Bookmarks are cached in a local SQLite table for offline viewing
+- [x] **BOOKMARK-05**: Bookmarks are synced with the ABS server via API (create, read, delete)
+- [x] **BOOKMARK-06**: Bookmarks are cached in a local SQLite table for offline viewing
 
 ### Navigation (NAVIGATION)
 
@@ -121,11 +121,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SECTION-02    | Phase 15 | Complete |
 | SECTION-03    | Phase 15 | Complete |
 | BOOKMARK-01   | Phase 17 | Pending  |
-| BOOKMARK-02   | Phase 17 | Pending  |
+| BOOKMARK-02   | Phase 17 | Complete |
 | BOOKMARK-03   | Phase 17 | Pending  |
 | BOOKMARK-04   | Phase 17 | Pending  |
-| BOOKMARK-05   | Phase 17 | Pending  |
-| BOOKMARK-06   | Phase 17 | Pending  |
+| BOOKMARK-05   | Phase 17 | Complete |
+| BOOKMARK-06   | Phase 17 | Complete |
 | NAVIGATION-01 | Phase 18 | Pending  |
 | NAVIGATION-02 | Phase 18 | Pending  |
 | NAVIGATION-03 | Phase 18 | Pending  |

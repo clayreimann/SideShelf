@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
-status: verifying
-stopped_at: Phase 17 context gathered
-last_updated: "2026-03-11T17:04:40.336Z"
-last_activity: "2026-03-11 — Phase 16 complete: all 4 plans done, device verification approved on physical iOS device"
+status: executing
+stopped_at: Completed 17-bookmarks-17-01-PLAN.md
+last_updated: "2026-03-12T00:35:30.659Z"
+last_activity: "2026-03-12 — Phase 17 Plan 01 complete: bookmark schema + helpers + tests"
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
-  percent: 100
+  total_plans: 16
+  completed_plans: 12
+  percent: 75
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 16 of 22 (Full Screen Player Redesign + AirPlay) — COMPLETE
-Plan: 4 of 4 (all tasks done, device verification approved)
-Status: Complete — Phase 16 fully verified on physical iOS device
-Last activity: 2026-03-11 — Phase 16 complete: all 4 plans done, device verification approved on physical iOS device
+Phase: 17 of 22 (Bookmarks) — In Progress
+Plan: 1 of 5 complete (17-01 done: schema + helpers + migration)
+Status: Executing — Phase 17 Plan 01 complete, Plans 02–05 remaining
+Last activity: 2026-03-12 — Phase 17 Plan 01 complete: bookmark schema + helpers + tests
 
-Progress: [██████████] 100%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [██████████] 100%
 | Phase 16-full-screen-player-redesign-airplay P02 | 4 | 2 tasks | 4 files |
 | Phase 16-full-screen-player-redesign-airplay P03 | 3 | 2 tasks | 4 files |
 | Phase 16-full-screen-player-redesign-airplay P04 | 6 | 2 tasks | 2 files |
+| Phase 17-bookmarks P01 | 4 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,8 @@ Full decision log is in PROJECT.md Key Decisions table.
 - ProgressBar rightLabel=undefined means fall back to formatTime(duration); callers pass undefined rather than explicit fallback string
 - Reanimated cross-component animated style prop type: use AnimatedStyle<ViewStyle> not ReturnType<typeof useAnimatedStyle> — the latter resolves to DefaultStyle (TextStyle union) which fails Animated.View type check
 - Static styles (marginBottom, overflow) that accompany Reanimated animations: include inside useAnimatedStyle worklet rather than array-merging at call site — avoids Reanimated style prop type errors
+- pendingBookmarkOps: no FK to users (plain text userId) — avoids cascade complications; clearPendingOps filters by userId+ids to prevent cross-user deletion
+- upsertAllBookmarks sets syncedAt=now() at import — records when ABS server data was last fetched
 
 ### Pending Todos
 
@@ -95,6 +98,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-11T17:04:40.334Z
-Stopped at: Phase 17 context gathered
-Resume file: .planning/phases/17-bookmarks/17-CONTEXT.md
+Last session: 2026-03-12T00:35:30.657Z
+Stopped at: Completed 17-bookmarks-17-01-PLAN.md
+Resume file: None
