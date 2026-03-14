@@ -282,6 +282,29 @@ export const LARGE_DIFF_THRESHOLD = 30; // seconds
 export type ResumeSource = "activeSession" | "savedProgress" | "asyncStorage" | "store";
 
 /**
+ * Source of a player event dispatch — used for tracing and debugging.
+ * Identifies which subsystem originated the event.
+ */
+export type EventSource =
+  | 'ui'
+  | 'restore'
+  | 'native_player'
+  | 'audio_focus'
+  | 'remote_command'
+  | 'sleep_timer'
+  | 'startup_bootstrap'
+  | 'unknown';
+
+/**
+ * Optional metadata attached to dispatchPlayerEvent() calls.
+ * Carried through the bus into coordinator for tracing; not stored on PlayerEvent union.
+ */
+export type DispatchMeta = {
+  source?: EventSource;
+  restoreSessionId?: string;
+};
+
+/**
  * Result of position reconciliation across multiple sources.
  */
 export interface ResumePositionInfo {
