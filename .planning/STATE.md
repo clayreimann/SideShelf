@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
-status: executing
-stopped_at: Completed 17-bookmarks-17-05-PLAN.md
-last_updated: "2026-03-12T15:48:48.300Z"
+status: verifying
+stopped_at: Phase 17.1 context gathered
+last_updated: "2026-03-14T01:19:02.471Z"
 last_activity: "2026-03-12 — Phase 17 complete: bookmark UX verified and approved across create, rename, delete, seek, settings, and persistence flows"
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 4
   total_plans: 16
   completed_plans: 16
@@ -97,6 +97,10 @@ Full decision log is in PROJECT.md Key Decisions table.
 - Bookmark creation branching stays in a pure helper so the full-screen player logic remains unit-testable
 - Human approval on 2026-03-12 closes Plan 17-05: all bookmark UX flows are now treated as validated end-to-end
 
+### Roadmap Evolution
+
+- Phase 17.1 inserted after Phase 17: Add span tracing debugging aid (URGENT)
+
 ### Pending Todos
 
 1. **Standardize path handling** (now Phase 18 / DEBT-01) — encoding mismatch between file:// URIs, POSIX paths, and D:/C: prefixed DB paths
@@ -112,6 +116,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-12T15:48:48.297Z
-Stopped at: Completed 17-bookmarks-17-05-PLAN.md
-Resume file: None
+Last session: 2026-03-14T01:19:02.469Z
+Stopped at: Phase 17.1 context gathered
+Resume file: .planning/phases/17.1-add-span-tracing-debugging-aid/17.1-CONTEXT.md
