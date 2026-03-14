@@ -147,6 +147,21 @@ Plans:
 - [x] 17-04-PLAN.md — UI layer (BookmarkButton long-press, FullScreenPlayer first-tap + modes, BookmarksSection rewrite, Settings row)
 - [x] 17-05-PLAN.md — Visual verification checkpoint (simulator flow verification)
 
+### Phase 17.1: Add span tracing debugging aid (INSERTED)
+
+**Goal:** Instrument the player state machine and restore flow with a local ring-buffer trace library to capture causality across async boundaries for intermittent bugs (state machine rejections, position resets to 0:00 after cold-start play)
+**Requirements**: (debugging aid — no formal requirement IDs)
+**Depends on:** Phase 17
+**Plans:** 5 plans
+
+Plans:
+
+- [ ] 17.1-01-PLAN.md — Wave 0: Test stubs (trace.test.ts, traceDump.test.ts, PlayPauseButton.test.tsx — RED state)
+- [ ] 17.1-02-PLAN.md — Core library (trace.ts + traceHooks.ts + traceDump.ts + startup configure in src/index.ts)
+- [ ] 17.1-03-PLAN.md — player.restore.\* instrumentation (EventSource type + ProgressRestoreCollaborator span tree)
+- [ ] 17.1-04-PLAN.md — player.machine.\* instrumentation + auto-dump on rejection (PlayerStateCoordinator)
+- [ ] 17.1-05-PLAN.md — Long-press dump on all 3 play/pause surfaces + TraceDumps viewer UI + human verification
+
 ### Phase 18: Sleep Timer Fade + Navigation + Path Standardization
 
 **Goal**: The sleep timer fades volume gracefully before stopping; Series and Authors navigation works from the More tab; the app responds to sideshelf:// deep links; file paths are stored in a consistent normalized format
@@ -272,6 +287,7 @@ Plans:
 | 15. Collapsible Section Redesign                  | 2/3       | In Progress    |             | -          |
 | 16. Full Screen Player Redesign + AirPlay         | 4/4       | Complete       | 2026-03-11  | -          |
 | 17. Bookmarks                                     | 5/5       | Complete       | 2026-03-12  | -          |
+| 17.1. Span Tracing Debugging Aid                  | v1.3      | 0/5            | Not started | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | v1.3      | 0/TBD          | Not started | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/TBD          | Not started | -          |
 | 20. Tree Shaking                                  | v1.3      | 0/TBD          | Not started | -          |
