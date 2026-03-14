@@ -14,48 +14,63 @@ import { ActivityIndicator, Platform, Pressable, View } from "react-native";
  * Shows an activity indicator while a track is loading.
  */
 export interface PlayPauseButtonProps {
-    hitBoxSize?: number;
-    iconSize?: number;
-    onPress: () => void;
+  hitBoxSize?: number;
+  iconSize?: number;
+  onPress: () => void;
+  onLongPress?: () => void;
 }
 
-export default function PlayPauseButton({ onPress, hitBoxSize = 44, iconSize = 24 }: PlayPauseButtonProps) {
-    const { colors } = useThemedStyles();
-    const isLoadingTrack = usePlayerState(state => state.player.loading.isLoadingTrack);
-    const isPlaying = usePlayerState(state => state.player.isPlaying);
+export default function PlayPauseButton({
+  onPress,
+  onLongPress,
+  hitBoxSize = 44,
+  iconSize = 24,
+}: PlayPauseButtonProps) {
+  const { colors } = useThemedStyles();
+  const isLoadingTrack = usePlayerState((state) => state.player.loading.isLoadingTrack);
+  const isPlaying = usePlayerState((state) => state.player.isPlaying);
 
-    if (isLoadingTrack) {
-        return (
-            <View style={{width: hitBoxSize, height: hitBoxSize, justifyContent: 'center', alignItems: 'center'}}>
-                <ActivityIndicator size="small" color={colors.textPrimary} />
-            </View>
-        );
-    }
-
+  if (isLoadingTrack) {
     return (
-        <Pressable
-            onPress={onPress}
-            style={({pressed}) => ({
-                width: hitBoxSize,
-                height: hitBoxSize,
-                justifyContent: 'center',
-                alignItems: 'center',
-                opacity: pressed ? 0.5 : 1,
-            })}
-        >
-            {Platform.OS === 'ios' ? (
-                <SymbolView
-                    name={isPlaying ? 'pause.circle.fill' : 'play.circle.fill'}
-                    size={iconSize}
-                    tintColor={colors.textPrimary}
-                />
-            ) : (
-                <MaterialIcons
-                    name={isPlaying ? 'pause' : 'play-arrow'}
-                    size={iconSize}
-                    color={colors.textPrimary}
-                />
-            )}
-        </Pressable>
+      <View
+        style={{
+          width: hitBoxSize,
+          height: hitBoxSize,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <ActivityIndicator size="small" color={colors.textPrimary} />
+      </View>
     );
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityRole="button"
+      style={({ pressed }) => ({
+        width: hitBoxSize,
+        height: hitBoxSize,
+        justifyContent: "center",
+        alignItems: "center",
+        opacity: pressed ? 0.5 : 1,
+      })}
+    >
+      {Platform.OS === "ios" ? (
+        <SymbolView
+          name={isPlaying ? "pause.circle.fill" : "play.circle.fill"}
+          size={iconSize}
+          tintColor={colors.textPrimary}
+        />
+      ) : (
+        <MaterialIcons
+          name={isPlaying ? "pause" : "play-arrow"}
+          size={iconSize}
+          color={colors.textPrimary}
+        />
+      )}
+    </Pressable>
+  );
 }
