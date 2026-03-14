@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: executing
-stopped_at: Completed 17.1-04-PLAN.md
-last_updated: "2026-03-14T14:26:06.780Z"
-last_activity: 2026-03-13 — LocalTrace library + traceDump + startup config wired; all 13 tests GREEN
+stopped_at: Completed 17.1-03-PLAN.md
+last_updated: "2026-03-14T14:29:54.422Z"
+last_activity: 2026-03-14 — PlayerStateCoordinator instrumented with player.machine._ trace events + auto-dump on rejection
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
   percent: 90
 ---
 
@@ -66,6 +66,7 @@ Progress: [█████████░] 90%
 | Phase 17.1-add-span-tracing-debugging-aid P01 | 12 | 3 tasks | 3 files |
 | Phase 17.1-add-span-tracing-debugging-aid P02 | 15 | 1 tasks | 4 files |
 | Phase 17.1-add-span-tracing-debugging-aid P04 | 0 | 1 tasks | 3 files |
+| Phase 17.1-add-span-tracing-debugging-aid P03 | 18 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,9 @@ Full decision log is in PROJECT.md Key Decisions table.
 - Auto-dump on rejection in PlayerStateCoordinator is fire-and-forget with .catch() — never awaited inside the AsyncLock acquire callback (would block the queue)
 - expo-application virtual mock added globally to setup.ts with { virtual: true } — integration tests pull in PlayerStateCoordinator transitively; per-file mocks would require touching every integration test
 - player.machine.\* trace calls use (event as any).source cast with eslint-disable — Plan 03 adds source to the event bus; follow-up will thread through the type properly
+- DispatchMeta is a separate type from PlayerEvent union — source/restoreSessionId not added to individual event variant types, keeping discriminated union clean; coordinator reads meta from bus side-channel
+- restoreSessionId generated as local variable per-method-call (Math.random().toString(16).slice(2)), not module-level — avoids stale IDs across concurrent restore attempts
+- All player.restore.* child spans pass parentContext explicitly — Hermes context stack is not async-aware, implicit propagation unreliable across await boundaries
 
 ### Roadmap Evolution
 
@@ -127,6 +131,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-14T14:26:06.778Z
-Stopped at: Completed 17.1-04-PLAN.md
+Last session: 2026-03-14T14:29:54.420Z
+Stopped at: Completed 17.1-03-PLAN.md
 Resume file: None
