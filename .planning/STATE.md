@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: executing
-stopped_at: Completed 17.1-02-PLAN.md
-last_updated: "2026-03-14T02:21:45.565Z"
-last_activity: "2026-03-12 — Phase 17 complete: bookmark UX verified and approved across create, rename, delete, seek, settings, and persistence flows"
+stopped_at: Completed 17.1-04-PLAN.md
+last_updated: "2026-03-14T14:26:06.780Z"
+last_activity: 2026-03-13 — LocalTrace library + traceDump + startup config wired; all 13 tests GREEN
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 21
-  completed_plans: 18
-  percent: 100
+  completed_plans: 19
+  percent: 90
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 ## Current Position
 
 Phase: 17.1 (Add Span Tracing Debugging Aid) — IN PROGRESS
-Plan: 2 of 5 (Plan 02 complete — LocalTrace library implemented)
-Status: In Progress — Plans 01-02 complete, Plans 03–05 pending
-Last activity: 2026-03-13 — LocalTrace library + traceDump + startup config wired; all 13 tests GREEN
+Plan: 4 of 5 (Plan 04 complete — PlayerStateCoordinator instrumented with player.machine._ trace events)
+Status: In Progress — Plans 01-02, 04 complete; Plans 03, 05 pending
+Last activity: 2026-03-14 — PlayerStateCoordinator instrumented with player.machine._ trace events + auto-dump on rejection
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [█████████░] 86%
 | Phase 17-bookmarks P04 | 18 | 2 tasks | 8 files |
 | Phase 17.1-add-span-tracing-debugging-aid P01 | 12 | 3 tasks | 3 files |
 | Phase 17.1-add-span-tracing-debugging-aid P02 | 15 | 1 tasks | 4 files |
+| Phase 17.1-add-span-tracing-debugging-aid P04 | 0 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,9 @@ Full decision log is in PROJECT.md Key Decisions table.
 - react-native custom resolver does not support virtual: true for @/ mapped paths — drop @/lib/trace mock from traceDump stub; traceDump import fails first anyway
 - traceDump writes flat payload (appVersion, platform, dumpReason at root) not nested under meta — required for test assertions on parsed.dumpReason
 - trace.ts is a zero-dependency leaf module — no imports from services, stores, or other lib files; safe to import anywhere
+- Auto-dump on rejection in PlayerStateCoordinator is fire-and-forget with .catch() — never awaited inside the AsyncLock acquire callback (would block the queue)
+- expo-application virtual mock added globally to setup.ts with { virtual: true } — integration tests pull in PlayerStateCoordinator transitively; per-file mocks would require touching every integration test
+- player.machine.\* trace calls use (event as any).source cast with eslint-disable — Plan 03 adds source to the event bus; follow-up will thread through the type properly
 
 ### Roadmap Evolution
 
@@ -123,6 +127,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-14T02:21:45.563Z
-Stopped at: Completed 17.1-02-PLAN.md
+Last session: 2026-03-14T14:26:06.778Z
+Stopped at: Completed 17.1-04-PLAN.md
 Resume file: None
