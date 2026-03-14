@@ -5,6 +5,7 @@
  */
 
 import { CoordinatorDiagnostics } from "@/components/diagnostics/CoordinatorDiagnostics";
+import TraceDumps from "@/components/diagnostics/TraceDumps";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
@@ -247,6 +248,19 @@ export default function TrackPlayerScreen() {
       data: [
         {
           component: (<CoordinatorDiagnostics autoRefresh={autoRefresh} />) as React.ReactNode,
+          label: "",
+          onPress: disabledOnPress,
+          disabled: true,
+        },
+      ],
+    },
+
+    // Trace Dumps
+    {
+      title: "Trace Dumps",
+      data: [
+        {
+          component: (<TraceDumps />) as React.ReactNode,
           label: "",
           onPress: disabledOnPress,
           disabled: true,
