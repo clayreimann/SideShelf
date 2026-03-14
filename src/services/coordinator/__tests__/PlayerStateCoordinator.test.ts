@@ -61,6 +61,11 @@ jest.mock("@/stores/appStore", () => ({
   },
 }));
 
+// Mock traceDump — expo-application is not installed in the test environment
+jest.mock("@/lib/traceDump", () => ({
+  writeDumpToDisk: jest.fn(() => Promise.resolve("file://mock-dump.json")),
+}));
+
 // Mock logger
 jest.mock("@/lib/logger", () => ({
   log: {

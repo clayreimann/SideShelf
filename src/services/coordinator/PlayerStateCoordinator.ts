@@ -48,6 +48,8 @@ import EventEmitter from "eventemitter3";
 import { State } from "react-native-track-player";
 // PlayerService is dynamically imported in executeTransition to avoid a circular dependency:
 // PlayerStateCoordinator → PlayerService → PlayerStateCoordinator
+import { trace } from "@/lib/trace";
+import { writeDumpToDisk } from "@/lib/traceDump";
 import { dispatchPlayerEvent, playerEventBus } from "./eventBus";
 import { validateTransition } from "./transitions";
 
@@ -78,6 +80,9 @@ export class PlayerStateCoordinator extends EventEmitter {
   // Event processing times for averaging
   private processingTimes: number[] = [];
   private readonly MAX_PROCESSING_TIMES = 100;
+
+  // Monotonic counter for trace event ordering
+  private machineSequence = 0;
 
   // Transition history for diagnostics
   private transitionHistory: TransitionHistoryEntry[] = [];
@@ -215,6 +220,21 @@ export class PlayerStateCoordinator extends EventEmitter {
     const validation = validateTransition(currentState, event);
     const nextState = validation.nextState;
 
+    // Trace: record every event received by the machine (pre-transition)
+    trace.addEvent("player.machine.event.received", {
+      sequence: this.machineSequence++,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
+      source: (event as any).source ?? "unknown",
+      event: event.type,
+      fromState: currentState,
+      itemId: this.context.currentTrack?.libraryItemId,
+      chapterId: this.context.currentChapter?.id,
+      positionMs:
+        this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restoreSessionId is an optional runtime field; not yet in the PlayerEvent union type
+      restoreSessionId: (event as any).restoreSessionId,
+    });
+
     // Update context based on event payload (even in observer mode, for accurate tracking)
     this.updateContextFromEvent(event);
 
@@ -265,7 +285,28 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.previousState = currentState;
         this.context.currentState = nextState;
       }
+      // Trace: accepted transition
+      trace.addEvent("player.machine.transition.accepted", {
+        sequence: this.machineSequence++,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
+        source: (event as any).source ?? "unknown",
+        event: event.type,
+        fromState: currentState,
+        toState: nextState ?? currentState,
+        itemId: this.context.currentTrack?.libraryItemId,
+        positionMs:
+          this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+      });
       await this.executeTransition(event, nextState);
+      // Trace: state entered (only on actual state change)
+      if (nextState && nextState !== currentState) {
+        trace.addEvent("player.machine.state.entered", {
+          sequence: this.machineSequence++,
+          state: nextState,
+          fromState: currentState,
+          event: event.type,
+        });
+      }
       // Sync coordinator state to Zustand store (Phase 4: State Propagation)
       if (event.type === "NATIVE_PROGRESS_UPDATED") {
         this.syncPositionToStore();
@@ -273,6 +314,26 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.syncStateToStore(event);
       }
     } else {
+      // Trace: rejected transition
+      trace.addEvent("player.machine.transition.rejected", {
+        sequence: this.machineSequence++,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
+        source: (event as any).source ?? "unknown",
+        event: event.type,
+        fromState: currentState,
+        reason: validation.reason ?? "unknown",
+        itemId: this.context.currentTrack?.libraryItemId,
+        positionMs:
+          this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restoreSessionId is an optional runtime field; not yet in the PlayerEvent union type
+        restoreSessionId: (event as any).restoreSessionId,
+      });
+      // Auto-dump: fire-and-forget — NEVER await inside the lock (Pitfall 5)
+      writeDumpToDisk("rejection", {
+        type: event.type,
+        fromState: currentState,
+        reason: validation.reason,
+      }).catch((err) => log.warn("[Coordinator] Auto trace dump failed", err as Error));
       log.warn(
         `[Coordinator] Rejected: ${currentState} --[${event.type}]--> Reason: ${validation.reason || "unknown"}`
       );

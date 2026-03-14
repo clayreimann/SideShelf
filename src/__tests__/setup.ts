@@ -229,6 +229,17 @@ jest.mock("@/lib/logger", () => ({
   },
 }));
 
+// Mock expo-application — not yet installed; used by traceDump.ts for version metadata
+jest.mock(
+  "expo-application",
+  () => ({
+    nativeApplicationVersion: "0.0.0-test",
+    nativeBuildVersion: "0",
+    applicationId: "com.test.sideshelf",
+  }),
+  { virtual: true }
+);
+
 // Mock react-native-device-info
 jest.mock("react-native-device-info", () => ({
   getUniqueId: jest.fn(() => "mock-device-id"),
