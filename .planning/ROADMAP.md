@@ -54,7 +54,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 - [x] **Phase 14: Progress Display Format** — User-selectable progress format across all three player surfaces (completed 2026-03-09)
 - [ ] **Phase 15: Collapsible Section Redesign** — Reanimated probe: peek-and-fade with UI-thread height animation
 - [x] **Phase 16: Full Screen Player Redesign + AirPlay** — Nav bar removal, chevron dismiss, settings UIMenu, AirPlay on all surfaces, Reanimated panel animation (completed 2026-03-11)
-- [ ] **Phase 17: Bookmarks** — Add/view/rename/delete with server sync and SQLite offline cache
+- [x] **Phase 17: Bookmarks** — Add/view/rename/delete with server sync and SQLite offline cache (completed 2026-03-12)
 - [ ] **Phase 18: Sleep Timer Fade + Navigation + Path Standardization** — Volume fade, Series/Authors More tab fix, deep linking, path normalization
 - [ ] **Phase 19: Performance Quick Wins** — FlashList, expo-image, TTI measurement, memory leak fixes, orphan reassociation UI
 - [ ] **Phase 20: Tree Shaking** — Standalone production bundle optimization requiring TestFlight verification
@@ -141,11 +141,11 @@ Plans:
 
 Plans:
 
-- [ ] 17-01-PLAN.md — DB schema + helpers + migration (bookmarks + pending_bookmark_ops tables, wipeUserData)
-- [ ] 17-02-PLAN.md — Settings data layer (bookmarkTitleMode in appSettings + settingsSlice)
-- [ ] 17-03-PLAN.md — API fixes + slice extension + offline sync queue (deleteBookmark fix, renameBookmark, offline-aware actions, drain on network restore)
-- [ ] 17-04-PLAN.md — UI layer (BookmarkButton long-press, FullScreenPlayer first-tap + modes, BookmarksSection rewrite, Settings row)
-- [ ] 17-05-PLAN.md — Visual verification checkpoint (simulator flow verification)
+- [x] 17-01-PLAN.md — DB schema + helpers + migration (bookmarks + pending_bookmark_ops tables, wipeUserData)
+- [x] 17-02-PLAN.md — Settings data layer (bookmarkTitleMode in appSettings + settingsSlice)
+- [x] 17-03-PLAN.md — API fixes + slice extension + offline sync queue (deleteBookmark fix, renameBookmark, offline-aware actions, drain on network restore)
+- [x] 17-04-PLAN.md — UI layer (BookmarkButton long-press, FullScreenPlayer first-tap + modes, BookmarksSection rewrite, Settings row)
+- [x] 17-05-PLAN.md — Visual verification checkpoint (simulator flow verification)
 
 ### Phase 18: Sleep Timer Fade + Navigation + Path Standardization
 
@@ -271,7 +271,7 @@ Plans:
 | 14. Progress Display Format                       | 4/4       | Complete       | 2026-03-09  | -          |
 | 15. Collapsible Section Redesign                  | 2/3       | In Progress    |             | -          |
 | 16. Full Screen Player Redesign + AirPlay         | 4/4       | Complete       | 2026-03-11  | -          |
-| 17. Bookmarks                                     | 4/5       | In Progress    |             | -          |
+| 17. Bookmarks                                     | 5/5       | Complete       | 2026-03-12  | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | v1.3      | 0/TBD          | Not started | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/TBD          | Not started | -          |
 | 20. Tree Shaking                                  | v1.3      | 0/TBD          | Not started | -          |

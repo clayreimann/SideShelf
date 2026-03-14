@@ -50,7 +50,7 @@ completed: 2026-03-12
 
 Each task was committed atomically:
 
-1. **Task 1: Visual verification checkpoint for bookmark UX** - `PENDING` (docs)
+1. **Task 1: Visual verification checkpoint for bookmark UX** - `7bf9a22` (docs)
 
 ## Files Created/Modified
 
@@ -94,7 +94,10 @@ None - no external service configuration required.
 
 ## Self-Check
 
-PENDING
+PASSED
+
+- FOUND: `.planning/phases/17-bookmarks/17-05-SUMMARY.md`
+- FOUND: `7bf9a22`
 
 ---
 

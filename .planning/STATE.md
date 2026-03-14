@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: executing
-stopped_at: Completed 17-bookmarks-17-04-PLAN.md
-last_updated: "2026-03-12T13:07:47.978Z"
-last_activity: "2026-03-12 — Phase 17 Plan 04 complete: bookmark title mode UX, rename/delete controls, and settings row"
+stopped_at: Completed 17-bookmarks-17-05-PLAN.md
+last_updated: "2026-03-12T15:48:48.300Z"
+last_activity: "2026-03-12 — Phase 17 complete: bookmark UX verified and approved across create, rename, delete, seek, settings, and persistence flows"
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 16
-  completed_plans: 15
-  percent: 94
+  completed_plans: 16
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Phase 17 — next phase (Phase 16 complete)
+**Current focus:** Phase 18 — next phase (Phase 17 complete)
 
 ## Current Position
 
-Phase: 17 of 22 (Bookmarks) — In Progress
-Plan: 4 of 5 complete (17-04 done: bookmark title mode UX, rename/delete controls, settings row)
-Status: Executing — Phase 17 Plans 01–04 complete, Plan 05 remaining
-Last activity: 2026-03-12 — Phase 17 Plan 04 complete: bookmark title mode UX, rename/delete controls, and settings row
+Phase: 17 of 22 (Bookmarks) — COMPLETE
+Plan: 5 of 5 (all tasks done, human verification approved)
+Status: Complete — Phase 17 bookmark flows verified and approved
+Last activity: 2026-03-12 — Phase 17 complete: bookmark UX verified and approved across create, rename, delete, seek, settings, and persistence flows
 
-Progress: [█████████░] 94%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -95,6 +95,7 @@ Full decision log is in PROJECT.md Key Decisions table.
 - bookmarkTitleMode null remains the first-run sentinel only; the settings screen now exposes explicit auto and prompt modes
 - Bookmark rename/delete actions use ActionSheetIOS on iOS and Alert plus bottom-sheet modal flows on Android
 - Bookmark creation branching stays in a pure helper so the full-screen player logic remains unit-testable
+- Human approval on 2026-03-12 closes Plan 17-05: all bookmark UX flows are now treated as validated end-to-end
 
 ### Pending Todos
 
@@ -111,6 +112,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-12T13:07:47.978Z
-Stopped at: Completed 17-bookmarks-17-04-PLAN.md
+Last session: 2026-03-12T15:48:48.297Z
+Stopped at: Completed 17-bookmarks-17-05-PLAN.md
 Resume file: None
