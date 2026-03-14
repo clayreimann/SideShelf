@@ -18,6 +18,44 @@ import DeviceInfo from "react-native-device-info";
 
 const log = logger.forTag("api:endpoints");
 
+type BookmarkCreateResponse = { bookmark?: ApiAudioBookmark | null } | ApiAudioBookmark | null;
+
+function fallbackBookmarkId(bookmark: Pick<ApiAudioBookmark, "libraryItemId" | "time" | "title">) {
+  return `${bookmark.libraryItemId}:${bookmark.time}:${bookmark.title}`;
+}
+
+export function normalizeBookmarkResponse(
+  payload: BookmarkCreateResponse,
+  fallback: Pick<ApiAudioBookmark, "libraryItemId" | "time" | "title">
+): ApiAudioBookmark {
+  const bookmarkCandidate =
+    payload && typeof payload === "object" && "bookmark" in payload ? payload.bookmark : payload;
+  const bookmark = bookmarkCandidate as Partial<ApiAudioBookmark> | null;
+  if (!bookmark) {
+    return {
+      id: fallbackBookmarkId(fallback),
+      libraryItemId: fallback.libraryItemId,
+      title: fallback.title,
+      time: fallback.time,
+      createdAt: Date.now(),
+    };
+  }
+
+  return {
+    id:
+      bookmark.id ||
+      fallbackBookmarkId({
+        libraryItemId: bookmark.libraryItemId ?? fallback.libraryItemId,
+        time: bookmark.time ?? fallback.time,
+        title: bookmark.title ?? fallback.title,
+      }),
+    libraryItemId: bookmark.libraryItemId ?? fallback.libraryItemId,
+    title: bookmark.title ?? fallback.title,
+    time: bookmark.time ?? fallback.time,
+    createdAt: bookmark.createdAt ?? Date.now(),
+  };
+}
+
 async function handleResponseError(response: Response, defaultMessage: string) {
   if (!response.ok) {
     const text = await response.clone().text();
@@ -507,6 +545,7 @@ export async function createBookmark(
   time: number,
   title?: string
 ): Promise<{ bookmark: import("@/types/api").ApiAudioBookmark }> {
+  const resolvedTitle = title || `Bookmark at ${formatTime(time)}`;
   const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark`, {
     method: "POST",
     headers: {
@@ -514,12 +553,19 @@ export async function createBookmark(
     },
     body: JSON.stringify({
       time,
-      title: title || `Bookmark at ${formatTime(time)}`,
+      title: resolvedTitle,
     }),
   });
 
   await handleResponseError(response, "Failed to create bookmark");
-  return response.json();
+  const payload = (await response.json()) as BookmarkCreateResponse;
+  return {
+    bookmark: normalizeBookmarkResponse(payload, {
+      libraryItemId,
+      time,
+      title: resolvedTitle,
+    }),
+  };
 }
 
 /**
@@ -553,7 +599,14 @@ export async function renameBookmark(
     body: JSON.stringify({ time, title }),
   });
   await handleResponseError(response, "Failed to rename bookmark");
-  return response.json();
+  const payload = (await response.json()) as BookmarkCreateResponse;
+  return {
+    bookmark: normalizeBookmarkResponse(payload, {
+      libraryItemId,
+      time,
+      title,
+    }),
+  };
 }
 
 // Helper function to format time for bookmark titles

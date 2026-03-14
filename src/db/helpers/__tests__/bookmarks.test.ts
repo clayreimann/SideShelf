@@ -266,5 +266,23 @@ describe("bookmarks DB helpers", () => {
       const rows = await testDb.db.select().from(bookmarks);
       expect(rows).toHaveLength(0);
     });
+
+    it("synthesizes stable ids when the server bookmark id is missing", async () => {
+      const apiBookmarks = [
+        {
+          id: undefined,
+          libraryItemId: "item-1",
+          title: "Chapter 1",
+          time: 60.0,
+          createdAt: 1704067200000,
+        },
+      ] as unknown as ApiAudioBookmark[];
+
+      await upsertAllBookmarks("user-1", apiBookmarks);
+
+      const rows = await testDb.db.select().from(bookmarks);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe("item-1:60:Chapter 1");
+    });
   });
 });

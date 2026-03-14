@@ -8,6 +8,14 @@ import {
 import type { ApiAudioBookmark } from "@/types/api";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
+function buildBookmarkId(item: Pick<ApiAudioBookmark, "libraryItemId" | "time" | "title">): string {
+  return `${item.libraryItemId}:${item.time}:${item.title}`;
+}
+
+function normalizeBookmarkId(item: ApiAudioBookmark): string {
+  return item.id || buildBookmarkId(item);
+}
+
 /**
  * Upsert a single bookmark row.
  * On conflict (same id), updates title, time, and syncedAt.
@@ -35,7 +43,7 @@ export async function upsertAllBookmarks(userId: string, items: ApiAudioBookmark
 
   for (const item of items) {
     await upsertBookmark({
-      id: item.id,
+      id: normalizeBookmarkId(item),
       userId,
       libraryItemId: item.libraryItemId,
       title: item.title,

@@ -33,6 +33,86 @@ import { v4 as uuidv4 } from "uuid";
 // Create cached sublogger for this slice
 const log = logger.forTag("UserProfileSlice");
 
+function buildLocalBookmarkId(params: {
+  libraryItemId: string;
+  time: number;
+  title: string;
+}): string {
+  return `${params.libraryItemId}:${params.time}:${params.title}`;
+}
+
+function getBookmarkIdentity(bookmark: Pick<ApiAudioBookmark, "libraryItemId" | "time">): string {
+  return `${bookmark.libraryItemId}:${bookmark.time}`;
+}
+
+function coerceBookmark(
+  payload: { bookmark?: ApiAudioBookmark | null } | ApiAudioBookmark | null | undefined,
+  fallback: { libraryItemId: string; time: number; title: string }
+): ApiAudioBookmark {
+  const bookmarkCandidate =
+    payload && typeof payload === "object" && "bookmark" in payload ? payload.bookmark : payload;
+  const bookmark = bookmarkCandidate as Partial<ApiAudioBookmark> | null;
+
+  if (!bookmark) {
+    return {
+      id: buildLocalBookmarkId(fallback),
+      libraryItemId: fallback.libraryItemId,
+      title: fallback.title,
+      time: fallback.time,
+      createdAt: Date.now(),
+    };
+  }
+
+  return {
+    id:
+      bookmark.id ||
+      buildLocalBookmarkId({
+        libraryItemId: bookmark.libraryItemId ?? fallback.libraryItemId,
+        time: bookmark.time ?? fallback.time,
+        title: bookmark.title ?? fallback.title,
+      }),
+    libraryItemId: bookmark.libraryItemId ?? fallback.libraryItemId,
+    title: bookmark.title ?? fallback.title,
+    time: bookmark.time ?? fallback.time,
+    createdAt: bookmark.createdAt ?? Date.now(),
+  };
+}
+
+function normalizeBookmarks(
+  payload: Array<{ bookmark?: ApiAudioBookmark | null } | ApiAudioBookmark | null | undefined>
+): ApiAudioBookmark[] {
+  const deduped = new Map<string, ApiAudioBookmark>();
+
+  for (const entry of payload) {
+    const bookmark = coerceBookmark(entry, {
+      libraryItemId:
+        (entry &&
+          typeof entry === "object" &&
+          "bookmark" in entry &&
+          entry.bookmark?.libraryItemId) ||
+        (entry as ApiAudioBookmark | null | undefined)?.libraryItemId ||
+        "",
+      time:
+        (entry && typeof entry === "object" && "bookmark" in entry && entry.bookmark?.time) ||
+        (entry as ApiAudioBookmark | null | undefined)?.time ||
+        0,
+      title:
+        (entry && typeof entry === "object" && "bookmark" in entry && entry.bookmark?.title) ||
+        (entry as ApiAudioBookmark | null | undefined)?.title ||
+        "Bookmark",
+    });
+    deduped.set(getBookmarkIdentity(bookmark), bookmark);
+  }
+
+  return [...deduped.values()].sort((a, b) => a.time - b.time);
+}
+
+function upsertBookmarkInState(bookmarks: ApiAudioBookmark[], nextBookmark: ApiAudioBookmark) {
+  const identity = getBookmarkIdentity(nextBookmark);
+  const filtered = bookmarks.filter((bookmark) => getBookmarkIdentity(bookmark) !== identity);
+  return [...filtered, nextBookmark].sort((a, b) => a.time - b.time);
+}
+
 /**
  * Device information type
  */
@@ -66,6 +146,8 @@ export interface UserProfileSliceState {
     deviceInfo: DeviceInfo | null;
     /** Current user database record */
     user: UserRow | null;
+    /** Active authenticated user id, even if the local users row is missing */
+    activeUserId: string | null;
     /** Server information */
     serverInfo: ServerInfo | null;
     /** User's bookmarks */
@@ -122,6 +204,7 @@ const initialState: UserProfileSliceState = {
   userProfile: {
     deviceInfo: null,
     user: null,
+    activeUserId: null,
     serverInfo: null,
     bookmarks: [],
     initialized: false,
@@ -167,7 +250,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
       ]);
 
       const userId = user?.id ?? meResponse.id;
-      const bookmarksFromServer = meResponse.bookmarks || [];
+      const bookmarksFromServer = normalizeBookmarks(meResponse.bookmarks || []);
 
       // Populate SQLite with server bookmarks
       await upsertAllBookmarks(userId, bookmarksFromServer);
@@ -178,6 +261,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
           ...state.userProfile,
           deviceInfo,
           user,
+          activeUserId: userId,
           bookmarks: bookmarksFromServer,
           initialized: true,
           isLoading: false,
@@ -266,6 +350,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
         userProfile: {
           ...state.userProfile,
           user,
+          activeUserId: user?.id ?? state.userProfile.activeUserId,
         },
       }));
 
@@ -289,7 +374,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
         ...state,
         userProfile: {
           ...state.userProfile,
-          bookmarks: meResponse.bookmarks || [],
+          bookmarks: normalizeBookmarks(meResponse.bookmarks || []),
         },
       }));
 
@@ -312,12 +397,16 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
 
     if (isOnline) {
       const response = await apiCreateBookmark(libraryItemId, time, title);
-      const newBookmark = response.bookmark;
+      const newBookmark = coerceBookmark(response, {
+        libraryItemId,
+        time,
+        title: title ?? `Bookmark at ${time}s`,
+      });
 
       // Upsert to SQLite with syncedAt = now
       await upsertBookmark({
         id: newBookmark.id,
-        userId: get().userProfile.user?.id ?? "",
+        userId: get().userProfile.activeUserId ?? "",
         libraryItemId: newBookmark.libraryItemId,
         title: newBookmark.title,
         time: newBookmark.time,
@@ -329,7 +418,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
         ...state,
         userProfile: {
           ...state.userProfile,
-          bookmarks: [...state.userProfile.bookmarks, newBookmark],
+          bookmarks: upsertBookmarkInState(state.userProfile.bookmarks, newBookmark),
         },
       }));
 
@@ -338,7 +427,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
     } else {
       // Offline: create optimistic bookmark
       const tempId = uuidv4();
-      const userId = get().userProfile.user?.id ?? "";
+      const userId = get().userProfile.activeUserId ?? "";
       const optimisticBookmark: ApiAudioBookmark = {
         id: tempId,
         libraryItemId,
@@ -374,7 +463,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
         ...state,
         userProfile: {
           ...state.userProfile,
-          bookmarks: [...state.userProfile.bookmarks, optimisticBookmark],
+          bookmarks: upsertBookmarkInState(state.userProfile.bookmarks, optimisticBookmark),
         },
       }));
 
@@ -392,7 +481,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
   deleteBookmark: async (libraryItemId: string, time: number) => {
     log.info(`[deleteBookmark] libraryItemId=${libraryItemId} time=${time}`);
 
-    const userId = get().userProfile.user?.id ?? "";
+    const userId = get().userProfile.activeUserId ?? "";
 
     // Optimistic state update (filter by libraryItemId + time)
     set((state: UserProfileSlice) => ({
@@ -435,7 +524,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
   renameBookmark: async (libraryItemId: string, time: number, newTitle: string) => {
     log.info(`[renameBookmark] libraryItemId=${libraryItemId} time=${time} newTitle=${newTitle}`);
 
-    const userId = get().userProfile.user?.id ?? "";
+    const userId = get().userProfile.activeUserId ?? "";
     const isOnline = get().network.isConnected && get().network.isInternetReachable !== false;
 
     // Optimistic state update
@@ -451,7 +540,11 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
 
     if (isOnline) {
       const response = await apiRenameBookmark(libraryItemId, time, newTitle);
-      const updatedBm = response.bookmark;
+      const updatedBm = coerceBookmark(response, {
+        libraryItemId,
+        time,
+        title: newTitle,
+      });
 
       await upsertBookmark({
         id: updatedBm.id,
@@ -513,7 +606,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
    * Calls refreshBookmarks after any successful ops to reconcile state.
    */
   drainPendingBookmarkOps: async () => {
-    const userId = get().userProfile.user?.id;
+    const userId = get().userProfile.activeUserId;
     if (!userId) {
       log.debug("[drainPendingBookmarkOps] no userId, skipping");
       return;

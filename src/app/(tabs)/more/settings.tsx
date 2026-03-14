@@ -13,7 +13,7 @@ import { useLibrary, useSettings } from "@/stores";
 import type { ProgressFormat } from "@/lib/helpers/progressFormat";
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
-import { Stack, useRouter } from "expo-router";
+import { Href, Stack, useRouter } from "expo-router";
 import { useCallback } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
@@ -43,7 +43,6 @@ export default function SettingsScreen() {
     updateJumpBackwardInterval,
     updateSmartRewindEnabled,
     updateDiagnosticsEnabled,
-    updateBookmarkTitleMode,
   } = useSettings();
   const { libraries, selectedLibrary, selectLibrary } = useLibrary();
 
@@ -293,19 +292,7 @@ export default function SettingsScreen() {
 
           {/* Bookmark Title Mode */}
           <Pressable
-            onPress={() => {
-              Alert.alert("Bookmark Title Mode", "How to create bookmark titles", [
-                {
-                  text: "Auto-create",
-                  onPress: () => void updateBookmarkTitleMode("auto"),
-                },
-                {
-                  text: "Always Prompt",
-                  onPress: () => void updateBookmarkTitleMode("prompt"),
-                },
-                { text: "Cancel", style: "cancel" },
-              ]);
-            }}
+            onPress={() => router.push("/more/bookmark-title-mode" as Href)}
             style={{
               flexDirection: "row",
               justifyContent: "space-between",

@@ -266,6 +266,65 @@ describe("Task 2 — createBookmark", () => {
     expect(bookmarkHelpers.enqueuePendingOp).not.toHaveBeenCalled();
   });
 
+  it("handles createBookmark API responses without a bookmark wrapper", async () => {
+    const bm = makeBookmark({ id: "bm-server", libraryItemId: "item-1", time: 60 });
+    endpoints.createBookmark.mockResolvedValue({ bookmark: bm });
+
+    const store = makeStore({ isConnected: true, isInternetReachable: true });
+    await store.getState().initializeUserProfile("testuser");
+
+    jest.clearAllMocks();
+    endpoints.createBookmark.mockResolvedValue({
+      id: undefined,
+      libraryItemId: "item-1",
+      title: undefined,
+      time: 60,
+      createdAt: undefined,
+    });
+    bookmarkHelpers.upsertBookmark.mockResolvedValue(undefined);
+
+    const created = await store.getState().createBookmark("item-1", 60, "Prompted Title");
+
+    expect(created.libraryItemId).toBe("item-1");
+    expect(created.title).toBe("Prompted Title");
+    expect(bookmarkHelpers.upsertBookmark).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.any(String),
+        title: "Prompted Title",
+      })
+    );
+  });
+
+  it("falls back to /me user id when local users row is missing", async () => {
+    const bm = makeBookmark({ id: "bm-server", libraryItemId: "item-1", time: 60 });
+    getUserByUsername.mockResolvedValue(null);
+    endpoints.fetchMe.mockResolvedValue({
+      id: "server-user-1",
+      username: "testuser",
+      bookmarks: [],
+    });
+    endpoints.createBookmark.mockResolvedValue({ bookmark: bm });
+
+    const store = makeStore({ isConnected: true, isInternetReachable: true });
+    await store.getState().initializeUserProfile("testuser");
+
+    expect(store.getState().userProfile.activeUserId).toBe("server-user-1");
+
+    jest.clearAllMocks();
+    endpoints.createBookmark.mockResolvedValue({ bookmark: bm });
+    bookmarkHelpers.upsertBookmark.mockResolvedValue(undefined);
+
+    await store.getState().createBookmark("item-1", 60, "Prompted Title");
+
+    expect(bookmarkHelpers.upsertBookmark).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "server-user-1",
+        libraryItemId: "item-1",
+        title: "Test Bookmark",
+      })
+    );
+  });
+
   it("when offline: skips API + upserts to SQLite optimistically + enqueues pending 'create' op", async () => {
     const store = makeStore({ isConnected: false, isInternetReachable: false });
     await store.getState().initializeUserProfile("testuser");

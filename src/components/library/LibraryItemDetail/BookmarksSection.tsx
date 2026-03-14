@@ -4,17 +4,9 @@ import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
 import { ApiAudioBookmark } from "@/types/api";
 import { Ionicons } from "@expo/vector-icons";
+import { MenuView } from "@react-native-menu/menu";
 import React, { useCallback, useState } from "react";
-import {
-  ActionSheetIOS,
-  Alert,
-  Modal,
-  Platform,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native";
 
 const log = logger.forTag("BookmarksSection");
 
@@ -85,47 +77,12 @@ export default function BookmarksSection({
     }
   }, [renamingBookmark, renameValue, libraryItemId, onRenameBookmark]);
 
-  const showBookmarkContextMenu = useCallback(
-    (bookmark: ApiAudioBookmark) => {
-      if (Platform.OS === "ios") {
-        ActionSheetIOS.showActionSheetWithOptions(
-          {
-            title: bookmark.title,
-            options: ["Cancel", "Rename", "Delete"],
-            destructiveButtonIndex: 2,
-            cancelButtonIndex: 0,
-          },
-          (index) => {
-            if (index === 1) {
-              openRenameModal(bookmark);
-            } else if (index === 2) {
-              void handleDeleteBookmark(bookmark);
-            }
-          }
-        );
-      } else {
-        // Android fallback
-        Alert.alert(bookmark.title, "", [
-          {
-            text: "Rename",
-            onPress: () => openRenameModal(bookmark),
-          },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => {
-              Alert.alert("Delete Bookmark", "Are you sure you want to delete this bookmark?", [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: () => void handleDeleteBookmark(bookmark),
-                },
-              ]);
-            },
-          },
-          { text: "Cancel", style: "cancel" },
-        ]);
+  const handleBookmarkMenuAction = useCallback(
+    (bookmark: ApiAudioBookmark, actionId: string) => {
+      if (actionId === "rename") {
+        openRenameModal(bookmark);
+      } else if (actionId === "delete") {
+        void handleDeleteBookmark(bookmark);
       }
     },
     [openRenameModal, handleDeleteBookmark]
@@ -156,31 +113,49 @@ export default function BookmarksSection({
     <>
       <CollapsibleSection title={`Bookmarks (${bookmarks.length})`} defaultExpanded={false}>
         {sortedBookmarks.map((bookmark, index) => (
-          <TouchableOpacity
-            key={bookmark.id}
+          <Pressable
+            key={`${bookmark.id}-${bookmark.time}`}
             onPress={() => void handleJumpToBookmark(bookmark.time)}
-            onLongPress={() => showBookmarkContextMenu(bookmark)}
             style={{
               paddingVertical: 12,
               borderBottomWidth: index < sortedBookmarks.length - 1 ? 1 : 0,
               borderBottomColor: isDark ? "#444" : "#eee",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Ionicons name="bookmark" size={16} color={colors.textPrimary} />
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[styles.text, { fontWeight: "600", marginBottom: 2 }]}
-                  numberOfLines={1}
-                >
-                  {bookmark.title}
-                </Text>
-                <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
-                  {formatTime(bookmark.time)}
-                </Text>
-              </View>
+            <Ionicons name="bookmark" size={16} color={colors.textPrimary} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.text, { fontWeight: "600", marginBottom: 2 }]} numberOfLines={1}>
+                {bookmark.title}
+              </Text>
+              <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
+                {formatTime(bookmark.time)}
+              </Text>
             </View>
-          </TouchableOpacity>
+            <MenuView
+              title={bookmark.title}
+              shouldOpenOnLongPress={false}
+              onPressAction={({ nativeEvent }) =>
+                handleBookmarkMenuAction(bookmark, nativeEvent.event)
+              }
+              actions={[
+                { id: "rename", title: "Rename" },
+                { id: "delete", title: "Delete", attributes: { destructive: true } },
+              ]}
+            >
+              <Pressable
+                hitSlop={8}
+                style={{ padding: 4 }}
+                onPress={(event) => {
+                  event.stopPropagation();
+                }}
+              >
+                <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
+              </Pressable>
+            </MenuView>
+          </Pressable>
         ))}
       </CollapsibleSection>
 
@@ -230,7 +205,7 @@ export default function BookmarksSection({
               onSubmitEditing={() => void handleSaveRename()}
             />
             <View style={{ flexDirection: "row", gap: 12, justifyContent: "flex-end" }}>
-              <TouchableOpacity
+              <Pressable
                 onPress={() => {
                   setShowRenameModal(false);
                   setRenamingBookmark(null);
@@ -238,10 +213,10 @@ export default function BookmarksSection({
                 style={{ padding: 8 }}
               >
                 <Text style={{ color: colors.textPrimary, fontSize: 15 }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => void handleSaveRename()} style={{ padding: 8 }}>
+              </Pressable>
+              <Pressable onPress={() => void handleSaveRename()} style={{ padding: 8 }}>
                 <Text style={{ color: colors.link, fontSize: 15, fontWeight: "600" }}>Save</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
         </View>

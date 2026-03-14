@@ -20,6 +20,7 @@ import SleepTimerControl from "@/components/player/SleepTimerControl";
 import { ProgressBar } from "@/components/ui";
 import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import CoverImage from "@/components/ui/CoverImange";
+import { getAutoBookmarkTitle } from "@/lib/helpers/bookmarks";
 import { formatTime } from "@/lib/helpers/formatters";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { logger } from "@/lib/logger";
@@ -50,18 +51,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const log = logger.forTag("FullScreenPlayer");
-
-function formatBookmarkTime(seconds: number): string {
-  const totalSecs = Math.floor(seconds);
-  const hours = Math.floor(totalSecs / 3600);
-  const minutes = Math.floor((totalSecs % 3600) / 60);
-  const secs = totalSecs % 60;
-  const secsStr = `${secs.toString().padStart(2, "0")}s`;
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${secsStr}`;
-  }
-  return `${minutes}m ${secsStr}`;
-}
 
 /**
  * Guard component that activates keep-awake using a hook.
@@ -228,10 +217,10 @@ export default function FullScreenPlayer() {
   }, []);
 
   const getAutoTitle = useCallback(() => {
-    if (currentChapter?.chapter.title) {
-      return `${currentChapter.chapter.title} \u2014 ${formatBookmarkTime(position)}`;
-    }
-    return `Bookmark at ${formatBookmarkTime(position)}`;
+    return getAutoBookmarkTitle({
+      chapterTitle: currentChapter?.chapter.title,
+      position,
+    });
   }, [currentChapter, position]);
 
   const doCreate = useCallback(
@@ -342,15 +331,18 @@ export default function FullScreenPlayer() {
       if (actionId === "progressFormat-remaining") updateProgressFormat("remaining");
       else if (actionId === "progressFormat-elapsed") updateProgressFormat("elapsed");
       else if (actionId === "progressFormat-percent") updateProgressFormat("percent");
+      else if (actionId === "bookmarkTitleMode-auto") updateBookmarkTitleMode("auto");
+      else if (actionId === "bookmarkTitleMode-prompt") updateBookmarkTitleMode("prompt");
       else if (actionId === "chapterBar-total") updateChapterBarShowRemaining(false);
       else if (actionId === "chapterBar-remaining") updateChapterBarShowRemaining(true);
       else if (actionId === "keepAwake") updateKeepScreenAwake(!keepScreenAwake);
     },
     [
-      progressFormat,
+      bookmarkTitleMode,
       chapterBarShowRemaining,
       keepScreenAwake,
       updateProgressFormat,
+      updateBookmarkTitleMode,
       updateChapterBarShowRemaining,
       updateKeepScreenAwake,
     ]
@@ -540,6 +532,22 @@ export default function FullScreenPlayer() {
                   id: "progressFormat-percent",
                   title: "Percent Complete",
                   state: progressFormat === "percent" ? "on" : "off",
+                },
+              ],
+            },
+            {
+              id: "bookmarkTitleMode",
+              title: "Bookmark Title Mode",
+              subactions: [
+                {
+                  id: "bookmarkTitleMode-auto",
+                  title: "Auto-create",
+                  state: bookmarkTitleMode !== "prompt" ? "on" : "off",
+                },
+                {
+                  id: "bookmarkTitleMode-prompt",
+                  title: "Always Prompt",
+                  state: bookmarkTitleMode === "prompt" ? "on" : "off",
                 },
               ],
             },

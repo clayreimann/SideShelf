@@ -31,6 +31,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
 import { Stack } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -62,7 +63,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     startDownload,
     deleteDownload,
   } = useDownloads();
-  const { getItemBookmarks, deleteBookmark, renameBookmark } = useUserProfile();
+  const { bookmarks, deleteBookmark, renameBookmark, refreshBookmarks } = useUserProfile();
 
   // Get cached item data or null
   const cachedData = getCachedItem(itemId);
@@ -86,9 +87,10 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
   const isPartiallyDownloaded = isItemPartiallyDownloaded(itemId);
 
   // Get bookmarks for this item
-  const itemBookmarks = useMemo(() => {
-    return getItemBookmarks(itemId);
-  }, [itemId, getItemBookmarks]);
+  const itemBookmarks = useMemo(
+    () => bookmarks.filter((bookmark) => bookmark.libraryItemId === itemId),
+    [bookmarks, itemId]
+  );
 
   // Fetch item details from store
   useEffect(() => {
@@ -120,6 +122,14 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
     loadItemDetails();
   }, [itemId, userId, fetchItemDetails, getCachedItem, onTitleChange]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshBookmarks().catch((error) => {
+        log.error("[useFocusEffect] Failed to refresh bookmarks", error as Error);
+      });
+    }, [refreshBookmarks])
+  );
 
   // Update title when metadata changes
   useEffect(() => {
@@ -543,6 +553,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
             libraryItemId={itemId}
             isDownloaded={isDownloaded}
             serverReachable={serverReachable ?? false}
+            initialBookmarkPosition={effectiveProgress?.currentTime ?? 0}
           />
         )}
 

@@ -1,9 +1,10 @@
 import BookmarkButton from "@/components/player/BookmarkButton";
 import PlayPauseButton from "@/components/player/PlayPauseButton";
 import SkipButton from "@/components/player/SkipButton";
-import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import { ProgressBar } from "@/components/ui";
+import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import { translate } from "@/i18n";
+import { getAutoBookmarkTitle } from "@/lib/helpers/bookmarks";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
@@ -16,12 +17,14 @@ interface ConsolidatedPlayerControlsProps {
   libraryItemId: string;
   isDownloaded: boolean;
   serverReachable: boolean | null;
+  initialBookmarkPosition: number;
 }
 
 export default function ConsolidatedPlayerControls({
   libraryItemId,
   isDownloaded,
   serverReachable,
+  initialBookmarkPosition,
 }: ConsolidatedPlayerControlsProps) {
   const { colors } = useThemedStyles();
   const { currentTrack, position, currentChapter, isLoadingTrack } = usePlayer();
@@ -71,9 +74,15 @@ export default function ConsolidatedPlayerControls({
       return;
     }
 
+    const bookmarkPosition = position > 0 ? position : initialBookmarkPosition;
+    const bookmarkTitle = getAutoBookmarkTitle({
+      chapterTitle: currentChapter?.chapter.title,
+      position: bookmarkPosition,
+    });
+
     setIsCreatingBookmark(true);
     try {
-      await createBookmark(currentTrack.libraryItemId, position);
+      await createBookmark(currentTrack.libraryItemId, bookmarkPosition, bookmarkTitle);
       Alert.alert("Bookmark Created", "Bookmark created successfully");
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to create bookmark:", error);
@@ -81,7 +90,14 @@ export default function ConsolidatedPlayerControls({
     } finally {
       setIsCreatingBookmark(false);
     }
-  }, [currentTrack, position, createBookmark, isCreatingBookmark]);
+  }, [
+    currentTrack,
+    position,
+    currentChapter,
+    initialBookmarkPosition,
+    createBookmark,
+    isCreatingBookmark,
+  ]);
 
   // Calculate chapter progress
   const chapterPosition = currentChapter?.positionInChapter || 0;
@@ -210,7 +226,14 @@ export default function ConsolidatedPlayerControls({
           />
 
           {/* AirPlay route picker */}
-          <AirPlayButton style={{ width: 48, height: 48 }} />
+          <AirPlayButton
+            style={{
+              width: 48,
+              height: 48,
+            }}
+            tintColor={colors.textPrimary}
+            activeTintColor={colors.textPrimary}
+          />
         </View>
       </View>
     </Pressable>
