@@ -6,12 +6,17 @@ import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import { translate } from "@/i18n";
 import { getAutoBookmarkTitle } from "@/lib/helpers/bookmarks";
 import { formatProgress } from "@/lib/helpers/progressFormat";
+import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { writeDumpToDisk } from "@/lib/traceDump";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
+import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { Alert, Pressable, Text, TouchableOpacity, View } from "react-native";
+
+const log = logger.forTag("ConsolidatedPlayerControls");
 
 interface ConsolidatedPlayerControlsProps {
   libraryItemId: string;
@@ -67,6 +72,15 @@ export default function ConsolidatedPlayerControls({
 
   const handleOpenFullScreenPlayer = useCallback(() => {
     router.push("/FullScreenPlayer");
+  }, []);
+
+  const handlePlayPauseLongPress = useCallback(async () => {
+    try {
+      await writeDumpToDisk("manual");
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err) {
+      log.error("[handlePlayPauseLongPress] Trace dump failed", err as Error);
+    }
   }, []);
 
   const handleCreateBookmark = useCallback(async () => {
@@ -214,7 +228,12 @@ export default function ConsolidatedPlayerControls({
           />
 
           {/* Play/Pause Button */}
-          <PlayPauseButton onPress={handlePlayPause} iconSize={48} hitBoxSize={48} />
+          <PlayPauseButton
+            onPress={handlePlayPause}
+            onLongPress={handlePlayPauseLongPress}
+            iconSize={48}
+            hitBoxSize={48}
+          />
 
           {/* Skip Forward - only show if currently playing */}
           <SkipButton

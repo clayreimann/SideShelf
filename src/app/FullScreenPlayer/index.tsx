@@ -25,6 +25,7 @@ import { formatTime } from "@/lib/helpers/formatters";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { writeDumpToDisk } from "@/lib/traceDump";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
 import {
@@ -33,6 +34,7 @@ import {
 } from "@/app/FullScreenPlayer/handleCreateBookmarkLogic";
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
+import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -141,6 +143,15 @@ export default function FullScreenPlayer() {
       await playerService.togglePlayPause();
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to toggle play/pause:", error);
+    }
+  }, []);
+
+  const handlePlayPauseLongPress = useCallback(async () => {
+    try {
+      await writeDumpToDisk("manual");
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err) {
+      log.error("[handlePlayPauseLongPress] Trace dump failed", err as Error);
     }
   }, []);
 
@@ -680,7 +691,12 @@ export default function FullScreenPlayer() {
             iconSize={32}
             hitBoxSize={60}
           />
-          <PlayPauseButton onPress={handlePlayPause} hitBoxSize={88} iconSize={64} />
+          <PlayPauseButton
+            onPress={handlePlayPause}
+            onLongPress={handlePlayPauseLongPress}
+            hitBoxSize={88}
+            iconSize={64}
+          />
           <SkipButton
             direction="forward"
             interval={jumpForwardInterval}

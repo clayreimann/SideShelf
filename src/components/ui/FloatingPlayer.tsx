@@ -12,13 +12,18 @@ import PlayPauseButton from "@/components/player/PlayPauseButton";
 import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import CoverImage from "@/components/ui/CoverImange";
 import { formatProgress } from "@/lib/helpers/progressFormat";
+import { logger } from "@/lib/logger";
 import { borderRadius, floatingPlayer, spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
+import { writeDumpToDisk } from "@/lib/traceDump";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useSettings } from "@/stores/appStore";
+import * as Haptics from "expo-haptics";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
-import React from "react";
+import React, { useCallback } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
+const log = logger.forTag("FloatingPlayer");
 
 export default function FloatingPlayer() {
   const { styles, isDark, colors } = useThemedStyles();
@@ -51,6 +56,15 @@ export default function FloatingPlayer() {
       console.error("[FloatingPlayer] Failed to toggle play/pause:", error);
     }
   };
+
+  const handlePlayPauseLongPress = useCallback(async () => {
+    try {
+      await writeDumpToDisk("manual");
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err) {
+      log.error("[handlePlayPauseLongPress] Trace dump failed", err as Error);
+    }
+  }, []);
 
   const handlePlayerPress = () => {
     router.push("/FullScreenPlayer");
@@ -100,7 +114,11 @@ export default function FloatingPlayer() {
         tintColor={colors.textPrimary}
         activeTintColor={colors.textPrimary}
       />
-      <PlayPauseButton onPress={handlePlayPausePress} iconSize={32} />
+      <PlayPauseButton
+        onPress={handlePlayPausePress}
+        onLongPress={handlePlayPauseLongPress}
+        iconSize={32}
+      />
     </View>
   );
 }
