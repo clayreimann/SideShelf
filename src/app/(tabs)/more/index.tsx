@@ -199,6 +199,12 @@ export default function MoreScreen() {
           isNavItem: true,
         },
         {
+          label: translate("more.traceDumps"),
+          onPress: () => router.push("/more/trace-dumps"),
+          icon: { sf: "doc.badge.gearshape" as SFSymbol, ionicon: "bug-outline" as IoniconsName },
+          isNavItem: true,
+        },
+        {
           label: translate("more.logs"),
           onPress: () => router.push("/more/logs"),
           badge: showErrorBadge ? errorCount : undefined,

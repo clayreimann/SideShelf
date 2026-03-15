@@ -154,6 +154,7 @@ export const es = {
   "more.libraryStats": "Estadísticas de biblioteca",
   "more.storage": "Almacenamiento",
   "more.trackPlayer": "Reproductor y Coordinador",
+  "more.traceDumps": "Volcados de Traza",
   "more.logs": "Registros",
   "more.loggerSettings": "Configuración de registros",
   "more.actions": "Acciones",

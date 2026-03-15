@@ -152,6 +152,7 @@ export const en = {
   "more.libraryStats": "Library Stats",
   "more.storage": "Storage",
   "more.trackPlayer": "Track Player & Coordinator",
+  "more.traceDumps": "Trace Dumps",
   "more.logs": "Logs",
   "more.loggerSettings": "Logger Settings",
   "more.actions": "Actions",
