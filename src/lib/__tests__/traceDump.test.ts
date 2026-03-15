@@ -1,12 +1,5 @@
 /**
  * Tests for writeDumpToDisk
- *
- * RED stubs — all tests reference @/lib/traceDump which does not exist yet.
- * These tests will fail until traceDump.ts is implemented.
- *
- * Note: @/lib/trace mock uses virtual:true because trace.ts does not exist yet.
- * The expo-application mock uses virtual:true because the package is not yet installed.
- * Both will be replaced with real imports once implementation plans run.
  */
 
 import { describe, expect, it, jest, beforeEach } from "@jest/globals";
@@ -23,15 +16,10 @@ jest.mock("expo-file-system", () => {
   return { File: MockFile, Paths: { document: "file:///documents" } };
 });
 
-// expo-application is not yet installed — virtual mock provides the shape
-jest.mock(
-  "expo-application",
-  () => ({ nativeApplicationVersion: "1.0.0-test" }),
-  { virtual: true }
-);
+jest.mock("expo-constants", () => ({
+  default: { expoConfig: { version: "1.0.0-test" } },
+}));
 
-// @/lib/traceDump is the module under test — it does not exist yet.
-// This import will throw "Cannot find module" until Plan 02 implements it.
 import { writeDumpToDisk } from "@/lib/traceDump";
 import * as ExpoFileSystem from "expo-file-system";
 

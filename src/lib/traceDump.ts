@@ -1,5 +1,5 @@
 import { File, Paths } from "expo-file-system";
-import * as Application from "expo-application";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { trace } from "@/lib/trace";
 import { logger } from "@/lib/logger";
@@ -19,7 +19,7 @@ export async function writeDumpToDisk(
   // Flatten meta fields to the root of the payload for easier reading
   const payload = {
     exportedAt: exported.exportedAt,
-    appVersion: Application.nativeApplicationVersion ?? "unknown",
+    appVersion: Constants.expoConfig?.version ?? "unknown",
     platform: Platform.OS,
     dumpReason: reason,
     rejectionEvent: rejectionEvent ?? null,
