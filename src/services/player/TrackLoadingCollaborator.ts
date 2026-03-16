@@ -29,6 +29,7 @@ import { downloadService } from "@/services/DownloadService";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
+import { PlayerState } from "@/types/coordinator";
 import type { PlayerTrack } from "@/types/player";
 import TrackPlayer, { State, Track } from "react-native-track-player";
 import type { IPlayerServiceFacade, ITrackLoadingCollaborator } from "./types";
@@ -344,6 +345,20 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       type: "RELOAD_QUEUE",
       payload: { libraryItemId: track.libraryItemId },
     });
+
+    // Guard: The coordinator updates currentState *before* calling executeTransition,
+    // so if we're inside executePlay() the coordinator is already in `playing`.
+    // RELOAD_QUEUE is queued but not yet processed (we hold the lock).
+    // Checking state synchronously tells us if RELOAD_QUEUE will be rejected —
+    // aborting here prevents TrackPlayer.reset() from stomping active playback.
+    const coordinator = getCoordinator();
+    const coordState = coordinator.getState();
+    if (coordState !== PlayerState.IDLE && coordState !== PlayerState.RESTORING) {
+      log.warn(
+        `[TrackLoadingCollaborator] RELOAD_QUEUE queued but coordinator in ${coordState} — aborting queue reset`
+      );
+      return false;
+    }
 
     let success = false;
 

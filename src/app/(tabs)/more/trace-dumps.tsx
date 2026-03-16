@@ -3,9 +3,12 @@ import { useThemedStyles } from "@/lib/theme";
 import { ScrollView } from "react-native";
 
 export default function TraceDumpsScreen() {
-  const { styles } = useThemedStyles();
+  const { colors } = useThemedStyles();
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 16 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      contentContainerStyle={{ padding: 16 }}
+    >
       <TraceDumps />
     </ScrollView>
   );

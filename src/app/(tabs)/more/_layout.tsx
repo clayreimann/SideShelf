@@ -20,6 +20,8 @@ export default function MoreLayout() {
         <Stack.Screen name="index" options={{ title: translate("tabs.more") }} />
         <Stack.Screen name="series" options={{ title: translate("tabs.series") }} />
         <Stack.Screen name="authors" options={{ title: translate("tabs.authors") }} />
+        <Stack.Screen name="trace-dumps" options={{ title: "Trace Dumps" }} />
+        <Stack.Screen name="trace-dump-detail" options={{ title: "Trace Dump" }} />
       </Stack>
     </TabErrorBoundary>
   );

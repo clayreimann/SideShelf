@@ -66,7 +66,7 @@ export default function RootLayout() {
   }, []);
 
   // Handle app state changes for refetching progress and reconnection
-  const lastBackgroundTime = useRef<number>(0);
+  const lastBackgroundTime = useRef<number>(Date.now());
   const playerInitTimestamp = useRef<number>(0);
   useEffect(() => {
     // Store the player init timestamp on mount

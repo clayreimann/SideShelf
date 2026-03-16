@@ -48,7 +48,7 @@ import EventEmitter from "eventemitter3";
 import { State } from "react-native-track-player";
 // PlayerService is dynamically imported in executeTransition to avoid a circular dependency:
 // PlayerStateCoordinator → PlayerService → PlayerStateCoordinator
-import { trace } from "@/lib/trace";
+import { trace, type SpanHandle } from "@/lib/trace";
 import { writeDumpToDisk } from "@/lib/traceDump";
 import { dispatchPlayerEvent, playerEventBus } from "./eventBus";
 import { validateTransition } from "./transitions";
@@ -94,6 +94,9 @@ export class PlayerStateCoordinator extends EventEmitter {
 
   // Phase 4: Store bridge - track last synced chapter to debounce metadata updates
   private lastSyncedChapterId: string | null = null;
+
+  // Open span for the current session sync cycle (SYNC_STARTED → SYNC_COMPLETED/FAILED)
+  private activeSyncSpan: SpanHandle | null = null;
 
   // Diagnostic logging interval
   private diagnosticInterval: NodeJS.Timeout | null = null;
@@ -220,20 +223,54 @@ export class PlayerStateCoordinator extends EventEmitter {
     const validation = validateTransition(currentState, event);
     const nextState = validation.nextState;
 
-    // Trace: record every event received by the machine (pre-transition)
-    trace.addEvent("player.machine.event.received", {
-      sequence: this.machineSequence++,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
-      source: (event as any).source ?? "unknown",
-      event: event.type,
-      fromState: currentState,
-      itemId: this.context.currentTrack?.libraryItemId,
-      chapterId: this.context.currentChapter?.id,
-      positionMs:
-        this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restoreSessionId is an optional runtime field; not yet in the PlayerEvent union type
-      restoreSessionId: (event as any).restoreSessionId,
-    });
+    // Sync lifecycle: open a span when a session sync cycle begins.
+    // Closed below after executeTransition completes (or for no-op states).
+    if (event.type === "SESSION_SYNC_STARTED") {
+      this.activeSyncSpan = trace.startSpan("player.session.sync", {
+        sessionId: this.context.sessionId,
+        itemId: this.context.currentTrack?.libraryItemId,
+      });
+      trace.addEvent("session.sync.started", {}, this.activeSyncSpan.context);
+    }
+
+    // Per-event dispatch span — groups received/accepted/rejected/state.entered as children.
+    // Skipped for NATIVE_PROGRESS_UPDATED (1 Hz) and session sync events (have own span).
+    // SESSION_UPDATED fires on every DB write — same noise profile as NATIVE_PROGRESS_UPDATED.
+    const isHighFrequency =
+      event.type === "NATIVE_PROGRESS_UPDATED" ||
+      event.type === "SESSION_UPDATED" ||
+      event.type === "SESSION_SYNC_STARTED" ||
+      event.type === "SESSION_SYNC_COMPLETED" ||
+      event.type === "SESSION_SYNC_FAILED";
+    const eventSpan = isHighFrequency
+      ? null
+      : trace.startSpan("player.machine.dispatch", {
+          event: event.type,
+          fromState: currentState,
+        });
+    const traceCtx = eventSpan?.context;
+
+    // Trace: record every event received by the machine (pre-transition).
+    // Skip NATIVE_PROGRESS_UPDATED — 1 Hz noise; the span guard above already skips it.
+    if (!isHighFrequency) {
+      trace.addEvent(
+        "player.machine.event.received",
+        {
+          sequence: this.machineSequence++,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
+          source: (event as any).source ?? "unknown",
+          event: event.type,
+          fromState: currentState,
+          itemId: this.context.currentTrack?.libraryItemId,
+          chapterId: this.context.currentChapter?.id,
+          positionMs:
+            this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restoreSessionId is an optional runtime field; not yet in the PlayerEvent union type
+          restoreSessionId: (event as any).restoreSessionId,
+        },
+        traceCtx
+      );
+    }
 
     // Update context based on event payload (even in observer mode, for accurate tracking)
     this.updateContextFromEvent(event);
@@ -286,27 +323,36 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.currentState = nextState;
       }
       // Trace: accepted transition
-      trace.addEvent("player.machine.transition.accepted", {
-        sequence: this.machineSequence++,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
-        source: (event as any).source ?? "unknown",
-        event: event.type,
-        fromState: currentState,
-        toState: nextState ?? currentState,
-        itemId: this.context.currentTrack?.libraryItemId,
-        positionMs:
-          this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
-      });
+      trace.addEvent(
+        "player.machine.transition.accepted",
+        {
+          sequence: this.machineSequence++,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
+          source: (event as any).source ?? "unknown",
+          event: event.type,
+          fromState: currentState,
+          toState: nextState ?? currentState,
+          itemId: this.context.currentTrack?.libraryItemId,
+          positionMs:
+            this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+        },
+        traceCtx
+      );
       await this.executeTransition(event, nextState);
       // Trace: state entered (only on actual state change)
       if (nextState && nextState !== currentState) {
-        trace.addEvent("player.machine.state.entered", {
-          sequence: this.machineSequence++,
-          state: nextState,
-          fromState: currentState,
-          event: event.type,
-        });
+        trace.addEvent(
+          "player.machine.state.entered",
+          {
+            sequence: this.machineSequence++,
+            state: nextState,
+            fromState: currentState,
+            event: event.type,
+          },
+          traceCtx
+        );
       }
+      if (eventSpan) trace.endSpan(eventSpan, "ok", { toState: nextState ?? currentState });
       // Sync coordinator state to Zustand store (Phase 4: State Propagation)
       if (event.type === "NATIVE_PROGRESS_UPDATED") {
         this.syncPositionToStore();
@@ -315,19 +361,27 @@ export class PlayerStateCoordinator extends EventEmitter {
       }
     } else {
       // Trace: rejected transition
-      trace.addEvent("player.machine.transition.rejected", {
-        sequence: this.machineSequence++,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
-        source: (event as any).source ?? "unknown",
-        event: event.type,
-        fromState: currentState,
-        reason: validation.reason ?? "unknown",
-        itemId: this.context.currentTrack?.libraryItemId,
-        positionMs:
-          this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restoreSessionId is an optional runtime field; not yet in the PlayerEvent union type
-        restoreSessionId: (event as any).restoreSessionId,
-      });
+      trace.addEvent(
+        "player.machine.transition.rejected",
+        {
+          sequence: this.machineSequence++,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
+          source: (event as any).source ?? "unknown",
+          event: event.type,
+          fromState: currentState,
+          reason: validation.reason ?? "unknown",
+          itemId: this.context.currentTrack?.libraryItemId,
+          positionMs:
+            this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restoreSessionId is an optional runtime field; not yet in the PlayerEvent union type
+          restoreSessionId: (event as any).restoreSessionId,
+        },
+        traceCtx
+      );
+      // End the dispatch span before dumping so it is committed to the ring buffer
+      // when exportTrace reads it. writeDumpToDisk is fire-and-forget async so it
+      // always runs after this synchronous endSpan call.
+      if (eventSpan) trace.endSpan(eventSpan, "error", { reason: validation.reason });
       // Auto-dump: fire-and-forget — NEVER await inside the lock (Pitfall 5)
       writeDumpToDisk("rejection", {
         type: event.type,
@@ -338,6 +392,23 @@ export class PlayerStateCoordinator extends EventEmitter {
         `[Coordinator] Rejected: ${currentState} --[${event.type}]--> Reason: ${validation.reason || "unknown"}`
       );
       this.metrics.rejectedTransitionCount++;
+    }
+
+    // Sync lifecycle: close the open sync span when the cycle completes or fails.
+    // Runs after executeTransition so the span covers the full state change in SYNCING_SESSION,
+    // and also closes cleanly when these events arrive as no-ops in other states.
+    if (
+      (event.type === "SESSION_SYNC_COMPLETED" || event.type === "SESSION_SYNC_FAILED") &&
+      this.activeSyncSpan
+    ) {
+      const isCompleted = event.type === "SESSION_SYNC_COMPLETED";
+      trace.addEvent(
+        isCompleted ? "session.sync.completed" : "session.sync.failed",
+        isCompleted ? {} : { error: String((event as any).payload?.error ?? "unknown") },
+        this.activeSyncSpan.context
+      );
+      trace.endSpan(this.activeSyncSpan, isCompleted ? "ok" : "error");
+      this.activeSyncSpan = null;
     }
 
     // Update metrics and internal state for accurate validation

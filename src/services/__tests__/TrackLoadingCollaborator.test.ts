@@ -105,12 +105,15 @@ jest.mock("@/db/helpers/users", () => ({
 jest.mock("@/services/coordinator/PlayerStateCoordinator", () => {
   const { jest } = require("@jest/globals");
   const mockResolveCanonicalPosition = jest.fn();
+  const mockGetState = jest.fn();
   const mockCoordinator = {
     resolveCanonicalPosition: mockResolveCanonicalPosition,
+    getState: mockGetState,
   };
   return {
     getCoordinator: jest.fn(() => mockCoordinator),
     __mockResolveCanonicalPosition: mockResolveCanonicalPosition,
+    __mockGetState: mockGetState,
   };
 });
 
@@ -153,6 +156,7 @@ describe("TrackLoadingCollaborator", () => {
   const { getUserByUsername } = require("@/db/helpers/users");
   const {
     __mockResolveCanonicalPosition,
+    __mockGetState,
   } = require("@/services/coordinator/PlayerStateCoordinator");
 
   let collaborator: TrackLoadingCollaborator;
@@ -217,6 +221,9 @@ describe("TrackLoadingCollaborator", () => {
       authoritativePosition: null,
       asyncStoragePosition: null,
     });
+
+    // Default coordinator state: IDLE (RELOAD_QUEUE is allowed)
+    __mockGetState.mockReturnValue("idle");
   });
 
   afterEach(() => {
@@ -488,6 +495,33 @@ describe("TrackLoadingCollaborator", () => {
 
       expect(result).toBe(false);
       expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
+    });
+
+    it("aborts queue reset and returns false when coordinator is in playing state", async () => {
+      __mockGetState.mockReturnValue("playing");
+
+      const result = await collaborator.reloadTrackPlayerQueue(baseTrack as any);
+
+      expect(result).toBe(false);
+      expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
+    });
+
+    it("aborts queue reset and returns false when coordinator is in ready state", async () => {
+      __mockGetState.mockReturnValue("ready");
+
+      const result = await collaborator.reloadTrackPlayerQueue(baseTrack as any);
+
+      expect(result).toBe(false);
+      expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
+    });
+
+    it("proceeds with queue reset when coordinator is in restoring state", async () => {
+      __mockGetState.mockReturnValue("restoring");
+
+      const result = await collaborator.reloadTrackPlayerQueue(baseTrack as any);
+
+      expect(result).toBe(true);
+      expect(mockedTrackPlayer.reset).toHaveBeenCalled();
     });
   });
 

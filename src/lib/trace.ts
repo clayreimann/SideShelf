@@ -234,6 +234,11 @@ export class LocalTrace {
   // For timers/event emitters/etc, callers should pass context explicitly.
   private contextStack: TraceContext[] = [];
 
+  // Tracks spans that have been started but not yet ended.
+  // Spans are only pushed to the ring buffer on endSpan, so without this map
+  // any in-flight span at dump time would be invisible to exportTrace.
+  private openSpans = new Map<string, SpanHandle>();
+
   configure(partial: Partial<TraceConfig>): void {
     this.cfg = { ...this.cfg, ...partial };
     if (partial.bufferSize && partial.bufferSize !== this.cfg.bufferSize) {
@@ -246,6 +251,7 @@ export class LocalTrace {
   clear(): void {
     this.buffer.clear();
     this.contextStack = [];
+    this.openSpans.clear();
   }
 
   getCurrentContext(): TraceContext | undefined {
@@ -293,7 +299,7 @@ export class LocalTrace {
       events: [],
     };
 
-    return {
+    const handle: SpanHandle = {
       context: {
         traceId,
         spanId,
@@ -305,12 +311,17 @@ export class LocalTrace {
       record,
       ended: false,
     };
+
+    this.openSpans.set(spanId, handle);
+    return handle;
   }
 
   endSpan(span: SpanHandle, status: SpanStatus = "ok", extraAttributes?: TraceAttributes): void {
     if (span.ended) return;
 
     span.ended = true;
+    this.openSpans.delete(span.context.spanId);
+
     const endTime = this.cfg.now!();
 
     span.record.endTime = endTime;
@@ -436,9 +447,20 @@ export class LocalTrace {
   }
 
   exportTrace(meta?: TraceAttributes): TraceExport {
+    // Snapshot in-flight spans (started but not yet ended at export time).
+    // These have startTime but no endTime/status — they appear at the front
+    // so the timeline sorts them by startTime alongside committed records.
+    const inFlight: SpanRecord[] = Array.from(this.openSpans.values()).map((h) => ({
+      ...h.record,
+      attributes: {
+        ...(h.record.attributes ?? {}),
+        _inFlight: true,
+      },
+    }));
+
     return {
       exportedAt: this.cfg.wallNow!(),
-      records: this.buffer.toArray(),
+      records: [...inFlight, ...this.buffer.toArray()],
       meta: sanitizeAttributes(meta, this.cfg),
     };
   }

@@ -9,8 +9,11 @@ import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
 import { Directory, File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import React, { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+
+const POLL_INTERVAL_MS = 3000;
 
 const log = logger.forTag("TraceDumps");
 
@@ -52,15 +55,26 @@ function formatBytes(bytes: number | undefined): string {
 
 export default function TraceDumps() {
   const { colors, isDark } = useThemedStyles();
+  const router = useRouter();
   const [dumps, setDumps] = useState<DumpFileInfo[]>([]);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(() => {
     setDumps(parseDumpFiles());
   }, []);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+      pollRef.current = setInterval(refresh, POLL_INTERVAL_MS);
+      return () => {
+        if (pollRef.current != null) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      };
+    }, [refresh])
+  );
 
   const handleShare = useCallback(async (dump: DumpFileInfo) => {
     try {
@@ -143,8 +157,11 @@ export default function TraceDumps() {
         </Text>
       )}
       {dumps.map((dump) => (
-        <View
+        <TouchableOpacity
           key={dump.name}
+          onPress={() =>
+            router.push({ pathname: "/more/trace-dump-detail", params: { name: dump.name } })
+          }
           style={[
             styles.dumpRow,
             { backgroundColor: cardBackground, borderColor: colors.separator },
@@ -166,7 +183,7 @@ export default function TraceDumps() {
               <Text style={[styles.actionText, { color: colors.error }]}>Delete</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
       ))}
     </View>
   );
