@@ -123,6 +123,15 @@ export interface StateContext {
   preSeekState: PlayerState | null;
   isLoadingTrack: boolean;
 
+  /** Set true when LOAD_TRACK arrives; cleared on PAUSE, error, or STOP.
+   *  Coordinator uses this to dispatch PLAY after executeLoadTrack completes. */
+  playIntentOnLoad: boolean;
+
+  /** Whether the TrackPlayer queue is known to be populated and valid.
+   *  'unknown' after RESTORE_STATE or STOP (queue may have been cleared by OS/BGS).
+   *  'valid' after QUEUE_RELOADED (coordinator just rebuilt and confirmed the queue). */
+  queueStatus: "unknown" | "valid";
+
   // Sync state
   lastServerSync: number | null;
   pendingSyncPosition: number | null;
@@ -286,14 +295,14 @@ export type ResumeSource = "activeSession" | "savedProgress" | "asyncStorage" | 
  * Identifies which subsystem originated the event.
  */
 export type EventSource =
-  | 'ui'
-  | 'restore'
-  | 'native_player'
-  | 'audio_focus'
-  | 'remote_command'
-  | 'sleep_timer'
-  | 'startup_bootstrap'
-  | 'unknown';
+  | "ui"
+  | "restore"
+  | "native_player"
+  | "audio_focus"
+  | "remote_command"
+  | "sleep_timer"
+  | "startup_bootstrap"
+  | "unknown";
 
 /**
  * Optional metadata attached to dispatchPlayerEvent() calls.
