@@ -16,9 +16,11 @@ import { logger } from "@/lib/logger";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { apiClientService } from "@/services/ApiClientService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { formatTime } from "@/lib/helpers/formatters";
 import { useAppStore } from "@/stores/appStore";
-import type { PlayerEvent } from "@/types/coordinator";
+import type { PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
+import type { PlayerTrack } from "@/types/player";
 import TrackPlayer, {
   AndroidAudioContentType,
   IOSCategory,
@@ -138,12 +140,20 @@ export class PlayerService implements IPlayerServiceFacade {
   }
 
   /**
-   * Rebuild currentTrack if it's missing but should exist.
-   * Delegates to ProgressRestoreCollaborator; exposed on facade so
-   * PlaybackControlCollaborator can call it without a direct import.
+   * Rebuild the TrackPlayer queue for the given track.
+   * Delegates to TrackLoadingCollaborator.executeRebuildQueue (pure execution).
+   * Called only by the coordinator from executeTransition.
    */
-  async rebuildCurrentTrackIfNeeded(): Promise<boolean> {
-    return this.progressRestore.rebuildCurrentTrackIfNeeded();
+  async executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo> {
+    return this.trackLoading.executeRebuildQueue(track);
+  }
+
+  /**
+   * Resolve canonical resume position for a library item.
+   * Delegates to coordinator without exposing coordinator to collaborators.
+   */
+  async resolveCanonicalPosition(libraryItemId: string): Promise<ResumePositionInfo> {
+    return getCoordinator().resolveCanonicalPosition(libraryItemId);
   }
 
   // --- Debug ---
