@@ -114,6 +114,7 @@ Full decision log is in PROJECT.md Key Decisions table.
 - All player.restore.\* child spans pass parentContext explicitly — Hermes context stack is not async-aware, implicit propagation unreliable across await boundaries
 - log.warn only takes 1 argument in this project's logger; long-press error paths use log.error(message, Error) instead
 - PlayPauseButton Pressable needs accessibilityRole="button" for getByRole("button") queries in tests
+- Span instrumentation rule: add `player.{subsystem}.{operation}` spans to any async path with branching decision points that are hard to reconstruct from logs (restore, smart rewind, seek chains, queue rebuilds); capture key decision outcomes as span attributes not just log strings; skip ring buffer for events >1 Hz with an `isHighFrequency` guard; always pass `parentContext` explicitly — Hermes does not propagate async context across `await`
 
 ### Roadmap Evolution
 
@@ -124,6 +125,7 @@ Full decision log is in PROJECT.md Key Decisions table.
 1. **Standardize path handling** (now Phase 18 / DEBT-01) — encoding mismatch between file:// URIs, POSIX paths, and D:/C: prefixed DB paths
 2. **Orphan reassociation UI** (now Phase 19 / DEBT-02) — allow user to link orphaned files to known library items
 3. **Preserve resume position and skip smart rewind on explicit seeks** — cold-start play sometimes resumes from 0:00, and chapter/bookmark jumps should bypass the smart rewind phase
+4. **Contribute AirPlay component resizable icon native module upstream** — current icon is fixed size with only padding growing on resize; fix native layer to scale icon with component dimensions + open PR upstream
 
 ### Blockers/Concerns
 
