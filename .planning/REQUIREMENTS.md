@@ -40,8 +40,8 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 
 ### Navigation (NAVIGATION)
 
-- [ ] **NAVIGATION-01**: Series list viewed from the More tab navigates to series detail on tap
-- [ ] **NAVIGATION-02**: Authors list viewed from the More tab navigates to author detail on tap
+- [x] **NAVIGATION-01**: Series list viewed from the More tab navigates to series detail on tap
+- [x] **NAVIGATION-02**: Authors list viewed from the More tab navigates to author detail on tap
 - [ ] **NAVIGATION-03**: App registers a `sideshelf://` URL scheme and deep links navigate to all main screens
 
 ### Sleep Timer (SLEEP)
@@ -126,8 +126,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BOOKMARK-04   | Phase 17 | Complete |
 | BOOKMARK-05   | Phase 17 | Complete |
 | BOOKMARK-06   | Phase 17 | Complete |
-| NAVIGATION-01 | Phase 18 | Pending  |
-| NAVIGATION-02 | Phase 18 | Pending  |
+| NAVIGATION-01 | Phase 18 | Complete |
+| NAVIGATION-02 | Phase 18 | Complete |
 | NAVIGATION-03 | Phase 18 | Pending  |
 | SLEEP-01      | Phase 18 | Pending  |
 | PERF-01       | Phase 19 | Pending  |
