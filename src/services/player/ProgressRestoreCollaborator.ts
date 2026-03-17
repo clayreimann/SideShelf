@@ -18,7 +18,6 @@ import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
 import { trace } from "@/lib/trace";
 import { progressService } from "@/services/ProgressService";
-import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { useAppStore } from "@/stores/appStore";
 import type { PlayerTrack } from "@/types/player";
 import TrackPlayer, { State } from "react-native-track-player";
@@ -281,74 +280,6 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
     } catch (error) {
       log.error("Error syncing position from database", error as Error);
       throw error;
-    }
-  }
-
-  /**
-   * Rebuild currentTrack if it's missing but should exist.
-   * Handles case where streaming media wasn't restored but playback should resume.
-   */
-  async rebuildCurrentTrackIfNeeded(): Promise<boolean> {
-    try {
-      const store = useAppStore.getState();
-      let playerSliceTrack = store.player.currentTrack;
-
-      if (!playerSliceTrack) {
-        log.info("No currentTrack in store, attempting to restore from session");
-        await this.restorePlayerServiceFromSession();
-        playerSliceTrack = useAppStore.getState().player.currentTrack;
-      }
-
-      if (!playerSliceTrack) {
-        log.warn("Unable to rebuild player state - no track information available");
-        return false;
-      }
-
-      const queue = await TrackPlayer.getQueue();
-      const expectedIds = playerSliceTrack.audioFiles.map((file) => file.id);
-      const queueIds = queue.map((track) => track.id);
-      const queueMatchesTrack =
-        queue.length > 0 &&
-        queue.length === expectedIds.length &&
-        queueIds.every((id, index) => id === expectedIds[index]);
-
-      if (queueMatchesTrack) {
-        const requiresStreaming = playerSliceTrack.audioFiles.some(
-          (audioFile) => !audioFile.downloadInfo?.isDownloaded
-        );
-        if (!requiresStreaming) {
-          const refreshedStore = useAppStore.getState();
-          if (refreshedStore.player.currentPlaySessionId) {
-            log.info(
-              `Clearing stale streaming session ID for downloaded track ${playerSliceTrack.libraryItemId}`
-            );
-            refreshedStore._setPlaySessionId(null);
-          }
-        }
-        log.info(`TrackPlayer queue already prepared for ${playerSliceTrack.libraryItemId}`);
-        return true;
-      }
-
-      log.info(
-        `TrackPlayer queue missing or mismatched, rebuilding for ${playerSliceTrack.libraryItemId}`
-      );
-
-      // Delegate queue rebuild to the facade which routes to TrackLoadingCollaborator.
-      // The facade owns executeRebuildQueue to avoid creating a direct collaborator-to-collaborator
-      // dependency that would require a dynamic import.
-      try {
-        await this.facade.executeRebuildQueue(playerSliceTrack);
-        return true;
-      } catch (rebuildError) {
-        log.warn(
-          `Failed to rebuild TrackPlayer queue for ${playerSliceTrack.libraryItemId}: ${rebuildError}`
-        );
-        return false;
-      }
-    } catch (error) {
-      log.error("Failed to rebuild currentTrack", error as Error);
-      // Don't throw - playback can still proceed
-      return false;
     }
   }
 }
