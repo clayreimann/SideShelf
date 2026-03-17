@@ -199,6 +199,7 @@ export default function RootLayout() {
      * - side-shelf://bundle-loader?url=https://example.com/bundle
      */
     const handleDeepLink = async (url: string) => {
+      log.info(`[handleDeepLink] received url="${url}"`);
       try {
         const urlObj = new URL(url);
 
@@ -300,6 +301,7 @@ export default function RootLayout() {
 
     // Handle initial URL if app was opened via deep link
     Linking.getInitialURL().then((url) => {
+      log.info(`[RootLayout] getInitialURL="${url ?? "null"}"`);
       if (url) {
         handleDeepLink(url);
       }
@@ -307,6 +309,7 @@ export default function RootLayout() {
 
     // Listen for deep links while app is running
     const subscription = Linking.addEventListener("url", (event) => {
+      log.info(`[RootLayout] Linking.addEventListener url="${event.url}"`);
       handleDeepLink(event.url);
     });
 

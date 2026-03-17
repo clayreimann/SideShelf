@@ -24,6 +24,12 @@ jest.mock("expo-router", () => ({
   },
 }));
 
+jest.mock("@/services/ApiClientService", () => ({
+  apiClientService: {
+    isAuthenticated: jest.fn(),
+  },
+}));
+
 jest.mock("@/stores/appStore", () => ({
   useAppStore: {
     getState: jest.fn(),
@@ -37,19 +43,17 @@ jest.mock("@/services/coordinator/eventBus", () => ({
 // --- Helpers ---
 
 /**
- * Build a mock store state with the given auth and player settings.
+ * Build a mock store state with the given player settings.
+ * Auth is now checked via apiClientService, not the store.
  */
 function buildStoreState(overrides: {
   isAuthenticated?: boolean;
   currentTrack?: object | null;
   isPlaying?: boolean;
 }) {
-  const { isAuthenticated = true, currentTrack = null, isPlaying = false } = overrides;
+  const { currentTrack = null, isPlaying = false } = overrides;
 
   return {
-    auth: {
-      isAuthenticated,
-    },
     player: {
       currentTrack,
       isPlaying,
@@ -69,13 +73,15 @@ describe("handleDeepLinkUrl", () => {
     const { router } = require("expo-router");
     const { dispatchPlayerEvent } = require("@/services/coordinator/eventBus");
     const { useAppStore } = require("@/stores/appStore");
+    const { apiClientService } = require("@/services/ApiClientService");
 
     mockRouter = router;
     mockDispatchPlayerEvent = dispatchPlayerEvent;
     mockUseAppStore = useAppStore.getState;
 
     // Default: authenticated, no current track, paused
-    mockUseAppStore.mockReturnValue(buildStoreState({ isAuthenticated: true }));
+    apiClientService.isAuthenticated.mockReturnValue(true);
+    mockUseAppStore.mockReturnValue(buildStoreState({}));
 
     // Import the function under test — will fail until deepLinkHandler.ts is created
     const module = require("@/lib/deepLinkHandler");
@@ -87,7 +93,8 @@ describe("handleDeepLinkUrl", () => {
   });
 
   it("test 1 (unauthenticated): when not authenticated, router.push('/login') is called and no navigation occurs", async () => {
-    mockUseAppStore.mockReturnValue(buildStoreState({ isAuthenticated: false }));
+    const { apiClientService } = require("@/services/ApiClientService");
+    apiClientService.isAuthenticated.mockReturnValue(false);
 
     expect(handleDeepLinkUrl).toBeDefined();
     await handleDeepLinkUrl("sideshelf://home");
@@ -101,7 +108,7 @@ describe("handleDeepLinkUrl", () => {
     expect(handleDeepLinkUrl).toBeDefined();
     await handleDeepLinkUrl("sideshelf://home");
 
-    expect(mockRouter.navigate).toHaveBeenCalledWith("/(tabs)");
+    expect(mockRouter.navigate).toHaveBeenCalledWith("/(tabs)/home");
   });
 
   it("test 3 (sideshelf://library): router.navigate('/(tabs)/library') is called", async () => {
@@ -151,7 +158,6 @@ describe("handleDeepLinkUrl", () => {
   it("test 9 (sideshelf://resume with currentTrack): dispatchPlayerEvent({ type: 'PLAY' }) is called", async () => {
     mockUseAppStore.mockReturnValue(
       buildStoreState({
-        isAuthenticated: true,
         currentTrack: { libraryItemId: "item-1", title: "My Book" },
         isPlaying: false,
       })
@@ -168,7 +174,6 @@ describe("handleDeepLinkUrl", () => {
   it("test 10 (sideshelf://resume with no track): no dispatch, no navigation", async () => {
     mockUseAppStore.mockReturnValue(
       buildStoreState({
-        isAuthenticated: true,
         currentTrack: null,
       })
     );
@@ -184,7 +189,6 @@ describe("handleDeepLinkUrl", () => {
   it("test 11 (sideshelf://play-pause while playing): dispatchPlayerEvent({ type: 'PAUSE' }) is called", async () => {
     mockUseAppStore.mockReturnValue(
       buildStoreState({
-        isAuthenticated: true,
         currentTrack: { libraryItemId: "item-1" },
         isPlaying: true,
       })
@@ -199,7 +203,6 @@ describe("handleDeepLinkUrl", () => {
   it("test 12 (sideshelf://play-pause while paused): dispatchPlayerEvent({ type: 'PLAY' }) is called", async () => {
     mockUseAppStore.mockReturnValue(
       buildStoreState({
-        isAuthenticated: true,
         currentTrack: { libraryItemId: "item-1" },
         isPlaying: false,
       })
