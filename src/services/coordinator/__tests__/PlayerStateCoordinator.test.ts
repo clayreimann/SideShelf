@@ -22,6 +22,18 @@ jest.mock("../../PlayerService", () => {
     executeSeek: jest.fn(),
     executeSetRate: jest.fn(),
     executeSetVolume: jest.fn(),
+    executeRebuildQueue: jest.fn().mockResolvedValue({
+      position: 0,
+      source: "store",
+      authoritativePosition: null,
+      asyncStoragePosition: null,
+    }),
+    resolveCanonicalPosition: jest.fn().mockResolvedValue({
+      position: 0,
+      source: "store",
+      authoritativePosition: null,
+      asyncStoragePosition: null,
+    }),
   };
   return {
     PlayerService: {
@@ -865,6 +877,76 @@ describe("PlayerStateCoordinator", () => {
       expect(context.currentTrack).toBeNull();
       expect(context.sessionId).toBeNull();
       expect(context.sessionStartTime).toBeNull();
+    });
+
+    it("should initialize playIntentOnLoad=false and queueStatus='unknown' in fresh context", () => {
+      const context = coordinator.getContext();
+      expect(context.playIntentOnLoad).toBe(false);
+      expect(context.queueStatus).toBe("unknown");
+    });
+
+    it("should set playIntentOnLoad=true on LOAD_TRACK", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const context = coordinator.getContext();
+      expect(context.playIntentOnLoad).toBe(true);
+    });
+
+    it("should clear playIntentOnLoad=false on PAUSE (even if rejected during LOADING)", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const context = coordinator.getContext();
+      expect(context.playIntentOnLoad).toBe(false);
+    });
+
+    it("should clear playIntentOnLoad on STOP", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await coordinator.dispatch({ type: "STOP" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const context = coordinator.getContext();
+      expect(context.playIntentOnLoad).toBe(false);
+    });
+
+    it("should set queueStatus='valid' on QUEUE_RELOADED", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("valid");
+    });
+
+    it("should set queueStatus='unknown' on STOP", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await coordinator.dispatch({ type: "STOP" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("unknown");
+    });
+
+    it("should set queueStatus='unknown' on RESTORE_STATE", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("valid");
+
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: null,
+            position: 0,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("unknown");
     });
   });
 

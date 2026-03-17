@@ -448,6 +448,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         if (state.currentTrack) {
           this.context.duration = state.currentTrack.duration;
         }
+        this.context.queueStatus = "unknown";
         log.debug(
           `[Coordinator] Context updated from RESTORE_STATE: position=${state.position}, track=${state.currentTrack?.title || "none"}`
         );
@@ -457,6 +458,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       // Track loading and changes
       case "LOAD_TRACK":
         this.context.isLoadingTrack = true;
+        this.context.playIntentOnLoad = true;
         break;
 
       case "NATIVE_TRACK_CHANGED":
@@ -476,8 +478,9 @@ export class PlayerStateCoordinator extends EventEmitter {
       case "QUEUE_RELOADED":
         this.context.isLoadingTrack = false;
         this.context.position = event.payload.position;
+        this.context.queueStatus = "valid";
         log.debug(
-          `[Coordinator] Context updated from QUEUE_RELOADED: position=${event.payload.position}`
+          `[Coordinator] Context updated from QUEUE_RELOADED: position=${event.payload.position}, queueStatus=valid`
         );
         break;
 
@@ -527,6 +530,7 @@ export class PlayerStateCoordinator extends EventEmitter {
 
       case "PAUSE":
         this.context.isPlaying = false;
+        this.context.playIntentOnLoad = false;
         break;
 
       case "STOP":
@@ -535,6 +539,8 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.currentTrack = null;
         this.context.sessionId = null;
         this.context.sessionStartTime = null;
+        this.context.playIntentOnLoad = false;
+        this.context.queueStatus = "unknown";
         break;
 
       // Playback configuration
@@ -604,6 +610,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       // Error handling
       case "NATIVE_ERROR":
         this.context.lastError = event.payload.error;
+        this.context.playIntentOnLoad = false;
         break;
 
       case "NATIVE_PLAYBACK_ERROR":
@@ -611,6 +618,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         // Clear loading state on playback error so the bridge can propagate it
         // (BGS handlePlaybackError's store._setTrackLoading(false) removed in Phase 4)
         this.context.isLoadingTrack = false;
+        this.context.playIntentOnLoad = false;
         break;
 
       case "SESSION_SYNC_FAILED":
@@ -967,6 +975,8 @@ export class PlayerStateCoordinator extends EventEmitter {
       isSeeking: false,
       preSeekState: null,
       isLoadingTrack: false,
+      playIntentOnLoad: false,
+      queueStatus: "unknown",
       lastServerSync: null,
       pendingSyncPosition: null,
       lastError: null,
