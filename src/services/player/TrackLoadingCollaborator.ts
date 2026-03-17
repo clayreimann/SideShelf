@@ -1,8 +1,8 @@
 /**
  * TrackLoadingCollaborator
  *
- * Concern group: track loading, track list building, and queue reload.
- * Owns: executeLoadTrack, buildTrackList, reloadTrackPlayerQueue.
+ * Concern group: track loading, track list building, and queue rebuild.
+ * Owns: executeLoadTrack, buildTrackList, executeRebuildQueue.
  *
  * These three methods share DB lookups, path repair, streaming session
  * creation, and TrackPlayer queue management.
@@ -26,10 +26,9 @@ import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
 import { downloadService } from "@/services/DownloadService";
-import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
-import { PlayerState } from "@/types/coordinator";
+import type { ResumePositionInfo } from "@/types/coordinator";
 import type { PlayerTrack } from "@/types/player";
 import TrackPlayer, { State, Track } from "react-native-track-player";
 import type { IPlayerServiceFacade, ITrackLoadingCollaborator } from "./types";
@@ -38,7 +37,7 @@ const log = logger.forTag("PlayerService");
 const diagLog = logger.forDiagnostics("PlayerService");
 
 /**
- * Handles track loading, track list construction, and queue reload.
+ * Handles track loading, track list construction, and queue rebuild.
  */
 export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
   constructor(private facade: IPlayerServiceFacade) {}
@@ -184,8 +183,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       // Add tracks to queue
       await TrackPlayer.add(tracks);
 
-      const coordinator = getCoordinator();
-      const resumeInfo = await coordinator.resolveCanonicalPosition(libraryItemId);
+      const resumeInfo = await this.facade.resolveCanonicalPosition(libraryItemId);
 
       // Seek to resume position first (if applicable)
       if (resumeInfo.position > 0) {
@@ -337,84 +335,47 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
   }
 
   /**
-   * Prepare TrackPlayer queue based on the current track stored in playerSlice.
+   * Rebuild TrackPlayer queue for the given track (pure execution).
+   * No coordinator imports, no event dispatches, throws on failure.
+   * Called only by the coordinator via IPlayerServiceFacade.executeRebuildQueue.
    */
-  async reloadTrackPlayerQueue(track: PlayerTrack): Promise<boolean> {
-    // Dispatch RELOAD_QUEUE event to state machine
-    this.facade.dispatchEvent({
-      type: "RELOAD_QUEUE",
-      payload: { libraryItemId: track.libraryItemId },
-    });
+  async executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo> {
+    await TrackPlayer.reset();
 
-    // Guard: The coordinator updates currentState *before* calling executeTransition,
-    // so if we're inside executePlay() the coordinator is already in `playing`.
-    // RELOAD_QUEUE is queued but not yet processed (we hold the lock).
-    // Checking state synchronously tells us if RELOAD_QUEUE will be rejected —
-    // aborting here prevents TrackPlayer.reset() from stomping active playback.
-    const coordinator = getCoordinator();
-    const coordState = coordinator.getState();
-    if (coordState !== PlayerState.IDLE && coordState !== PlayerState.RESTORING) {
-      log.warn(
-        `[TrackLoadingCollaborator] RELOAD_QUEUE queued but coordinator in ${coordState} — aborting queue reset`
+    const tracks = await this.buildTrackList(track);
+    if (tracks.length === 0) {
+      log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
+      throw new Error(
+        `No playable sources found while rebuilding queue for ${track.libraryItemId}`
       );
-      return false;
     }
 
-    let success = false;
+    await TrackPlayer.add(tracks);
 
-    try {
-      await TrackPlayer.reset();
+    const resumeInfo = await this.facade.resolveCanonicalPosition(track.libraryItemId);
 
-      const tracks = await this.buildTrackList(track);
-      if (tracks.length === 0) {
-        log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
-        return false;
-      }
-
-      await TrackPlayer.add(tracks);
-
-      const coordinator = getCoordinator();
-      const resumeInfo = await coordinator.resolveCanonicalPosition(track.libraryItemId);
-
-      if (resumeInfo.position > 0) {
-        await TrackPlayer.seekTo(resumeInfo.position);
-        log.info(
-          `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
-        );
-
-        const updatedStore = useAppStore.getState();
-        updatedStore._updateCurrentChapter(resumeInfo.position);
-      } else {
-        log.info("Prepared queue with no resume position (starting from beginning)");
-      }
-
-      const updatedStore = useAppStore.getState();
-      if (updatedStore.player.playbackRate !== 1.0) {
-        await TrackPlayer.setRate(updatedStore.player.playbackRate);
-        log.info(`Applied stored playback rate: ${updatedStore.player.playbackRate}`);
-      }
-
-      if (updatedStore.player.volume !== 1.0) {
-        await TrackPlayer.setVolume(updatedStore.player.volume);
-        log.info(`Applied stored volume: ${updatedStore.player.volume}`);
-      }
-
-      // Dispatch QUEUE_RELOADED event to state machine
-      this.facade.dispatchEvent({
-        type: "QUEUE_RELOADED",
-        payload: { position: resumeInfo.position },
-      });
-
-      success = true;
-      return true;
-    } catch (error) {
-      log.error("Failed to rebuild TrackPlayer queue", error as Error);
-      return false;
-    } finally {
-      if (!success) {
-        const updatedStore = useAppStore.getState();
-        updatedStore._setTrackLoading(false);
-      }
+    if (resumeInfo.position > 0) {
+      await TrackPlayer.seekTo(resumeInfo.position);
+      log.info(
+        `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
+      );
+      const store = useAppStore.getState();
+      store._updateCurrentChapter(resumeInfo.position);
+    } else {
+      log.info("Prepared queue with no resume position (starting from beginning)");
     }
+
+    const store = useAppStore.getState();
+    if (store.player.playbackRate !== 1.0) {
+      await TrackPlayer.setRate(store.player.playbackRate);
+      log.info(`Applied stored playback rate: ${store.player.playbackRate}`);
+    }
+
+    if (store.player.volume !== 1.0) {
+      await TrackPlayer.setVolume(store.player.volume);
+      log.info(`Applied stored volume: ${store.player.volume}`);
+    }
+
+    return resumeInfo;
   }
 }

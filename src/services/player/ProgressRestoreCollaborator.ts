@@ -41,28 +41,28 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
     // Generate a unique ID per restore attempt for tracing causality through child spans
     // and any machine events dispatched during restore.
     const restoreSessionId = Math.random().toString(16).slice(2);
-    const rootSpan = trace.startSpan('player.restore.session', { restoreSessionId });
+    const rootSpan = trace.startSpan("player.restore.session", { restoreSessionId });
 
     try {
       const username = await getStoredUsername();
       if (!username) {
         log.info("No username found, skipping PlayerService restoration");
-        trace.endSpan(rootSpan, 'ok', { earlyExit: 'no_username', restoreSessionId });
+        trace.endSpan(rootSpan, "ok", { earlyExit: "no_username", restoreSessionId });
         return;
       }
 
       const user = await getUserByUsername(username);
       if (!user?.id) {
         log.info("User not found, skipping PlayerService restoration");
-        trace.endSpan(rootSpan, 'ok', { earlyExit: 'user_not_found', restoreSessionId });
+        trace.endSpan(rootSpan, "ok", { earlyExit: "user_not_found", restoreSessionId });
         return;
       }
 
       // --- source.memory span: check in-memory store for an existing libraryItemId ---
-      const memorySpan = trace.startSpan('player.restore.source.memory', {}, rootSpan.context);
+      const memorySpan = trace.startSpan("player.restore.source.memory", {}, rootSpan.context);
       const store = useAppStore.getState();
       let libraryItemId: string | null = store.player.currentTrack?.libraryItemId || null;
-      trace.endSpan(memorySpan, 'ok', {
+      trace.endSpan(memorySpan, "ok", {
         found: !!libraryItemId,
         itemId: libraryItemId ?? null,
       });
@@ -70,7 +70,7 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
       // --- source.db span: query DB for most recent active session ---
       let sessionCount = 0;
       if (!libraryItemId) {
-        const dbSpan = trace.startSpan('player.restore.source.db', {}, rootSpan.context);
+        const dbSpan = trace.startSpan("player.restore.source.db", {}, rootSpan.context);
         const activeSessions = await getAllActiveSessionsForUser(user.id);
         sessionCount = activeSessions.length;
         if (activeSessions.length > 0) {
@@ -79,7 +79,7 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
           )[0];
           libraryItemId = mostRecent.libraryItemId;
         }
-        trace.endSpan(dbSpan, 'ok', {
+        trace.endSpan(dbSpan, "ok", {
           found: !!libraryItemId,
           sessionCount,
           itemId: libraryItemId ?? null,
@@ -88,57 +88,67 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
 
       if (!libraryItemId) {
         log.info("No active session found, skipping PlayerService restoration");
-        trace.endSpan(rootSpan, 'ok', { earlyExit: 'no_library_item_id', restoreSessionId });
+        trace.endSpan(rootSpan, "ok", { earlyExit: "no_library_item_id", restoreSessionId });
         return;
       }
 
       const session = await progressService.getCurrentSession(user.id, libraryItemId);
       if (!session) {
         log.info("No active session found, skipping PlayerService restoration");
-        trace.endSpan(rootSpan, 'ok', { earlyExit: 'no_session', itemId: libraryItemId, restoreSessionId });
+        trace.endSpan(rootSpan, "ok", {
+          earlyExit: "no_session",
+          itemId: libraryItemId,
+          restoreSessionId,
+        });
         return;
       }
 
       log.info(`Restoring PlayerService from session: ${session.libraryItemId}`);
 
       // --- reconcile span: select the winning candidate ---
-      const reconcileSpan = trace.startSpan('player.restore.reconcile', {}, rootSpan.context);
-      trace.addEvent('restore.candidate.accepted', {
-        source: 'db',
+      const reconcileSpan = trace.startSpan("player.restore.reconcile", {}, rootSpan.context);
+      trace.addEvent("restore.candidate.accepted", {
+        source: "db",
         itemId: session.libraryItemId,
         positionMs: session.currentTime * 1000,
-        reason: 'active_session',
+        reason: "active_session",
         restoreSessionId,
       });
-      trace.addEvent('restore.decision.finalized', {
-        source: 'db',
+      trace.addEvent("restore.decision.finalized", {
+        source: "db",
         itemId: session.libraryItemId,
         positionMs: session.currentTime * 1000,
         restoreSessionId,
       });
-      trace.endSpan(reconcileSpan, 'ok', {
-        winner: 'db',
+      trace.endSpan(reconcileSpan, "ok", {
+        winner: "db",
         itemId: session.libraryItemId,
         positionMs: session.currentTime * 1000,
       });
 
       // --- apply span: build track and write to store ---
-      const applySpan = trace.startSpan('player.restore.apply', {}, rootSpan.context);
+      const applySpan = trace.startSpan("player.restore.apply", {}, rootSpan.context);
       // Try to restore track info - only load full track if we have downloaded files
       try {
         const libraryItem = await getLibraryItemById(session.libraryItemId);
         if (!libraryItem) {
           log.warn(`Library item ${session.libraryItemId} not found, cannot restore track`);
-          trace.endSpan(applySpan, 'error', { reason: 'library_item_not_found', itemId: session.libraryItemId });
-          trace.endSpan(rootSpan, 'ok', { earlyExit: 'library_item_not_found', restoreSessionId });
+          trace.endSpan(applySpan, "error", {
+            reason: "library_item_not_found",
+            itemId: session.libraryItemId,
+          });
+          trace.endSpan(rootSpan, "ok", { earlyExit: "library_item_not_found", restoreSessionId });
           return;
         }
 
         const metadata = await getMediaMetadataByLibraryItemId(session.libraryItemId);
         if (!metadata) {
           log.warn(`Metadata not found for ${session.libraryItemId}, cannot restore track`);
-          trace.endSpan(applySpan, 'error', { reason: 'metadata_not_found', itemId: session.libraryItemId });
-          trace.endSpan(rootSpan, 'ok', { earlyExit: 'metadata_not_found', restoreSessionId });
+          trace.endSpan(applySpan, "error", {
+            reason: "metadata_not_found",
+            itemId: session.libraryItemId,
+          });
+          trace.endSpan(rootSpan, "ok", { earlyExit: "metadata_not_found", restoreSessionId });
           return;
         }
 
@@ -146,8 +156,11 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
         const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
         if (audioFiles.length === 0) {
           log.warn(`No audio files found for ${session.libraryItemId}, cannot restore track`);
-          trace.endSpan(applySpan, 'error', { reason: 'no_audio_files', itemId: session.libraryItemId });
-          trace.endSpan(rootSpan, 'ok', { earlyExit: 'no_audio_files', restoreSessionId });
+          trace.endSpan(applySpan, "error", {
+            reason: "no_audio_files",
+            itemId: session.libraryItemId,
+          });
+          trace.endSpan(rootSpan, "ok", { earlyExit: "no_audio_files", restoreSessionId });
           return;
         }
 
@@ -177,7 +190,7 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
         log.info(
           `Restored PlayerService track to playerSlice (${hasDownloadedFiles ? "downloaded" : "streaming"}): ${track.title}`
         );
-        trace.endSpan(applySpan, 'ok', {
+        trace.endSpan(applySpan, "ok", {
           itemId: track.libraryItemId,
           positionMs: session.currentTime * 1000,
           isDownloaded: hasDownloadedFiles,
@@ -186,26 +199,26 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
       } catch (error) {
         log.error("Failed to restore currentTrack from session", error as Error);
         trace.recordError(error, applySpan);
-        trace.endSpan(applySpan, 'error');
-        trace.endSpan(rootSpan, 'error');
+        trace.endSpan(applySpan, "error");
+        trace.endSpan(rootSpan, "error");
         return;
       }
 
       // --- verify span: confirm store has the track after apply ---
-      const verifySpan = trace.startSpan('player.restore.verify', {}, rootSpan.context);
+      const verifySpan = trace.startSpan("player.restore.verify", {}, rootSpan.context);
       const postApplyStore = useAppStore.getState();
       const restoredTrack = postApplyStore.player.currentTrack;
-      trace.endSpan(verifySpan, 'ok', {
+      trace.endSpan(verifySpan, "ok", {
         trackPresent: !!restoredTrack,
         itemId: restoredTrack?.libraryItemId ?? null,
         isDownloaded: restoredTrack?.isDownloaded ?? null,
       });
 
-      trace.endSpan(rootSpan, 'ok', { restoreSessionId, itemId: session.libraryItemId });
+      trace.endSpan(rootSpan, "ok", { restoreSessionId, itemId: session.libraryItemId });
     } catch (error) {
       log.error("Failed to restore PlayerService from session", error as Error);
       trace.recordError(error, rootSpan);
-      trace.endSpan(rootSpan, 'error');
+      trace.endSpan(rootSpan, "error");
     }
   }
 
@@ -320,19 +333,18 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
         `TrackPlayer queue missing or mismatched, rebuilding for ${playerSliceTrack.libraryItemId}`
       );
 
-      // Dynamically import TrackLoadingCollaborator to avoid circular dependency
-      // TrackLoadingCollaborator → types.ts → (no PlayerService import)
-      // ProgressRestoreCollaborator → TrackLoadingCollaborator would be fine statically,
-      // but PlayerService creates both, so we keep this dynamic to be safe.
-      const { TrackLoadingCollaborator } = await import("./TrackLoadingCollaborator");
-      const trackLoader = new TrackLoadingCollaborator(this.facade);
-      const rebuilt = await trackLoader.reloadTrackPlayerQueue(playerSliceTrack);
-
-      if (!rebuilt) {
-        log.warn(`Failed to rebuild TrackPlayer queue for ${playerSliceTrack.libraryItemId}`);
+      // Delegate queue rebuild to the facade which routes to TrackLoadingCollaborator.
+      // The facade owns executeRebuildQueue to avoid creating a direct collaborator-to-collaborator
+      // dependency that would require a dynamic import.
+      try {
+        await this.facade.executeRebuildQueue(playerSliceTrack);
+        return true;
+      } catch (rebuildError) {
+        log.warn(
+          `Failed to rebuild TrackPlayer queue for ${playerSliceTrack.libraryItemId}: ${rebuildError}`
+        );
+        return false;
       }
-
-      return rebuilt;
     } catch (error) {
       log.error("Failed to rebuild currentTrack", error as Error);
       // Don't throw - playback can still proceed

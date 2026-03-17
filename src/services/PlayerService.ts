@@ -370,6 +370,14 @@ export class PlayerService implements IPlayerServiceFacade {
   }
 
   /**
+   * Rebuild currentTrack if it's missing but should exist.
+   * Delegates to ProgressRestoreCollaborator.
+   */
+  async rebuildCurrentTrackIfNeeded(): Promise<boolean> {
+    return this.progressRestore.rebuildCurrentTrackIfNeeded();
+  }
+
+  /**
    * Reconnect background service after app updates, hot reloads, or JS context recreation
    */
   async reconnectBackgroundService(): Promise<void> {

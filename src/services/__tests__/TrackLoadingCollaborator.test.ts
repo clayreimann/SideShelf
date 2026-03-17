@@ -1,7 +1,7 @@
 /**
  * Tests for TrackLoadingCollaborator
  *
- * Collaborator concern: executeLoadTrack, buildTrackList, reloadTrackPlayerQueue.
+ * Collaborator concern: executeLoadTrack, buildTrackList, executeRebuildQueue.
  *
  * Mock setup needed (not 13+):
  *   - react-native-track-player
@@ -102,21 +102,6 @@ jest.mock("@/db/helpers/users", () => ({
   getUserByUsername: jest.fn(),
 }));
 
-jest.mock("@/services/coordinator/PlayerStateCoordinator", () => {
-  const { jest } = require("@jest/globals");
-  const mockResolveCanonicalPosition = jest.fn();
-  const mockGetState = jest.fn();
-  const mockCoordinator = {
-    resolveCanonicalPosition: mockResolveCanonicalPosition,
-    getState: mockGetState,
-  };
-  return {
-    getCoordinator: jest.fn(() => mockCoordinator),
-    __mockResolveCanonicalPosition: mockResolveCanonicalPosition,
-    __mockGetState: mockGetState,
-  };
-});
-
 // --- Test Data ---
 
 const mockLibraryItem = { id: "item-1", libraryId: "lib-1", mediaType: "book" };
@@ -154,10 +139,6 @@ describe("TrackLoadingCollaborator", () => {
   const { useAppStore } = require("@/stores/appStore");
   const { getStoredUsername } = require("@/lib/secureStore");
   const { getUserByUsername } = require("@/db/helpers/users");
-  const {
-    __mockResolveCanonicalPosition,
-    __mockGetState,
-  } = require("@/services/coordinator/PlayerStateCoordinator");
 
   let collaborator: TrackLoadingCollaborator;
   let mockFacade: IPlayerServiceFacade;
@@ -187,7 +168,13 @@ describe("TrackLoadingCollaborator", () => {
       dispatchEvent: jest.fn(),
       getApiInfo: jest.fn().mockReturnValue({ baseUrl: "http://test", accessToken: "tok123" }),
       getInitializationTimestamp: jest.fn().mockReturnValue(Date.now()),
-      rebuildCurrentTrackIfNeeded: jest.fn().mockResolvedValue(true),
+      executeRebuildQueue: jest.fn(),
+      resolveCanonicalPosition: jest.fn().mockResolvedValue({
+        position: 0,
+        source: "store",
+        authoritativePosition: null,
+        asyncStoragePosition: null,
+      }),
     };
 
     collaborator = new TrackLoadingCollaborator(mockFacade);
@@ -214,16 +201,6 @@ describe("TrackLoadingCollaborator", () => {
     // getStoredUsername + getUserByUsername mocked via jest.mock at module level
     require("@/lib/secureStore").getStoredUsername.mockResolvedValue("testuser");
     require("@/db/helpers/users").getUserByUsername.mockResolvedValue({ id: "user-1" });
-
-    __mockResolveCanonicalPosition.mockResolvedValue({
-      position: 0,
-      source: "store",
-      authoritativePosition: null,
-      asyncStoragePosition: null,
-    });
-
-    // Default coordinator state: IDLE (RELOAD_QUEUE is allowed)
-    __mockGetState.mockReturnValue("idle");
   });
 
   afterEach(() => {
@@ -304,7 +281,7 @@ describe("TrackLoadingCollaborator", () => {
     });
 
     it("seeks to resume position when coordinator provides one", async () => {
-      __mockResolveCanonicalPosition.mockResolvedValue({
+      (mockFacade.resolveCanonicalPosition as jest.Mock).mockResolvedValue({
         position: 300,
         source: "activeSession",
         authoritativePosition: 300,
@@ -406,8 +383,8 @@ describe("TrackLoadingCollaborator", () => {
     });
   });
 
-  describe("reloadTrackPlayerQueue", () => {
-    const baseTrack = {
+  describe("executeRebuildQueue", () => {
+    const mockTrack: any = {
       libraryItemId: "item-1",
       mediaId: "media-1",
       title: "Test Book",
@@ -419,109 +396,72 @@ describe("TrackLoadingCollaborator", () => {
       isDownloaded: true,
     };
 
-    it("rebuilds TrackPlayer queue and returns true on success", async () => {
-      const result = await collaborator.reloadTrackPlayerQueue(baseTrack as any);
+    it("resets queue, builds track list, and returns ResumePositionInfo", async () => {
+      const resumeInfo = await collaborator.executeRebuildQueue(mockTrack);
 
-      expect(result).toBe(true);
       expect(mockedTrackPlayer.reset).toHaveBeenCalled();
       expect(mockedTrackPlayer.add).toHaveBeenCalled();
-      expect(mockFacade.dispatchEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "QUEUE_RELOADED" })
-      );
+      expect(resumeInfo).toEqual({
+        position: 0,
+        source: "store",
+        authoritativePosition: null,
+        asyncStoragePosition: null,
+      });
     });
 
-    it("returns false when no playable tracks found", async () => {
+    it("seeks to resume position when position > 0", async () => {
+      (mockFacade.resolveCanonicalPosition as jest.Mock).mockResolvedValue({
+        position: 300,
+        source: "activeSession",
+        authoritativePosition: 300,
+        asyncStoragePosition: null,
+      });
+
+      await collaborator.executeRebuildQueue(mockTrack);
+
+      expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(300);
+    });
+
+    it("does not seek when position is 0", async () => {
+      await collaborator.executeRebuildQueue(mockTrack);
+
+      expect(mockedTrackPlayer.seekTo).not.toHaveBeenCalled();
+    });
+
+    it("throws when no playable tracks found", async () => {
       verifyFileExists.mockResolvedValue(false);
       require("@/lib/api/endpoints").startPlaySession.mockResolvedValue({
         id: "sess-1",
         audioTracks: [],
       });
 
-      const result = await collaborator.reloadTrackPlayerQueue(baseTrack as any);
-
-      expect(result).toBe(false);
-    });
-
-    it("dispatches RELOAD_QUEUE event before building the queue", async () => {
-      await collaborator.reloadTrackPlayerQueue(baseTrack as any);
-
-      expect(mockFacade.dispatchEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "RELOAD_QUEUE" })
+      await expect(collaborator.executeRebuildQueue(mockTrack)).rejects.toThrow(
+        "No playable sources found"
       );
     });
 
-    it("applies non-default playback rate from store during reload", async () => {
+    it("does not call dispatchEvent (pure execution)", async () => {
+      await collaborator.executeRebuildQueue(mockTrack);
+
+      expect(mockFacade.dispatchEvent).not.toHaveBeenCalled();
+    });
+
+    it("calls facade.resolveCanonicalPosition instead of coordinator directly", async () => {
+      await collaborator.executeRebuildQueue(mockTrack);
+
+      expect(mockFacade.resolveCanonicalPosition).toHaveBeenCalledWith("item-1");
+    });
+
+    it("applies playback rate from store when non-default", async () => {
       mockStore.player.playbackRate = 1.5;
-      useAppStore.getState.mockReturnValue(mockStore);
-      __mockResolveCanonicalPosition.mockResolvedValue({
-        position: 0,
-        source: "store",
-        authoritativePosition: null,
-        asyncStoragePosition: null,
-      });
-
-      await collaborator.reloadTrackPlayerQueue(baseTrack as any);
-
+      await collaborator.executeRebuildQueue(mockTrack);
       expect(mockedTrackPlayer.setRate).toHaveBeenCalledWith(1.5);
     });
 
-    it("applies non-default volume from store during reload", async () => {
-      mockStore.player.volume = 0.5;
-      useAppStore.getState.mockReturnValue(mockStore);
-
-      await collaborator.reloadTrackPlayerQueue(baseTrack as any);
-
-      expect(mockedTrackPlayer.setVolume).toHaveBeenCalledWith(0.5);
-    });
-
-    it("seeks to resume position and updates chapter during reload", async () => {
-      __mockResolveCanonicalPosition.mockResolvedValue({
-        position: 400,
-        source: "activeSession",
-        authoritativePosition: 400,
-        asyncStoragePosition: null,
-      });
-
-      await collaborator.reloadTrackPlayerQueue(baseTrack as any);
-
-      expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(400);
-      expect(mockStore._updateCurrentChapter).toHaveBeenCalledWith(400);
-    });
-
-    it("returns false and clears loading on exception", async () => {
-      mockedTrackPlayer.reset.mockRejectedValue(new Error("Reset failed"));
-
-      const result = await collaborator.reloadTrackPlayerQueue(baseTrack as any);
-
-      expect(result).toBe(false);
-      expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
-    });
-
-    it("aborts queue reset and returns false when coordinator is in playing state", async () => {
-      __mockGetState.mockReturnValue("playing");
-
-      const result = await collaborator.reloadTrackPlayerQueue(baseTrack as any);
-
-      expect(result).toBe(false);
-      expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
-    });
-
-    it("aborts queue reset and returns false when coordinator is in ready state", async () => {
-      __mockGetState.mockReturnValue("ready");
-
-      const result = await collaborator.reloadTrackPlayerQueue(baseTrack as any);
-
-      expect(result).toBe(false);
-      expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
-    });
-
-    it("proceeds with queue reset when coordinator is in restoring state", async () => {
-      __mockGetState.mockReturnValue("restoring");
-
-      const result = await collaborator.reloadTrackPlayerQueue(baseTrack as any);
-
-      expect(result).toBe(true);
-      expect(mockedTrackPlayer.reset).toHaveBeenCalled();
+    it("does not apply playback rate when 1.0 (default)", async () => {
+      mockStore.player.playbackRate = 1.0;
+      await collaborator.executeRebuildQueue(mockTrack);
+      expect(mockedTrackPlayer.setRate).not.toHaveBeenCalled();
     });
   });
 

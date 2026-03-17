@@ -8,7 +8,6 @@
  *   - react-native-track-player
  *   - @/lib/smartRewind
  *   - @/stores/appStore
- *   - mockFacade.rebuildCurrentTrackIfNeeded (injected)
  *   - mockFacade.dispatchEvent (injected)
  */
 
@@ -77,7 +76,13 @@ describe("PlaybackControlCollaborator", () => {
       dispatchEvent: jest.fn(),
       getApiInfo: jest.fn().mockReturnValue({ baseUrl: "http://test", accessToken: "tok123" }),
       getInitializationTimestamp: jest.fn().mockReturnValue(Date.now()),
-      rebuildCurrentTrackIfNeeded: jest.fn().mockResolvedValue(true),
+      executeRebuildQueue: jest.fn(),
+      resolveCanonicalPosition: jest.fn().mockResolvedValue({
+        position: 0,
+        source: "store",
+        authoritativePosition: null,
+        asyncStoragePosition: null,
+      }),
     };
 
     collaborator = new PlaybackControlCollaborator(mockFacade);
@@ -98,10 +103,9 @@ describe("PlaybackControlCollaborator", () => {
   });
 
   describe("executePlay", () => {
-    it("calls facade.rebuildCurrentTrackIfNeeded then TrackPlayer.play", async () => {
+    it("applies smart rewind and calls TrackPlayer.play", async () => {
       await collaborator.executePlay();
 
-      expect(mockFacade.rebuildCurrentTrackIfNeeded).toHaveBeenCalled();
       expect(applySmartRewind).toHaveBeenCalled();
       expect(mockedTrackPlayer.play).toHaveBeenCalled();
     });
@@ -110,14 +114,6 @@ describe("PlaybackControlCollaborator", () => {
       await collaborator.executePlay();
 
       expect(mockStore._setLastPauseTime).toHaveBeenCalledWith(null);
-    });
-
-    it("does not call TrackPlayer.play when rebuildCurrentTrackIfNeeded returns false", async () => {
-      (mockFacade.rebuildCurrentTrackIfNeeded as jest.Mock).mockResolvedValue(false);
-
-      await collaborator.executePlay();
-
-      expect(mockedTrackPlayer.play).not.toHaveBeenCalled();
     });
 
     it("clears track loading state on error and rethrows", async () => {

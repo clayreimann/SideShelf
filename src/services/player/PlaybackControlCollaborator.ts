@@ -5,8 +5,7 @@
  * Owns: executePlay, executePause, executeStop, executeSeek, executeSetRate, executeSetVolume.
  *
  * Each method owns exactly one TrackPlayer operation plus any required store side-effects.
- * executePlay delegates the track-rebuild check to facade.rebuildCurrentTrackIfNeeded()
- * (implemented by ProgressRestoreCollaborator, exposed on the facade interface).
+ * The coordinator ensures queue is built before calling executePlay via executeRebuildQueue.
  */
 
 import { applySmartRewind } from "@/lib/smartRewind";
@@ -25,15 +24,10 @@ export class PlaybackControlCollaborator implements IPlaybackControlCollaborator
 
   /**
    * Execute play (Internal - Called by Coordinator).
-   * Rebuilds the queue if needed, applies smart rewind, then starts playback.
+   * Applies smart rewind and starts playback. The coordinator ensures the
+   * queue is already built before calling this method.
    */
   async executePlay(): Promise<void> {
-    const prepared = await this.facade.rebuildCurrentTrackIfNeeded();
-    if (!prepared) {
-      log.warn("Playback request ignored: no track available after restoration");
-      return;
-    }
-
     try {
       const store = useAppStore.getState();
 
