@@ -12,6 +12,7 @@ import { logger } from "@/lib/logger";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { MIN_PLAUSIBLE_POSITION } from "@/types/coordinator";
+import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
 import { getCurrentUser } from "@/utils/userHelpers";
@@ -36,6 +37,10 @@ const diagLog = logger.forDiagnostics("PlayerBackgroundService");
 
 // Generate a unique ID for this module instance to detect multiple instances
 const MODULE_INSTANCE_UUID = `BGS-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+// Sleep timer fade state
+let _preFadeVolume: number | null = null;
+const FADE_WINDOW_SECONDS = 30;
 
 /**
  * HEADLESS JS ARCHITECTURE NOTE:
@@ -411,6 +416,71 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
     const currentTrack = store.player.currentTrack;
     const ids = await getUserIdAndLibraryItemId();
 
+    // Detect sleep timer cancel mid-fade: restore volume if timer was cleared while fade was active
+    const timerActive = store.player.sleepTimer.type !== null;
+    if (!timerActive && _preFadeVolume !== null) {
+      log.info("[handlePlaybackProgressUpdated] Sleep timer cancelled mid-fade, restoring volume");
+      await playerService.executeSetVolume(_preFadeVolume);
+      _preFadeVolume = null;
+    }
+
+    // Check sleep timer: apply volume fade and pause if expired
+    // Use store.player.isPlaying for sleep timer check — matches coordinator state and is testable
+    const { sleepTimer } = store.player;
+    if (sleepTimer.type && store.player.isPlaying) {
+      // Volume fade: linear ramp to silence over final 30 seconds
+      const remaining = store.getSleepTimerRemaining(); // handles both duration and chapter types
+      if (remaining !== null && remaining <= FADE_WINDOW_SECONDS && remaining > 0) {
+        if (_preFadeVolume === null) {
+          _preFadeVolume = store.player.volume;
+          log.info(
+            `[handlePlaybackProgressUpdated] Sleep timer fade started, pre-fade volume=${_preFadeVolume}`
+          );
+        }
+        const fadedVolume = _preFadeVolume * (remaining / FADE_WINDOW_SECONDS);
+        await playerService.executeSetVolume(Math.max(0, fadedVolume));
+      }
+
+      let shouldPause = false;
+
+      if (sleepTimer.type === "duration" && sleepTimer.endTime) {
+        // Time-based timer
+        if (Date.now() >= sleepTimer.endTime) {
+          shouldPause = true;
+          log.info("Sleep timer expired (duration-based), pausing playback");
+        }
+      } else if (sleepTimer.type === "chapter" && currentChapter) {
+        // Chapter-based timer
+        const targetChapter =
+          sleepTimer.chapterTarget === "current"
+            ? currentChapter.chapter
+            : currentTrack?.chapters.find((ch) => ch.start === currentChapter.chapter.end);
+
+        if (targetChapter && event.position >= targetChapter.end) {
+          shouldPause = true;
+          log.info(
+            `Sleep timer expired (end of ${sleepTimer.chapterTarget} chapter), pausing playback`
+          );
+        }
+      }
+
+      if (shouldPause) {
+        // Restore volume to pre-fade value before stopping (silent fade complete)
+        if (_preFadeVolume !== null) {
+          log.info(
+            `[handlePlaybackProgressUpdated] Sleep timer expired, restoring volume=${_preFadeVolume}`
+          );
+          await playerService.executeSetVolume(_preFadeVolume);
+          _preFadeVolume = null;
+        }
+        // Cancel the timer and pause playback
+        store.cancelSleepTimer();
+        const pauseTime = Date.now();
+        store._setLastPauseTime(pauseTime);
+        dispatchPlayerEvent({ type: "PAUSE" });
+      }
+    }
+
     if (ids) {
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
 
@@ -422,8 +492,8 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
       }
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
-      const state = await TrackPlayer.getPlaybackState();
-      const isPlaying = state.state === State.Playing;
+      const nativeState = await TrackPlayer.getPlaybackState();
+      const isPlaying = nativeState.state === State.Playing;
 
       // Update session progress (DB is source of truth)
       await progressService.updateProgress(
@@ -443,41 +513,6 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
       // syncPositionToStore bridge handles position propagation (PROP-02/PROP-03 two-tier sync)
       if (!updatedSession) {
         log.debug(`No session found after updateProgress, position=${formatTime(event.position)}s`);
-      }
-
-      // Check sleep timer and pause if expired
-      const { sleepTimer } = store.player;
-      if (sleepTimer.type && isPlaying) {
-        let shouldPause = false;
-
-        if (sleepTimer.type === "duration" && sleepTimer.endTime) {
-          // Time-based timer
-          if (Date.now() >= sleepTimer.endTime) {
-            shouldPause = true;
-            log.info("Sleep timer expired (duration-based), pausing playback");
-          }
-        } else if (sleepTimer.type === "chapter" && currentChapter) {
-          // Chapter-based timer
-          const targetChapter =
-            sleepTimer.chapterTarget === "current"
-              ? currentChapter.chapter
-              : currentTrack?.chapters.find((ch) => ch.start === currentChapter.chapter.end);
-
-          if (targetChapter && event.position >= targetChapter.end) {
-            shouldPause = true;
-            log.info(
-              `Sleep timer expired (end of ${sleepTimer.chapterTarget} chapter), pausing playback`
-            );
-          }
-        }
-
-        if (shouldPause) {
-          // Cancel the timer and pause playback
-          store.cancelSleepTimer();
-          const pauseTime = Date.now();
-          store._setLastPauseTime(pauseTime);
-          dispatchPlayerEvent({ type: "PAUSE" });
-        }
       }
 
       // Check if we should sync to server (uses adaptive intervals based on network type)
@@ -973,10 +1008,13 @@ const serviceExports = trackPlayerBackgroundService as unknown as {
   reconnectBackgroundService?: typeof reconnectBackgroundService;
   shutdownBackgroundService?: typeof shutdownBackgroundService;
   isBackgroundServiceInitialized?: typeof isBackgroundServiceInitialized;
+  /** Test shim: exposes internal handlePlaybackProgressUpdated for unit tests. Not for production use. */
+  _testHandlePlaybackProgressUpdated?: typeof handlePlaybackProgressUpdated;
 };
 
 serviceExports.reconnectBackgroundService = reconnectBackgroundService;
 serviceExports.shutdownBackgroundService = shutdownBackgroundService;
 serviceExports.isBackgroundServiceInitialized = isBackgroundServiceInitialized;
+serviceExports._testHandlePlaybackProgressUpdated = handlePlaybackProgressUpdated;
 
 module.exports = trackPlayerBackgroundService;
