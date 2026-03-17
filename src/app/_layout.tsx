@@ -1,4 +1,5 @@
 import { initializeApp } from "@/index";
+import { handleDeepLinkUrl } from "@/lib/deepLinkHandler";
 import { formatTimeRemaining } from "@/lib/helpers/formatters";
 import { runDownloadReconciliationScan } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
@@ -281,6 +282,12 @@ export default function RootLayout() {
             log.warn("No valid logger configuration found in deep link");
           }
 
+          return;
+        }
+
+        // Handle sideshelf:// navigation deep links
+        if (url.startsWith("sideshelf://")) {
+          await handleDeepLinkUrl(url);
           return;
         }
 
