@@ -2953,4 +2953,113 @@ describe("PlayerStateCoordinator", () => {
       dispatchSpy.mockRestore();
     });
   });
+
+  describe("Change 4: coordinator performs inline queue rebuild when queueStatus is unknown", () => {
+    let mockPlayerService: {
+      executePlay: ReturnType<typeof jest.fn>;
+      executeRebuildQueue: ReturnType<typeof jest.fn>;
+    };
+    const mockResumeInfo = {
+      position: 120,
+      source: "activeSession" as const,
+      authoritativePosition: 120,
+      asyncStoragePosition: null,
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      (mockPlayerService.executeRebuildQueue as jest.Mock).mockResolvedValue(mockResumeInfo);
+      jest.clearAllMocks();
+    });
+
+    it("calls executeRebuildQueue before executePlay when queueStatus is unknown", async () => {
+      // Drive to RESTORING state (sets queueStatus='unknown')
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: {
+              libraryItemId: "item-1",
+              mediaId: "media-1",
+              title: "Test",
+              duration: 3600,
+              audioFiles: [],
+              chapters: [],
+              isDownloaded: true,
+            } as any,
+            position: 100,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("unknown");
+      jest.clearAllMocks();
+
+      // Dispatch PLAY — queueStatus is unknown, should trigger inline rebuild
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockPlayerService.executeRebuildQueue).toHaveBeenCalled();
+      expect(mockPlayerService.executePlay).toHaveBeenCalled();
+    });
+
+    it("sets queueStatus to 'valid' after inline rebuild completes", async () => {
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: {
+              libraryItemId: "item-1",
+              mediaId: "media-1",
+              title: "Test",
+              duration: 3600,
+              audioFiles: [],
+              chapters: [],
+              isDownloaded: true,
+            } as any,
+            position: 100,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(coordinator.getContext().queueStatus).toBe("valid");
+    });
+
+    it("skips executeRebuildQueue when queueStatus is valid", async () => {
+      // Drive coordinator to PLAYING with queueStatus='valid'
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      // After Change 2 auto-PLAY, coordinator is in PLAYING with queueStatus dependent on QUEUE_RELOADED
+      // Force queueStatus='valid' via QUEUE_RELOADED
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+
+      // Drive to PAUSED (queueStatus still valid)
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+
+      // Dispatch PLAY — queueStatus is valid, should skip rebuild
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockPlayerService.executeRebuildQueue).not.toHaveBeenCalled();
+      expect(mockPlayerService.executePlay).toHaveBeenCalled();
+    });
+  });
 });

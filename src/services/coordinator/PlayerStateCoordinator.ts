@@ -1136,6 +1136,33 @@ export class PlayerStateCoordinator extends EventEmitter {
           case PlayerState.PLAYING:
             // Only call executePlay when actually transitioning into PLAYING (not same-state no-ops like SET_RATE)
             if (event.type === "PLAY") {
+              // Change 4: Inline queue rebuild if queueStatus is unknown.
+              // This handles the RESTORE_STATE and STOP paths where the OS may have
+              // cleared the TrackPlayer queue. Direct context mutations are used
+              // (not dispatchPlayerEvent) because PLAYING/PAUSED reject RELOAD_QUEUE
+              // via the transition table — bypassing the queue preserves POS-03 guard.
+              if (this.context.queueStatus === "unknown" && this.context.currentTrack) {
+                const track = this.context.currentTrack;
+                this.updateContextFromEvent({
+                  type: "RELOAD_QUEUE",
+                  payload: { libraryItemId: track.libraryItemId },
+                }); // sets isLoadingTrack=true (POS-03 guard)
+                try {
+                  const resumeInfo = await playerService.executeRebuildQueue(track);
+                  this.updateContextFromEvent({
+                    type: "QUEUE_RELOADED",
+                    payload: { position: resumeInfo.position },
+                  }); // sets isLoadingTrack=false, queueStatus='valid'
+                } catch (rebuildError) {
+                  // Clear loading state and abort — calling executePlay on an empty queue would fail
+                  this.context.isLoadingTrack = false;
+                  log.error(
+                    "[Coordinator] Failed to rebuild queue before play",
+                    rebuildError as Error
+                  );
+                  return;
+                }
+              }
               await playerService.executePlay();
             }
             break;
