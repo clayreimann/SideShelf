@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: completed
-stopped_at: Completed 18-sleep-timer-fade-navigation-path-standardization/18-04-PLAN.md
-last_updated: "2026-03-17T20:21:55.408Z"
+stopped_at: Completed 18-sleep-timer-fade-navigation-path-standardization/18-03-PLAN.md
+last_updated: "2026-03-17T20:25:58.752Z"
 last_activity: 2026-03-14 — Long-press play/pause writes trace dump with haptic on all surfaces; TraceDumps viewer in More > Track Player
 progress:
   total_phases: 10
   completed_phases: 5
   total_plans: 26
-  completed_plans: 24
+  completed_plans: 25
   percent: 100
 ---
 
@@ -71,6 +71,7 @@ Progress: [██████████] 100%
 | Phase 18-sleep-timer-fade-navigation-path-standardization P02 | 3 | 2 tasks | 5 files |
 | Phase 18-sleep-timer-fade-navigation-path-standardization P01 | 20 | 2 tasks | 3 files |
 | Phase 18-sleep-timer-fade-navigation-path-standardization P04 | 15 | 2 tasks | 6 files |
+| Phase 18-sleep-timer-fade-navigation-path-standardization P03 | 25 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,8 @@ Full decision log is in PROJECT.md Key Decisions table.
 - log.warn only takes 1 argument in this project's logger; long-press error paths use log.error(message, Error) instead
 - PlayPauseButton Pressable needs accessibilityRole="button" for getByRole("button") queries in tests
 - Span instrumentation rule: add `player.{subsystem}.{operation}` spans to any async path with branching decision points that are hard to reconstruct from logs (restore, smart rewind, seek chains, queue rebuilds); capture key decision outcomes as span attributes not just log strings; skip ring buffer for events >1 Hz with an `isHighFrequency` guard; always pass `parentContext` explicitly — Hermes does not propagate async context across `await`
+- Sleep timer fade guard uses store.player.isPlaying not TrackPlayer.getPlaybackState() — after jest.resetModules() the top-level TrackPlayer import in tests diverges from the freshly-required module instance; store state is consistently mocked
+- \_testHandlePlaybackProgressUpdated shim attached to serviceExports object (not ES export const) — module.exports = fn at bottom overwrites ES exports in this CJS file; test shims must use the serviceExports attachment pattern
 
 ### Roadmap Evolution
 
@@ -139,6 +142,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-17T20:21:55.405Z
-Stopped at: Completed 18-sleep-timer-fade-navigation-path-standardization/18-04-PLAN.md
+Last session: 2026-03-17T20:25:58.750Z
+Stopped at: Completed 18-sleep-timer-fade-navigation-path-standardization/18-03-PLAN.md
 Resume file: None
