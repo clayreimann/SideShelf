@@ -3061,5 +3061,45 @@ describe("PlayerStateCoordinator", () => {
       expect(mockPlayerService.executeRebuildQueue).not.toHaveBeenCalled();
       expect(mockPlayerService.executePlay).toHaveBeenCalled();
     });
+
+    it("does not call executePlay and clears isLoadingTrack when rebuild fails", async () => {
+      (mockPlayerService.executeRebuildQueue as jest.Mock).mockRejectedValue(
+        new Error("No playable sources found")
+      );
+
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: {
+              libraryItemId: "item-1",
+              mediaId: "media-1",
+              title: "Test",
+              duration: 3600,
+              audioFiles: [],
+              chapters: [],
+              isDownloaded: true,
+            } as any,
+            position: 100,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+      (mockPlayerService.executeRebuildQueue as jest.Mock).mockRejectedValue(
+        new Error("No playable sources found")
+      );
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockPlayerService.executeRebuildQueue).toHaveBeenCalled();
+      expect(mockPlayerService.executePlay).not.toHaveBeenCalled();
+      expect(coordinator.getContext().isLoadingTrack).toBe(false);
+    });
   });
 });
