@@ -175,14 +175,15 @@ Plans:
 4. Tapping an author from the More tab opens the author detail screen
 5. Tapping a sideshelf:// deep link from outside the app navigates to the correct screen
 6. File paths written to the database and compared in filesystem operations use a consistent normalized format (POSIX, no file:// prefix)
-   **Plans**: 4 plans
+   **Plans**: 5 plans
 
 Plans:
 
-- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
-- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
-- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
-- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
+- [ ] 18-01-PLAN.md — TDD Wave 0: RED test stubs for SLEEP-01, NAVIGATION-03, DEBT-01
+- [ ] 18-02-PLAN.md — More tab navigation fix (series/[seriesId] + authors/[authorId] routes, More-scoped wrappers)
+- [ ] 18-03-PLAN.md — Sleep timer volume fade (PlayerBackgroundService fade + cancel/stop restore)
+- [ ] 18-04-PLAN.md — Deep link handler + scheme change + path normalization migration
+- [ ] 18-05-PLAN.md — Visual verification checkpoint (all 5 requirements)
 
 ### Phase 19: Performance Quick Wins + Orphan Reassociation
 
@@ -288,7 +289,7 @@ Plans:
 | 16. Full Screen Player Redesign + AirPlay         | 4/4       | Complete       | 2026-03-11  | -          |
 | 17. Bookmarks                                     | 5/5       | Complete       | 2026-03-12  | -          |
 | 17.1. Span Tracing Debugging Aid                  | 5/5       | Complete       | 2026-03-15  | -          |
-| 18. Sleep Timer Fade + Navigation + Path Std      | v1.3      | 0/TBD          | Not started | -          |
+| 18. Sleep Timer Fade + Navigation + Path Std      | v1.3      | 0/5            | Not started | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/TBD          | Not started | -          |
 | 20. Tree Shaking                                  | v1.3      | 0/TBD          | Not started | -          |
 | 21. Maestro UI Testing Infrastructure             | v1.3      | 0/TBD          | Not started | -          |
