@@ -1095,6 +1095,24 @@ export class PlayerStateCoordinator extends EventEmitter {
         switch (nextState) {
           case PlayerState.LOADING:
             if (event.type === "LOAD_TRACK") {
+              // Change 3: short-circuit if same item is already actively playing or paused.
+              // previousState is the state before transitioning to LOADING.
+              // context.currentTrack reflects the track confirmed by a prior playback cycle —
+              // safe to trust in PLAYING and PAUSED. READY is excluded (see spec).
+              const { previousState, currentTrack } = this.context;
+              const wasActivelyPlayingOrPaused =
+                previousState === PlayerState.PLAYING || previousState === PlayerState.PAUSED;
+              if (
+                wasActivelyPlayingOrPaused &&
+                event.payload.libraryItemId === currentTrack?.libraryItemId
+              ) {
+                log.info(
+                  `[Coordinator] Short-circuit: ${event.payload.libraryItemId} already ${previousState} — dispatching PLAY`
+                );
+                dispatchPlayerEvent({ type: "PLAY" });
+                return; // skip executeLoadTrack and playIntentOnLoad check
+              }
+
               await playerService.executeLoadTrack(
                 event.payload.libraryItemId,
                 event.payload.episodeId
