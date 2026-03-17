@@ -208,7 +208,7 @@ describe("TrackLoadingCollaborator", () => {
   });
 
   describe("executeLoadTrack", () => {
-    it("loads a track, builds queue, and dispatches PLAY via facade", async () => {
+    it("loads a track, builds queue, and does NOT dispatch PLAY (coordinator handles it)", async () => {
       await collaborator.executeLoadTrack("item-1");
 
       expect(getLibraryItemById).toHaveBeenCalledWith("item-1");
@@ -216,50 +216,22 @@ describe("TrackLoadingCollaborator", () => {
       expect(getAudioFilesWithDownloadInfo).toHaveBeenCalled();
       expect(mockedTrackPlayer.reset).toHaveBeenCalled();
       expect(mockedTrackPlayer.add).toHaveBeenCalled();
-      expect(mockFacade.dispatchEvent).toHaveBeenCalledWith({ type: "PLAY" });
+      // Coordinator handles PLAY dispatch — collaborator must NOT dispatch it
+      expect(mockFacade.dispatchEvent).not.toHaveBeenCalledWith({ type: "PLAY" });
     });
 
-    it("dispatches PLAY and skips reload if same item is already playing with queue", async () => {
-      mockStore.player.currentTrack = {
-        libraryItemId: "item-1",
-        mediaId: "media-1",
-        title: "Test Book",
-        author: "Test Author",
-        coverUri: "http://example.com/cover.jpg",
-        audioFiles: mockAudioFiles,
-        chapters: mockChapters,
-        duration: 3600,
-        isDownloaded: true,
-      };
-      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Playing });
-      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
+    it("calls facade.resolveCanonicalPosition to determine resume position", async () => {
+      (mockFacade.resolveCanonicalPosition as jest.Mock).mockResolvedValue({
+        position: 120,
+        source: "activeSession",
+        authoritativePosition: 120,
+        asyncStoragePosition: null,
+      });
 
       await collaborator.executeLoadTrack("item-1");
 
-      expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
-      expect(mockedTrackPlayer.add).not.toHaveBeenCalled();
-      expect(mockFacade.dispatchEvent).toHaveBeenCalledWith({ type: "PLAY" });
-    });
-
-    it("dispatches PLAY and skips reload if same item is paused with queue", async () => {
-      mockStore.player.currentTrack = {
-        libraryItemId: "item-1",
-        mediaId: "media-1",
-        title: "Test Book",
-        author: "Test Author",
-        coverUri: "http://example.com/cover.jpg",
-        audioFiles: mockAudioFiles,
-        chapters: mockChapters,
-        duration: 3600,
-        isDownloaded: true,
-      };
-      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Paused });
-      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
-
-      await collaborator.executeLoadTrack("item-1");
-
-      expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
-      expect(mockFacade.dispatchEvent).toHaveBeenCalledWith({ type: "PLAY" });
+      expect(mockFacade.resolveCanonicalPosition).toHaveBeenCalledWith("item-1");
+      expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(120);
     });
 
     it("throws if library item not found", async () => {
@@ -517,29 +489,6 @@ describe("TrackLoadingCollaborator", () => {
 
       expect(mockedTrackPlayer.setRate).toHaveBeenCalledWith(1.5);
       expect(mockedTrackPlayer.setVolume).toHaveBeenCalledWith(0.7);
-    });
-
-    it("reloads track when same item has empty queue", async () => {
-      mockStore.player.currentTrack = {
-        libraryItemId: "item-1",
-        mediaId: "media-1",
-        title: "Test Book",
-        author: "Test Author",
-        coverUri: "http://example.com/cover.jpg",
-        audioFiles: mockAudioFiles,
-        chapters: mockChapters,
-        duration: 3600,
-        isDownloaded: true,
-      };
-      // Queue is empty even though currentTrack is set
-      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Paused });
-      mockedTrackPlayer.getQueue.mockResolvedValue([]);
-
-      await collaborator.executeLoadTrack("item-1");
-
-      // Should not short-circuit — should do full reload
-      expect(mockedTrackPlayer.reset).toHaveBeenCalled();
-      expect(mockedTrackPlayer.add).toHaveBeenCalled();
     });
   });
 

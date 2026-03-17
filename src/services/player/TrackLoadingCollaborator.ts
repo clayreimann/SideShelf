@@ -30,7 +30,7 @@ import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
 import type { ResumePositionInfo } from "@/types/coordinator";
 import type { PlayerTrack } from "@/types/player";
-import TrackPlayer, { State, Track } from "react-native-track-player";
+import TrackPlayer, { Track } from "react-native-track-player";
 import type { IPlayerServiceFacade, ITrackLoadingCollaborator } from "./types";
 
 const log = logger.forTag("PlayerService");
@@ -76,28 +76,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         throw new Error("User not found in database");
       }
 
-      // Check if already playing this item - if so, just resume
       const store = useAppStore.getState();
-      if (store.player.currentTrack?.libraryItemId === libraryItemId) {
-        const state = await TrackPlayer.getPlaybackState();
-        const queue = await TrackPlayer.getQueue();
-
-        // Only short-circuit if we actually have tracks in the queue
-        if (queue.length > 0) {
-          if (state.state === State.Playing) {
-            log.info("Already playing this item - syncing coordinator state");
-            this.facade.dispatchEvent({ type: "PLAY" });
-            return;
-          } else if (state.state === State.Paused) {
-            log.info("Resuming paused playback via coordinator");
-            this.facade.dispatchEvent({ type: "PLAY" });
-            return;
-          }
-        } else {
-          // Queue is empty even though we have a currentTrack - need to reload
-          log.warn("Current track set but queue is empty - reloading track");
-        }
-      }
 
       // Fetch required data from database
       const libraryItem = await getLibraryItemById(libraryItemId);
@@ -207,10 +186,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         log.info(`Applied volume from store: ${currentVolume}`);
       }
 
-      // Dispatch PLAY so the coordinator transitions to PLAYING and calls executePlay().
-      this.facade.dispatchEvent({ type: "PLAY" });
-
-      log.info("Track loaded, PLAY dispatched to coordinator");
+      log.info("Track loaded, returning to coordinator");
     } catch (error) {
       log.error(" Failed to load track:", error as Error);
       // Clear loading state on error
