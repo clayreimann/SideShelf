@@ -79,6 +79,8 @@ export const es = {
   "libraryItem.actions.deleteDownload": "Eliminar descarga",
   "libraryItem.actions.markFinished": "Marcar como terminado",
   "libraryItem.actions.markUnfinished": "Marcar como no terminado",
+  "libraryItem.actions.copyLink": "Copiar enlace",
+  "libraryItem.alerts.linkCopied": "Enlace copiado al portapapeles",
 
   // Library Item Alerts
   "libraryItem.alerts.userNotFound": "Usuario no encontrado",

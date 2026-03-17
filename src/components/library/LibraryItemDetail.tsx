@@ -29,6 +29,7 @@ import {
   useUserProfile,
 } from "@/stores";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import { MenuView } from "@react-native-menu/menu";
 import { Stack } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -356,6 +357,15 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
     // State will be updated via progress subscription
   }, [item]);
 
+  const handleCopyLink = useCallback(async () => {
+    await Clipboard.setStringAsync(`sideshelf://item/${itemId}`);
+    Alert.alert(
+      translate("libraryItem.actions.copyLink"),
+      translate("libraryItem.alerts.linkCopied"),
+      [{ text: translate("common.ok") }]
+    );
+  }, [itemId]);
+
   // Force resync position handler
   const handleForceResync = useCallback(async () => {
     if (!item || !userId) return;
@@ -402,6 +412,9 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         case "force-resync":
           handleForceResync();
           break;
+        case "copy-link":
+          void handleCopyLink();
+          break;
         default:
           break;
       }
@@ -412,6 +425,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       handlePartialDownloadAction,
       handleToggleFinished,
       handleForceResync,
+      handleCopyLink,
     ]
   );
 
@@ -469,6 +483,13 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
         image: "arrow.clockwise.circle",
       });
     }
+
+    // Copy Link — always available
+    actions.push({
+      id: "copy-link",
+      title: translate("libraryItem.actions.copyLink"),
+      image: "link",
+    });
 
     return actions;
   }, [
