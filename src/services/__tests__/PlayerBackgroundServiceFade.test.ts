@@ -28,6 +28,7 @@ jest.mock("@/stores/appStore", () => ({
 jest.mock("@/services/PlayerService", () => ({
   playerService: {
     executeSetVolume: jest.fn(),
+    executeSeek: jest.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -57,7 +58,8 @@ jest.mock("@/services/coordinator/PlayerStateCoordinator", () => ({
 
 // --- Helpers ---
 
-const FADE_WINDOW_SECONDS = 30;
+const FADE_WINDOW_SECONDS = 5;
+const REWIND_ON_SLEEP_SECONDS = 2.5;
 
 /**
  * Build a mock store state with the given sleep timer and volume settings.
@@ -119,6 +121,7 @@ describe("sleep timer volume fade", () => {
 
     mockUseAppStore = useAppStore.getState;
     mockExecuteSetVolume = playerService.executeSetVolume;
+    playerService.executeSeek.mockResolvedValue(undefined);
     mockDispatchPlayerEvent = dispatchPlayerEvent;
 
     // Reset TrackPlayer mock to return Playing state
@@ -142,11 +145,11 @@ describe("sleep timer volume fade", () => {
     jest.resetModules();
   });
 
-  it("test 1 (fade starts): when remaining <= 30s and playing, executeSetVolume is called with value < pre-fade volume", async () => {
+  it("test 1 (fade starts): when remaining <= 5s and playing, executeSetVolume is called with value < pre-fade volume", async () => {
     const storeState = buildStoreState({
       sleepTimerType: "duration",
       volume: 1.0,
-      sleepTimerRemaining: 20, // 20s remaining — inside 30s fade window
+      sleepTimerRemaining: 3, // 3s remaining — inside 5s fade window
     });
     mockUseAppStore.mockReturnValue(storeState);
 
@@ -159,12 +162,12 @@ describe("sleep timer volume fade", () => {
     expect(calledVolume).toBeGreaterThan(0);
   });
 
-  it("test 2 (linear fade): at 15s remaining (50% of 30s window), executeSetVolume called with 50% of pre-fade volume", async () => {
+  it("test 2 (linear fade): at 2.5s remaining (50% of 5s window), executeSetVolume called with 50% of pre-fade volume", async () => {
     const preFadeVolume = 1.0;
     const storeState = buildStoreState({
       sleepTimerType: "duration",
       volume: preFadeVolume,
-      sleepTimerRemaining: 15, // exactly 50% of fade window
+      sleepTimerRemaining: 2.5, // exactly 50% of fade window
     });
     mockUseAppStore.mockReturnValue(storeState);
 
@@ -173,7 +176,7 @@ describe("sleep timer volume fade", () => {
 
     expect(mockExecuteSetVolume).toHaveBeenCalled();
     const calledVolume = mockExecuteSetVolume.mock.calls[0][0] as number;
-    expect(calledVolume).toBeCloseTo(preFadeVolume * (15 / FADE_WINDOW_SECONDS), 5);
+    expect(calledVolume).toBeCloseTo(preFadeVolume * (2.5 / FADE_WINDOW_SECONDS), 5);
   });
 
   it("test 3 (fade cancel): when sleepTimer.type changes to null mid-fade, executeSetVolume restores to pre-fade value", async () => {
@@ -182,7 +185,7 @@ describe("sleep timer volume fade", () => {
     const fadingState = buildStoreState({
       sleepTimerType: "duration",
       volume: preFadeVolume,
-      sleepTimerRemaining: 10,
+      sleepTimerRemaining: 3, // inside 5s window
     });
     mockUseAppStore.mockReturnValue(fadingState);
 
@@ -224,7 +227,7 @@ describe("sleep timer volume fade", () => {
       sleepTimerType: "chapter",
       sleepTimerEndTime: null, // chapter timers have no endTime
       volume: 1.0,
-      sleepTimerRemaining: 15, // getSleepTimerRemaining returns 15s for chapter-based
+      sleepTimerRemaining: 3, // getSleepTimerRemaining returns 3s for chapter-based, inside 5s window
     });
     mockUseAppStore.mockReturnValue(storeState);
 
@@ -275,6 +278,10 @@ describe("sleep timer volume fade", () => {
     // Volume restore happens before (or at same time as) PAUSE dispatch
     const pauseInvocation = mockDispatchPlayerEvent.mock.invocationCallOrder[pauseCallOrder];
     expect(setVolumeCallOrder).toBeLessThanOrEqual(pauseInvocation);
+
+    // executeSeek should be called with position - REWIND_ON_SLEEP_SECONDS before PAUSE
+    const { playerService } = require("@/services/PlayerService");
+    expect(playerService.executeSeek).toHaveBeenCalledWith(105 - REWIND_ON_SLEEP_SECONDS);
   });
 
   it("test 7 (no fade when timer inactive): when sleepTimer.type is null, executeSetVolume is not called for fade", async () => {
@@ -291,11 +298,11 @@ describe("sleep timer volume fade", () => {
     expect(mockExecuteSetVolume).not.toHaveBeenCalled();
   });
 
-  it("test 8 (outside fade window): when remaining > 30s, no fade occurs — volume not changed", async () => {
+  it("test 8 (outside fade window): when remaining > 5s, no fade occurs — volume not changed", async () => {
     const storeState = buildStoreState({
       sleepTimerType: "duration",
       volume: 1.0,
-      sleepTimerRemaining: 60, // 60s remaining — outside 30s fade window
+      sleepTimerRemaining: 60, // 60s remaining — outside 5s fade window
     });
     mockUseAppStore.mockReturnValue(storeState);
 

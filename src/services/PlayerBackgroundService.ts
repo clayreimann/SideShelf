@@ -40,7 +40,8 @@ const MODULE_INSTANCE_UUID = `BGS-${Date.now()}-${Math.random().toString(36).sub
 
 // Sleep timer fade state
 let _preFadeVolume: number | null = null;
-const FADE_WINDOW_SECONDS = 30;
+const FADE_WINDOW_SECONDS = 5;
+const REWIND_ON_SLEEP_SECONDS = 2.5;
 
 /**
  * HEADLESS JS ARCHITECTURE NOTE:
@@ -473,6 +474,12 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
           await playerService.executeSetVolume(_preFadeVolume);
           _preFadeVolume = null;
         }
+        // Rewind slightly so any audio that faded out silently gets replayed next session
+        const rewindTarget = Math.max(0, event.position - REWIND_ON_SLEEP_SECONDS);
+        log.info(
+          `[handlePlaybackProgressUpdated] Sleep timer expired, rewinding ${REWIND_ON_SLEEP_SECONDS}s to position=${rewindTarget.toFixed(2)}`
+        );
+        await playerService.executeSeek(rewindTarget);
         // Cancel the timer and pause playback
         store.cancelSleepTimer();
         const pauseTime = Date.now();
