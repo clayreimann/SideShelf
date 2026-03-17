@@ -42,11 +42,11 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 
 - [x] **NAVIGATION-01**: Series list viewed from the More tab navigates to series detail on tap
 - [x] **NAVIGATION-02**: Authors list viewed from the More tab navigates to author detail on tap
-- [ ] **NAVIGATION-03**: App registers a `sideshelf://` URL scheme and deep links navigate to all main screens
+- [x] **NAVIGATION-03**: App registers a `sideshelf://` URL scheme and deep links navigate to all main screens
 
 ### Sleep Timer (SLEEP)
 
-- [ ] **SLEEP-01**: Playback volume fades out over the last 30 seconds before the sleep timer stops playback
+- [x] **SLEEP-01**: Playback volume fades out over the last 30 seconds before the sleep timer stops playback
 
 ### Performance (PERF)
 
@@ -64,7 +64,7 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 
 ### Technical Debt (DEBT)
 
-- [ ] **DEBT-01**: File paths are stored and compared in a consistent normalized format (POSIX, no `file://` prefix) across DB, downloads, and filesystem operations
+- [x] **DEBT-01**: File paths are stored and compared in a consistent normalized format (POSIX, no `file://` prefix) across DB, downloads, and filesystem operations
 - [ ] **DEBT-02**: User can associate an orphaned downloaded file with a known library item from the orphan management screen
 - [ ] **DEBT-03**: ProgressService is decomposed into a facade and collaborators with 90%+ test coverage maintained
 
@@ -128,8 +128,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BOOKMARK-06   | Phase 17 | Complete |
 | NAVIGATION-01 | Phase 18 | Complete |
 | NAVIGATION-02 | Phase 18 | Complete |
-| NAVIGATION-03 | Phase 18 | Pending  |
-| SLEEP-01      | Phase 18 | Pending  |
+| NAVIGATION-03 | Phase 18 | Complete |
+| SLEEP-01      | Phase 18 | Complete |
 | PERF-01       | Phase 19 | Pending  |
 | PERF-02       | Phase 19 | Pending  |
 | PERF-03       | Phase 20 | Pending  |
@@ -141,7 +141,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PERF-09       | Phase 19 | Pending  |
 | PERF-10       | Phase 19 | Pending  |
 | PERF-11       | Phase 16 | Complete |
-| DEBT-01       | Phase 18 | Pending  |
+| DEBT-01       | Phase 18 | Complete |
 | DEBT-02       | Phase 19 | Pending  |
 | DEBT-03       | Phase 22 | Pending  |
 | TESTING-01    | Phase 21 | Pending  |
