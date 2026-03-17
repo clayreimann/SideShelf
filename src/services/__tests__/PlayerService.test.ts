@@ -766,16 +766,6 @@ describe("PlayerService", () => {
 
       await expect(playerService.refreshFilePathsAfterContainerChange()).resolves.not.toThrow();
     });
-
-    it("rebuildCurrentTrackIfNeeded delegates to progressRestore collaborator", async () => {
-      // No current track + no session → returns false
-      mockStore.player.currentTrack = null;
-      getStoredUsername.mockResolvedValue(null);
-
-      const result = await playerService.rebuildCurrentTrackIfNeeded();
-
-      expect(result).toBe(false);
-    });
   });
 
   describe("initialize: existing player path", () => {

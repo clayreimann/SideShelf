@@ -6,7 +6,7 @@
  *
  * - TrackLoadingCollaborator: executeLoadTrack, buildTrackList, reloadTrackPlayerQueue
  * - PlaybackControlCollaborator: executePlay, executePause, executeStop, executeSeek, setRate, setVolume
- * - ProgressRestoreCollaborator: restorePlayerServiceFromSession, syncPositionFromDatabase, rebuildCurrentTrackIfNeeded
+ * - ProgressRestoreCollaborator: restorePlayerServiceFromSession, syncPositionFromDatabase
  * - BackgroundReconnectCollaborator: reconnectBackgroundService, refreshFilePathsAfterContainerChange
  *
  * Interfaces are defined in src/services/player/types.ts to prevent circular imports.
@@ -367,14 +367,6 @@ export class PlayerService implements IPlayerServiceFacade {
    */
   async syncPositionFromDatabase(): Promise<void> {
     return this.progressRestore.syncPositionFromDatabase();
-  }
-
-  /**
-   * Rebuild currentTrack if it's missing but should exist.
-   * Delegates to ProgressRestoreCollaborator.
-   */
-  async rebuildCurrentTrackIfNeeded(): Promise<boolean> {
-    return this.progressRestore.rebuildCurrentTrackIfNeeded();
   }
 
   /**
