@@ -78,7 +78,8 @@ export async function handleDeepLinkUrl(url: string): Promise<void> {
       case "item": {
         const itemId = urlObj.pathname.slice(1); // strip leading "/"
         log.info(`[handleDeepLinkUrl] navigating to item itemId="${itemId}"`);
-        router.push(`/(tabs)/library/item/${itemId}`);
+        // Route file is (tabs)/library/[item]/index.tsx — dynamic segment is the id directly
+        router.navigate(`/(tabs)/library/${itemId}`);
         break;
       }
 
@@ -91,6 +92,8 @@ export async function handleDeepLinkUrl(url: string): Promise<void> {
         } else {
           log.warn("[handleDeepLinkUrl] sideshelf://resume — no track loaded, no-op");
         }
+        // Navigate to home: Expo Router would otherwise route sideshelf://resume as a path and show 404
+        router.navigate("/(tabs)/home");
         break;
       }
 
@@ -103,6 +106,8 @@ export async function handleDeepLinkUrl(url: string): Promise<void> {
         } else {
           dispatchPlayerEvent({ type: "PLAY" });
         }
+        // Navigate to home: Expo Router would otherwise route sideshelf://play-pause as a path and show 404
+        router.navigate("/(tabs)/home");
         break;
       }
 

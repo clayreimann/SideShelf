@@ -27,17 +27,20 @@ This app provides a native mobile experience for your Audiobookshelf library, fe
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/your-username/abs-react-native.git
    cd abs-react-native
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 3. **Start the development server**
+
    ```bash
    npx expo start
    ```
@@ -100,22 +103,64 @@ src/
 ### Core Features
 
 #### Library Browsing
+
 - Browse your audiobook and podcast collections
 - Sort by title, author, date added, or progress
 - Switch between grid and list views
 - Filter by download status, progress, or genre
 
 #### Content Playback
+
 - Stream directly from your server or play downloaded content
 - Automatic progress synchronization across devices
 - Chapter navigation and bookmarking
 - Variable playback speed and sleep timer
 
 #### Download Management
+
 - Download individual books or entire series
 - Monitor download progress with detailed statistics
 - Automatic cleanup of old downloads
 - Background downloading support
+
+## 🔗 Deep Links
+
+SideShelf supports `sideshelf://` deep links for navigation and playback control.
+
+### Navigation links
+
+| URL                         | Destination        |
+| --------------------------- | ------------------ |
+| `sideshelf://home`          | Home tab           |
+| `sideshelf://library`       | Library tab        |
+| `sideshelf://series`        | Series tab         |
+| `sideshelf://authors`       | Authors tab        |
+| `sideshelf://more`          | More tab           |
+| `sideshelf://item/{itemId}` | Item detail screen |
+
+**Finding an item ID:** Open an item in the app, tap `···` → **Copy Link**, then inspect the copied URL. The UUID at the end is the item ID.
+
+### Playback control links
+
+| URL                      | Action                                                |
+| ------------------------ | ----------------------------------------------------- |
+| `sideshelf://play-pause` | Toggle play/pause for the current track               |
+| `sideshelf://resume`     | Resume the current track (no-op if nothing is loaded) |
+
+### Testing on simulator
+
+```bash
+# Open a specific tab
+xcrun simctl openurl booted "sideshelf://library"
+
+# Open an item by ID
+xcrun simctl openurl booted "sideshelf://item/99562d16-5572-4131-8091-8761da0a2250"
+
+# Toggle playback
+xcrun simctl openurl booted "sideshelf://play-pause"
+```
+
+All deep links require the user to be authenticated. Unauthenticated links redirect to the login screen.
 
 ## 🛠️ Development
 

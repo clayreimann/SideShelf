@@ -139,23 +139,23 @@ describe("handleDeepLinkUrl", () => {
     expect(mockRouter.navigate).toHaveBeenCalledWith("/(tabs)/more");
   });
 
-  it("test 7 (sideshelf://item/ABC123): router.push('/(tabs)/library/item/ABC123') is called", async () => {
+  it("test 7 (sideshelf://item/ABC123): router.navigate('/(tabs)/library/ABC123') is called", async () => {
     expect(handleDeepLinkUrl).toBeDefined();
     await handleDeepLinkUrl("sideshelf://item/ABC123");
 
-    expect(mockRouter.push).toHaveBeenCalledWith("/(tabs)/library/item/ABC123");
+    expect(mockRouter.navigate).toHaveBeenCalledWith("/(tabs)/library/ABC123");
   });
 
-  it("test 8 (sideshelf://item/ABC123?action=play): router.push called with item path (action=play noted)", async () => {
+  it("test 8 (sideshelf://item/ABC123?action=play): router.navigate called with item path", async () => {
     // Per RESEARCH.md open question: action=play navigates to item detail for Phase 18
     // Auto-play implementation deferred to follow-up
     expect(handleDeepLinkUrl).toBeDefined();
     await handleDeepLinkUrl("sideshelf://item/ABC123?action=play");
 
-    expect(mockRouter.push).toHaveBeenCalledWith("/(tabs)/library/item/ABC123");
+    expect(mockRouter.navigate).toHaveBeenCalledWith("/(tabs)/library/ABC123");
   });
 
-  it("test 9 (sideshelf://resume with currentTrack): dispatchPlayerEvent({ type: 'PLAY' }) is called", async () => {
+  it("test 9 (sideshelf://resume with currentTrack): dispatchPlayerEvent({ type: 'PLAY' }) and navigate home", async () => {
     mockUseAppStore.mockReturnValue(
       buildStoreState({
         currentTrack: { libraryItemId: "item-1", title: "My Book" },
@@ -167,11 +167,11 @@ describe("handleDeepLinkUrl", () => {
     await handleDeepLinkUrl("sideshelf://resume");
 
     expect(mockDispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
-    // No navigation when resuming
-    expect(mockRouter.navigate).not.toHaveBeenCalled();
+    // Always navigates home to prevent Expo Router showing 404 for sideshelf://resume path
+    expect(mockRouter.navigate).toHaveBeenCalledWith("/(tabs)/home");
   });
 
-  it("test 10 (sideshelf://resume with no track): no dispatch, no navigation", async () => {
+  it("test 10 (sideshelf://resume with no track): no dispatch, navigates home", async () => {
     mockUseAppStore.mockReturnValue(
       buildStoreState({
         currentTrack: null,
@@ -182,11 +182,10 @@ describe("handleDeepLinkUrl", () => {
     await handleDeepLinkUrl("sideshelf://resume");
 
     expect(mockDispatchPlayerEvent).not.toHaveBeenCalled();
-    expect(mockRouter.navigate).not.toHaveBeenCalled();
-    expect(mockRouter.push).not.toHaveBeenCalledWith(expect.stringContaining("(tabs)"));
+    expect(mockRouter.navigate).toHaveBeenCalledWith("/(tabs)/home");
   });
 
-  it("test 11 (sideshelf://play-pause while playing): dispatchPlayerEvent({ type: 'PAUSE' }) is called", async () => {
+  it("test 11 (sideshelf://play-pause while playing): PAUSE dispatched and navigates home", async () => {
     mockUseAppStore.mockReturnValue(
       buildStoreState({
         currentTrack: { libraryItemId: "item-1" },
@@ -198,9 +197,10 @@ describe("handleDeepLinkUrl", () => {
     await handleDeepLinkUrl("sideshelf://play-pause");
 
     expect(mockDispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" });
+    expect(mockRouter.navigate).toHaveBeenCalledWith("/(tabs)/home");
   });
 
-  it("test 12 (sideshelf://play-pause while paused): dispatchPlayerEvent({ type: 'PLAY' }) is called", async () => {
+  it("test 12 (sideshelf://play-pause while paused): PLAY dispatched and navigates home", async () => {
     mockUseAppStore.mockReturnValue(
       buildStoreState({
         currentTrack: { libraryItemId: "item-1" },
@@ -212,6 +212,7 @@ describe("handleDeepLinkUrl", () => {
     await handleDeepLinkUrl("sideshelf://play-pause");
 
     expect(mockDispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+    expect(mockRouter.navigate).toHaveBeenCalledWith("/(tabs)/home");
   });
 
   it("test 13 (unknown scheme): no navigation, no dispatch", async () => {
