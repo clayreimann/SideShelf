@@ -132,7 +132,7 @@ Full decision log is in PROJECT.md Key Decisions table.
 - AirPlay package new-arch compatibility: RESOLVED — `@douglowder/expo-av-route-picker-view` builds on SDK 54 + newArchEnabled (prebuild --clean exit 0 confirmed in Plan 02)
 - Tree shaking (Phase 20): `inlineRequires` + Reanimated 4 + React Compiler triple interaction undocumented; treat as exploratory; have revert plan ready
 - ABS bookmark PATCH endpoint: RESOLVED — PATCH /api/me/item/:id/bookmark with {time, title} body (implemented in Plan 03)
-- URL scheme mismatch: app.json has `"scheme": "side-shelf"` (hyphen) but docs use `sideshelf://` — resolve at start of Phase 21; run `xcrun simctl openurl` to confirm
+- URL scheme mismatch: app.json has `"scheme": "side-shelf"` (hyphen) but docs use `sideshelf://` — RESOLVED in Phase 18 scope; scheme will be changed to `"sideshelf"` during Phase 18 execution
 
 ## Session Continuity
 

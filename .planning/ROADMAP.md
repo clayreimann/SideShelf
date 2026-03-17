@@ -52,7 +52,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 **Milestone Goal:** Ship the app to beta — UI polish on the player and library surfaces, performance improvements from the RN audit, bookmark management, sleep timer volume fade, UI testing infrastructure, and remaining tech debt.
 
 - [x] **Phase 14: Progress Display Format** — User-selectable progress format across all three player surfaces (completed 2026-03-09)
-- [ ] **Phase 15: Collapsible Section Redesign** — Reanimated probe: peek-and-fade with UI-thread height animation
+- [x] **Phase 15: Collapsible Section Redesign** — Reanimated probe: peek-and-fade with UI-thread height animation (completed 2026-03-10)
 - [x] **Phase 16: Full Screen Player Redesign + AirPlay** — Nav bar removal, chevron dismiss, settings UIMenu, AirPlay on all surfaces, Reanimated panel animation (completed 2026-03-11)
 - [x] **Phase 17: Bookmarks** — Add/view/rename/delete with server sync and SQLite offline cache (completed 2026-03-12)
 - [ ] **Phase 18: Sleep Timer Fade + Navigation + Path Standardization** — Volume fade, Series/Authors More tab fix, deep linking, path normalization
@@ -99,9 +99,9 @@ Plans:
 
 Plans:
 
-- [ ] 15-01-PLAN.md — Test scaffold for CollapsibleSection (Wave 0, RED state)
-- [ ] 15-02-PLAN.md — Rewrite CollapsibleSection with Reanimated + expo-linear-gradient
-- [ ] 15-03-PLAN.md — Update DescriptionSection call site + simulator visual verification
+- [x] 15-01-PLAN.md — Test scaffold for CollapsibleSection (Wave 0, RED state)
+- [x] 15-02-PLAN.md — Rewrite CollapsibleSection with Reanimated + expo-linear-gradient
+- [x] 15-03-PLAN.md — Update DescriptionSection call site + simulator visual verification
 
 ### Phase 16: Full Screen Player Redesign + AirPlay
 
