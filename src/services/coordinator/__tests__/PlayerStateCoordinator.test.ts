@@ -2892,4 +2892,46 @@ describe("PlayerStateCoordinator", () => {
       }
     });
   });
+
+  // ============================================================================
+  // Change 2: playIntentOnLoad — coordinator dispatches PLAY after executeLoadTrack
+  // ============================================================================
+
+  describe("Change 2: playIntentOnLoad — coordinator dispatches PLAY after executeLoadTrack", () => {
+    let mockPlayerService: {
+      executeLoadTrack: ReturnType<typeof jest.fn>;
+      executePlay: ReturnType<typeof jest.fn>;
+      executeRebuildQueue: ReturnType<typeof jest.fn>;
+      resolveCanonicalPosition: ReturnType<typeof jest.fn>;
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      jest.clearAllMocks();
+    });
+
+    it("dispatches PLAY after executeLoadTrack when playIntentOnLoad is true", async () => {
+      const dispatchSpy = jest.spyOn(coordinator, "dispatch");
+
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("item-1", undefined);
+
+      const playDispatches = dispatchSpy.mock.calls.filter(
+        ([evt]: [any]) => evt.type === "PLAY"
+      );
+      expect(playDispatches.length).toBeGreaterThan(0);
+
+      dispatchSpy.mockRestore();
+    });
+
+    it("eventually calls executePlay after executeLoadTrack (via dispatched PLAY)", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(mockPlayerService.executePlay).toHaveBeenCalled();
+    });
+  });
 });
