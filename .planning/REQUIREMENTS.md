@@ -53,13 +53,13 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 - [x] **PERF-01**: LibraryItemList uses FlashList with `estimatedItemSize` and `getItemType` for grid/list modes
 - [x] **PERF-02**: ChapterList `renderItem` is memoized with `useCallback` and has `getItemLayout` for fixed-height rows
 - [ ] **PERF-03**: Expo tree shaking enabled via `.env` flags and `metro.config.js` transformer config
-- [ ] **PERF-04**: Root layout uses direct icon imports; AuthProvider and statisticsSlice use direct `@/db/helpers` imports
+- [x] **PERF-04**: Root layout uses direct icon imports; AuthProvider and statisticsSlice use direct `@/db/helpers` imports
 - [x] **PERF-05**: TTI baseline established with `react-native-performance` — `performance.mark('screenInteractive')` added to home screen
 - [x] **PERF-06**: AuthProvider secure storage reads run concurrently via `Promise.all`
-- [ ] **PERF-07**: Coordinator instantiation deferred from module scope into `initializeApp()`
+- [x] **PERF-07**: Coordinator instantiation deferred from module scope into `initializeApp()`
 - [x] **PERF-08**: `CoverImage` component uses `expo-image` for memory + disk caching
 - [x] **PERF-09**: ChapterList `useEffect` setTimeout calls return cleanup functions
-- [ ] **PERF-10**: `NetInfo.addEventListener` unsubscribe is captured and called in `resetNetwork()`; `initializeNetwork()` clears existing intervals before creating new ones
+- [x] **PERF-10**: `NetInfo.addEventListener` unsubscribe is captured and called in `resetNetwork()`; `initializeNetwork()` clears existing intervals before creating new ones
 - [x] **PERF-11**: FullScreenPlayer panel open/close animations use Reanimated `useAnimatedStyle`
 
 ### Technical Debt (DEBT)
@@ -133,13 +133,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PERF-01       | Phase 19 | Complete |
 | PERF-02       | Phase 19 | Complete |
 | PERF-03       | Phase 20 | Pending  |
-| PERF-04       | Phase 19 | Pending  |
+| PERF-04       | Phase 19 | Complete |
 | PERF-05       | Phase 19 | Complete |
 | PERF-06       | Phase 19 | Complete |
-| PERF-07       | Phase 19 | Pending  |
+| PERF-07       | Phase 19 | Complete |
 | PERF-08       | Phase 19 | Complete |
 | PERF-09       | Phase 19 | Complete |
-| PERF-10       | Phase 19 | Pending  |
+| PERF-10       | Phase 19 | Complete |
 | PERF-11       | Phase 16 | Complete |
 | DEBT-01       | Phase 18 | Complete |
 | DEBT-02       | Phase 19 | Complete |
