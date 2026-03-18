@@ -202,10 +202,10 @@ Plans:
 
 Plans:
 
-- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
-- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
-- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
-- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
+- [ ] 19-01-PLAN.md — FlashList migration + ChapterList memoization + setTimeout cleanup (PERF-01, PERF-02, PERF-09)
+- [ ] 19-02-PLAN.md — CoverImage expo-image migration + rename + dim overlay (PERF-08)
+- [ ] 19-03-PLAN.md — Startup optimizations + TTI mark + NetInfo leak fix (PERF-04, PERF-05, PERF-06, PERF-07, PERF-10)
+- [ ] 19-04-PLAN.md — Orphan file reassociation UI (DEBT-02)
 
 ### Phase 20: Tree Shaking
 
@@ -290,7 +290,7 @@ Plans:
 | 17. Bookmarks                                     | 5/5       | Complete       | 2026-03-12  | -          |
 | 17.1. Span Tracing Debugging Aid                  | 5/5       | Complete       | 2026-03-15  | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | 4/5       | In Progress    |             | -          |
-| 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/TBD          | Not started | -          |
+| 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/4            | Not started | -          |
 | 20. Tree Shaking                                  | v1.3      | 0/TBD          | Not started | -          |
 | 21. Maestro UI Testing Infrastructure             | v1.3      | 0/TBD          | Not started | -          |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
