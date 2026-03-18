@@ -56,7 +56,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 - [x] **Phase 16: Full Screen Player Redesign + AirPlay** — Nav bar removal, chevron dismiss, settings UIMenu, AirPlay on all surfaces, Reanimated panel animation (completed 2026-03-11)
 - [x] **Phase 17: Bookmarks** — Add/view/rename/delete with server sync and SQLite offline cache (completed 2026-03-12)
 - ✅ **Phase 18: Sleep Timer Fade + Navigation + Path Standardization** — Volume fade, Series/Authors More tab fix, deep linking, path normalization
-- [ ] **Phase 19: Performance Quick Wins** — FlashList, expo-image, TTI measurement, memory leak fixes, orphan reassociation UI
+- [x] **Phase 19: Performance Quick Wins** — FlashList, expo-image, TTI measurement, memory leak fixes, orphan reassociation UI (completed 2026-03-18)
 - [ ] **Phase 20: Tree Shaking** — Standalone production bundle optimization requiring TestFlight verification
 - [ ] **Phase 21: Maestro UI Testing Infrastructure** — Deep link flows, testID coverage, reusable subflows, regression suite
 - [ ] **Phase 22: ProgressService Decomposition** — Facade + collaborator refactor maintaining 90%+ coverage
@@ -291,7 +291,7 @@ Plans:
 | 17. Bookmarks                                     | 5/5       | Complete       | 2026-03-12  | -          |
 | 17.1. Span Tracing Debugging Aid                  | 5/5       | Complete       | 2026-03-15  | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | 4/5       | In Progress    |             | -          |
-| 19. Performance Quick Wins + Orphan Reassociation | 2/5       | In Progress    |             | -          |
+| 19. Performance Quick Wins + Orphan Reassociation | 2/5       | Complete       | 2026-03-18  | -          |
 | 20. Tree Shaking                                  | v1.3      | 0/TBD          | Not started | -          |
 | 21. Maestro UI Testing Infrastructure             | v1.3      | 0/TBD          | Not started | -          |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
