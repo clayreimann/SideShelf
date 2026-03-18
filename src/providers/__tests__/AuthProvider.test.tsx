@@ -8,22 +8,19 @@ import React from "react";
 import { AuthProvider, useAuth } from "../AuthProvider";
 
 // Mock dependencies
-jest.mock("@/db/helpers", () => ({
-  authHelpers: {
-    extractTokensFromAuthResponse: jest.fn(),
-  },
-  mediaProgressHelpers: {
-    marshalMediaProgressFromAuthResponse: jest.fn(),
-    upsertMediaProgress: jest.fn(),
-  },
-  userHelpers: {
-    marshalUserFromAuthResponse: jest.fn(),
-    upsertUser: jest.fn(),
-  },
+jest.mock("@/db/helpers/tokens", () => ({
+  extractTokensFromAuthResponse: jest.fn(),
 }));
 
 jest.mock("@/db/helpers/users", () => ({
   getUserByUsername: jest.fn(),
+  marshalUserFromAuthResponse: jest.fn(),
+  upsertUser: jest.fn(),
+}));
+
+jest.mock("@/db/helpers/mediaProgress", () => ({
+  marshalMediaProgressFromAuthResponse: jest.fn(),
+  upsertMediaProgress: jest.fn(),
 }));
 
 jest.mock("@/lib/api/endpoints", () => ({
@@ -77,10 +74,14 @@ jest.mock("@/stores/appStore", () => ({
   }),
 }));
 
-const { getUserByUsername } = require("@/db/helpers/users");
+const { getUserByUsername, marshalUserFromAuthResponse, upsertUser } = require("@/db/helpers/users");
+const {
+  marshalMediaProgressFromAuthResponse,
+  upsertMediaProgress,
+} = require("@/db/helpers/mediaProgress");
+const { extractTokensFromAuthResponse } = require("@/db/helpers/tokens");
 const { getStoredUsername, persistUsername } = require("@/lib/secureStore");
 const { apiClientService } = require("@/services/ApiClientService");
-const { authHelpers, userHelpers, mediaProgressHelpers } = require("@/db/helpers");
 const { login: doLogin } = require("@/lib/api/endpoints");
 
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -103,17 +104,17 @@ describe("AuthProvider — userId in useAuth()", () => {
     apiClientService.setTokens.mockResolvedValue(undefined);
     apiClientService.clearTokens.mockResolvedValue(undefined);
     getUserByUsername.mockResolvedValue(null);
-    userHelpers.marshalUserFromAuthResponse.mockReturnValue({
+    marshalUserFromAuthResponse.mockReturnValue({
       id: "user-id-123",
       username: "testuser",
     });
-    userHelpers.upsertUser.mockResolvedValue(undefined);
-    authHelpers.extractTokensFromAuthResponse.mockReturnValue({
+    upsertUser.mockResolvedValue(undefined);
+    extractTokensFromAuthResponse.mockReturnValue({
       accessToken: "access-token",
       refreshToken: "refresh-token",
     });
-    mediaProgressHelpers.marshalMediaProgressFromAuthResponse.mockReturnValue([]);
-    mediaProgressHelpers.upsertMediaProgress.mockResolvedValue(undefined);
+    marshalMediaProgressFromAuthResponse.mockReturnValue([]);
+    upsertMediaProgress.mockResolvedValue(undefined);
     doLogin.mockResolvedValue({
       user: { id: "user-id-123", username: "testuser" },
       userToken: "access-token",

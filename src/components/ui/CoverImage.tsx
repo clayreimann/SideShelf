@@ -1,7 +1,8 @@
 import { OfflineIcon } from "@/components/icons";
 import { useThemedStyles } from "@/lib/theme";
 import { useDownloads, useNetwork } from "@/stores";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
+import { StyleSheet, Text, View } from "react-native";
 
 export interface CoverImageProps {
   uri: string | null;
@@ -25,7 +26,13 @@ export default function CoverImage({ uri, title, fontSize, libraryItemId }: Cove
   return (
     <View style={{ width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }}>
       {uri ? (
-        <Image source={{ uri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+        <Image
+          source={{ uri }}
+          style={{ width: "100%", height: "100%" }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={libraryItemId}
+        />
       ) : (
         <Text
           style={{ color: colors.textPrimary, fontSize, textAlign: "center", paddingHorizontal: 6 }}
@@ -34,6 +41,9 @@ export default function CoverImage({ uri, title, fontSize, libraryItemId }: Cove
           {title || "Untitled"}
         </Text>
       )}
+
+      {/* Dim overlay for undownloaded items to indicate unavailability */}
+      {libraryItemId && !isDownloaded && <View style={styles.dimOverlay} />}
 
       {/* Show offline cloud icon for non-downloaded items when offline */}
       {showOfflineIcon && (
@@ -57,6 +67,14 @@ export default function CoverImage({ uri, title, fontSize, libraryItemId }: Cove
 }
 
 const styles = StyleSheet.create({
+  dimOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
   offlineIconContainer: {
     position: "absolute",
     top: 4,

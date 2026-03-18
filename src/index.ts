@@ -35,9 +35,6 @@ import TrackPlayer from "react-native-track-player";
 
 const log = logger.forTag("App");
 
-// Ensure that the coordinator is initialized on app startup
-const coordinator = getCoordinator();
-export { coordinator };
 /**
  * Initialize all singleton services
  *
@@ -46,6 +43,9 @@ export { coordinator };
  * and singletons that the app depends on.
  */
 export async function initializeApp(): Promise<void> {
+  // Defer coordinator instantiation to runtime (was module-scope — avoids eager init cost)
+  getCoordinator();
+
   // Configure trace buffer before any service initialization — synchronous, no await
   trace.configure({
     bufferSize: 800,
