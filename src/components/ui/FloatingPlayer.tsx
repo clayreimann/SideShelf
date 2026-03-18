@@ -10,7 +10,7 @@
 
 import PlayPauseButton from "@/components/player/PlayPauseButton";
 import { AirPlayButton } from "@/components/ui/AirPlayButton";
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { logger } from "@/lib/logger";
 import { borderRadius, floatingPlayer, spacing } from "@/lib/styles";
