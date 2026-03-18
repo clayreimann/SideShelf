@@ -43,7 +43,7 @@ export default function CoverImage({ uri, title, fontSize, libraryItemId }: Cove
       )}
 
       {/* Dim overlay for undownloaded items to indicate unavailability */}
-      {libraryItemId && !isDownloaded && <View style={styles.dimOverlay} />}
+      {libraryItemId && !isDownloaded && <View testID="dim-overlay" style={styles.dimOverlay} />}
 
       {/* Show offline cloud icon for non-downloaded items when offline */}
       {showOfflineIcon && (

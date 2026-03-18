@@ -19,7 +19,7 @@ import SkipButton from "@/components/player/SkipButton";
 import SleepTimerControl from "@/components/player/SleepTimerControl";
 import { ProgressBar } from "@/components/ui";
 import { AirPlayButton } from "@/components/ui/AirPlayButton";
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import { getAutoBookmarkTitle } from "@/lib/helpers/bookmarks";
 import { formatTime } from "@/lib/helpers/formatters";
 import { formatProgress } from "@/lib/helpers/progressFormat";

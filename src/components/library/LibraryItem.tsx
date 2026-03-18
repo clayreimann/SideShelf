@@ -1,4 +1,4 @@
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import { borderRadius, spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
 import { LibraryItemDisplayRow } from "@/types/components";

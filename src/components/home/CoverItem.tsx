@@ -1,4 +1,4 @@
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { type HomeScreenItem } from "@/db/helpers/homeScreen";
 import { useThemedStyles } from "@/lib/theme";
@@ -42,7 +42,12 @@ export default function CoverItem({ item, showProgress = false }: CoverItemProps
             elevation: 5,
           }}
         >
-          <CoverImage uri={item.imageUrl ?? null} title={item.title} fontSize={16} libraryItemId={item.id} />
+          <CoverImage
+            uri={item.imageUrl ?? null}
+            title={item.title}
+            fontSize={16}
+            libraryItemId={item.id}
+          />
         </View>
 
         {/* Progress Bar - only shown for items with progress */}

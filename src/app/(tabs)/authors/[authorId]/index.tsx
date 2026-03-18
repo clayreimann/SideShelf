@@ -1,4 +1,4 @@
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import { getLibraryItemsByAuthor, transformItemsToDisplayFormat } from "@/db/helpers/libraryItems";
 import { formatTime } from "@/lib/helpers/formatters";
 import { useThemedStyles } from "@/lib/theme";

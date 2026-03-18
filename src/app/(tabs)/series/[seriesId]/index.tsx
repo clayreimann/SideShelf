@@ -1,5 +1,5 @@
 import { ProgressBar } from "@/components/ui";
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import { MediaProgressRow } from "@/db/helpers/mediaProgress";
 import { SeriesBookRow } from "@/db/helpers/series";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";

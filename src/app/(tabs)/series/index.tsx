@@ -1,5 +1,5 @@
 import { HeaderControls, SortMenu } from "@/components/ui";
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import { SeriesListRow } from "@/db/helpers/series";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
