@@ -28,7 +28,12 @@ export default function HomeItem({ item }: HomeItemProps) {
         }}
       >
         <View style={{ width: 64, height: 64, borderRadius: 4, overflow: "hidden" }}>
-          <CoverImage uri={item.imageUrl ?? null} title={item.title} fontSize={12} />
+          <CoverImage
+            uri={item.imageUrl ?? null}
+            title={item.title}
+            fontSize={12}
+            libraryItemId={item.id}
+          />
         </View>
         <View style={{ flex: 1, marginLeft: 12, flexDirection: "column" }}>
           <Text style={[styles.text, { fontWeight: "600", fontSize: 16 }]} numberOfLines={1}>

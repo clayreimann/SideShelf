@@ -107,9 +107,9 @@ export default function ApiLibraryItem({ item, variant = "grid" }: LibraryItemPr
 const styles = StyleSheet.create({
   // Grid item styles
   gridItemContainer: {
-    width: "30%",
+    width: "100%",
     aspectRatio: 1,
-    marginBottom: spacing.md,
+    padding: spacing.xs,
   },
   gridCoverContainer: {
     flex: 1,

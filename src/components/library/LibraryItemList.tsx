@@ -89,10 +89,10 @@ export default function LibraryItemList({
       backgroundColor: styles.flatListContainer.backgroundColor,
       width: "100%" as const,
       paddingTop: spacing.sm,
-      paddingHorizontal: viewMode === "grid" ? spacing.md : 0,
+      paddingHorizontal: spacing.sm,
       paddingBottom: floatingPlayerPadding.paddingBottom,
     }),
-    [styles.flatListContainer.backgroundColor, viewMode, floatingPlayerPadding.paddingBottom]
+    [styles.flatListContainer.backgroundColor, floatingPlayerPadding.paddingBottom]
   );
 
   return (
@@ -129,7 +129,7 @@ const componentStyles = StyleSheet.create({
     width: "100%",
   },
   searchContainer: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
   searchInputWrapper: {

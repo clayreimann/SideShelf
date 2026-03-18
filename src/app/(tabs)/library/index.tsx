@@ -154,7 +154,9 @@ export default function LibraryScreen() {
           searchQuery={selectedLibrary ? searchQuery : undefined}
           onSearchChange={selectedLibrary ? setSearchQuery : undefined}
         />
-        <Stack.Screen options={{ title, headerTitle: title, headerRight: controls }} />
+        <Stack.Screen
+          options={{ title, headerTitle: title, headerRight: controls, headerTitleAlign: "center" }}
+        />
       </View>
     </>
   );

@@ -1,8 +1,10 @@
 import { OfflineIcon } from "@/components/icons";
 import { useThemedStyles } from "@/lib/theme";
 import { useDownloads, useNetwork } from "@/stores";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { StyleSheet, Text, View } from "react-native";
+import { SymbolView } from "expo-symbols";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
 export interface CoverImageProps {
   uri: string | null;
@@ -42,8 +44,19 @@ export default function CoverImage({ uri, title, fontSize, libraryItemId }: Cove
         </Text>
       )}
 
-      {/* Dim overlay for undownloaded items to indicate unavailability */}
+      {/* Light gray overlay for undownloaded items */}
       {libraryItemId && !isDownloaded && <View testID="dim-overlay" style={styles.dimOverlay} />}
+
+      {/* Download badge — bottom right, indicates item is not yet downloaded */}
+      {libraryItemId && !isDownloaded && (
+        <View style={styles.downloadBadge}>
+          {Platform.OS === "ios" ? (
+            <SymbolView name="arrow.down" size={10} tintColor="white" type="monochrome" />
+          ) : (
+            <MaterialCommunityIcons name="arrow-down" size={10} color="white" />
+          )}
+        </View>
+      )}
 
       {/* Show offline cloud icon for non-downloaded items when offline */}
       {showOfflineIcon && (
@@ -73,7 +86,15 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    backgroundColor: "rgba(200, 200, 200, 0.8)",
+  },
+  downloadBadge: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    borderRadius: 4,
+    padding: 3,
   },
   offlineIconContainer: {
     position: "absolute",
