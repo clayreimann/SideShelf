@@ -6,7 +6,7 @@ import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
 import { ApiBookChapter } from "@/types/api";
 import { ChapterRow } from "@/types/database";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 
 type ChapterListProps = {
@@ -75,21 +75,24 @@ export default function ChapterList({
     );
   }
 
-  const handleChapterPress = async (chapterStart: number) => {
-    if (!libraryItemId) return;
+  const handleChapterPress = useCallback(
+    async (chapterStart: number) => {
+      if (!libraryItemId) return;
 
-    try {
-      // If not currently playing this item, start playback
-      if (!isCurrentlyPlaying) {
-        await playerService.playTrack(libraryItemId);
-        // Small delay to ensure track is loaded before seeking
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      try {
+        // If not currently playing this item, start playback
+        if (!isCurrentlyPlaying) {
+          await playerService.playTrack(libraryItemId);
+          // Small delay to ensure track is loaded before seeking
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+        await playerService.seekTo(chapterStart);
+      } catch (error) {
+        console.error("[ChapterList] Failed to jump to chapter:", error);
       }
-      await playerService.seekTo(chapterStart);
-    } catch (error) {
-      console.error("[ChapterList] Failed to jump to chapter:", error);
-    }
-  };
+    },
+    [libraryItemId, isCurrentlyPlaying]
+  );
 
   return (
     <CollapsibleSection title={translate("libraryItem.chapters", { count: chapters.length })}>

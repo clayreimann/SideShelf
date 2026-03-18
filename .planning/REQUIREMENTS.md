@@ -50,22 +50,22 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 
 ### Performance (PERF)
 
-- [ ] **PERF-01**: LibraryItemList uses FlashList with `estimatedItemSize` and `getItemType` for grid/list modes
-- [ ] **PERF-02**: ChapterList `renderItem` is memoized with `useCallback` and has `getItemLayout` for fixed-height rows
+- [x] **PERF-01**: LibraryItemList uses FlashList with `estimatedItemSize` and `getItemType` for grid/list modes
+- [x] **PERF-02**: ChapterList `renderItem` is memoized with `useCallback` and has `getItemLayout` for fixed-height rows
 - [ ] **PERF-03**: Expo tree shaking enabled via `.env` flags and `metro.config.js` transformer config
 - [ ] **PERF-04**: Root layout uses direct icon imports; AuthProvider and statisticsSlice use direct `@/db/helpers` imports
-- [ ] **PERF-05**: TTI baseline established with `react-native-performance` — `performance.mark('screenInteractive')` added to home screen
-- [ ] **PERF-06**: AuthProvider secure storage reads run concurrently via `Promise.all`
+- [x] **PERF-05**: TTI baseline established with `react-native-performance` — `performance.mark('screenInteractive')` added to home screen
+- [x] **PERF-06**: AuthProvider secure storage reads run concurrently via `Promise.all`
 - [ ] **PERF-07**: Coordinator instantiation deferred from module scope into `initializeApp()`
-- [ ] **PERF-08**: `CoverImage` component uses `expo-image` for memory + disk caching
-- [ ] **PERF-09**: ChapterList `useEffect` setTimeout calls return cleanup functions
+- [x] **PERF-08**: `CoverImage` component uses `expo-image` for memory + disk caching
+- [x] **PERF-09**: ChapterList `useEffect` setTimeout calls return cleanup functions
 - [ ] **PERF-10**: `NetInfo.addEventListener` unsubscribe is captured and called in `resetNetwork()`; `initializeNetwork()` clears existing intervals before creating new ones
 - [x] **PERF-11**: FullScreenPlayer panel open/close animations use Reanimated `useAnimatedStyle`
 
 ### Technical Debt (DEBT)
 
 - [x] **DEBT-01**: File paths are stored and compared in a consistent normalized format (POSIX, no `file://` prefix) across DB, downloads, and filesystem operations
-- [ ] **DEBT-02**: User can associate an orphaned downloaded file with a known library item from the orphan management screen
+- [x] **DEBT-02**: User can associate an orphaned downloaded file with a known library item from the orphan management screen
 - [ ] **DEBT-03**: ProgressService is decomposed into a facade and collaborators with 90%+ test coverage maintained
 
 ### UI Testing (TESTING)
@@ -130,19 +130,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NAVIGATION-02 | Phase 18 | Complete |
 | NAVIGATION-03 | Phase 18 | Complete |
 | SLEEP-01      | Phase 18 | Complete |
-| PERF-01       | Phase 19 | Pending  |
-| PERF-02       | Phase 19 | Pending  |
+| PERF-01       | Phase 19 | Complete |
+| PERF-02       | Phase 19 | Complete |
 | PERF-03       | Phase 20 | Pending  |
 | PERF-04       | Phase 19 | Pending  |
-| PERF-05       | Phase 19 | Pending  |
-| PERF-06       | Phase 19 | Pending  |
+| PERF-05       | Phase 19 | Complete |
+| PERF-06       | Phase 19 | Complete |
 | PERF-07       | Phase 19 | Pending  |
-| PERF-08       | Phase 19 | Pending  |
-| PERF-09       | Phase 19 | Pending  |
+| PERF-08       | Phase 19 | Complete |
+| PERF-09       | Phase 19 | Complete |
 | PERF-10       | Phase 19 | Pending  |
 | PERF-11       | Phase 16 | Complete |
 | DEBT-01       | Phase 18 | Complete |
-| DEBT-02       | Phase 19 | Pending  |
+| DEBT-02       | Phase 19 | Complete |
 | DEBT-03       | Phase 22 | Pending  |
 | TESTING-01    | Phase 21 | Pending  |
 | TESTING-02    | Phase 21 | Pending  |

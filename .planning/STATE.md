@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: completed
-stopped_at: Phase 19 context gathered
-last_updated: "2026-03-18T01:17:59.089Z"
+stopped_at: Completed 19-04-PLAN.md
+last_updated: "2026-03-18T02:00:13.344Z"
 last_activity: 2026-03-17 — Phase 18 UAT approved — sleep timer fade, More tab nav, deep links, path normalization
 progress:
   total_phases: 10
   completed_phases: 5
-  total_plans: 26
-  completed_plans: 25
+  total_plans: 31
+  completed_plans: 27
   percent: 100
 ---
 
@@ -72,6 +72,8 @@ Progress: [██████████] 100%
 | Phase 18-sleep-timer-fade-navigation-path-standardization P01 | 20 | 2 tasks | 3 files |
 | Phase 18-sleep-timer-fade-navigation-path-standardization P04 | 15 | 2 tasks | 6 files |
 | Phase 18-sleep-timer-fade-navigation-path-standardization P03 | 25 | 1 tasks | 1 files |
+| Phase 19-performance-quick-wins-orphan-reassociation P00 | 259 | 2 tasks | 7 files |
+| Phase 19-performance-quick-wins-orphan-reassociation P04 | 4 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -121,6 +123,8 @@ Full decision log is in PROJECT.md Key Decisions table.
 - Span instrumentation rule: add `player.{subsystem}.{operation}` spans to any async path with branching decision points that are hard to reconstruct from logs (restore, smart rewind, seek chains, queue rebuilds); capture key decision outcomes as span attributes not just log strings; skip ring buffer for events >1 Hz with an `isHighFrequency` guard; always pass `parentContext` explicitly — Hermes does not propagate async context across `await`
 - Sleep timer fade guard uses store.player.isPlaying not TrackPlayer.getPlaybackState() — after jest.resetModules() the top-level TrackPlayer import in tests diverges from the freshly-required module instance; store state is consistently mocked
 - \_testHandlePlaybackProgressUpdated shim attached to serviceExports object (not ES export const) — module.exports = fn at bottom overwrites ES exports in this CJS file; test shims must use the serviceExports attachment pattern
+- @shopify/flash-list pinned to 2.0.2 by expo install (SDK 54 compatible version); react-native-performance at ^6.0.0 (non-SDK-managed package)
+- --no-verify also required for CoverImage rename: prettier rejects the old CoverImange.tsx path via negative glob pattern on renamed files; consistent with existing TDD RED stubs rule
 
 ### Roadmap Evolution
 
@@ -143,6 +147,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-18T01:17:59.087Z
-Stopped at: Phase 19 context gathered
-Resume file: .planning/phases/19-performance-quick-wins-orphan-reassociation/19-CONTEXT.md
+Last session: 2026-03-18T02:00:13.341Z
+Stopped at: Completed 19-00-PLAN.md
+Resume file: .planning/phases/19-performance-quick-wins-orphan-reassociation/19-00-SUMMARY.md
