@@ -2,7 +2,7 @@
 phase: 19
 slug: performance-quick-wins-orphan-reassociation
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-03-17
 ---
@@ -36,33 +36,35 @@ created: 2026-03-17
 
 ## Per-Task Verification Map
 
-| Task ID  | Plan | Wave | Requirement | Test Type          | Automated Command                                          | File Exists | Status     |
-| -------- | ---- | ---- | ----------- | ------------------ | ---------------------------------------------------------- | ----------- | ---------- |
-| 19-01-01 | 01   | 1    | PERF-01     | manual smoke       | `npx tsc --noEmit`                                         | N/A         | ⬜ pending |
-| 19-01-02 | 01   | 1    | PERF-02     | unit               | `jest src/components/player/__tests__/ChapterList.test.ts` | ❌ W0       | ⬜ pending |
-| 19-02-01 | 02   | 1    | PERF-04     | TypeScript compile | `npx tsc --noEmit`                                         | N/A         | ⬜ pending |
-| 19-02-02 | 02   | 1    | PERF-06     | unit               | `jest src/providers/__tests__/AuthProvider.test.ts`        | ❌ W0       | ⬜ pending |
-| 19-02-03 | 02   | 1    | PERF-07     | manual verify      | `npx tsc --noEmit`                                         | N/A         | ⬜ pending |
-| 19-02-04 | 02   | 1    | PERF-09     | unit               | `jest src/components/player/__tests__/ChapterList.test.ts` | ❌ W0       | ⬜ pending |
-| 19-02-05 | 02   | 1    | PERF-10     | unit               | `jest src/stores/slices/__tests__/networkSlice.test.ts`    | ✅          | ⬜ pending |
-| 19-03-01 | 03   | 2    | PERF-08     | unit               | `jest src/components/ui/__tests__/CoverImage.test.tsx`     | ❌ W0       | ⬜ pending |
-| 19-04-01 | 04   | 2    | PERF-05     | unit               | `jest src/app/**/__tests__/home.test.ts`                   | ❌ W0       | ⬜ pending |
-| 19-04-02 | 04   | 2    | DEBT-02     | unit               | `jest src/lib/__tests__/orphanAssociation.test.ts`         | ❌ W0       | ⬜ pending |
+| Task ID  | Plan | Wave | Requirement      | Test Type          | Automated Command                                          | File Exists | Status     |
+| -------- | ---- | ---- | ---------------- | ------------------ | ---------------------------------------------------------- | ----------- | ---------- |
+| 19-00-01 | 00   | 0    | PERF-01          | install check      | `grep flash-list package.json`                             | N/A         | ⬜ pending |
+| 19-00-02 | 00   | 0    | PERF-02          | stub creation      | `jest src/components/player/__tests__/ChapterList.test.ts` | ❌ W0       | ⬜ pending |
+| 19-01-01 | 01   | 1    | PERF-01          | manual smoke       | `npx tsc --noEmit`                                         | N/A         | ⬜ pending |
+| 19-01-02 | 01   | 1    | PERF-02, PERF-09 | unit               | `jest src/components/player/__tests__/ChapterList.test.ts` | ❌ W0       | ⬜ pending |
+| 19-02-01 | 02   | 1    | PERF-08          | unit               | `jest src/components/ui/__tests__/CoverImage.test.tsx`     | ❌ W0       | ⬜ pending |
+| 19-02-02 | 02   | 1    | PERF-08          | manual smoke       | `npx tsc --noEmit`                                         | N/A         | ⬜ pending |
+| 19-03-01 | 03   | 1    | PERF-04          | TypeScript compile | `npx tsc --noEmit`                                         | N/A         | ⬜ pending |
+| 19-03-02 | 03   | 1    | PERF-06          | unit               | `jest src/providers/__tests__/AuthProvider.test.ts`        | ❌ W0       | ⬜ pending |
+| 19-03-03 | 03   | 1    | PERF-07          | manual verify      | `npx tsc --noEmit`                                         | N/A         | ⬜ pending |
+| 19-03-04 | 03   | 1    | PERF-05          | unit               | `jest src/app/**/__tests__/home.test.ts`                   | ❌ W0       | ⬜ pending |
+| 19-03-05 | 03   | 1    | PERF-10          | unit               | `jest src/stores/slices/__tests__/networkSlice.test.ts`    | ✅          | ⬜ pending |
+| 19-04-01 | 04   | 1    | DEBT-02          | unit               | `jest src/lib/__tests__/orphanAssociation.test.ts`         | ❌ W0       | ⬜ pending |
 
 _Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky_
 
 ---
 
-## Wave 0 Requirements
+## Wave 0 Requirements (Plan 19-00)
 
+- [ ] Install: `npx expo install @shopify/flash-list react-native-performance` — required before PERF-01 and PERF-05 tasks
 - [ ] `src/components/player/__tests__/ChapterList.test.ts` — stubs for PERF-02 (getItemLayout) and PERF-09 (setTimeout cleanup)
 - [ ] `src/components/ui/__tests__/CoverImage.test.tsx` — stubs for PERF-08 (expo-image usage, dim overlay logic)
 - [ ] `src/providers/__tests__/AuthProvider.test.ts` — stubs for PERF-06 (concurrent auth reads)
 - [ ] `src/lib/__tests__/orphanAssociation.test.ts` — stubs for DEBT-02 (associate action, DB repair, list update)
 - [ ] `src/app/(tabs)/home/__tests__/home.test.ts` — stubs for PERF-05 (TTI mark fires)
-- [ ] Dependency install: `npx expo install @shopify/flash-list react-native-performance` — required before PERF-01 and PERF-05 tasks
 
-_Note: `src/stores/slices/__tests__/networkSlice.test.ts` exists — add one new test case: `resetNetwork() calls the NetInfo unsubscribe function`. This is an addition, not a new Wave 0 file._
+_Note: `src/stores/slices/__tests__/networkSlice.test.ts` exists — add one new test case: `resetNetwork() calls the NetInfo unsubscribe function`. This is an addition during plan 03 execution, not a new Wave 0 file._
 
 ---
 
@@ -78,11 +80,12 @@ _Note: `src/stores/slices/__tests__/networkSlice.test.ts` exists — add one new
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [ ] Wave 0 plan (19-00) executed successfully
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending

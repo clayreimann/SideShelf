@@ -198,10 +198,11 @@ Plans:
 4. A TTI baseline mark fires when the home screen becomes interactive, visible in performance tooling
 5. Auth startup reads credentials concurrently (no sequential await chaining)
 6. From the orphan management screen, user can associate an orphaned file with a known library item (not only delete it)
-   **Plans**: 4 plans
+   **Plans**: 5 plans
 
 Plans:
 
+- [ ] 19-00-PLAN.md — Wave 0: Install dependencies + create test stubs (TDD red phase)
 - [ ] 19-01-PLAN.md — FlashList migration + ChapterList memoization + setTimeout cleanup (PERF-01, PERF-02, PERF-09)
 - [ ] 19-02-PLAN.md — CoverImage expo-image migration + rename + dim overlay (PERF-08)
 - [ ] 19-03-PLAN.md — Startup optimizations + TTI mark + NetInfo leak fix (PERF-04, PERF-05, PERF-06, PERF-07, PERF-10)
@@ -290,7 +291,7 @@ Plans:
 | 17. Bookmarks                                     | 5/5       | Complete       | 2026-03-12  | -          |
 | 17.1. Span Tracing Debugging Aid                  | 5/5       | Complete       | 2026-03-15  | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | 4/5       | In Progress    |             | -          |
-| 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/4            | Not started | -          |
+| 19. Performance Quick Wins + Orphan Reassociation | v1.3      | 0/5            | Not started | -          |
 | 20. Tree Shaking                                  | v1.3      | 0/TBD          | Not started | -          |
 | 21. Maestro UI Testing Infrastructure             | v1.3      | 0/TBD          | Not started | -          |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
