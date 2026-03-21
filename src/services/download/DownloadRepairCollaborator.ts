@@ -5,6 +5,7 @@ import { cacheCoverIfMissing } from "@/lib/covers";
 import { getDownloadPath, getDownloadsDirectory, verifyFileExists } from "@/lib/fileSystem";
 import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 import { logger } from "@/lib/logger";
+import { trace } from "@/lib/trace";
 import type { IDownloadRepairCollaborator } from "@/services/download/types";
 
 const log = logger.forTag("DownloadRepairCollaborator");
@@ -41,20 +42,25 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
   async repairDownloadStatus(libraryItemId: string): Promise<number> {
     log.info(`Repairing download status for ${libraryItemId}...`);
 
+    const parentSpan = trace.startSpan("player.load.repair_download_paths", { libraryItemId });
+
     try {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) {
         log.info(`No metadata found for ${libraryItemId}`);
+        trace.endSpan(parentSpan, "ok", { totalFiles: 0, repairedCount: 0, clearedCount: 0 });
         return 0;
       }
 
       const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       if (audioFiles.length === 0) {
         log.info(`No audio files found for ${libraryItemId}`);
+        trace.endSpan(parentSpan, "ok", { totalFiles: 0, repairedCount: 0, clearedCount: 0 });
         return 0;
       }
 
       let repairedCount = 0;
+      let clearedCount = 0;
 
       for (const file of audioFiles) {
         if (!file.downloadInfo?.isDownloaded) {
@@ -62,16 +68,28 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
           continue;
         }
 
-        // Check if file exists at stored path
-        const existsAtStoredPath = await verifyFileExists(file.downloadInfo.downloadPath);
+        const storedPath = file.downloadInfo.downloadPath;
+        const existsAtStoredPath = await verifyFileExists(storedPath);
 
         if (existsAtStoredPath) {
           // File is fine, no repair needed
+          const fileSpan = trace.startSpan(
+            "player.load.repair_file",
+            {
+              audioFileId: file.id,
+              filename: file.filename,
+              storedPath,
+              existsAtStoredPath: true,
+              action: "ok",
+            },
+            parentSpan.context
+          );
+          trace.endSpan(fileSpan, "ok");
           continue;
         }
 
         log.warn(`File marked as downloaded but missing at stored path: ${file.filename}`);
-        log.warn(`  Stored path: ${file.downloadInfo.downloadPath}`);
+        log.warn(`  Stored path: ${storedPath}`);
 
         // Try to find the file using the expected download path (current container)
         const expectedPath = getDownloadPath(libraryItemId, file.filename);
@@ -97,6 +115,21 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
           }
 
           log.info(`  ✓ Repaired download path for ${file.filename}`);
+
+          const fileSpan = trace.startSpan(
+            "player.load.repair_file",
+            {
+              audioFileId: file.id,
+              filename: file.filename,
+              storedPath,
+              existsAtStoredPath: false,
+              existsAtExpectedPath: true,
+              expectedPath,
+              action: "repaired",
+            },
+            parentSpan.context
+          );
+          trace.endSpan(fileSpan, "ok");
         } else {
           log.warn(`  ✗ File not found at expected path either: ${expectedPath}`);
           log.warn(`  File may have been deleted by iOS to free storage space`);
@@ -104,6 +137,22 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
 
           // File truly doesn't exist, clear the download status
           await clearAudioFileDownloadStatus(file.id);
+          clearedCount++;
+
+          const fileSpan = trace.startSpan(
+            "player.load.repair_file",
+            {
+              audioFileId: file.id,
+              filename: file.filename,
+              storedPath,
+              existsAtStoredPath: false,
+              existsAtExpectedPath: false,
+              expectedPath,
+              action: "cleared",
+            },
+            parentSpan.context
+          );
+          trace.endSpan(fileSpan, "ok");
         }
       }
 
@@ -113,9 +162,15 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
         log.info(`No repairs needed for library item ${libraryItemId}`);
       }
 
+      trace.endSpan(parentSpan, "ok", {
+        totalFiles: audioFiles.length,
+        repairedCount,
+        clearedCount,
+      });
       return repairedCount;
     } catch (error) {
       log.error(`Error repairing download status for ${libraryItemId}:`, error as Error);
+      trace.endSpan(parentSpan, "error");
       return 0;
     }
   }

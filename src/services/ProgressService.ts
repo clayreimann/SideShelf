@@ -166,10 +166,26 @@ export class ProgressService {
         );
       }
 
-      // Use the most recently updated session
-      const session = activeSessions.sort(
+      // Use the most recently updated session as winner
+      const [session, ...losers] = activeSessions.sort(
         (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-      )[0];
+      );
+
+      // Always close all non-winner sessions to prevent zombie persistence across boots
+      if (losers.length > 0) {
+        log.info(`Closing ${losers.length} loser session(s) to prevent zombie persistence`);
+        for (const loser of losers) {
+          const isBrandNew = loser.currentTime === loser.startTime;
+          if (!isBrandNew) {
+            // Has real listening progress — sync before closing
+            log.info(`Syncing loser session with real progress before closing: ${loser.id}`);
+            await this.syncSessionToServer(context.userId, loser.libraryItemId, loser.id);
+          } else {
+            log.info(`Closing zombie loser session silently (no progress to sync): ${loser.id}`);
+          }
+          await endStaleListeningSession(loser.id, loser.currentTime);
+        }
+      }
 
       // If a specific library item ID was provided, verify it matches
       if (matchLibraryItemId && session.libraryItemId !== matchLibraryItemId) {

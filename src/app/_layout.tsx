@@ -9,7 +9,9 @@ import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { useAppStore } from "@/stores/appStore";
+import { PlayerState } from "@/types/coordinator";
 import { ErrorBoundary } from "@/components/errors";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
@@ -154,13 +156,22 @@ export default function RootLayout() {
         }
 
         if (wasLongBackground || contextRecreated) {
-          log.info(
-            `App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, restoring persisted state`
-          );
+          const machineState = getCoordinator().getState();
+          const needsRestore =
+            machineState === PlayerState.IDLE || machineState === PlayerState.RESTORING;
 
-          // Restore current track from AsyncStore if missing
-          // Coordinator bridge keeps store in sync; no manual reconciliation needed
-          await useAppStore.getState().restorePersistedState();
+          if (needsRestore) {
+            log.info(
+              `App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, restoring persisted state`
+            );
+            // Restore current track from AsyncStore if missing
+            // Coordinator bridge keeps store in sync; no manual reconciliation needed
+            await useAppStore.getState().restorePersistedState();
+          } else {
+            log.info(
+              `[RootLayout] Skipping restore on foreground — machine already in ${machineState}`
+            );
+          }
         }
 
         log.info("Triggering progress refetch on app foreground");

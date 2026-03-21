@@ -24,6 +24,7 @@ import { ensureItemInDocuments } from "@/lib/fileLifecycleManager";
 import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { trace } from "@/lib/trace";
 import { getStoredUsername } from "@/lib/secureStore";
 import { downloadService } from "@/services/DownloadService";
 import { useAppStore } from "@/stores/appStore";
@@ -59,7 +60,8 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
 
       // Repair download paths to account for iOS container path changes
       try {
-        await downloadService.repairDownloadStatus(libraryItemId);
+        const repairedCount = await downloadService.repairDownloadStatus(libraryItemId);
+        trace.addEvent("player.load.repair_completed", { libraryItemId, repairedCount });
       } catch (error) {
         log.warn(`Failed to repair download status, continuing with playback: ${error}`);
       }
@@ -200,6 +202,10 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
    * Build track list from PlayerTrack.
    */
   async buildTrackList(playerTrack: PlayerTrack): Promise<Track[]> {
+    const parentSpan = trace.startSpan("player.load.build_track_list", {
+      libraryItemId: playerTrack.libraryItemId,
+    });
+
     const tracks: Track[] = [];
 
     // First, check which files we have locally
@@ -261,15 +267,26 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
     // Get API info once for all streaming URLs
     let cachedApiInfo = this.facade.getApiInfo();
 
+    let localCount = 0;
+    let streamingCount = 0;
+    let missingCount = 0;
+
     // Process each audio file in a single loop
     for (const audioFile of playerTrack.audioFiles) {
       let url: string | undefined;
-      let sourceType: "local" | "streaming" = "local";
+      let sourceType: "local" | "streaming" | "missing" = "missing";
+      let storedPath: string | undefined;
+      let resolvedPath: string | undefined;
+      let fileExists = false;
 
       // First, try to use local file if available
       if (locallyAvailableFiles.has(audioFile.id) && audioFile.downloadInfo?.downloadPath) {
-        url = resolveAppPath(audioFile.downloadInfo.downloadPath);
+        storedPath = audioFile.downloadInfo.downloadPath;
+        resolvedPath = resolveAppPath(storedPath);
+        url = resolvedPath;
         sourceType = "local";
+        fileExists = true;
+        localCount++;
       }
       // If no local file, try streaming
       else if (playSession && playSession.audioTracks.length > 0) {
@@ -282,8 +299,27 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
           const separator = streamingTrack.contentUrl.includes("?") ? "&" : "?";
           url = `${cachedApiInfo.baseUrl}${streamingTrack.contentUrl}${separator}token=${cachedApiInfo.accessToken}`;
           sourceType = "streaming";
+          streamingCount++;
         }
       }
+
+      if (sourceType === "missing") {
+        missingCount++;
+      }
+
+      const fileSpan = trace.startSpan(
+        "player.load.file_verify",
+        {
+          audioFileId: audioFile.id,
+          filename: audioFile.filename,
+          storedPath: storedPath ?? null,
+          resolvedPath: resolvedPath ?? null,
+          fileExists,
+          sourceType,
+        },
+        parentSpan.context
+      );
+      trace.endSpan(fileSpan, "ok");
 
       // Add track if we have a valid URL
       if (url) {
@@ -306,6 +342,13 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         log.warn(`No playable source found for: ${audioFile.filename}`);
       }
     }
+
+    trace.endSpan(parentSpan, "ok", {
+      totalFiles: playerTrack.audioFiles.length,
+      localCount,
+      streamingCount,
+      missingCount,
+    });
 
     return tracks;
   }
