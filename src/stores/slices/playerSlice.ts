@@ -394,6 +394,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     saveItem(ASYNC_KEYS.position, position);
+    saveItem(ASYNC_KEYS.positionUpdatedAt, Date.now());
     // Update current chapter (calculates chapter-relative position internally)
     state._updateCurrentChapter(position);
   },

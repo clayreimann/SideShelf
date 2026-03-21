@@ -50,6 +50,7 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     BUFFERING_STARTED: PlayerState.BUFFERING,
     SET_RATE: PlayerState.PLAYING, // No-op transition — rate change doesn't change state
     SET_VOLUME: PlayerState.PLAYING, // No-op transition — volume change doesn't change state
+    POSITION_RECONCILED: PlayerState.PLAYING, // Position resolved after resume while already playing
     NATIVE_STATE_CHANGED: PlayerState.PLAYING, // Allow native state changes during playback
     NATIVE_TRACK_CHANGED: PlayerState.PLAYING, // Allow track changes during playback
     NATIVE_ERROR: PlayerState.ERROR,

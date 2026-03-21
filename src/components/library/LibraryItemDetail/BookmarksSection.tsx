@@ -113,9 +113,8 @@ export default function BookmarksSection({
     <>
       <CollapsibleSection title={`Bookmarks (${bookmarks.length})`} defaultExpanded={false}>
         {sortedBookmarks.map((bookmark, index) => (
-          <Pressable
+          <View
             key={`${bookmark.id}-${bookmark.time}`}
-            onPress={() => void handleJumpToBookmark(bookmark.time)}
             style={{
               paddingVertical: 12,
               borderBottomWidth: index < sortedBookmarks.length - 1 ? 1 : 0,
@@ -125,15 +124,26 @@ export default function BookmarksSection({
               gap: 8,
             }}
           >
-            <Ionicons name="bookmark" size={16} color={colors.textPrimary} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.text, { fontWeight: "600", marginBottom: 2 }]} numberOfLines={1}>
-                {bookmark.title}
-              </Text>
-              <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
-                {formatTime(bookmark.time)}
-              </Text>
-            </View>
+            {/* Left: tap to seek */}
+            <Pressable
+              style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}
+              onPress={() => void handleJumpToBookmark(bookmark.time)}
+            >
+              <Ionicons name="bookmark" size={16} color={colors.textPrimary} />
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[styles.text, { fontWeight: "600", marginBottom: 2 }]}
+                  numberOfLines={1}
+                >
+                  {bookmark.title}
+                </Text>
+                <Text style={[styles.text, { fontSize: 12, opacity: 0.7 }]}>
+                  {formatTime(bookmark.time)}
+                </Text>
+              </View>
+            </Pressable>
+
+            {/* Right: tap to open menu */}
             <MenuView
               title={bookmark.title}
               shouldOpenOnLongPress={false}
@@ -145,17 +155,11 @@ export default function BookmarksSection({
                 { id: "delete", title: "Delete", attributes: { destructive: true } },
               ]}
             >
-              <Pressable
-                hitSlop={8}
-                style={{ padding: 4 }}
-                onPress={(event) => {
-                  event.stopPropagation();
-                }}
-              >
+              <Pressable hitSlop={8} style={{ padding: 4 }}>
                 <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
               </Pressable>
             </MenuView>
-          </Pressable>
+          </View>
         ))}
       </CollapsibleSection>
 

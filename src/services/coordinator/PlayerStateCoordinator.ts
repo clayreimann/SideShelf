@@ -654,7 +654,10 @@ export class PlayerStateCoordinator extends EventEmitter {
    */
   async resolveCanonicalPosition(libraryItemId: string): Promise<ResumePositionInfo> {
     const store = useAppStore.getState();
-    const asyncStoragePosition = (await getAsyncItem(ASYNC_KEYS.position)) as number | null;
+    const [asyncStoragePosition, asyncStoragePositionUpdatedAt] = (await Promise.all([
+      getAsyncItem(ASYNC_KEYS.position),
+      getAsyncItem(ASYNC_KEYS.positionUpdatedAt),
+    ])) as [number | null, number | null];
 
     let position = store.player.position;
     let source: ResumeSource = "store";
@@ -690,55 +693,85 @@ export class PlayerStateCoordinator extends EventEmitter {
             } else {
               const sessionPosition = activeSession.currentTime;
               const sessionUpdatedAt = activeSession.updatedAt.getTime();
-              const savedPosition = savedProgress?.currentTime;
-              const savedLastUpdate = savedProgress?.lastUpdate?.getTime();
 
-              // Check if session position is implausibly small (native 0-before-loaded artifact)
-              if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
-                if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
-                  log.warn(
-                    `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : "unknown"})`
-                  );
-                  position = savedPosition;
-                  source = "savedProgress";
-                  authoritativePosition = savedPosition;
-                } else if (asyncStoragePosition && asyncStoragePosition >= MIN_PLAUSIBLE_POSITION) {
-                  log.warn(
-                    `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`
-                  );
-                  position = asyncStoragePosition;
-                  source = "asyncStorage";
-                  authoritativePosition = asyncStoragePosition;
+              // If AsyncStorage has a timestamped position that is fresher than the DB session,
+              // prefer it — the session may be stale (e.g. zombie session not closed on last run).
+              if (
+                asyncStoragePosition !== null &&
+                asyncStoragePositionUpdatedAt !== null &&
+                asyncStoragePositionUpdatedAt > sessionUpdatedAt
+              ) {
+                log.info(
+                  `[Coordinator] AsyncStorage position (${formatTime(asyncStoragePosition)}s, ` +
+                    `updated ${new Date(asyncStoragePositionUpdatedAt).toISOString()}) ` +
+                    `is more recent than active session (${formatTime(sessionPosition)}s, ` +
+                    `updated ${new Date(sessionUpdatedAt).toISOString()}) — using asyncStorage`
+                );
+                position = asyncStoragePosition;
+                source = "asyncStorage";
+                authoritativePosition = asyncStoragePosition;
+              } else {
+                const savedPosition = savedProgress?.currentTime;
+                const savedLastUpdate = savedProgress?.lastUpdate?.getTime();
+
+                // Check if session position is implausibly small (native 0-before-loaded artifact)
+                if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
+                  if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
+                    log.warn(
+                      `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : "unknown"})`
+                    );
+                    position = savedPosition;
+                    source = "savedProgress";
+                    authoritativePosition = savedPosition;
+                  } else if (
+                    asyncStoragePosition &&
+                    asyncStoragePosition >= MIN_PLAUSIBLE_POSITION
+                  ) {
+                    log.warn(
+                      `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`
+                    );
+                    position = asyncStoragePosition;
+                    source = "asyncStorage";
+                    authoritativePosition = asyncStoragePosition;
+                  } else {
+                    // Session position is small but no better alternative exists
+                    position = sessionPosition;
+                    source = "activeSession";
+                    authoritativePosition = sessionPosition;
+                    log.info(
+                      `[Coordinator] Resume position from active session (small but no alternative): ${formatTime(position)}s`
+                    );
+                  }
+                } else if (savedPosition && savedLastUpdate) {
+                  // Both exist — compare timestamps to determine which is more recent
+                  const positionDiff = Math.abs(sessionPosition - savedPosition);
+
+                  if (positionDiff > LARGE_DIFF_THRESHOLD) {
+                    // Large discrepancy — prefer the more recently updated source
+                    const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
+                    const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
+                    const preferredSource: ResumeSource = isSessionNewer
+                      ? "activeSession"
+                      : "savedProgress";
+
+                    log.warn(
+                      `[Coordinator] Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
+                    );
+
+                    position = preferredPosition;
+                    source = preferredSource;
+                    authoritativePosition = preferredPosition;
+                  } else {
+                    // Positions are close — use session (more frequently updated)
+                    position = sessionPosition;
+                    source = "activeSession";
+                    authoritativePosition = sessionPosition;
+                    log.info(
+                      `[Coordinator] Resume position from active session: ${formatTime(position)}s`
+                    );
+                  }
                 } else {
-                  // Session position is small but no better alternative exists
-                  position = sessionPosition;
-                  source = "activeSession";
-                  authoritativePosition = sessionPosition;
-                  log.info(
-                    `[Coordinator] Resume position from active session (small but no alternative): ${formatTime(position)}s`
-                  );
-                }
-              } else if (savedPosition && savedLastUpdate) {
-                // Both exist — compare timestamps to determine which is more recent
-                const positionDiff = Math.abs(sessionPosition - savedPosition);
-
-                if (positionDiff > LARGE_DIFF_THRESHOLD) {
-                  // Large discrepancy — prefer the more recently updated source
-                  const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
-                  const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
-                  const preferredSource: ResumeSource = isSessionNewer
-                    ? "activeSession"
-                    : "savedProgress";
-
-                  log.warn(
-                    `[Coordinator] Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
-                  );
-
-                  position = preferredPosition;
-                  source = preferredSource;
-                  authoritativePosition = preferredPosition;
-                } else {
-                  // Positions are close — use session (more frequently updated)
+                  // Normal case — use session position
                   position = sessionPosition;
                   source = "activeSession";
                   authoritativePosition = sessionPosition;
@@ -746,15 +779,7 @@ export class PlayerStateCoordinator extends EventEmitter {
                     `[Coordinator] Resume position from active session: ${formatTime(position)}s`
                   );
                 }
-              } else {
-                // Normal case — use session position
-                position = sessionPosition;
-                source = "activeSession";
-                authoritativePosition = sessionPosition;
-                log.info(
-                  `[Coordinator] Resume position from active session: ${formatTime(position)}s`
-                );
-              }
+              } // end else (asyncStorage not fresher than session)
             } // end else (not isFinished)
           } else if (savedProgress?.currentTime) {
             // If item is marked finished, start from beginning
