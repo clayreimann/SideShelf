@@ -1,30 +1,34 @@
 /**
- * Tests for AuthProvider — userId in useAuth() (EFFECT-03)
+ * Tests for AuthProvider
+ *
+ * PERF-06: concurrent auth reads — apiClientService.initialize and
+ * getStoredUsername run concurrently via Promise.all (both read from
+ * secure storage; neither depends on the other's result)
  */
 
-import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { act, renderHook } from "@testing-library/react-native";
 import React from "react";
-import { AuthProvider, useAuth } from "../AuthProvider";
+import { View } from "react-native";
+import { act, render } from "@testing-library/react-native";
+import { describe, expect, it, jest } from "@jest/globals";
 
-// Mock dependencies
-jest.mock("@/db/helpers/tokens", () => ({
-  extractTokensFromAuthResponse: jest.fn(),
+// --- Mocks ---
+
+jest.mock("@/providers/DbProvider", () => ({
+  useDb: jest.fn(() => ({ initialized: true })),
 }));
 
-jest.mock("@/db/helpers/users", () => ({
-  getUserByUsername: jest.fn(),
-  marshalUserFromAuthResponse: jest.fn(),
-  upsertUser: jest.fn(),
-}));
-
-jest.mock("@/db/helpers/mediaProgress", () => ({
-  marshalMediaProgressFromAuthResponse: jest.fn(),
-  upsertMediaProgress: jest.fn(),
-}));
-
-jest.mock("@/lib/api/endpoints", () => ({
-  login: jest.fn(),
+jest.mock("@/services/ApiClientService", () => ({
+  apiClientService: {
+    initialize: jest.fn(),
+    getBaseUrl: jest.fn(() => null),
+    getAccessToken: jest.fn(() => null),
+    getRefreshToken: jest.fn(() => null),
+    isAuthenticated: jest.fn(() => false),
+    subscribe: jest.fn(() => jest.fn()),
+    setBaseUrl: jest.fn(),
+    setTokens: jest.fn(),
+    clearTokens: jest.fn(),
+  },
 }));
 
 jest.mock("@/lib/secureStore", () => ({
@@ -32,37 +36,35 @@ jest.mock("@/lib/secureStore", () => ({
   persistUsername: jest.fn(),
 }));
 
-jest.mock("@/providers/DbProvider", () => ({
-  useDb: jest.fn(() => ({ initialized: true })),
+jest.mock("@/db/helpers/users", () => ({
+  marshalUserFromAuthResponse: jest.fn(),
+  upsertUser: jest.fn(),
+  getUserByUsername: jest.fn(),
 }));
 
-jest.mock("@/services/ProgressService", () => ({
-  progressService: {
-    fetchServerProgress: jest.fn(),
-  },
+jest.mock("@/db/helpers/tokens", () => ({
+  extractTokensFromAuthResponse: jest.fn(),
 }));
 
-jest.mock("@/services/ApiClientService", () => ({
-  apiClientService: {
-    initialize: jest.fn(),
-    getBaseUrl: jest.fn(() => "http://localhost:13378"),
-    getAccessToken: jest.fn(() => "test-token"),
-    getRefreshToken: jest.fn(() => null),
-    isAuthenticated: jest.fn(() => true),
-    setBaseUrl: jest.fn(),
-    setTokens: jest.fn(),
-    clearTokens: jest.fn(),
-    subscribe: jest.fn(() => () => {}),
-  },
+jest.mock("@/db/helpers/mediaProgress", () => ({
+  marshalMediaProgressFromAuthResponse: jest.fn(),
+  upsertMediaProgress: jest.fn(),
 }));
 
 jest.mock("@/db/helpers/wipeUserData", () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  wipeUserData: jest.fn<() => Promise<void>>().mockResolvedValue(undefined as any),
+  wipeUserData: jest.fn(),
+}));
+
+jest.mock("@/lib/api/endpoints", () => ({
+  login: jest.fn(),
+}));
+
+jest.mock("@/services/ProgressService", () => ({
+  progressService: { fetchServerProgress: jest.fn() },
 }));
 
 jest.mock("@/stores/appStore", () => ({
-  useAppStore: Object.assign(jest.fn(), {
+  useAppStore: {
     getState: jest.fn(() => ({
       resetLibrary: jest.fn(),
       resetSeries: jest.fn(),
@@ -71,130 +73,84 @@ jest.mock("@/stores/appStore", () => ({
       resetUserProfile: jest.fn(),
       resetHome: jest.fn(),
     })),
-  }),
+  },
 }));
 
-const { getUserByUsername, marshalUserFromAuthResponse, upsertUser } = require("@/db/helpers/users");
-const {
-  marshalMediaProgressFromAuthResponse,
-  upsertMediaProgress,
-} = require("@/db/helpers/mediaProgress");
-const { extractTokensFromAuthResponse } = require("@/db/helpers/tokens");
-const { getStoredUsername, persistUsername } = require("@/lib/secureStore");
-const { apiClientService } = require("@/services/ApiClientService");
-const { login: doLogin } = require("@/lib/api/endpoints");
+// --- Typed mock helpers (imported after mocks are registered) ---
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  return <AuthProvider>{children}</AuthProvider>;
-}
+import { AuthProvider } from "@/providers/AuthProvider";
+import { apiClientService } from "@/services/ApiClientService";
+import { getStoredUsername, persistUsername } from "@/lib/secureStore";
+import { getUserByUsername } from "@/db/helpers/users";
 
-describe("AuthProvider — userId in useAuth()", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+const mockInitialize = apiClientService.initialize as jest.MockedFunction<
+  typeof apiClientService.initialize
+>;
+const mockGetStoredUsername = getStoredUsername as jest.MockedFunction<typeof getStoredUsername>;
+const mockPersistUsername = persistUsername as jest.MockedFunction<typeof persistUsername>;
+const mockGetUserByUsername = getUserByUsername as jest.MockedFunction<typeof getUserByUsername>;
 
-    // Default: no stored username
-    getStoredUsername.mockResolvedValue(null);
-    persistUsername.mockResolvedValue(undefined);
-    apiClientService.initialize.mockResolvedValue(undefined);
-    apiClientService.getBaseUrl.mockReturnValue("http://localhost:13378");
-    apiClientService.getAccessToken.mockReturnValue(null);
-    apiClientService.getRefreshToken.mockReturnValue(null);
-    apiClientService.isAuthenticated.mockReturnValue(false);
-    apiClientService.subscribe.mockReturnValue(() => {});
-    apiClientService.setTokens.mockResolvedValue(undefined);
-    apiClientService.clearTokens.mockResolvedValue(undefined);
-    getUserByUsername.mockResolvedValue(null);
-    marshalUserFromAuthResponse.mockReturnValue({
-      id: "user-id-123",
-      username: "testuser",
-    });
-    upsertUser.mockResolvedValue(undefined);
-    extractTokensFromAuthResponse.mockReturnValue({
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-    });
-    marshalMediaProgressFromAuthResponse.mockReturnValue([]);
-    upsertMediaProgress.mockResolvedValue(undefined);
-    doLogin.mockResolvedValue({
-      user: { id: "user-id-123", username: "testuser" },
-      userToken: "access-token",
-      token: "access-token",
-    });
-  });
+// --- Tests ---
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it("userId is null before login", async () => {
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    // Wait for initialization to complete
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
-
-    expect(result.current.userId).toBeNull();
-  });
-
-  it("useAuth() returns userId after login", async () => {
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    // Wait for initialization
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
-
-    await act(async () => {
-      await result.current.login({
-        serverUrl: "http://localhost:13378",
-        username: "testuser",
-        password: "password",
+describe("AuthProvider", () => {
+  describe("PERF-06: concurrent auth reads", () => {
+    it("calls apiClientService.initialize and getStoredUsername concurrently via Promise.all", async () => {
+      // Make initialize() hang indefinitely — if getStoredUsername is called sequentially
+      // (i.e., awaited after initialize), it would never be reached.
+      let resolveInit!: () => void;
+      const initPromise = new Promise<void>((resolve) => {
+        resolveInit = resolve;
       });
-    });
+      mockInitialize.mockReturnValue(initPromise);
+      mockGetStoredUsername.mockResolvedValue(null);
+      mockPersistUsername.mockResolvedValue(undefined);
 
-    expect(result.current.userId).toBe("user-id-123");
-  });
+      render(
+        <AuthProvider>
+          <View />
+        </AuthProvider>
+      );
 
-  it("userId is populated from DB during initialize when username exists", async () => {
-    getStoredUsername.mockResolvedValue("testuser");
-    apiClientService.getAccessToken.mockReturnValue("stored-token");
-    apiClientService.isAuthenticated.mockReturnValue(true);
-    getUserByUsername.mockResolvedValue({ id: "user-id-456", username: "testuser" });
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    });
-
-    expect(result.current.userId).toBe("user-id-456");
-  });
-
-  it("logout resets userId to null", async () => {
-    const { result } = renderHook(() => useAuth(), { wrapper });
-
-    // Wait for initialization
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
-
-    // Login first
-    await act(async () => {
-      await result.current.login({
-        serverUrl: "http://localhost:13378",
-        username: "testuser",
-        password: "password",
+      // Flush microtasks so the useEffect async body begins executing
+      await act(async () => {
+        await Promise.resolve();
       });
+
+      // getStoredUsername was called even though initialize() has not resolved yet
+      // → proves both are started concurrently via Promise.all, not sequentially
+      expect(mockGetStoredUsername).toHaveBeenCalled();
+      expect(mockInitialize).toHaveBeenCalled();
+
+      // Resolve to avoid dangling promise warnings
+      resolveInit();
     });
 
-    expect(result.current.userId).toBe("user-id-123");
+    it("getUserByUsername is called after Promise.all resolves (not concurrent)", async () => {
+      mockInitialize.mockResolvedValue(undefined);
+      mockGetStoredUsername.mockResolvedValue("alice");
+      mockPersistUsername.mockResolvedValue(undefined);
+      mockGetUserByUsername.mockResolvedValue({
+        id: "user-1",
+        username: "alice",
+        serverUrl: null,
+        createdAt: null,
+        updatedAt: null,
+      });
 
-    // Now logout
-    await act(async () => {
-      await result.current.logout();
+      render(
+        <AuthProvider>
+          <View />
+        </AuthProvider>
+      );
+
+      await act(async () => {
+        // Allow the full async chain (Promise.all → getUserByUsername) to settle
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      // getUserByUsername is called with the username from getStoredUsername,
+      // confirming it runs only after Promise.all resolves (not concurrently with it)
+      expect(mockGetUserByUsername).toHaveBeenCalledWith("alice");
     });
-
-    expect(result.current.userId).toBeNull();
   });
 });

@@ -11,12 +11,11 @@ import {
   getAllDownloadedAudioFiles,
   getAllDownloadedLibraryFiles,
   getAllLocalCovers,
-  markAudioFileAsDownloaded,
-  markLibraryFileAsDownloaded,
 } from "@/db/helpers/localData";
 import { audioFiles } from "@/db/schema/audioFiles";
 import { libraryFiles } from "@/db/schema/libraryFiles";
 import { mediaMetadata } from "@/db/schema/mediaMetadata";
+import { associateOrphanFile } from "@/lib/orphanAssociation";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,7 +27,7 @@ import {
 } from "@/lib/iCloudBackupExclusion";
 import { useThemedStyles } from "@/lib/theme";
 import { type StorageEntry, useStatistics } from "@/stores";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { logger } from "@/lib/logger";
 import { Directory, File, Paths } from "expo-file-system";
 import { OrphanFile, scanForOrphanFiles } from "@/lib/orphanScanner";
@@ -473,100 +472,13 @@ export default function StorageScreen() {
     }
   }, []);
 
-  // Note on dependency array: db, eq, and, mediaMetadata, audioFiles, libraryFiles are all
-  // module imports (not hooks), and setOrphanFiles is a stable React state setter.
-  // Empty deps array is correct — no stale closure risk.
-  const associateOrphanFile = useCallback(async (orphan: OrphanFile) => {
-    const log = logger.forTag("StorageScreen");
-    try {
-      // 1. Look up item title by libraryItemId
-      const metadataRows = await db
-        .select({ title: mediaMetadata.title })
-        .from(mediaMetadata)
-        .where(eq(mediaMetadata.libraryItemId, orphan.libraryItemId))
-        .limit(1);
-      const title = normalizeTitle(metadataRows[0]?.title);
-
-      // 2. Determine file type by extension
-      const ext = orphan.filename.slice(orphan.filename.lastIndexOf(".")).toLowerCase();
-      const audioExtensions = [".mp3", ".m4b", ".m4a", ".ogg", ".opus", ".flac", ".aac", ".wav"];
-      const isAudio = audioExtensions.includes(ext);
-
-      // 3. Look up the file ID needed for DB repair
-      let fileId: string | null = null;
-      if (isAudio) {
-        // Find audio file by filename and libraryItemId (via mediaMetadata join)
-        const rows = await db
-          .select({ id: audioFiles.id })
-          .from(audioFiles)
-          .innerJoin(mediaMetadata, eq(audioFiles.mediaId, mediaMetadata.id))
-          .where(
-            and(
-              eq(mediaMetadata.libraryItemId, orphan.libraryItemId),
-              eq(audioFiles.filename, orphan.filename)
-            )
-          )
-          .limit(1);
-        fileId = rows[0]?.id ?? null;
-      } else {
-        // Find library file by filename and libraryItemId
-        const rows = await db
-          .select({ id: libraryFiles.id })
-          .from(libraryFiles)
-          .where(
-            and(
-              eq(libraryFiles.libraryItemId, orphan.libraryItemId),
-              eq(libraryFiles.filename, orphan.filename)
-            )
-          )
-          .limit(1);
-        fileId = rows[0]?.id ?? null;
-      }
-
-      if (!fileId) {
-        Alert.alert(
-          "Cannot Repair",
-          `No matching ${isAudio ? "audio" : "library"} file record found for "${orphan.filename}". The file may need to be re-downloaded.`,
-          [{ text: "OK" }]
-        );
-        return;
-      }
-
-      // 4. Show confirmation alert with item title
-      Alert.alert(
-        "Repair Download Record",
-        `This file belongs to "${title}" \u2014 repair download record?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Repair",
-            onPress: async () => {
-              try {
-                if (isAudio) {
-                  await markAudioFileAsDownloaded(fileId!, orphan.uri);
-                } else {
-                  await markLibraryFileAsDownloaded(fileId!, orphan.uri);
-                }
-                // Remove orphan from list
-                setOrphanFiles((prev) => prev.filter((f) => f.uri !== orphan.uri));
-                log.info(
-                  `[associateOrphanFile] Repaired ${orphan.filename} -> ${orphan.libraryItemId}`
-                );
-              } catch (repairError) {
-                log.error("[associateOrphanFile] Repair failed", repairError as Error);
-                Alert.alert(
-                  "Repair Failed",
-                  "Could not repair the download record. Please try again."
-                );
-              }
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      log.error("[associateOrphanFile] Failed", error as Error);
-    }
-  }, []);
+  const handleAssociateOrphan = useCallback(
+    (orphan: OrphanFile) =>
+      associateOrphanFile(orphan, (uri) =>
+        setOrphanFiles((prev) => prev.filter((f) => f.uri !== uri))
+      ),
+    []
+  );
 
   // Determine if we should show the backup column
   const showBackupColumn = isICloudBackupExclusionAvailable();
@@ -664,7 +576,7 @@ export default function StorageScreen() {
               sublabel: formatBytes(orphan.size),
               onPress: disabledOnPress,
               disabled: true,
-              linkAction: () => void associateOrphanFile(orphan),
+              linkAction: () => void handleAssociateOrphan(orphan),
               trashAction: () => {
                 Alert.alert(
                   "Delete Unknown File",
