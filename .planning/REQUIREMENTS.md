@@ -52,7 +52,7 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 
 - [x] **PERF-01**: LibraryItemList uses FlashList with `estimatedItemSize` and `getItemType` for grid/list modes
 - [x] **PERF-02**: ChapterList `renderItem` is memoized with `useCallback` and has `getItemLayout` for fixed-height rows
-- [ ] **PERF-03**: Expo tree shaking enabled via `.env` flags and `metro.config.js` transformer config
+- [x] **PERF-03**: Expo tree shaking enabled via `.env` flags and `metro.config.js` transformer config
 - [x] **PERF-04**: Root layout uses direct icon imports; AuthProvider and statisticsSlice use direct `@/db/helpers` imports
 - [x] **PERF-05**: TTI baseline established with `react-native-performance` — `performance.mark('screenInteractive')` added to home screen
 - [x] **PERF-06**: AuthProvider secure storage reads run concurrently via `Promise.all`
@@ -132,7 +132,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SLEEP-01      | Phase 18 | Complete |
 | PERF-01       | Phase 19 | Complete |
 | PERF-02       | Phase 19 | Complete |
-| PERF-03       | Phase 20 | Pending  |
+| PERF-03       | Phase 20 | Complete |
 | PERF-04       | Phase 19 | Complete |
 | PERF-05       | Phase 19 | Complete |
 | PERF-06       | Phase 19 | Complete |

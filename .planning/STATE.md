@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: — Beta Polish
 status: completed
-stopped_at: Phase 20 context gathered
-last_updated: "2026-03-22T13:50:22.413Z"
+stopped_at: "Completed 20-tree-shaking plan 01 — tree shaking enabled + EAS build #80 submitted to TestFlight"
+last_updated: "2026-03-22T14:50:58.229Z"
 last_activity: 2026-03-17 — Phase 18 UAT approved — sleep timer fade, More tab nav, deep links, path normalization
 progress:
   total_phases: 10
   completed_phases: 6
-  total_plans: 31
-  completed_plans: 30
+  total_plans: 33
+  completed_plans: 31
   percent: 100
 ---
 
@@ -74,6 +74,7 @@ Progress: [██████████] 100%
 | Phase 18-sleep-timer-fade-navigation-path-standardization P03 | 25 | 1 tasks | 1 files |
 | Phase 19-performance-quick-wins-orphan-reassociation P00 | 259 | 2 tasks | 7 files |
 | Phase 19-performance-quick-wins-orphan-reassociation P04 | 4 | 1 tasks | 1 files |
+| Phase 20-tree-shaking P01 | 15 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,9 @@ Full decision log is in PROJECT.md Key Decisions table.
 - \_testHandlePlaybackProgressUpdated shim attached to serviceExports object (not ES export const) — module.exports = fn at bottom overwrites ES exports in this CJS file; test shims must use the serviceExports attachment pattern
 - @shopify/flash-list pinned to 2.0.2 by expo install (SDK 54 compatible version); react-native-performance at ^6.0.0 (non-SDK-managed package)
 - --no-verify also required for CoverImage rename: prettier rejects the old CoverImange.tsx path via negative glob pattern on renamed files; consistent with existing TDD RED stubs rule
+- EXPO*TREE_SHAKING env var consumed by metro.config.js (Node.js build tool) — no EXPO_PUBLIC* prefix needed; that prefix would unnecessarily expose the flag in the app JS bundle
+- .env committed to git (not gitignored) for tree shaking flag — contains no secrets and EAS cloud build needs it for metro bundling; .gitignore only blocks .env\*.local
+- Feature-flag-gated metro config pattern: read env var at top of metro.config.js, const FLAG = process.env.X === 'true', gate config mutations with if (FLAG) — instant revert via flag value change + rebuild
 
 ### Roadmap Evolution
 
@@ -147,6 +151,6 @@ Full decision log is in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-22T13:50:22.411Z
-Stopped at: Phase 20 context gathered
-Resume file: .planning/phases/20-tree-shaking/20-CONTEXT.md
+Last session: 2026-03-22T14:50:58.226Z
+Stopped at: Completed 20-tree-shaking plan 01 — tree shaking enabled + EAS build #80 submitted to TestFlight
+Resume file: None

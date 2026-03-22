@@ -290,6 +290,6 @@ Plans:
 | 17.1. Span Tracing Debugging Aid                  | 5/5       | Complete       | 2026-03-15  | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | 4/5       | Complete       |             | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | 2/5       | Complete       | 2026-03-18  | -          |
-| 20. Tree Shaking                                  | v1.3      | 0/2            | Not started | -          |
+| 20. Tree Shaking                                  | 1/2       | In Progress    |             | -          |
 | 21. Maestro UI Testing Infrastructure             | v1.3      | 0/TBD          | Not started | -          |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
