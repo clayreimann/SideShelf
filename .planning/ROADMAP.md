@@ -55,7 +55,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 - [x] **Phase 15: Collapsible Section Redesign** — Reanimated probe: peek-and-fade with UI-thread height animation (completed 2026-03-10)
 - [x] **Phase 16: Full Screen Player Redesign + AirPlay** — Nav bar removal, chevron dismiss, settings UIMenu, AirPlay on all surfaces, Reanimated panel animation (completed 2026-03-11)
 - [x] **Phase 17: Bookmarks** — Add/view/rename/delete with server sync and SQLite offline cache (completed 2026-03-12)
-- ✅ **Phase 18: Sleep Timer Fade + Navigation + Path Standardization** — Volume fade, Series/Authors More tab fix, deep linking, path normalization
+- [x] **Phase 18: Sleep Timer Fade + Navigation + Path Standardization** — Volume fade, Series/Authors More tab fix, deep linking, path normalization
 - [x] **Phase 19: Performance Quick Wins** — FlashList, expo-image, TTI measurement, memory leak fixes, orphan reassociation UI (completed 2026-03-18)
 - [ ] **Phase 20: Tree Shaking** — Standalone production bundle optimization requiring TestFlight verification
 - [ ] **Phase 21: Maestro UI Testing Infrastructure** — Deep link flows, testID coverage, reusable subflows, regression suite
@@ -218,14 +218,12 @@ Plans:
 1. Tree shaking is enabled in the metro config and a production build is submitted to TestFlight
 2. All Reanimated animations (CollapsibleSection, FullScreenPlayer panels) work correctly in the TestFlight build
 3. The app launches and plays audio without crashes in the TestFlight build
-   **Plans**: 4 plans
+   **Plans**: 2 plans
 
 Plans:
 
-- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
-- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
-- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
-- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
+- [ ] 20-01-PLAN.md — Create .env + update metro.config.js for tree shaking + EAS build submission
+- [ ] 20-02-PLAN.md — TestFlight full regression verification (checkpoint)
 
 ### Phase 21: Maestro UI Testing Infrastructure
 
@@ -286,12 +284,12 @@ Plans:
 | 12. Service Decomposition                         | v1.2      | 2/2            | Complete    | 2026-03-05 |
 | 13. RN Downloader Migration                       | v1.2      | 2/2            | Complete    | 2026-03-07 |
 | 14. Progress Display Format                       | 4/4       | Complete       | 2026-03-09  | -          |
-| 15. Collapsible Section Redesign                  | 2/3       | In Progress    |             | -          |
+| 15. Collapsible Section Redesign                  | 2/3       | Complete       |             | -          |
 | 16. Full Screen Player Redesign + AirPlay         | 4/4       | Complete       | 2026-03-11  | -          |
 | 17. Bookmarks                                     | 5/5       | Complete       | 2026-03-12  | -          |
 | 17.1. Span Tracing Debugging Aid                  | 5/5       | Complete       | 2026-03-15  | -          |
-| 18. Sleep Timer Fade + Navigation + Path Std      | 4/5       | In Progress    |             | -          |
+| 18. Sleep Timer Fade + Navigation + Path Std      | 4/5       | Complete       |             | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | 2/5       | Complete       | 2026-03-18  | -          |
-| 20. Tree Shaking                                  | v1.3      | 0/TBD          | Not started | -          |
+| 20. Tree Shaking                                  | v1.3      | 0/2            | Not started | -          |
 | 21. Maestro UI Testing Infrastructure             | v1.3      | 0/TBD          | Not started | -          |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
