@@ -26,6 +26,7 @@ import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { trace } from "@/lib/trace";
 import { getStoredUsername } from "@/lib/secureStore";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { downloadService } from "@/services/DownloadService";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
@@ -46,7 +47,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
   /**
    * Execute track loading (Internal - Called by Coordinator).
    */
-  async executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void> {
+  async executeLoadTrack(libraryItemId: string, episodeId?: string, startPosition?: number): Promise<void> {
     try {
       diagLog.info(`playTrack called for libraryItemId: ${libraryItemId}`);
       log.info(`Loading track for library item: ${libraryItemId}`);
@@ -164,14 +165,21 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       // Add tracks to queue
       await TrackPlayer.add(tracks);
 
-      const resumeInfo = await this.facade.resolveCanonicalPosition(libraryItemId);
+      let seekPosition: number;
+      if (startPosition !== undefined) {
+        // Caller-specified chapter position — skip resolveCanonicalPosition to avoid
+        // spurious progress-jump toast and timing race during queue rebuild.
+        seekPosition = startPosition;
+        dispatchPlayerEvent({ type: "POSITION_RECONCILED", payload: { position: startPosition } });
+        log.info(`[executeLoadTrack] Using caller-specified startPosition: ${formatTime(startPosition)}s`);
+      } else {
+        const resumeInfo = await this.facade.resolveCanonicalPosition(libraryItemId);
+        seekPosition = resumeInfo.position;
+        log.info(`[executeLoadTrack] Resuming from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`);
+      }
 
-      // Seek to resume position first (if applicable)
-      if (resumeInfo.position > 0) {
-        await TrackPlayer.seekTo(resumeInfo.position);
-        log.info(
-          `Resuming playback from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
-        );
+      if (seekPosition > 0) {
+        await TrackPlayer.seekTo(seekPosition);
       }
 
       // Apply playback settings from store to TrackPlayer

@@ -45,7 +45,7 @@ export enum PlayerState {
  */
 export type PlayerEvent =
   // Command events (from user/UI)
-  | { type: "LOAD_TRACK"; payload: { libraryItemId: string; episodeId?: string } }
+  | { type: "LOAD_TRACK"; payload: { libraryItemId: string; episodeId?: string; startPosition?: number } }
   | { type: "PLAY" }
   | { type: "PAUSE" }
   | { type: "STOP" }

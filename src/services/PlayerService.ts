@@ -233,10 +233,10 @@ export class PlayerService implements IPlayerServiceFacade {
   /**
    * Load and play a track (Public API - Dispatches Event)
    */
-  async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
+  async playTrack(libraryItemId: string, episodeId?: string, startPosition?: number): Promise<void> {
     dispatchPlayerEvent({
       type: "LOAD_TRACK",
-      payload: { libraryItemId, episodeId },
+      payload: { libraryItemId, episodeId, startPosition },
     });
   }
 
@@ -309,8 +309,8 @@ export class PlayerService implements IPlayerServiceFacade {
   /**
    * Execute track loading (Internal - Called by Coordinator)
    */
-  async executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void> {
-    return this.trackLoading.executeLoadTrack(libraryItemId, episodeId);
+  async executeLoadTrack(libraryItemId: string, episodeId?: string, startPosition?: number): Promise<void> {
+    return this.trackLoading.executeLoadTrack(libraryItemId, episodeId, startPosition);
   }
 
   /**

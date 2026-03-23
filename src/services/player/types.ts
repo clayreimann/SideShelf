@@ -68,7 +68,7 @@ export interface IPlayerServiceFacade {
  * creation, and TrackPlayer queue management.
  */
 export interface ITrackLoadingCollaborator {
-  executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void>;
+  executeLoadTrack(libraryItemId: string, episodeId?: string, startPosition?: number): Promise<void>;
   buildTrackList(track: PlayerTrack): Promise<Track[]>;
   executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo>;
 }

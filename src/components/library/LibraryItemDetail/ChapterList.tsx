@@ -2,8 +2,11 @@ import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { getPlayedChapters, getUpcomingChapters } from "@/db/helpers/chapters";
 import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
+import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
+
+const log = logger.forTag("ChapterList");
 import { ApiBookChapter } from "@/types/api";
 import { ChapterRow } from "@/types/database";
 import React, { useCallback, useMemo, useState } from "react";
@@ -78,17 +81,14 @@ export default function ChapterList({
   const handleChapterPress = useCallback(
     async (chapterStart: number) => {
       if (!libraryItemId) return;
-
       try {
-        // If not currently playing this item, start playback
         if (!isCurrentlyPlaying) {
-          await playerService.playTrack(libraryItemId);
-          // Small delay to ensure track is loaded before seeking
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          await playerService.playTrack(libraryItemId, undefined, chapterStart);
+        } else {
+          await playerService.seekTo(chapterStart);
         }
-        await playerService.seekTo(chapterStart);
       } catch (error) {
-        console.error("[ChapterList] Failed to jump to chapter:", error);
+        log.error("[handleChapterPress] Failed to jump to chapter:", error as Error);
       }
     },
     [libraryItemId, isCurrentlyPlaying]

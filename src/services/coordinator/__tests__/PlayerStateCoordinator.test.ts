@@ -1002,7 +1002,7 @@ describe("PlayerStateCoordinator", () => {
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("test-item", undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("test-item", undefined, undefined);
     });
 
     it("should call executePlay when transitioning to PLAYING", async () => {
@@ -1113,7 +1113,7 @@ describe("PlayerStateCoordinator", () => {
       // Second LOAD_TRACK should have been rejected (coordinator was still in LOADING)
       // executeLoadTrack called only once (first item), not for the second
       expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("test-item", undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("test-item", undefined, undefined);
       expect(coordinator.getMetrics().rejectedTransitionCount).toBe(beforeRejected + 1);
     });
 
@@ -2679,7 +2679,7 @@ describe("PlayerStateCoordinator", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("lifecycle-item", undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("lifecycle-item", undefined, undefined);
       expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
       // Auto-PLAY fires after executeLoadTrack completes: LOADING -> READY -> PLAYING
       expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(1);
@@ -2874,7 +2874,7 @@ describe("PlayerStateCoordinator", () => {
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("item-1", undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("item-1", undefined, undefined);
 
       const playDispatches = dispatchSpy.mock.calls.filter(([evt]: [any]) => evt.type === "PLAY");
       expect(playDispatches.length).toBeGreaterThan(0);
@@ -2928,7 +2928,7 @@ describe("PlayerStateCoordinator", () => {
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-2" } });
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("item-2", undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("item-2", undefined, undefined);
     });
 
     it("skips executeLoadTrack and dispatches PLAY when same item re-requested while PLAYING", async () => {

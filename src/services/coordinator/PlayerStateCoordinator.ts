@@ -1166,7 +1166,8 @@ export class PlayerStateCoordinator extends EventEmitter {
 
               await playerService.executeLoadTrack(
                 event.payload.libraryItemId,
-                event.payload.episodeId
+                event.payload.episodeId,
+                event.payload.startPosition
               );
               // Change 2: dispatch PLAY after successful load if intent is still set.
               // playIntentOnLoad is cleared if PAUSE or error arrived during LOADING.
