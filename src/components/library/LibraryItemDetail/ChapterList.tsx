@@ -5,12 +5,12 @@ import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
-
-const log = logger.forTag("ChapterList");
 import { ApiBookChapter } from "@/types/api";
 import { ChapterRow } from "@/types/database";
 import React, { useCallback, useMemo, useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
+
+const log = logger.forTag("ChapterList");
 
 type ChapterListProps = {
   chapters: ApiBookChapter[];
@@ -68,16 +68,6 @@ export default function ChapterList({
     return (chapterId: number) => playedIds.has(chapterId);
   }, [playedChapters]);
 
-  if (chapters.length === 0) {
-    return (
-      <View>
-        <Text style={[styles.text, { fontStyle: "italic", opacity: 0.7 }]}>
-          {translate("chapters.empty")}
-        </Text>
-      </View>
-    );
-  }
-
   const handleChapterPress = useCallback(
     async (chapterStart: number) => {
       if (!libraryItemId) return;
@@ -93,6 +83,16 @@ export default function ChapterList({
     },
     [libraryItemId, isCurrentlyPlaying]
   );
+
+  if (chapters.length === 0) {
+    return (
+      <View>
+        <Text style={[styles.text, { fontStyle: "italic", opacity: 0.7 }]}>
+          {translate("chapters.empty")}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <CollapsibleSection title={translate("libraryItem.chapters", { count: chapters.length })}>
