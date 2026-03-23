@@ -178,7 +178,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         // "store" fallback (which reads store.player.position as last resort).
         const currentItemId = store.player.currentTrack?.libraryItemId;
         if (currentItemId && currentItemId !== libraryItemId) {
-          store._updatePosition(0);
+          store.updatePosition(0);
           log.debug(`[executeLoadTrack] Switching books (${currentItemId} → ${libraryItemId}): reset store position to 0`);
         }
         const resumeInfo = await this.facade.resolveCanonicalPosition(libraryItemId);
