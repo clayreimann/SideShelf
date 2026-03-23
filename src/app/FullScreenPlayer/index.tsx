@@ -129,10 +129,12 @@ export default function FullScreenPlayer() {
     try {
       await playerService.seekTo(chapterStart);
       setShowChapterList(false); // Close chapter list after selection
+      coverSizeSV.value = withTiming(0, { duration: PANEL_DURATION });
+      chapterPanelSV.value = withTiming(0, { duration: PANEL_DURATION });
     } catch (error) {
-      console.error("[FullScreenPlayer] Failed to seek to chapter:", error);
+      log.error("[handleChapterPress] Failed to seek to chapter:", error as Error);
     }
-  }, []);
+  }, [coverSizeSV, chapterPanelSV]);
 
   const handleClose = useCallback(() => {
     router.back();
