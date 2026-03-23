@@ -322,25 +322,27 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.previousState = currentState;
         this.context.currentState = nextState;
       }
-      // Trace: accepted transition
-      trace.addEvent(
-        "player.machine.transition.accepted",
-        {
-          sequence: this.machineSequence++,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
-          source: (event as any).source ?? "unknown",
-          event: event.type,
-          fromState: currentState,
-          toState: nextState ?? currentState,
-          itemId: this.context.currentTrack?.libraryItemId,
-          positionMs:
-            this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
-        },
-        traceCtx
-      );
+      // Trace: accepted transition (skip for high-frequency events to reduce noise)
+      if (!isHighFrequency) {
+        trace.addEvent(
+          "player.machine.transition.accepted",
+          {
+            sequence: this.machineSequence++,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
+            source: (event as any).source ?? "unknown",
+            event: event.type,
+            fromState: currentState,
+            toState: nextState ?? currentState,
+            itemId: this.context.currentTrack?.libraryItemId,
+            positionMs:
+              this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+          },
+          traceCtx
+        );
+      }
       await this.executeTransition(event, nextState);
       // Trace: state entered (only on actual state change)
-      if (nextState && nextState !== currentState) {
+      if (!isHighFrequency && nextState && nextState !== currentState) {
         trace.addEvent(
           "player.machine.state.entered",
           {

@@ -493,7 +493,7 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
 
       if (Math.floor(event.position) % 5 === 0) {
         const { id, title } = store.player.currentChapter?.chapter || { id: null, title: null };
-        log.info(
+        log.debug(
           `Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} uuid=${MODULE_INSTANCE_UUID} session=${session?.sessionId || "none"} item=${ids.libraryItemId} chapter=${JSON.stringify({ id, title })}`
         );
       }
