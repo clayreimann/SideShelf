@@ -352,4 +352,6 @@ export const en = {
   "player.jumpMenu.titleForward": "Jump Forward",
   "player.jumpMenu.titleBackward": "Jump Backward",
   "player.jumpMenu.seconds": "{seconds} seconds",
+  "player.progressToast.label": "Jumped to {time} ({delta})",
+  "player.progressToast.undo": "Undo",
 } as const;

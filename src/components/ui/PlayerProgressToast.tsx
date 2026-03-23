@@ -6,8 +6,10 @@
  * Auto-dismisses after 7 seconds.
  */
 
+import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
 import { useAppStore } from "@/stores/appStore";
 import React, { useCallback, useEffect } from "react";
@@ -16,6 +18,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 const log = logger.forTag("PlayerProgressToast");
 
 export default function PlayerProgressToast() {
+  const { isDark } = useThemedStyles();
   const pendingProgressJump = useAppStore((state) => state.player.pendingProgressJump);
   const _setPendingProgressJump = useAppStore((state) => state._setPendingProgressJump);
 
@@ -49,16 +52,21 @@ export default function PlayerProgressToast() {
   const delta = toPosition - fromPosition;
   const deltaLabel = delta >= 0 ? `+${formatTime(delta)}` : `-${formatTime(Math.abs(delta))}`;
 
+  const toastBg = isDark ? "rgba(0,0,0,0.88)" : "rgba(20,20,20,0.92)";
+
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <View style={styles.toast}>
+      <View style={[styles.toast, { backgroundColor: toastBg }]}>
         <View style={styles.content}>
           <Text style={styles.label}>
-            Jumped to {formatTime(toPosition)} ({deltaLabel})
+            {translate("player.progressToast.label", {
+              time: formatTime(toPosition),
+              delta: deltaLabel,
+            })}
           </Text>
         </View>
         <Pressable onPress={handleUndo} style={styles.undoButton} hitSlop={8}>
-          <Text style={styles.undoLabel}>Undo</Text>
+          <Text style={styles.undoLabel}>{translate("player.progressToast.undo")}</Text>
         </Pressable>
         <Pressable onPress={handleDismiss} style={styles.dismissButton} hitSlop={8}>
           <Text style={styles.dismissLabel}>✕</Text>
@@ -78,7 +86,6 @@ const styles = StyleSheet.create({
     zIndex: 9999,
   },
   toast: {
-    backgroundColor: "rgba(0,0,0,0.85)",
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 16,
