@@ -3104,4 +3104,167 @@ describe("PlayerStateCoordinator", () => {
       expect(coordinator.getContext().isLoadingTrack).toBe(false);
     });
   });
+
+  // ============================================================================
+  // Jump detection: _pendingProgressJump set only for unintentional large deltas
+  // ============================================================================
+
+  describe("Jump detection (NATIVE_PROGRESS_UPDATED)", () => {
+    const { useAppStore } = require("@/stores/appStore");
+
+    const makeMockStore = () => ({
+      player: { position: 0 },
+      updatePosition: jest.fn(),
+      updatePlayingState: jest.fn(),
+      _setCurrentTrack: jest.fn(),
+      _setTrackLoading: jest.fn(),
+      _setSeeking: jest.fn(),
+      _setPlaybackRate: jest.fn(),
+      _setVolume: jest.fn(),
+      _setPlaySessionId: jest.fn(),
+      _setLastPauseTime: jest.fn(),
+      _setPendingProgressJump: jest.fn(),
+      updateNowPlayingMetadata: jest.fn().mockResolvedValue(undefined),
+      setSleepTimer: jest.fn(),
+      cancelSleepTimer: jest.fn(),
+    });
+
+    let mockStore: ReturnType<typeof makeMockStore>;
+
+    beforeEach(() => {
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+      jest.clearAllMocks();
+      // Re-apply after clearAllMocks
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+    });
+
+    it("detects jump and calls _setPendingProgressJump on large delta (≥30s)", async () => {
+      // Set initial context position directly via a progress update
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks, then dispatch a 40s jump
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 140, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockStore._setPendingProgressJump).toHaveBeenCalledWith(
+        expect.objectContaining({ fromPosition: 100, toPosition: 140, timestamp: expect.any(Number) })
+      );
+    });
+
+    it("suppresses jump detection when isSeeking was true before the update", async () => {
+      // Establish a baseline position
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Simulate an in-flight seek: set isSeeking in coordinator context
+      // We dispatch SEEK which sets isSeeking=true, then dispatch progress to trigger clear
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "seek-item" } });
+      await new Promise((resolve) => setTimeout(resolve, 150)); // let auto-PLAY complete
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Establish new baseline at 100s in PLAYING state
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Trigger a seek (sets isSeeking=true in context)
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 140 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Progress arrives — isSeeking=true at start of this handler, cleared inside it
+      // The 40s jump must NOT trigger _setPendingProgressJump
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 140, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockStore._setPendingProgressJump).not.toHaveBeenCalled();
+    });
+
+    it("suppresses jump detection when isLoadingTrack is true", async () => {
+      // Establish a baseline position via a progress update from IDLE state
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Dispatch LOAD_TRACK to set isLoadingTrack=true
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "load-item" } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Progress arrives during load — 40s jump must NOT trigger _setPendingProgressJump
+      // Note: position 0 is filtered by POS-03; use a non-zero position to reach jump detection
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 140, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockStore._setPendingProgressJump).not.toHaveBeenCalled();
+    });
+
+    it("does not detect jump for small delta (<30s)", async () => {
+      // Establish a baseline position
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Dispatch a small 5s delta (normal playback tick)
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 105, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockStore._setPendingProgressJump).not.toHaveBeenCalled();
+    });
+  });
 });

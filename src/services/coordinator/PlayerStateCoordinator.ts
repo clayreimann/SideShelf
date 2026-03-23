@@ -494,6 +494,8 @@ export class PlayerStateCoordinator extends EventEmitter {
         const newPosition = event.payload.position;
         const prevPosition = this.context.position;
 
+        // Capture isSeeking before clearing — used below in jump detection
+        const wasSeeking = this.context.isSeeking;
         // Clear isSeeking when progress update arrives during seek (seek is complete)
         if (this.context.isSeeking) {
           this.context.isSeeking = false;
@@ -514,7 +516,7 @@ export class PlayerStateCoordinator extends EventEmitter {
 
         // Detect unintentional position jumps (not during seek or track load)
         const delta = newPosition - prevPosition;
-        if (!this.context.isSeeking && !this.context.isLoadingTrack && Math.abs(delta) >= 30) {
+        if (!wasSeeking && !this.context.isLoadingTrack && Math.abs(delta) >= 30) {
           this._pendingProgressJump = { fromPosition: prevPosition, toPosition: newPosition };
         }
         break;
