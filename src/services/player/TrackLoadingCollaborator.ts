@@ -173,6 +173,14 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         dispatchPlayerEvent({ type: "POSITION_RECONCILED", payload: { position: startPosition } });
         log.info(`[executeLoadTrack] Using caller-specified startPosition: ${formatTime(startPosition)}s`);
       } else {
+        // Reset position context when switching to a different book to prevent
+        // the previous book's position bleeding into resolveCanonicalPosition's
+        // "store" fallback (which reads store.player.position as last resort).
+        const currentItemId = store.player.currentTrack?.libraryItemId;
+        if (currentItemId && currentItemId !== libraryItemId) {
+          store._updatePosition(0);
+          log.debug(`[executeLoadTrack] Switching books (${currentItemId} → ${libraryItemId}): reset store position to 0`);
+        }
         const resumeInfo = await this.facade.resolveCanonicalPosition(libraryItemId);
         seekPosition = resumeInfo.position;
         log.info(`[executeLoadTrack] Resuming from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`);
