@@ -621,7 +621,17 @@ export class PlayerStateCoordinator extends EventEmitter {
         log.debug(
           `[Coordinator] Context updated from NATIVE_STATE_CHANGED: isPlaying=${this.context.isPlaying} (state=${event.payload.state})`
         );
-
+        // If the machine is PLAYING but native audio stopped (not just buffering),
+        // dispatch PAUSE to sync machine state → PAUSED. This allows togglePlayPause()
+        // to dispatch PLAY from PAUSED (which is allowed), resuming TrackPlayer.
+        // AsyncLock ensures PAUSE is processed after NATIVE_STATE_CHANGED completes.
+        if (
+          this.context.currentState === PlayerState.PLAYING &&
+          event.payload.state !== State.Playing &&
+          event.payload.state !== State.Buffering
+        ) {
+          dispatchPlayerEvent({ type: "PAUSE" });
+        }
         break;
 
       // Error handling

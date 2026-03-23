@@ -147,8 +147,10 @@ jest.mock("@/lib/smartRewind", () => ({
 jest.mock("@/services/coordinator/PlayerStateCoordinator", () => {
   const { jest } = require("@jest/globals");
   const mockResolveCanonicalPosition = jest.fn();
+  const mockContext = { isPlaying: false };
   const mockCoordinator = {
     resolveCanonicalPosition: mockResolveCanonicalPosition,
+    getContext: jest.fn(() => mockContext),
   };
   return {
     getCoordinator: jest.fn(() => mockCoordinator),
@@ -157,6 +159,7 @@ jest.mock("@/services/coordinator/PlayerStateCoordinator", () => {
       resetInstance: jest.fn(),
     },
     __mockCoordinator: mockCoordinator,
+    __mockContext: mockContext,
     __mockResolveCanonicalPosition: mockResolveCanonicalPosition,
   };
 });
@@ -462,7 +465,8 @@ describe("PlayerService", () => {
     });
 
     it("should toggle play/pause when playing", async () => {
-      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Playing });
+      const { __mockContext } = require("@/services/coordinator/PlayerStateCoordinator");
+      __mockContext.isPlaying = true;
 
       await playerService.togglePlayPause();
 
@@ -470,20 +474,8 @@ describe("PlayerService", () => {
     });
 
     it("should toggle play/pause when paused", async () => {
-      // Setup current track and queue so play() doesn't exit early
-      mockStore.player.currentTrack = {
-        libraryItemId: "item-1",
-        mediaId: "media-1",
-        title: "Test Book",
-        author: "Test Author",
-        coverUri: "http://example.com/cover.jpg",
-        audioFiles: mockAudioFiles,
-        chapters: mockChapters,
-        duration: 3600,
-        isDownloaded: true,
-      };
-      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
-      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Paused });
+      const { __mockContext } = require("@/services/coordinator/PlayerStateCoordinator");
+      __mockContext.isPlaying = false;
 
       await playerService.togglePlayPause();
 

@@ -1471,17 +1471,16 @@ describe("PlayerStateCoordinator", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // Should accept the event (PLAYING -> PLAYING transition allowed)
+      // Should accept the event — NATIVE_STATE_CHANGED dispatches PAUSE to sync machine
       const metrics = coordinator.getMetrics();
       expect(metrics.rejectedTransitionCount).toBe(0);
 
-      // Observer mode: Context should reflect the native state change
-      // This allows diagnostics UI to show accurate state
+      // Context should reflect the native state change
       const context = coordinator.getContext();
       expect(context.isPlaying).toBe(false);
 
-      // State machine remains in PLAYING (no-op transition)
-      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+      // State machine transitions to PAUSED so togglePlayPause() can resume via PLAY
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
     });
 
     it("should handle duplicate NATIVE_STATE_CHANGED events (UI + native)", async () => {
@@ -1557,15 +1556,16 @@ describe("PlayerStateCoordinator", () => {
       context = coordinator.getContext();
       expect(context.isPlaying).toBe(false); // Context tracks native state
 
-      // State machine stays in PLAYING (all NATIVE_STATE_CHANGED from PLAYING stay in PLAYING)
-      // But context accurately reflects what the native player is doing
-      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+      // State machine ends in PAUSED: first native pause triggered PLAYING→PAUSED transition;
+      // subsequent NATIVE_STATE_CHANGED events do not re-dispatch PAUSE (machine not in PLAYING).
+      // Context accurately reflects what the native player is doing.
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
 
-      // All events should be accepted
+      // All events should be accepted (no rejected transitions)
       const metrics = coordinator.getMetrics();
       expect(metrics.rejectedTransitionCount).toBe(0);
-      // After Change 2: LOAD_TRACK + auto-PLAY + 3x NATIVE_STATE_CHANGED = at least 4 processed
-      expect(metrics.totalEventsProcessed).toBeGreaterThanOrEqual(4); // LOAD + auto-PLAY + 3x NATIVE
+      // LOAD_TRACK + auto-PLAY + 3x NATIVE_STATE_CHANGED + 1 auto-PAUSE (from fix) = at least 5 processed
+      expect(metrics.totalEventsProcessed).toBeGreaterThanOrEqual(5);
     });
 
     it("should not reject NATIVE_STATE_CHANGED during SEEKING", async () => {

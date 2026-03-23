@@ -25,7 +25,6 @@ import TrackPlayer, {
   AndroidAudioContentType,
   IOSCategory,
   IOSCategoryMode,
-  State,
 } from "react-native-track-player";
 import { BackgroundReconnectCollaborator } from "./player/BackgroundReconnectCollaborator";
 import { PlaybackControlCollaborator } from "./player/PlaybackControlCollaborator";
@@ -244,12 +243,13 @@ export class PlayerService implements IPlayerServiceFacade {
    * Toggle play/pause
    */
   async togglePlayPause(): Promise<void> {
-    const state = await TrackPlayer.getPlaybackState();
-
-    if (state.state === State.Playing) {
-      await this.pause();
+    // Read from coordinator (authoritative state machine) rather than TrackPlayer
+    // to avoid hard lock when native audio stops externally (call, audio focus loss).
+    const coordinator = getCoordinator();
+    if (coordinator.getContext().isPlaying) {
+      dispatchPlayerEvent({ type: "PAUSE" });
     } else {
-      await this.play();
+      dispatchPlayerEvent({ type: "PLAY" });
     }
   }
 
