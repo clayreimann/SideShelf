@@ -5,6 +5,7 @@ import { ProgressBar } from "@/components/ui";
 import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import { translate } from "@/i18n";
 import { getAutoBookmarkTitle } from "@/lib/helpers/bookmarks";
+import { formatTime } from "@/lib/helpers/formatters";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
@@ -34,7 +35,7 @@ export default function ConsolidatedPlayerControls({
   const { colors } = useThemedStyles();
   const { currentTrack, position, currentChapter, isLoadingTrack } = usePlayer();
   const { createBookmark } = useUserProfile();
-  const { jumpForwardInterval, jumpBackwardInterval, progressFormat } = useSettings();
+  const { jumpForwardInterval, jumpBackwardInterval, progressFormat, chapterBarShowRemaining } = useSettings();
   const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
   // Check if this is the currently playing item
@@ -119,6 +120,10 @@ export default function ConsolidatedPlayerControls({
   const chapterProgress = chapterDuration > 0 ? chapterPosition / chapterDuration : 0;
   const chapterTitle = currentChapter?.chapter.title || "";
 
+  const chapterBarRightLabel = chapterBarShowRemaining
+    ? `-${formatTime(chapterDuration - chapterPosition)}`
+    : undefined;
+
   const isDisabled = isLoadingTrack || (!isDownloaded && serverReachable === false);
 
   if (!isCurrentlyPlaying) {
@@ -184,19 +189,10 @@ export default function ConsolidatedPlayerControls({
               showTimeLabels={true}
               currentTime={chapterPosition}
               duration={chapterDuration}
-              showPercentage={false}
+              showPercentage={true}
+              customPercentageText={formatProgress(progressFormat, position, currentTrack?.duration ?? 0)}
+              rightLabel={chapterBarRightLabel}
             />
-            <Text
-              style={{
-                fontSize: 13,
-                textAlign: "center",
-                marginTop: 4,
-                opacity: 0.7,
-                color: colors.textPrimary,
-              }}
-            >
-              {formatProgress(progressFormat, position, currentTrack?.duration ?? 0)}
-            </Text>
           </>
         )}
 
