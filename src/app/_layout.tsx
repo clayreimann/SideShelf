@@ -1,3 +1,4 @@
+import PlayerProgressToast from "@/components/ui/PlayerProgressToast";
 import { initializeApp } from "@/index";
 import { handleDeepLinkUrl } from "@/lib/deepLinkHandler";
 import { formatTimeRemaining } from "@/lib/helpers/formatters";
@@ -371,6 +372,7 @@ export default function RootLayout() {
                   }}
                 />
               </Stack>
+              <PlayerProgressToast />
             </StoreProvider>
           </AuthProvider>
         </DbProvider>

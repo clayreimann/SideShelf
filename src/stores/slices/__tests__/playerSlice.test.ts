@@ -142,6 +142,7 @@ describe("PlayerSlice", () => {
           type: null,
           chapterTarget: null,
         },
+        pendingProgressJump: null,
       });
     });
   });

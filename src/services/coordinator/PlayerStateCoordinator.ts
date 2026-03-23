@@ -95,6 +95,9 @@ export class PlayerStateCoordinator extends EventEmitter {
   // Phase 4: Store bridge - track last synced chapter to debounce metadata updates
   private lastSyncedChapterId: string | null = null;
 
+  // Pending unintentional position jump awaiting flush to store
+  private _pendingProgressJump: { fromPosition: number; toPosition: number } | null = null;
+
   // Open span for the current session sync cycle (SYNC_STARTED → SYNC_COMPLETED/FAILED)
   private activeSyncSpan: SpanHandle | null = null;
 
@@ -487,7 +490,10 @@ export class PlayerStateCoordinator extends EventEmitter {
         break;
 
       // Position and duration updates
-      case "NATIVE_PROGRESS_UPDATED":
+      case "NATIVE_PROGRESS_UPDATED": {
+        const newPosition = event.payload.position;
+        const prevPosition = this.context.position;
+
         // Clear isSeeking when progress update arrives during seek (seek is complete)
         if (this.context.isSeeking) {
           this.context.isSeeking = false;
@@ -497,15 +503,22 @@ export class PlayerStateCoordinator extends EventEmitter {
         // before the seek to the resume position completes. If we write 0 here, we
         // lose the position that resolveCanonicalPosition just resolved.
         // Once isLoadingTrack is cleared (by QUEUE_RELOADED), native 0 is accepted.
-        if (this.context.isLoadingTrack && event.payload.position === 0) {
+        if (this.context.isLoadingTrack && newPosition === 0) {
           this.context.duration = event.payload.duration; // duration update is safe
           this.context.lastPositionUpdate = Date.now();
           break;
         }
-        this.context.position = event.payload.position;
+        this.context.position = newPosition;
         this.context.duration = event.payload.duration;
         this.context.lastPositionUpdate = Date.now();
+
+        // Detect unintentional position jumps (not during seek or track load)
+        const delta = newPosition - prevPosition;
+        if (!this.context.isSeeking && !this.context.isLoadingTrack && Math.abs(delta) >= 30) {
+          this._pendingProgressJump = { fromPosition: prevPosition, toPosition: newPosition };
+        }
         break;
+      }
 
       case "SEEK":
         this.context.preSeekState = this.context.currentState; // capture BEFORE transition
@@ -864,6 +877,15 @@ export class PlayerStateCoordinator extends EventEmitter {
     try {
       const store = useAppStore.getState();
       store.updatePosition(this.context.position); // triggers _updateCurrentChapter synchronously
+
+      // Flush pending progress jump to store for toast display
+      if (this._pendingProgressJump) {
+        store._setPendingProgressJump({
+          ...this._pendingProgressJump,
+          timestamp: Date.now(),
+        });
+        this._pendingProgressJump = null;
+      }
 
       // Detect chapter boundary crossings; debounced by lastSyncedChapterId (mirrors PROP-06)
       const currentChapterId = store.player.currentChapter?.chapter?.id?.toString() ?? null;

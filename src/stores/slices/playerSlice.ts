@@ -63,6 +63,12 @@ export interface PlayerSliceState {
       /** Chapter target: 'current' or 'next', only used when type is 'chapter' */
       chapterTarget: "current" | "next" | null;
     };
+    /** Pending unintentional progress jump awaiting user acknowledgement */
+    pendingProgressJump: {
+      fromPosition: number;
+      toPosition: number;
+      timestamp: number;
+    } | null;
   };
 }
 
@@ -104,6 +110,8 @@ export interface PlayerSliceActions {
   _setPlaySessionId: (sessionId: string | null) => void;
   /** Set last pause time (for smart rewind) */
   _setLastPauseTime: (timestamp: number | null) => void;
+  /** Set or clear the pending progress jump toast */
+  _setPendingProgressJump: (jump: { fromPosition: number; toPosition: number; timestamp: number } | null) => void;
   /** Update now playing metadata with chapter information */
   updateNowPlayingMetadata: () => Promise<void>;
   /** Set sleep timer with duration in minutes */
@@ -359,6 +367,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       type: null,
       chapterTarget: null,
     },
+    pendingProgressJump: null,
   },
 
   // Actions
@@ -559,6 +568,10 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     // Note: lastPauseTime is not persisted - it's ephemeral state for smart rewind
+  },
+
+  _setPendingProgressJump: (jump) => {
+    set((state) => ({ player: { ...state.player, pendingProgressJump: jump } }));
   },
 
   /**
