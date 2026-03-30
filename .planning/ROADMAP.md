@@ -57,8 +57,8 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 - [x] **Phase 17: Bookmarks** — Add/view/rename/delete with server sync and SQLite offline cache (completed 2026-03-12)
 - [x] **Phase 18: Sleep Timer Fade + Navigation + Path Standardization** — Volume fade, Series/Authors More tab fix, deep linking, path normalization
 - [x] **Phase 19: Performance Quick Wins** — FlashList, expo-image, TTI measurement, memory leak fixes, orphan reassociation UI (completed 2026-03-18)
-- [ ] **Phase 20: Tree Shaking** — Standalone production bundle optimization requiring TestFlight verification
-- [ ] **Phase 21: Maestro UI Testing Infrastructure** — Deep link flows, testID coverage, reusable subflows, regression suite
+- [x] **Phase 20: Tree Shaking** — Standalone production bundle optimization requiring TestFlight verification (completed 2026-03-30)
+- [ ] **Phase 21: Maestro UI Testing Infrastructure** — testID coverage, reusable subflows, regression suite
 - [ ] **Phase 22: ProgressService Decomposition** — Facade + collaborator refactor maintaining 90%+ coverage
 
 ## Phase Details
@@ -241,10 +241,10 @@ Plans:
 
 Plans:
 
-- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
-- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
-- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
-- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
+- [ ] 21-01-PLAN.md — Add testID attributes to login screen, player, and library elements (TESTING-01, TESTING-03)
+- [ ] 21-02-PLAN.md — Create reusable Maestro subflows: \_login.yaml and \_start-playback.yaml (TESTING-02, TESTING-04)
+- [ ] 21-03-PLAN.md — Create standalone regression flows: library-navigation, playback, download (TESTING-04, TESTING-05)
+- [ ] 21-04-PLAN.md — Project setup: .env.maestro, .gitignore, maestro:test npm script (TESTING-02, TESTING-05)
 
 ### Phase 22: ProgressService Decomposition
 
@@ -256,14 +256,7 @@ Plans:
 1. ProgressService exists as a facade delegating to SessionTrackingCollaborator and SessionSyncCollaborator
 2. Test coverage for all ProgressService files is 90% or above
 3. Progress is saved correctly after 5+ minutes of uninterrupted playback (background sync timer path intact)
-   **Plans**: 4 plans
-
-Plans:
-
-- [ ] 14-01-PLAN.md — Progress format utility (TDD: formatProgress helper + ProgressFormat type)
-- [ ] 14-02-PLAN.md — Settings data layer (progressFormat in appSettings + settingsSlice)
-- [ ] 14-03-PLAN.md — Settings UI + player surfaces (sub-screen, FullScreenPlayer, FloatingPlayer, ConsolidatedPlayerControls)
-- [ ] 14-04-PLAN.md — Item details cleanup (MetadataSection inline progress + remove ProgressSection)
+   **Plans**: [To be planned]
 
 ## Progress
 
@@ -290,6 +283,6 @@ Plans:
 | 17.1. Span Tracing Debugging Aid                  | 5/5       | Complete       | 2026-03-15  | -          |
 | 18. Sleep Timer Fade + Navigation + Path Std      | 4/5       | Complete       |             | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | 2/5       | Complete       | 2026-03-18  | -          |
-| 20. Tree Shaking                                  | 1/2       | In Progress    |             | -          |
-| 21. Maestro UI Testing Infrastructure             | v1.3      | 0/TBD          | Not started | -          |
+| 20. Tree Shaking                                  | 2/2       | Complete       | 2026-03-30  | -          |
+| 21. Maestro UI Testing Infrastructure             | v1.3      | 0/4            | Not started | -          |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
