@@ -9,6 +9,7 @@ import { formatTime } from "@/lib/helpers/formatters";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { trace } from "@/lib/trace";
 import { writeDumpToDisk } from "@/lib/traceDump";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
@@ -35,7 +36,8 @@ export default function ConsolidatedPlayerControls({
   const { colors } = useThemedStyles();
   const { currentTrack, position, currentChapter, isLoadingTrack } = usePlayer();
   const { createBookmark } = useUserProfile();
-  const { jumpForwardInterval, jumpBackwardInterval, progressFormat, chapterBarShowRemaining } = useSettings();
+  const { jumpForwardInterval, jumpBackwardInterval, progressFormat, chapterBarShowRemaining } =
+    useSettings();
   const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
   // Check if this is the currently playing item
@@ -57,7 +59,14 @@ export default function ConsolidatedPlayerControls({
 
   const handleSkipBackward = useCallback(async () => {
     try {
-      await playerService.seekTo(Math.max(position - jumpBackwardInterval, 0));
+      const targetPosition = Math.max(position - jumpBackwardInterval, 0);
+      trace.addEvent("player.ui.skip", {
+        direction: "backward",
+        fromPositionMs: Math.round(position * 1000),
+        targetPositionMs: Math.round(targetPosition * 1000),
+        intervalSeconds: jumpBackwardInterval,
+      });
+      await playerService.seekTo(targetPosition);
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to skip backward:", error);
     }
@@ -65,7 +74,14 @@ export default function ConsolidatedPlayerControls({
 
   const handleSkipForward = useCallback(async () => {
     try {
-      await playerService.seekTo(position + jumpForwardInterval);
+      const targetPosition = position + jumpForwardInterval;
+      trace.addEvent("player.ui.skip", {
+        direction: "forward",
+        fromPositionMs: Math.round(position * 1000),
+        targetPositionMs: Math.round(targetPosition * 1000),
+        intervalSeconds: jumpForwardInterval,
+      });
+      await playerService.seekTo(targetPosition);
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to skip forward:", error);
     }
@@ -190,7 +206,11 @@ export default function ConsolidatedPlayerControls({
               currentTime={chapterPosition}
               duration={chapterDuration}
               showPercentage={true}
-              customPercentageText={formatProgress(progressFormat, position, currentTrack?.duration ?? 0)}
+              customPercentageText={formatProgress(
+                progressFormat,
+                position,
+                currentTrack?.duration ?? 0
+              )}
               rightLabel={chapterBarRightLabel}
             />
           </>

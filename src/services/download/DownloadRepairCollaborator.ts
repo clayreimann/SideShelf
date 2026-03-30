@@ -2,7 +2,12 @@ import { clearAudioFileDownloadStatus, markAudioFileAsDownloaded } from "@/db/he
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { cacheCoverIfMissing } from "@/lib/covers";
-import { getDownloadPath, getDownloadsDirectory, verifyFileExists } from "@/lib/fileSystem";
+import {
+  getAudioFileLocation,
+  getDownloadPath,
+  getDownloadsDirectory,
+  verifyFileExists,
+} from "@/lib/fileSystem";
 import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 import { logger } from "@/lib/logger";
 import { trace } from "@/lib/trace";
@@ -91,12 +96,14 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
         log.warn(`File marked as downloaded but missing at stored path: ${file.filename}`);
         log.warn(`  Stored path: ${storedPath}`);
 
-        // Try to find the file using the expected download path (current container)
-        const expectedPath = getDownloadPath(libraryItemId, file.filename);
-        const existsAtExpectedPath = await verifyFileExists(expectedPath);
+        // Try to find the file by checking both Documents and Caches using current container paths.
+        // getAudioFileLocation() is safe even for legacy absolute stored paths because it constructs
+        // fresh paths via Paths.document / Paths.cache — immune to iOS container UUID rotation.
+        const foundLocation = getAudioFileLocation(libraryItemId, file.filename);
 
-        if (existsAtExpectedPath) {
-          log.info(`  ✓ Found file at expected path: ${expectedPath}`);
+        if (foundLocation !== null) {
+          const expectedPath = getDownloadPath(libraryItemId, file.filename, foundLocation);
+          log.info(`  ✓ Found file at ${foundLocation}: ${expectedPath}`);
           log.info(`  Updating database with corrected path...`);
 
           // Update the database with the corrected path
@@ -123,7 +130,7 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
               filename: file.filename,
               storedPath,
               existsAtStoredPath: false,
-              existsAtExpectedPath: true,
+              foundLocation,
               expectedPath,
               action: "repaired",
             },
@@ -131,11 +138,11 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
           );
           trace.endSpan(fileSpan, "ok");
         } else {
-          log.warn(`  ✗ File not found at expected path either: ${expectedPath}`);
+          log.warn(`  ✗ File not found in Documents or Caches`);
           log.warn(`  File may have been deleted by iOS to free storage space`);
           log.warn(`  Clearing download status...`);
 
-          // File truly doesn't exist, clear the download status
+          // File truly doesn't exist in either location, clear the download status
           await clearAudioFileDownloadStatus(file.id);
           clearedCount++;
 
@@ -146,8 +153,7 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
               filename: file.filename,
               storedPath,
               existsAtStoredPath: false,
-              existsAtExpectedPath: false,
-              expectedPath,
+              foundLocation: null,
               action: "cleared",
             },
             parentSpan.context

@@ -62,6 +62,7 @@ describe("PlaybackControlCollaborator", () => {
   const mockStore = {
     player: {
       currentTrack: null as any,
+      position: 0,
     },
     _setLastPauseTime: jest.fn(),
     _setTrackLoading: jest.fn(),
@@ -103,24 +104,55 @@ describe("PlaybackControlCollaborator", () => {
   });
 
   describe("executePlay", () => {
-    it("applies smart rewind and calls TrackPlayer.play", async () => {
+    it("calls TrackPlayer.play before applySmartRewind", async () => {
+      const callOrder: string[] = [];
+      mockedTrackPlayer.play.mockImplementation(async () => {
+        callOrder.push("play");
+      });
+      applySmartRewind.mockImplementation(async () => {
+        callOrder.push("applySmartRewind");
+      });
+
       await collaborator.executePlay();
 
-      expect(applySmartRewind).toHaveBeenCalled();
-      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+      expect(callOrder).toEqual(["play", "applySmartRewind"]);
     });
 
-    it("clears last pause time before playing", async () => {
+    it("clears last pause time after playing", async () => {
       await collaborator.executePlay();
 
       expect(mockStore._setLastPauseTime).toHaveBeenCalledWith(null);
     });
 
-    it("clears track loading state on error and rethrows", async () => {
+    it("clears track loading state when play fails and rethrows", async () => {
       mockedTrackPlayer.play.mockRejectedValue(new Error("Play failed"));
 
       await expect(collaborator.executePlay()).rejects.toThrow("Play failed");
       expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
+    });
+
+    it("clears track loading state when applySmartRewind fails and rethrows", async () => {
+      applySmartRewind.mockRejectedValue(new Error("Seek failed"));
+
+      await expect(collaborator.executePlay()).rejects.toThrow("Seek failed");
+      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+      expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
+    });
+
+    it("passes store position to applySmartRewind to prevent streaming race where TrackPlayer.getProgress returns 0", async () => {
+      mockStore.player.position = 20956;
+
+      await collaborator.executePlay();
+
+      expect(applySmartRewind).toHaveBeenCalledWith(20956);
+    });
+
+    it("passes 0 to applySmartRewind when store position is 0 (beginning of book)", async () => {
+      mockStore.player.position = 0;
+
+      await collaborator.executePlay();
+
+      expect(applySmartRewind).toHaveBeenCalledWith(0);
     });
   });
 

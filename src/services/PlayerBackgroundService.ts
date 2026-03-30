@@ -104,15 +104,15 @@ declare global {
  */
 async function handleRemotePlay(): Promise<void> {
   log.debug(`RemotePlay received (${describeRuntimeContext()})`);
-  dispatchPlayerEvent({ type: "PLAY" });
+  dispatchPlayerEvent({ type: "PLAY" }, { source: "remote_command" });
 }
 
 /**
  * Handle remote pause command
  */
 async function handleRemotePause(): Promise<void> {
-  log.debug(`RemotePause received (${describeRuntimeContext()})`);
-  dispatchPlayerEvent({ type: "PAUSE" });
+  log.info(`RemotePause received (${describeRuntimeContext()})`);
+  dispatchPlayerEvent({ type: "PAUSE" }, { source: "remote_command" });
 }
 
 /**
@@ -141,7 +141,7 @@ async function getUserIdAndLibraryItemId(): Promise<{
  */
 async function handleRemoteStop(): Promise<void> {
   log.debug(`RemoteStop received (${describeRuntimeContext()})`);
-  dispatchPlayerEvent({ type: "STOP" });
+  dispatchPlayerEvent({ type: "STOP" }, { source: "remote_command" });
 
   const ids = await getUserIdAndLibraryItemId();
   if (ids) {
@@ -165,10 +165,13 @@ async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<v
   const progress = await TrackPlayer.getProgress();
   const newPosition = progress.position + event.interval;
 
-  dispatchPlayerEvent({
-    type: "SEEK",
-    payload: { position: newPosition },
-  });
+  dispatchPlayerEvent(
+    {
+      type: "SEEK",
+      payload: { position: newPosition },
+    },
+    { source: "remote_command" }
+  );
 
   try {
     const ids = await getUserIdAndLibraryItemId();
@@ -212,10 +215,13 @@ async function handleRemoteJumpBackward(event: RemoteJumpBackwardEvent): Promise
   const progress = await TrackPlayer.getProgress();
   const newPosition = Math.max(0, progress.position - event.interval);
 
-  dispatchPlayerEvent({
-    type: "SEEK",
-    payload: { position: newPosition },
-  });
+  dispatchPlayerEvent(
+    {
+      type: "SEEK",
+      payload: { position: newPosition },
+    },
+    { source: "remote_command" }
+  );
 
   try {
     const ids = await getUserIdAndLibraryItemId();
@@ -273,10 +279,13 @@ async function handleRemotePrevious(): Promise<void> {
 async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
   log.debug(`RemoteSeek received position=${event.position} (${describeRuntimeContext()})`);
 
-  dispatchPlayerEvent({
-    type: "SEEK",
-    payload: { position: event.position },
-  });
+  dispatchPlayerEvent(
+    {
+      type: "SEEK",
+      payload: { position: event.position },
+    },
+    { source: "remote_command" }
+  );
 
   // Update progress immediately after seek
   try {
@@ -325,15 +334,15 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
     if (ids) {
       if (event.permanent) {
         log.info(`Pausing playback (permanent duck)`);
-        dispatchPlayerEvent({ type: "PAUSE" });
+        dispatchPlayerEvent({ type: "PAUSE" }, { source: "audio_focus" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else if (event.paused) {
         log.info(`Pausing playback (duck)`);
-        dispatchPlayerEvent({ type: "PAUSE" });
+        dispatchPlayerEvent({ type: "PAUSE" }, { source: "audio_focus" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else {
         // Resuming from duck - coordinator's executePlay() handles applySmartRewind
-        dispatchPlayerEvent({ type: "PLAY" });
+        dispatchPlayerEvent({ type: "PLAY" }, { source: "audio_focus" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, false);
       }
 
@@ -359,10 +368,13 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
 async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<void> {
   try {
     // Phase 1: Dispatch to event bus
-    dispatchPlayerEvent({
-      type: "NATIVE_STATE_CHANGED",
-      payload: { state: event.state },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: event.state },
+      },
+      { source: "native_player" }
+    );
 
     // isLoadingTrack(false), updatePosition, and updatePlayingState removed:
     // NATIVE_STATE_CHANGED event → coordinator → syncStateToStore bridge handles all three
@@ -408,10 +420,13 @@ async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<vo
 async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent): Promise<void> {
   try {
     // Phase 1: Dispatch to event bus
-    dispatchPlayerEvent({
-      type: "NATIVE_PROGRESS_UPDATED",
-      payload: { position: event.position, duration: event.duration, buffered: event.buffered },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: event.position, duration: event.duration, buffered: event.buffered },
+      },
+      { source: "native_player" }
+    );
 
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
@@ -484,7 +499,7 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
         store.cancelSleepTimer();
         const pauseTime = Date.now();
         store._setLastPauseTime(pauseTime);
-        dispatchPlayerEvent({ type: "PAUSE" });
+        dispatchPlayerEvent({ type: "PAUSE" }, { source: "sleep_timer" });
       }
     }
 
@@ -706,10 +721,13 @@ async function handleActiveTrackChanged(
 
     // Phase 1: Dispatch to event bus
     // Note: We pass null for track since we don't have PlayerTrack here
-    dispatchPlayerEvent({
-      type: "NATIVE_TRACK_CHANGED",
-      payload: { track: null },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "NATIVE_TRACK_CHANGED",
+        payload: { track: null },
+      },
+      { source: "native_player" }
+    );
 
     lastActiveTrackId.value = currentActiveTrack.id;
 
@@ -817,10 +835,13 @@ async function handleActiveTrackChanged(
 async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
   try {
     // Dispatch to coordinator so isLoadingTrack is cleared via syncStateToStore bridge
-    dispatchPlayerEvent({
-      type: "NATIVE_PLAYBACK_ERROR",
-      payload: { code: event.code, message: event.message },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "NATIVE_PLAYBACK_ERROR",
+        payload: { code: event.code, message: event.message },
+      },
+      { source: "native_player" }
+    );
 
     const ids = await getUserIdAndLibraryItemId();
     const store = useAppStore.getState();

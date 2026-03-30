@@ -1002,7 +1002,11 @@ describe("PlayerStateCoordinator", () => {
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("test-item", undefined, undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "test-item",
+        undefined,
+        undefined
+      );
     });
 
     it("should call executePlay when transitioning to PLAYING", async () => {
@@ -1113,7 +1117,11 @@ describe("PlayerStateCoordinator", () => {
       // Second LOAD_TRACK should have been rejected (coordinator was still in LOADING)
       // executeLoadTrack called only once (first item), not for the second
       expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("test-item", undefined, undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "test-item",
+        undefined,
+        undefined
+      );
       expect(coordinator.getMetrics().rejectedTransitionCount).toBe(beforeRejected + 1);
     });
 
@@ -1463,6 +1471,13 @@ describe("PlayerStateCoordinator", () => {
 
       expect(coordinator.getState()).toBe(PlayerState.PLAYING);
 
+      // Native playback confirms it has started (hasReachedPlayingState guard)
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       // Simulate lock screen pause button pressed
       // Native player pauses, sends NATIVE_STATE_CHANGED
       await coordinator.dispatch({
@@ -1480,6 +1495,61 @@ describe("PlayerStateCoordinator", () => {
       expect(context.isPlaying).toBe(false);
 
       // State machine transitions to PAUSED so togglePlayPause() can resume via PLAY
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
+    });
+
+    it("should NOT auto-pause when NATIVE_STATE_CHANGED arrives with State.Ready during PLAYING", async () => {
+      // Regression: streaming tracks briefly emit State.Ready after NATIVE_TRACK_CHANGED
+      // during track initialization. This must not trigger the coordinator's auto-pause.
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Simulate TrackPlayer briefly reporting State.Ready during streaming track init
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Ready },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should stay PLAYING — State.Ready is transient, not an external pause
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+      expect(coordinator.getMetrics().rejectedTransitionCount).toBe(0);
+    });
+
+    it("should NOT dispatch PAUSE when State.Paused fires before native play starts (queue rebuild path)", async () => {
+      // Regression: on iOS, TrackPlayer.add()+seekTo() during queue rebuild emits
+      // Buffering→Ready→Paused before executePlay() runs. The coordinator must not
+      // auto-pause from those states — hasReachedPlayingState guards against this.
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Simulate iOS pre-play state sequence (queue rebuild, before native play starts)
+      for (const state of [State.Buffering, State.Ready, State.Paused]) {
+        await coordinator.dispatch({ type: "NATIVE_STATE_CHANGED", payload: { state } });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      // Must still be PLAYING — the pre-play Paused must not have triggered auto-pause
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Now native play actually starts → hasReachedPlayingState becomes true
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Now a real external pause (e.g. lock screen) should trigger auto-pause
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Paused },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(coordinator.getState()).toBe(PlayerState.PAUSED);
     });
 
@@ -1525,6 +1595,13 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Native playback confirms it has started (hasReachedPlayingState guard)
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Lock screen: pause
       await coordinator.dispatch({
@@ -2679,7 +2756,11 @@ describe("PlayerStateCoordinator", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("lifecycle-item", undefined, undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "lifecycle-item",
+        undefined,
+        undefined
+      );
       expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
       // Auto-PLAY fires after executeLoadTrack completes: LOADING -> READY -> PLAYING
       expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(1);
@@ -2874,7 +2955,11 @@ describe("PlayerStateCoordinator", () => {
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("item-1", undefined, undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "item-1",
+        undefined,
+        undefined
+      );
 
       const playDispatches = dispatchSpy.mock.calls.filter(([evt]: [any]) => evt.type === "PLAY");
       expect(playDispatches.length).toBeGreaterThan(0);
@@ -2928,7 +3013,11 @@ describe("PlayerStateCoordinator", () => {
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-2" } });
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("item-2", undefined, undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "item-2",
+        undefined,
+        undefined
+      );
     });
 
     it("skips executeLoadTrack and dispatches PLAY when same item re-requested while PLAYING", async () => {
@@ -3160,7 +3249,11 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(mockStore._setPendingProgressJump).toHaveBeenCalledWith(
-        expect.objectContaining({ fromPosition: 100, toPosition: 140, timestamp: expect.any(Number) })
+        expect.objectContaining({
+          fromPosition: 100,
+          toPosition: 140,
+          timestamp: expect.any(Number),
+        })
       );
     });
 

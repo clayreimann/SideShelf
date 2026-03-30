@@ -30,13 +30,20 @@ export class PlaybackControlCollaborator implements IPlaybackControlCollaborator
   async executePlay(): Promise<void> {
     try {
       const store = useAppStore.getState();
+      // Read position before play() — for streaming tracks, TrackPlayer.getProgress().position
+      // returns 0 until the stream buffers to the seekTo position. Reading from the store here
+      // avoids that race (applySmartRewind accepts an optional currentPosition for exactly this).
+      const currentPosition = store.player.position;
 
-      // Apply smart rewind (checks enabled setting internally)
-      await applySmartRewind();
+      // Start playback first to establish audio session in "playing" state,
+      // then apply smart rewind while already playing.
+      // Calling seekTo() on a paused track before play() can trigger a
+      // spurious iOS RemotePause ~200ms later (observed in trace seq 175, 233).
+      await TrackPlayer.play();
+      await applySmartRewind(currentPosition);
 
       // Clear pause time since we're resuming
       store._setLastPauseTime(null);
-      await TrackPlayer.play();
     } catch (error) {
       const store = useAppStore.getState();
       store._setTrackLoading(false);

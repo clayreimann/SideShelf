@@ -111,7 +111,9 @@ export interface PlayerSliceActions {
   /** Set last pause time (for smart rewind) */
   _setLastPauseTime: (timestamp: number | null) => void;
   /** Set or clear the pending progress jump toast */
-  _setPendingProgressJump: (jump: { fromPosition: number; toPosition: number; timestamp: number } | null) => void;
+  _setPendingProgressJump: (
+    jump: { fromPosition: number; toPosition: number; timestamp: number } | null
+  ) => void;
   /** Update now playing metadata with chapter information */
   updateNowPlayingMetadata: () => Promise<void>;
   /** Set sleep timer with duration in minutes */
@@ -327,24 +329,30 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     // Notify coordinator that state has been restored
     const finalState = get();
-    dispatchPlayerEvent({
-      type: "RESTORE_STATE",
-      payload: {
-        state: {
-          currentTrack: finalState.player.currentTrack,
-          position: finalState.player.position,
-          playbackRate: finalState.player.playbackRate,
-          volume: finalState.player.volume,
-          isPlaying: finalState.player.isPlaying,
-          currentPlaySessionId: finalState.player.currentPlaySessionId,
+    dispatchPlayerEvent(
+      {
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: finalState.player.currentTrack,
+            position: finalState.player.position,
+            playbackRate: finalState.player.playbackRate,
+            volume: finalState.player.volume,
+            isPlaying: finalState.player.isPlaying,
+            currentPlaySessionId: finalState.player.currentPlaySessionId,
+          },
         },
       },
-    });
+      { source: "restore" }
+    );
 
     // Signal that restoration is complete
-    dispatchPlayerEvent({
-      type: "RESTORE_COMPLETE",
-    });
+    dispatchPlayerEvent(
+      {
+        type: "RESTORE_COMPLETE",
+      },
+      { source: "restore" }
+    );
   },
   // Initial scoped state
   player: {

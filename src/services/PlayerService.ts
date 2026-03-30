@@ -232,11 +232,18 @@ export class PlayerService implements IPlayerServiceFacade {
   /**
    * Load and play a track (Public API - Dispatches Event)
    */
-  async playTrack(libraryItemId: string, episodeId?: string, startPosition?: number): Promise<void> {
-    dispatchPlayerEvent({
-      type: "LOAD_TRACK",
-      payload: { libraryItemId, episodeId, startPosition },
-    });
+  async playTrack(
+    libraryItemId: string,
+    episodeId?: string,
+    startPosition?: number
+  ): Promise<void> {
+    dispatchPlayerEvent(
+      {
+        type: "LOAD_TRACK",
+        payload: { libraryItemId, episodeId, startPosition },
+      },
+      { source: "ui" }
+    );
   }
 
   /**
@@ -247,9 +254,9 @@ export class PlayerService implements IPlayerServiceFacade {
     // to avoid hard lock when native audio stops externally (call, audio focus loss).
     const coordinator = getCoordinator();
     if (coordinator.getContext().isPlaying) {
-      dispatchPlayerEvent({ type: "PAUSE" });
+      dispatchPlayerEvent({ type: "PAUSE" }, { source: "ui" });
     } else {
-      dispatchPlayerEvent({ type: "PLAY" });
+      dispatchPlayerEvent({ type: "PLAY" }, { source: "ui" });
     }
   }
 
@@ -257,51 +264,60 @@ export class PlayerService implements IPlayerServiceFacade {
    * Pause playback (Public API - Dispatches Event)
    */
   async pause(): Promise<void> {
-    dispatchPlayerEvent({ type: "PAUSE" });
+    dispatchPlayerEvent({ type: "PAUSE" }, { source: "ui" });
   }
 
   /**
    * Resume playback (Public API - Dispatches Event)
    */
   async play(): Promise<void> {
-    dispatchPlayerEvent({ type: "PLAY" });
+    dispatchPlayerEvent({ type: "PLAY" }, { source: "ui" });
   }
 
   /**
    * Seek to position in seconds (Public API - Dispatches Event)
    */
   async seekTo(position: number): Promise<void> {
-    dispatchPlayerEvent({
-      type: "SEEK",
-      payload: { position },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "SEEK",
+        payload: { position },
+      },
+      { source: "ui" }
+    );
   }
 
   /**
    * Set playback rate (Public API - Dispatches Event)
    */
   async setRate(rate: number): Promise<void> {
-    dispatchPlayerEvent({
-      type: "SET_RATE",
-      payload: { rate },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "SET_RATE",
+        payload: { rate },
+      },
+      { source: "ui" }
+    );
   }
 
   /**
    * Set volume (Public API - Dispatches Event)
    */
   async setVolume(volume: number): Promise<void> {
-    dispatchPlayerEvent({
-      type: "SET_VOLUME",
-      payload: { volume },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "SET_VOLUME",
+        payload: { volume },
+      },
+      { source: "ui" }
+    );
   }
 
   /**
    * Stop playback (Public API - Dispatches Event)
    */
   async stop(): Promise<void> {
-    dispatchPlayerEvent({ type: "STOP" });
+    dispatchPlayerEvent({ type: "STOP" }, { source: "ui" });
   }
 
   // --- Internal (Called by Coordinator) — single-line delegates ---
@@ -309,7 +325,11 @@ export class PlayerService implements IPlayerServiceFacade {
   /**
    * Execute track loading (Internal - Called by Coordinator)
    */
-  async executeLoadTrack(libraryItemId: string, episodeId?: string, startPosition?: number): Promise<void> {
+  async executeLoadTrack(
+    libraryItemId: string,
+    episodeId?: string,
+    startPosition?: number
+  ): Promise<void> {
     return this.trackLoading.executeLoadTrack(libraryItemId, episodeId, startPosition);
   }
 

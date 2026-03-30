@@ -11,7 +11,7 @@
  * always use IPlayerServiceFacade from "./types" to prevent circular imports.
  */
 
-import { clearAudioFileDownloadStatus } from "@/db/helpers/audioFiles";
+import { clearAudioFileDownloadStatus, markAudioFileAsDownloaded } from "@/db/helpers/audioFiles";
 import { getChaptersForMedia } from "@/db/helpers/chapters";
 import type { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
@@ -21,7 +21,12 @@ import { getUserByUsername } from "@/db/helpers/users";
 import { startPlaySession } from "@/lib/api/endpoints";
 import { getCoverUri } from "@/lib/covers";
 import { ensureItemInDocuments } from "@/lib/fileLifecycleManager";
-import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
+import {
+  getAudioFileLocation,
+  getDownloadPath,
+  resolveAppPath,
+  verifyFileExists,
+} from "@/lib/fileSystem";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { trace } from "@/lib/trace";
@@ -47,7 +52,11 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
   /**
    * Execute track loading (Internal - Called by Coordinator).
    */
-  async executeLoadTrack(libraryItemId: string, episodeId?: string, startPosition?: number): Promise<void> {
+  async executeLoadTrack(
+    libraryItemId: string,
+    episodeId?: string,
+    startPosition?: number
+  ): Promise<void> {
     try {
       diagLog.info(`playTrack called for libraryItemId: ${libraryItemId}`);
       log.info(`Loading track for library item: ${libraryItemId}`);
@@ -170,8 +179,13 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         // Caller-specified chapter position — skip resolveCanonicalPosition to avoid
         // spurious progress-jump toast and timing race during queue rebuild.
         seekPosition = startPosition;
-        dispatchPlayerEvent({ type: "POSITION_RECONCILED", payload: { position: startPosition } });
-        log.info(`[executeLoadTrack] Using caller-specified startPosition: ${formatTime(startPosition)}s`);
+        dispatchPlayerEvent(
+          { type: "POSITION_RECONCILED", payload: { position: startPosition } },
+          { source: "restore" }
+        );
+        log.info(
+          `[executeLoadTrack] Using caller-specified startPosition: ${formatTime(startPosition)}s`
+        );
       } else {
         // Reset position context when switching to a different book to prevent
         // the previous book's position bleeding into resolveCanonicalPosition's
@@ -179,11 +193,19 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         const currentItemId = store.player.currentTrack?.libraryItemId;
         if (currentItemId && currentItemId !== libraryItemId) {
           store.updatePosition(0);
-          log.debug(`[executeLoadTrack] Switching books (${currentItemId} → ${libraryItemId}): reset store position to 0`);
+          log.debug(
+            `[executeLoadTrack] Switching books (${currentItemId} → ${libraryItemId}): reset store position to 0`
+          );
         }
         const resumeInfo = await this.facade.resolveCanonicalPosition(libraryItemId);
         seekPosition = resumeInfo.position;
-        log.info(`[executeLoadTrack] Resuming from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`);
+        // Sync store position so executePlay reads the correct value via store.player.position.
+        // Without this, applySmartRewind would read 0 from the store on the first play of a
+        // streaming book (TrackPlayer hasn't buffered to seekTo position yet).
+        store.updatePosition(seekPosition);
+        log.info(
+          `[executeLoadTrack] Resuming from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
+        );
       }
 
       if (seekPosition > 0) {
@@ -226,6 +248,9 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
 
     // First, check which files we have locally
     const locallyAvailableFiles = new Set<string>();
+    // Tracks repaired paths for files whose stored path was stale (legacy absolute path after
+    // iOS container UUID rotation). Used in the second loop to serve the correct URL.
+    const repairedPaths = new Map<string, string>(); // audioFileId → repaired path
     for (const audioFile of playerTrack.audioFiles) {
       if (audioFile.downloadInfo?.isDownloaded && audioFile.downloadInfo.downloadPath) {
         const storedPath = audioFile.downloadInfo.downloadPath;
@@ -234,14 +259,33 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
           locallyAvailableFiles.add(audioFile.id);
         } else {
           const resolvedPath = resolveAppPath(storedPath);
-          log.warn(`File marked as downloaded but missing: ${resolvedPath}`);
+          log.warn(`File marked as downloaded but missing at stored path: ${resolvedPath}`);
 
-          // Clean up database
-          try {
-            await clearAudioFileDownloadStatus(audioFile.id);
-            log.info(`Cleared download status for missing file: ${audioFile.id}`);
-          } catch (error) {
-            log.error("Failed to clear download status", error as Error);
+          // Before clearing, check both Documents and Caches using current container paths.
+          // This handles legacy absolute stored paths that became stale after an iOS UUID rotation.
+          const foundLocation = getAudioFileLocation(playerTrack.libraryItemId, audioFile.filename);
+          if (foundLocation !== null) {
+            const repairedPath = getDownloadPath(
+              playerTrack.libraryItemId,
+              audioFile.filename,
+              foundLocation
+            );
+            log.info(`  ✓ Found at ${foundLocation}, repairing path: ${repairedPath}`);
+            try {
+              await markAudioFileAsDownloaded(audioFile.id, repairedPath);
+            } catch (error) {
+              log.error("Failed to repair download path in buildTrackList", error as Error);
+            }
+            repairedPaths.set(audioFile.id, repairedPath);
+            locallyAvailableFiles.add(audioFile.id);
+          } else {
+            // File truly not found in either location — clean up database
+            try {
+              await clearAudioFileDownloadStatus(audioFile.id);
+              log.info(`Cleared download status for missing file: ${audioFile.id}`);
+            } catch (error) {
+              log.error("Failed to clear download status", error as Error);
+            }
           }
         }
       }
@@ -297,8 +341,9 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
 
       // First, try to use local file if available
       if (locallyAvailableFiles.has(audioFile.id) && audioFile.downloadInfo?.downloadPath) {
-        storedPath = audioFile.downloadInfo.downloadPath;
-        resolvedPath = resolveAppPath(storedPath);
+        // Use repaired path if the stored path was stale; fall back to resolveAppPath for normal paths
+        storedPath = repairedPaths.get(audioFile.id) ?? audioFile.downloadInfo.downloadPath;
+        resolvedPath = repairedPaths.has(audioFile.id) ? storedPath : resolveAppPath(storedPath);
         url = resolvedPath;
         sourceType = "local";
         fileExists = true;

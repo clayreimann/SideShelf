@@ -470,7 +470,7 @@ describe("PlayerService", () => {
 
       await playerService.togglePlayPause();
 
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" }, { source: "ui" });
     });
 
     it("should toggle play/pause when paused", async () => {
@@ -479,7 +479,7 @@ describe("PlayerService", () => {
 
       await playerService.togglePlayPause();
 
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" }, { source: "ui" });
     });
 
     it("should pause playback", async () => {
@@ -571,49 +571,61 @@ describe("PlayerService", () => {
   describe("Public API (Event Dispatching)", () => {
     it("should dispatch LOAD_TRACK event", async () => {
       await playerService.playTrack("item-1", "ep-1");
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
-        type: "LOAD_TRACK",
-        payload: { libraryItemId: "item-1", episodeId: "ep-1" },
-      });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        {
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "item-1", episodeId: "ep-1" },
+        },
+        { source: "ui" }
+      );
     });
 
     it("should dispatch PLAY event", async () => {
       await playerService.play();
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" }, { source: "ui" });
     });
 
     it("should dispatch PAUSE event", async () => {
       await playerService.pause();
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" }, { source: "ui" });
     });
 
     it("should dispatch STOP event", async () => {
       await playerService.stop();
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "STOP" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "STOP" }, { source: "ui" });
     });
 
     it("should dispatch SEEK event", async () => {
       await playerService.seekTo(123);
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
-        type: "SEEK",
-        payload: { position: 123 },
-      });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        {
+          type: "SEEK",
+          payload: { position: 123 },
+        },
+        { source: "ui" }
+      );
     });
 
     it("should dispatch SET_RATE event", async () => {
       await playerService.setRate(1.5);
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
-        type: "SET_RATE",
-        payload: { rate: 1.5 },
-      });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        {
+          type: "SET_RATE",
+          payload: { rate: 1.5 },
+        },
+        { source: "ui" }
+      );
     });
 
     it("should dispatch SET_VOLUME event", async () => {
       await playerService.setVolume(0.5);
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
-        type: "SET_VOLUME",
-        payload: { volume: 0.5 },
-      });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        {
+          type: "SET_VOLUME",
+          payload: { volume: 0.5 },
+        },
+        { source: "ui" }
+      );
     });
   });
 

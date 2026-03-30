@@ -183,7 +183,7 @@ describe("handleDeepLinkUrl", () => {
     expect(handleDeepLinkUrl).toBeDefined();
     await handleDeepLinkUrl("sideshelf://resume");
 
-    expect(mockDispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+    expect(mockDispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" }, { source: "ui" });
     expect(mockRouter.back).toHaveBeenCalled();
     expect(mockRouter.navigate).not.toHaveBeenCalled();
   });
@@ -217,7 +217,7 @@ describe("handleDeepLinkUrl", () => {
     expect(handleDeepLinkUrl).toBeDefined();
     await handleDeepLinkUrl("sideshelf://play-pause");
 
-    expect(mockDispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" });
+    expect(mockDispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" }, { source: "ui" });
     expect(mockRouter.back).toHaveBeenCalled();
     expect(mockRouter.navigate).not.toHaveBeenCalled();
   });
@@ -230,7 +230,7 @@ describe("handleDeepLinkUrl", () => {
     expect(handleDeepLinkUrl).toBeDefined();
     await handleDeepLinkUrl("sideshelf://play-pause");
 
-    expect(mockDispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+    expect(mockDispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" }, { source: "ui" });
     expect(mockRouter.back).toHaveBeenCalled();
     expect(mockRouter.navigate).not.toHaveBeenCalled();
   });

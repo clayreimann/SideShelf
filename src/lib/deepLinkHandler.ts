@@ -117,7 +117,7 @@ export async function handleDeepLinkUrl(url: string): Promise<void> {
         const currentTrack = store.player?.currentTrack ?? null;
         if (currentTrack) {
           log.info("[handleDeepLinkUrl] dispatching PLAY for resume");
-          dispatchPlayerEvent({ type: "PLAY" });
+          dispatchPlayerEvent({ type: "PLAY" }, { source: "ui" });
         } else {
           log.warn("[handleDeepLinkUrl] sideshelf://resume — no track loaded, no-op");
         }
@@ -134,9 +134,9 @@ export async function handleDeepLinkUrl(url: string): Promise<void> {
         const isPlaying = store.player?.isPlaying ?? false;
         log.info(`[handleDeepLinkUrl] play-pause isPlaying=${String(isPlaying)}`);
         if (isPlaying) {
-          dispatchPlayerEvent({ type: "PAUSE" });
+          dispatchPlayerEvent({ type: "PAUSE" }, { source: "ui" });
         } else {
-          dispatchPlayerEvent({ type: "PLAY" });
+          dispatchPlayerEvent({ type: "PLAY" }, { source: "ui" });
         }
         // Pop the 404 Expo Router pushed for sideshelf://play-pause; fall back to home if nothing to go back to
         if (router.canGoBack()) {

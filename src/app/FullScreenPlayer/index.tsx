@@ -25,6 +25,7 @@ import { formatTime } from "@/lib/helpers/formatters";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { trace } from "@/lib/trace";
 import { writeDumpToDisk } from "@/lib/traceDump";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
@@ -125,16 +126,19 @@ export default function FullScreenPlayer() {
     chapterPanelSV.value = withTiming(next ? 1 : 0, { duration: PANEL_DURATION });
   }, [showChapterList, coverSizeSV, chapterPanelSV]);
 
-  const handleChapterPress = useCallback(async (chapterStart: number) => {
-    try {
-      await playerService.seekTo(chapterStart);
-      setShowChapterList(false); // Close chapter list after selection
-      coverSizeSV.value = withTiming(0, { duration: PANEL_DURATION });
-      chapterPanelSV.value = withTiming(0, { duration: PANEL_DURATION });
-    } catch (error) {
-      log.error("[handleChapterPress] Failed to seek to chapter:", error as Error);
-    }
-  }, [coverSizeSV, chapterPanelSV]);
+  const handleChapterPress = useCallback(
+    async (chapterStart: number) => {
+      try {
+        await playerService.seekTo(chapterStart);
+        setShowChapterList(false); // Close chapter list after selection
+        coverSizeSV.value = withTiming(0, { duration: PANEL_DURATION });
+        chapterPanelSV.value = withTiming(0, { duration: PANEL_DURATION });
+      } catch (error) {
+        log.error("[handleChapterPress] Failed to seek to chapter:", error as Error);
+      }
+    },
+    [coverSizeSV, chapterPanelSV]
+  );
 
   const handleClose = useCallback(() => {
     router.back();
@@ -177,7 +181,14 @@ export default function FullScreenPlayer() {
 
   const handleSkipBackward = useCallback(async () => {
     try {
-      await playerService.seekTo(Math.max(position - jumpBackwardInterval, 0));
+      const targetPosition = Math.max(position - jumpBackwardInterval, 0);
+      trace.addEvent("player.ui.skip", {
+        direction: "backward",
+        fromPositionMs: Math.round(position * 1000),
+        targetPositionMs: Math.round(targetPosition * 1000),
+        intervalSeconds: jumpBackwardInterval,
+      });
+      await playerService.seekTo(targetPosition);
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to skip backward:", error);
     }
@@ -185,7 +196,14 @@ export default function FullScreenPlayer() {
 
   const handleSkipForward = useCallback(async () => {
     try {
-      await playerService.seekTo(position + jumpForwardInterval);
+      const targetPosition = position + jumpForwardInterval;
+      trace.addEvent("player.ui.skip", {
+        direction: "forward",
+        fromPositionMs: Math.round(position * 1000),
+        targetPositionMs: Math.round(targetPosition * 1000),
+        intervalSeconds: jumpForwardInterval,
+      });
+      await playerService.seekTo(targetPosition);
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to skip forward:", error);
     }

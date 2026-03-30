@@ -59,11 +59,17 @@ jest.mock("@/db/helpers/chapters", () => ({
 
 jest.mock("@/db/helpers/audioFiles", () => ({
   clearAudioFileDownloadStatus: jest.fn(),
+  markAudioFileAsDownloaded: jest.fn(),
 }));
 
 jest.mock("@/lib/fileSystem", () => ({
   resolveAppPath: jest.fn(),
   verifyFileExists: jest.fn(),
+  getAudioFileLocation: jest.fn().mockReturnValue(null),
+  getDownloadPath: jest.fn(
+    (libraryItemId: string, filename: string, _location?: string) =>
+      `/repaired/downloads/${libraryItemId}/${filename}`
+  ),
 }));
 
 jest.mock("@/lib/fileLifecycleManager", () => ({
@@ -149,11 +155,13 @@ describe("TrackLoadingCollaborator", () => {
       playbackRate: 1.0,
       volume: 1.0,
       currentPlaySessionId: null as any,
+      position: 0,
     },
     _setCurrentTrack: jest.fn(),
     _setTrackLoading: jest.fn(),
     _setPlaySessionId: jest.fn(),
     _updateCurrentChapter: jest.fn(),
+    updatePosition: jest.fn(),
   };
 
   beforeEach(() => {
@@ -539,6 +547,48 @@ describe("TrackLoadingCollaborator", () => {
 
       expect(tracks).toHaveLength(1);
       expect(tracks[0].artwork).toBe("http://example.com/cover.jpg");
+    });
+
+    it("repairs stale path and builds local track when verifyFileExists fails but getAudioFileLocation finds the file", async () => {
+      const { getAudioFileLocation, getDownloadPath } = require("@/lib/fileSystem");
+      const { markAudioFileAsDownloaded } = require("@/db/helpers/audioFiles");
+
+      // Stored path is stale (legacy absolute path after iOS container UUID rotation)
+      verifyFileExists.mockResolvedValue(false);
+      // But getAudioFileLocation finds the file in Documents
+      getAudioFileLocation.mockReturnValue("documents");
+      getDownloadPath.mockReturnValue("/repaired/downloads/item-1/test.m4b");
+      markAudioFileAsDownloaded.mockResolvedValue(undefined);
+
+      const tracks = await collaborator.buildTrackList(baseTrack as any);
+
+      expect(markAudioFileAsDownloaded).toHaveBeenCalledWith(
+        "file-1",
+        "/repaired/downloads/item-1/test.m4b"
+      );
+      expect(tracks).toHaveLength(1);
+      expect(tracks[0].url).toBe("/repaired/downloads/item-1/test.m4b");
+    });
+  });
+
+  describe("executeLoadTrack: store position sync", () => {
+    it("updates store position after resolveCanonicalPosition (path B) so executePlay reads correct position", async () => {
+      (mockFacade.resolveCanonicalPosition as jest.Mock).mockResolvedValue({
+        position: 300,
+        source: "activeSession",
+        authoritativePosition: 300,
+        asyncStoragePosition: null,
+      });
+
+      await collaborator.executeLoadTrack("item-1");
+
+      expect(mockStore.updatePosition).toHaveBeenCalledWith(300);
+    });
+
+    it("does not call updatePosition when startPosition is provided (path A — caller-specified)", async () => {
+      await collaborator.executeLoadTrack("item-1", undefined, 500);
+
+      expect(mockStore.updatePosition).not.toHaveBeenCalled();
     });
   });
 });

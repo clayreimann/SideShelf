@@ -45,7 +45,10 @@ export enum PlayerState {
  */
 export type PlayerEvent =
   // Command events (from user/UI)
-  | { type: "LOAD_TRACK"; payload: { libraryItemId: string; episodeId?: string; startPosition?: number } }
+  | {
+      type: "LOAD_TRACK";
+      payload: { libraryItemId: string; episodeId?: string; startPosition?: number };
+    }
   | { type: "PLAY" }
   | { type: "PAUSE" }
   | { type: "STOP" }
@@ -131,6 +134,14 @@ export interface StateContext {
    *  'unknown' after RESTORE_STATE or STOP (queue may have been cleared by OS/BGS).
    *  'valid' after QUEUE_RELOADED (coordinator just rebuilt and confirmed the queue). */
   queueStatus: "unknown" | "valid";
+
+  /** Guards the auto-pause dispatch in NATIVE_STATE_CHANGED.
+   *  Set true when native State.Playing fires (native playback has begun).
+   *  Reset on LOAD_TRACK, RESTORE_STATE, RELOAD_QUEUE, and STOP.
+   *  Without this guard, the Buffering→Ready→Paused sequence emitted by iOS
+   *  during queue rebuild (before executePlay runs) would trigger a spurious
+   *  PAUSE and leave the machine stuck in PAUSED immediately after LOAD_TRACK. */
+  hasReachedPlayingState: boolean;
 
   // Sync state
   lastServerSync: number | null;

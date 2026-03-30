@@ -15,6 +15,12 @@ jest --findRelatedTests path/to/file.ts    # Run tests related to a file
 npm run drizzle:generate                   # Generate migrations after schema changes
 npm run lint                               # Run ESLint
 npx dpdm --circular src/services/X.ts     # Check for circular import cycles
+
+# Log analysis (queries logs/ directory — all .txt + trace-dump-*.json files)
+uv run scripts/query-logs.py --schema                        # Show tables and columns
+uv run scripts/query-logs.py --list                          # List available log/trace files
+uv run scripts/query-logs.py "SELECT ..."                    # SQL against logs, spans, trace_events
+uv run scripts/query-logs.py --dir /path "SELECT ..."        # Use a different directory
 ```
 
 ## Architecture

@@ -34,8 +34,10 @@ jest.mock("@/db/helpers/mediaMetadata", () => ({
 jest.mock("@/lib/fileSystem", () => ({
   verifyFileExists: jest.fn(),
   getDownloadPath: jest.fn(
-    (libraryItemId: string, filename: string) => `/documents/downloads/${libraryItemId}/${filename}`
+    (libraryItemId: string, filename: string, _location?: string) =>
+      `/documents/downloads/${libraryItemId}/${filename}`
   ),
+  getAudioFileLocation: jest.fn().mockReturnValue(null),
   getDownloadsDirectory: jest.fn(() => ({
     exists: false,
     delete: jest.fn(),
@@ -55,7 +57,7 @@ jest.mock("@/lib/iCloudBackupExclusion", () => ({
 import { markAudioFileAsDownloaded, clearAudioFileDownloadStatus } from "@/db/helpers/audioFiles";
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
-import { verifyFileExists, getDownloadsDirectory } from "@/lib/fileSystem";
+import { verifyFileExists, getDownloadsDirectory, getAudioFileLocation } from "@/lib/fileSystem";
 import { cacheCoverIfMissing } from "@/lib/covers";
 import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 
@@ -80,6 +82,9 @@ const mockCacheCoverIfMissing = cacheCoverIfMissing as jest.MockedFunction<
 >;
 const mockSetExcludeFromBackup = setExcludeFromBackup as jest.MockedFunction<
   typeof setExcludeFromBackup
+>;
+const mockGetAudioFileLocation = getAudioFileLocation as jest.MockedFunction<
+  typeof getAudioFileLocation
 >;
 
 // --- Fixture data ---
@@ -160,6 +165,7 @@ describe("DownloadRepairCollaborator", () => {
     mockClearAudioFileDownloadStatus.mockResolvedValue(undefined as any);
     mockCacheCoverIfMissing.mockResolvedValue(undefined);
     mockSetExcludeFromBackup.mockResolvedValue(undefined);
+    mockGetAudioFileLocation.mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -183,22 +189,40 @@ describe("DownloadRepairCollaborator", () => {
       expect(mockClearAudioFileDownloadStatus).not.toHaveBeenCalled();
     });
 
-    it("marks file as downloaded with corrected path when file found at expected path", async () => {
+    it("marks file as downloaded with corrected path when file found via getAudioFileLocation", async () => {
       const storedPath = "/old-container/documents/downloads/item-1/chapter-1.mp3";
       const expectedPath = "/documents/downloads/item-1/chapter-1.mp3";
 
       mockGetAudioFilesWithDownloadInfo.mockResolvedValue([
         makeAudioFile("af-1", "chapter-1.mp3", 500_000, true, storedPath) as any,
       ]);
-      // File missing at stored path, but found at expected path
-      mockVerifyFileExists
-        .mockResolvedValueOnce(false) // stored path check
-        .mockResolvedValueOnce(true); // expected path check
+      // File missing at stored path, but getAudioFileLocation finds it in documents
+      mockVerifyFileExists.mockResolvedValue(false); // stored path check fails
+      mockGetAudioFileLocation.mockReturnValue("documents"); // found at current path
 
       const count = await collaborator.repairDownloadStatus("item-1");
       expect(count).toBe(1);
       expect(mockMarkAudioFileAsDownloaded).toHaveBeenCalledWith("af-1", expectedPath);
       expect(mockSetExcludeFromBackup).toHaveBeenCalledWith(expectedPath);
+    });
+
+    it("repairs file found in Documents when stored path is a stale legacy absolute path", async () => {
+      const legacyPath =
+        "file:///var/mobile/Containers/Data/Application/OLD-UUID-1234/Documents/downloads/item-1/chapter-1.mp3";
+      const repairedPath = "/documents/downloads/item-1/chapter-1.mp3";
+
+      mockGetAudioFilesWithDownloadInfo.mockResolvedValue([
+        makeAudioFile("af-1", "chapter-1.mp3", 500_000, true, legacyPath) as any,
+      ]);
+      // Stored path fails (UUID changed), getAudioFileLocation finds file in Documents
+      mockVerifyFileExists.mockResolvedValue(false);
+      mockGetAudioFileLocation.mockReturnValue("documents");
+
+      const count = await collaborator.repairDownloadStatus("item-1");
+
+      expect(count).toBe(1);
+      expect(mockMarkAudioFileAsDownloaded).toHaveBeenCalledWith("af-1", repairedPath);
+      expect(mockClearAudioFileDownloadStatus).not.toHaveBeenCalled();
     });
 
     it("clears download status when file missing from both stored and expected paths", async () => {
@@ -230,12 +254,9 @@ describe("DownloadRepairCollaborator", () => {
         makeAudioFile("af-1", "chapter-1.mp3", 500_000, true, storedPath) as any,
         makeAudioFile("af-2", "chapter-2.mp3", 600_000, true, storedPath) as any,
       ]);
-      // Both files are missing at stored path but found at expected path
-      mockVerifyFileExists
-        .mockResolvedValueOnce(false) // af-1 stored
-        .mockResolvedValueOnce(true) // af-1 expected
-        .mockResolvedValueOnce(false) // af-2 stored
-        .mockResolvedValueOnce(true); // af-2 expected
+      // Both files are missing at stored path but found via getAudioFileLocation
+      mockVerifyFileExists.mockResolvedValue(false); // both stored paths fail
+      mockGetAudioFileLocation.mockReturnValue("documents"); // both found in Documents
 
       const count = await collaborator.repairDownloadStatus("item-1");
       expect(count).toBe(2);

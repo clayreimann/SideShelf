@@ -32,6 +32,7 @@ import { useAppStore } from "@/stores/appStore";
 import {
   CoordinatorMetrics,
   DiagnosticEvent,
+  DispatchMeta,
   EventProcessingResult,
   LARGE_DIFF_THRESHOLD,
   MIN_PLAUSIBLE_POSITION,
@@ -62,7 +63,7 @@ export class PlayerStateCoordinator extends EventEmitter {
   private static instance: PlayerStateCoordinator | null = null;
 
   private context: StateContext;
-  private eventQueue: PlayerEvent[] = [];
+  private eventQueue: Array<{ event: PlayerEvent; meta?: DispatchMeta }> = [];
   private lock = new AsyncLock();
   private processingEvent = false;
 
@@ -148,8 +149,8 @@ export class PlayerStateCoordinator extends EventEmitter {
    * Events are queued and processed serially. Valid transitions invoke the
    * corresponding execute* method on PlayerService.
    */
-  async dispatch(event: PlayerEvent): Promise<void> {
-    this.eventQueue.push(event);
+  async dispatch(event: PlayerEvent, meta?: DispatchMeta): Promise<void> {
+    this.eventQueue.push({ event, meta });
     this.metrics.eventQueueLength = this.eventQueue.length;
 
     // Start processing if not already processing
@@ -196,12 +197,12 @@ export class PlayerStateCoordinator extends EventEmitter {
     this.processingEvent = true;
 
     while (this.eventQueue.length > 0) {
-      const event = this.eventQueue.shift()!;
+      const { event, meta } = this.eventQueue.shift()!;
       this.metrics.eventQueueLength = this.eventQueue.length;
 
       try {
         await this.lock.acquire("state-transition", async () => {
-          await this.handleEvent(event);
+          await this.handleEvent(event, meta);
         });
       } catch (error) {
         log.error(`[Coordinator] Error processing event: ${event.type}`, error as Error);
@@ -218,7 +219,7 @@ export class PlayerStateCoordinator extends EventEmitter {
    * Validates the transition, updates context, and calls executeTransition
    * to invoke the appropriate execute* method on PlayerService.
    */
-  private async handleEvent(event: PlayerEvent): Promise<void> {
+  private async handleEvent(event: PlayerEvent, meta?: DispatchMeta): Promise<void> {
     const startTime = Date.now();
     const { currentState } = this.context;
 
@@ -250,6 +251,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       : trace.startSpan("player.machine.dispatch", {
           event: event.type,
           fromState: currentState,
+          source: meta?.source ?? "unknown",
         });
     const traceCtx = eventSpan?.context;
 
@@ -260,16 +262,15 @@ export class PlayerStateCoordinator extends EventEmitter {
         "player.machine.event.received",
         {
           sequence: this.machineSequence++,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
-          source: (event as any).source ?? "unknown",
+          source: meta?.source ?? "unknown",
           event: event.type,
           fromState: currentState,
           itemId: this.context.currentTrack?.libraryItemId,
           chapterId: this.context.currentChapter?.id,
           positionMs:
             this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restoreSessionId is an optional runtime field; not yet in the PlayerEvent union type
-          restoreSessionId: (event as any).restoreSessionId,
+          restoreSessionId: meta?.restoreSessionId,
+          ...(event.type === "NATIVE_STATE_CHANGED" ? { nativeState: event.payload.state } : {}),
         },
         traceCtx
       );
@@ -331,8 +332,7 @@ export class PlayerStateCoordinator extends EventEmitter {
           "player.machine.transition.accepted",
           {
             sequence: this.machineSequence++,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
-            source: (event as any).source ?? "unknown",
+            source: meta?.source ?? "unknown",
             event: event.type,
             fromState: currentState,
             toState: nextState ?? currentState,
@@ -353,6 +353,7 @@ export class PlayerStateCoordinator extends EventEmitter {
             state: nextState,
             fromState: currentState,
             event: event.type,
+            source: meta?.source ?? "unknown",
           },
           traceCtx
         );
@@ -370,16 +371,14 @@ export class PlayerStateCoordinator extends EventEmitter {
         "player.machine.transition.rejected",
         {
           sequence: this.machineSequence++,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- source is attached at runtime by eventBus (Plan 03); not yet in the PlayerEvent union type
-          source: (event as any).source ?? "unknown",
+          source: meta?.source ?? "unknown",
           event: event.type,
           fromState: currentState,
           reason: validation.reason ?? "unknown",
           itemId: this.context.currentTrack?.libraryItemId,
           positionMs:
             this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- restoreSessionId is an optional runtime field; not yet in the PlayerEvent union type
-          restoreSessionId: (event as any).restoreSessionId,
+          restoreSessionId: meta?.restoreSessionId,
         },
         traceCtx
       );
@@ -454,6 +453,7 @@ export class PlayerStateCoordinator extends EventEmitter {
           this.context.duration = state.currentTrack.duration;
         }
         this.context.queueStatus = "unknown";
+        this.context.hasReachedPlayingState = false;
         log.debug(
           `[Coordinator] Context updated from RESTORE_STATE: position=${state.position}, track=${state.currentTrack?.title || "none"}`
         );
@@ -464,6 +464,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       case "LOAD_TRACK":
         this.context.isLoadingTrack = true;
         this.context.playIntentOnLoad = true;
+        this.context.hasReachedPlayingState = false;
         break;
 
       case "NATIVE_TRACK_CHANGED":
@@ -477,6 +478,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         // Set isLoadingTrack so the bridge can propagate it; QUEUE_RELOADED clears it
         // This allows store._setTrackLoading(true) to be removed from reloadTrackPlayerQueue()
         this.context.isLoadingTrack = true;
+        this.context.hasReachedPlayingState = false;
         log.debug(`[Coordinator] Context updated from RELOAD_QUEUE: isLoadingTrack=true`);
         break;
 
@@ -558,6 +560,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.sessionStartTime = null;
         this.context.playIntentOnLoad = false;
         this.context.queueStatus = "unknown";
+        this.context.hasReachedPlayingState = false;
         break;
 
       // Playback configuration
@@ -617,6 +620,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         // that was removed in Phase 4 (store._setTrackLoading(false) was only in Playing case)
         if (event.payload.state === State.Playing) {
           this.context.isLoadingTrack = false;
+          this.context.hasReachedPlayingState = true;
         }
         log.debug(
           `[Coordinator] Context updated from NATIVE_STATE_CHANGED: isPlaying=${this.context.isPlaying} (state=${event.payload.state})`
@@ -625,12 +629,20 @@ export class PlayerStateCoordinator extends EventEmitter {
         // dispatch PAUSE to sync machine state → PAUSED. This allows togglePlayPause()
         // to dispatch PLAY from PAUSED (which is allowed), resuming TrackPlayer.
         // AsyncLock ensures PAUSE is processed after NATIVE_STATE_CHANGED completes.
+        //
+        // hasReachedPlayingState guards against the iOS queue-rebuild pre-play sequence:
+        // TrackPlayer.add()/seekTo() triggers Buffering→Ready→Paused before executePlay
+        // runs. Without the guard that spurious Paused fires a PAUSE that leaves the
+        // machine stuck in PAUSED. We only auto-pause once native playback has confirmed
+        // at least one State.Playing event (reset on LOAD_TRACK / RESTORE_STATE / RELOAD_QUEUE / STOP).
         if (
           this.context.currentState === PlayerState.PLAYING &&
+          this.context.hasReachedPlayingState &&
           event.payload.state !== State.Playing &&
-          event.payload.state !== State.Buffering
+          event.payload.state !== State.Buffering &&
+          event.payload.state !== State.Ready // transient during track load/stream init after NATIVE_TRACK_CHANGED
         ) {
-          dispatchPlayerEvent({ type: "PAUSE" });
+          dispatchPlayerEvent({ type: "PAUSE" }, { source: "native_player" });
         }
         break;
 
@@ -852,7 +864,10 @@ export class PlayerStateCoordinator extends EventEmitter {
     this.context.position = position;
 
     // Dispatch POSITION_RECONCILED so the position flows through the event bus
-    dispatchPlayerEvent({ type: "POSITION_RECONCILED", payload: { position } });
+    dispatchPlayerEvent(
+      { type: "POSITION_RECONCILED", payload: { position } },
+      { source: "native_player" }
+    );
 
     // Sync AsyncStorage if the authoritative position differs from what was stored
     if (authoritativePosition !== null && authoritativePosition !== asyncStoragePosition) {
@@ -983,9 +998,9 @@ export class PlayerStateCoordinator extends EventEmitter {
    * coordinator subscribes to event bus and can call service methods.
    */
   private subscribeToEventBus(): void {
-    playerEventBus.subscribe((event) => {
-      // Dispatch to internal queue for processing
-      this.dispatch(event).catch((err) => {
+    playerEventBus.subscribe((event, meta) => {
+      // Dispatch to internal queue for processing, carrying meta for source tracing
+      this.dispatch(event, meta).catch((err) => {
         log.error("[Coordinator] Error handling event from bus", err);
       });
     });
@@ -1038,6 +1053,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       isLoadingTrack: false,
       playIntentOnLoad: false,
       queueStatus: "unknown",
+      hasReachedPlayingState: false,
       lastServerSync: null,
       pendingSyncPosition: null,
       lastError: null,
@@ -1048,7 +1064,7 @@ export class PlayerStateCoordinator extends EventEmitter {
    * Get event queue snapshot (for diagnostics)
    */
   getEventQueue(): ReadonlyArray<PlayerEvent> {
-    return [...this.eventQueue];
+    return this.eventQueue.map(({ event }) => event);
   }
 
   /**
@@ -1092,7 +1108,7 @@ export class PlayerStateCoordinator extends EventEmitter {
     return {
       context: { ...this.context },
       metrics: { ...this.metrics },
-      eventQueue: [...this.eventQueue],
+      eventQueue: this.eventQueue.map(({ event }) => event),
       ...(compact ? {} : { processingTimes: [...this.processingTimes] }),
       transitionHistory: history,
       historyMetadata: { ...this.historyMetadata },
@@ -1109,7 +1125,9 @@ export class PlayerStateCoordinator extends EventEmitter {
     return this.transitionHistory.map((entry) => ({
       ts: entry.timestamp,
       evt: entry.event.type,
-      ...(entry.event.payload ? { pay: this.compactPayload(entry.event.payload) } : {}),
+      ...((entry.event as { type: string; payload?: unknown }).payload
+        ? { pay: this.compactPayload((entry.event as { type: string; payload: unknown }).payload) }
+        : {}),
       from: entry.fromState,
       to: entry.toState || entry.fromState,
       ok: entry.allowed,
@@ -1170,7 +1188,7 @@ export class PlayerStateCoordinator extends EventEmitter {
                 log.info(
                   `[Coordinator] Short-circuit: ${event.payload.libraryItemId} already ${previousState} — dispatching PLAY`
                 );
-                dispatchPlayerEvent({ type: "PLAY" });
+                dispatchPlayerEvent({ type: "PLAY" }, { source: "native_player" });
                 return; // skip executeLoadTrack and playIntentOnLoad check
               }
 
@@ -1182,7 +1200,7 @@ export class PlayerStateCoordinator extends EventEmitter {
               // Change 2: dispatch PLAY after successful load if intent is still set.
               // playIntentOnLoad is cleared if PAUSE or error arrived during LOADING.
               if (this.context.playIntentOnLoad) {
-                dispatchPlayerEvent({ type: "PLAY" });
+                dispatchPlayerEvent({ type: "PLAY" }, { source: "native_player" });
               }
             }
             break;
@@ -1191,7 +1209,7 @@ export class PlayerStateCoordinator extends EventEmitter {
             // Resume playback if seek interrupted PLAYING state
             if (this.context.preSeekState === PlayerState.PLAYING) {
               this.context.preSeekState = null; // clear after use
-              dispatchPlayerEvent({ type: "PLAY" });
+              dispatchPlayerEvent({ type: "PLAY" }, { source: "native_player" });
             }
             break;
 

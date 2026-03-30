@@ -5,6 +5,7 @@ import { formatTimeRemaining } from "@/lib/helpers/formatters";
 import { runDownloadReconciliationScan } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { pruneTraceDumps } from "@/lib/traceDump";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
@@ -87,6 +88,9 @@ export default function RootLayout() {
         // Trigger log purge when app goes to background
         logger.manualTrim();
       } else if (nextAppState === "active") {
+        // Prune old trace dumps on foreground (mirrors logger.manualTrim pattern)
+        pruneTraceDumps().catch((e) => log.warn("Trace dump prune failed", e));
+
         const timeInBackground = Date.now() - lastBackgroundTime.current;
         const wasLongBackground = timeInBackground > 30000; // 30 seconds
 

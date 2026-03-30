@@ -118,7 +118,7 @@ export async function initializeApp(): Promise<void> {
     // Restore persisted player state on cold boot
     try {
       // Notify coordinator that app is starting state restoration
-      dispatchPlayerEvent({ type: "APP_FOREGROUNDED" });
+      dispatchPlayerEvent({ type: "APP_FOREGROUNDED" }, { source: "startup_bootstrap" });
 
       await useAppStore.getState().restorePersistedState();
       log.info("Player state restored from persistence");
