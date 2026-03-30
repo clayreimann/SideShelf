@@ -49,7 +49,6 @@ export interface MockPlayerSlice {
   setSleepTimerChapter: jest.Mock;
   cancelSleepTimer: jest.Mock;
   getSleepTimerRemaining: jest.Mock;
-  updateNowPlayingMetadata: jest.Mock;
   restorePersistedState: jest.Mock;
   initializePlayerSlice: jest.Mock;
 }
@@ -111,7 +110,6 @@ export function createMockPlayerSlice(options: MockPlayerSliceOptions = {}): Moc
     setSleepTimerChapter: jest.fn(),
     cancelSleepTimer: jest.fn(),
     getSleepTimerRemaining: jest.fn(),
-    updateNowPlayingMetadata: jest.fn(),
     restorePersistedState: jest.fn(),
     initializePlayerSlice: jest.fn(),
     ...methods,

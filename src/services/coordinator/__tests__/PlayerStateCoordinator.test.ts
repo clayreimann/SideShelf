@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals
 import { State } from "react-native-track-player";
 import { PlayerStateCoordinator } from "../PlayerStateCoordinator";
 import { playerEventBus } from "../eventBus";
+import { updateNowPlayingMetadata } from "@/lib/nowPlayingMetadata";
 
 // Mock PlayerService
 jest.mock("../../PlayerService", () => {
@@ -76,6 +77,11 @@ jest.mock("@/stores/appStore", () => ({
 // Mock traceDump — expo-application is not installed in the test environment
 jest.mock("@/lib/traceDump", () => ({
   writeDumpToDisk: jest.fn(() => Promise.resolve("file://mock-dump.json")),
+}));
+
+// Mock the now-playing lib so tests don't need a live TrackPlayer instance
+jest.mock("@/lib/nowPlayingMetadata", () => ({
+  updateNowPlayingMetadata: jest.fn(() => Promise.resolve()),
 }));
 
 // Mock logger
@@ -2184,7 +2190,12 @@ describe("PlayerStateCoordinator", () => {
     const { useAppStore } = require("@/stores/appStore");
 
     const makeMockStore = () => ({
-      player: { position: 0 },
+      player: {
+        position: 0,
+        // currentTrack must be non-null so the coordinator's updateNowPlayingMetadata
+        // guard passes (track && !isLoadingTrack).
+        currentTrack: { libraryItemId: "test-item", chapters: [], title: "Test", author: "Author", coverUri: null, duration: 3600 },
+      },
       updatePosition: jest.fn(),
       updatePlayingState: jest.fn(),
       _setCurrentTrack: jest.fn(),
@@ -2195,7 +2206,6 @@ describe("PlayerStateCoordinator", () => {
       _setPlaySessionId: jest.fn(),
       _setLastPauseTime: jest.fn(),
       _setPendingProgressJump: jest.fn(),
-      updateNowPlayingMetadata: jest.fn().mockResolvedValue(undefined),
       setSleepTimer: jest.fn(),
       cancelSleepTimer: jest.fn(),
     });
@@ -2439,7 +2449,7 @@ describe("PlayerStateCoordinator", () => {
         await coordinator.dispatch({ type: "PAUSE" });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+        expect((updateNowPlayingMetadata as jest.Mock)).toHaveBeenCalledTimes(1);
       });
 
       it("calls updateNowPlayingMetadata on PLAY (resume)", async () => {
@@ -2456,7 +2466,7 @@ describe("PlayerStateCoordinator", () => {
         await coordinator.dispatch({ type: "PLAY" });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+        expect((updateNowPlayingMetadata as jest.Mock)).toHaveBeenCalledTimes(1);
       });
 
       it("does NOT call updateNowPlayingMetadata on SET_RATE or other structural events", async () => {
@@ -2472,7 +2482,7 @@ describe("PlayerStateCoordinator", () => {
         await coordinator.dispatch({ type: "SET_RATE", payload: { rate: 1.5 } });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+        expect((updateNowPlayingMetadata as jest.Mock)).not.toHaveBeenCalled();
       });
 
       it("does NOT call updateNowPlayingMetadata on NATIVE_PROGRESS_UPDATED (position-only path)", async () => {
@@ -2491,7 +2501,7 @@ describe("PlayerStateCoordinator", () => {
         });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+        expect((updateNowPlayingMetadata as jest.Mock)).not.toHaveBeenCalled();
       });
     });
   });
@@ -2505,7 +2515,12 @@ describe("PlayerStateCoordinator", () => {
 
     // Create a mock store with all playerSlice mutators as jest.fn() spies
     const makeMockStore = () => ({
-      player: { position: 0 },
+      player: {
+        position: 0,
+        // currentTrack must be non-null so the coordinator's updateNowPlayingMetadata
+        // guard passes (track && !isLoadingTrack).
+        currentTrack: { libraryItemId: "test-item", chapters: [], title: "Test", author: "Author", coverUri: null, duration: 3600 },
+      },
       updatePosition: jest.fn(),
       updatePlayingState: jest.fn(),
       _setCurrentTrack: jest.fn(),
@@ -2516,7 +2531,6 @@ describe("PlayerStateCoordinator", () => {
       _setPlaySessionId: jest.fn(),
       _setLastPauseTime: jest.fn(),
       _setPendingProgressJump: jest.fn(),
-      updateNowPlayingMetadata: jest.fn().mockResolvedValue(undefined),
       setSleepTimer: jest.fn(),
       cancelSleepTimer: jest.fn(),
     });
@@ -2585,7 +2599,7 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Assert updateNowPlayingMetadata called once for the chapter change
-      expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+      expect((updateNowPlayingMetadata as jest.Mock)).toHaveBeenCalledTimes(1);
 
       // Reset mocks — dispatch again with SAME chapter (no change expected)
       jest.clearAllMocks();
@@ -2600,7 +2614,7 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Debounce: same chapter id — updateNowPlayingMetadata must NOT be called again
-      expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+      expect((updateNowPlayingMetadata as jest.Mock)).not.toHaveBeenCalled();
     });
 
     it("syncStateToStore updates all fields on structural transition (LOAD_TRACK)", async () => {
@@ -2660,7 +2674,7 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // updateNowPlayingMetadata called once for the PAUSE transition
-      expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+      expect((updateNowPlayingMetadata as jest.Mock)).toHaveBeenCalledTimes(1);
 
       // Dispatch a structural event that does NOT warrant a metadata update
       jest.clearAllMocks();
@@ -2671,7 +2685,7 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // updateNowPlayingMetadata must NOT be called for SET_RATE
-      expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+      expect((updateNowPlayingMetadata as jest.Mock)).not.toHaveBeenCalled();
     });
 
     it("syncToStore handles BGS context gracefully when getState throws", async () => {

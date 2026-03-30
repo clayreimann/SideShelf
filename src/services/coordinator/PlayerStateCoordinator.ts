@@ -27,6 +27,7 @@ import { getUserByUsername } from "@/db/helpers/users";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { updateNowPlayingMetadata } from "@/lib/nowPlayingMetadata";
 import { getStoredUsername } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
 import {
@@ -914,13 +915,20 @@ export class PlayerStateCoordinator extends EventEmitter {
         this._pendingProgressJump = null;
       }
 
-      // Detect chapter boundary crossings; debounced by lastSyncedChapterId (mirrors PROP-06)
+      // Detect chapter boundary crossings using the store's computed chapter id (set
+      // synchronously by _updateCurrentChapter above). Debounced by lastSyncedChapterId.
       const currentChapterId = store.player.currentChapter?.chapter?.id?.toString() ?? null;
       if (currentChapterId !== null && currentChapterId !== this.lastSyncedChapterId) {
         this.lastSyncedChapterId = currentChapterId;
-        store.updateNowPlayingMetadata().catch((err) => {
-          log.error("[Coordinator] Failed to update now playing metadata on chapter change", err);
-        });
+        // currentTrack comes from the store (maintained by PlayerService); position
+        // comes from this.context (coordinator's authoritative value, not delayed by
+        // the React state cycle).
+        const track = store.player.currentTrack;
+        if (track && !this.context.isLoadingTrack) {
+          updateNowPlayingMetadata(track, this.context.position).catch((err) => {
+            log.error("[Coordinator] Failed to update now playing metadata on chapter change", err);
+          });
+        }
       }
     } catch {
       // BGS headless context: Zustand store may not be available (PROP-05)
@@ -972,8 +980,15 @@ export class PlayerStateCoordinator extends EventEmitter {
       // absolute track position when playback state changes, overwriting the chapter-relative
       // elapsedTime we set. Re-asserting our metadata after these transitions ensures the lock
       // screen always freezes (PAUSE) or resumes advancing (PLAY) from the correct chapter position.
-      if (event.type === "SEEK_COMPLETE" || event.type === "PAUSE" || event.type === "PLAY") {
-        store.updateNowPlayingMetadata().catch((err) => {
+      // currentTrack comes from the store (maintained by PlayerService); position
+      // comes from this.context (coordinator's authoritative value).
+      const track = store.player.currentTrack;
+      if (
+        (event.type === "SEEK_COMPLETE" || event.type === "PAUSE" || event.type === "PLAY") &&
+        track &&
+        !this.context.isLoadingTrack
+      ) {
+        updateNowPlayingMetadata(track, this.context.position).catch((err) => {
           log.error("[Coordinator] Failed to update now playing metadata", err);
         });
       }
