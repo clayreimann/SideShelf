@@ -2417,58 +2417,70 @@ describe("PlayerStateCoordinator", () => {
     });
 
     // --------------------------------------------------------------------------
-    // PROP-06: updateNowPlayingMetadata debounce preserved
+    // Lock screen metadata updated on PAUSE / PLAY / SEEK_COMPLETE
     //
-    // updateNowPlayingMetadata is only called when chapter.id changes (not every
-    // structural sync). This prevents redundant now-playing updates at each event.
-    //
-    // Note: Periodic metadata updates (2s gate) are preserved in BGS
-    // handlePlaybackProgressUpdated — not tested here as that's BGS-specific.
+    // syncStateToStore calls updateNowPlayingMetadata on these three event types
+    // so the lock screen position is accurate when iOS freezes (PAUSE), resumes
+    // (PLAY), or the user seeks within the same chapter (SEEK_COMPLETE).
+    // Chapter boundary crossings are handled separately in syncPositionToStore.
     // --------------------------------------------------------------------------
 
-    describe("PROP-06: updateNowPlayingMetadata debounce preserved", () => {
-      it("should call updateNowPlayingMetadata once on chapter change, not again for same chapter", async () => {
-        // Reach PLAYING state
-        await coordinator.dispatch({
-          type: "LOAD_TRACK",
-          payload: { libraryItemId: "prop-06-item" },
-        });
-        await coordinator.dispatch({
-          type: "QUEUE_RELOADED",
-          payload: { position: 0 },
-        });
+    describe("lock screen metadata updated at key playback transitions", () => {
+      it("calls updateNowPlayingMetadata on PAUSE", async () => {
+        await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+        await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
         await coordinator.dispatch({ type: "PLAY" });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        // Reset mocks
         jest.clearAllMocks();
         mockStore = makeMockStore();
         useAppStore.getState.mockReturnValue(mockStore);
 
-        const chapter1: any = {
-          chapter: {
-            id: "chapter-1",
-            chapterId: 1,
-            title: "Chapter 1",
-            start: 0,
-            end: 600,
-            mediaId: "media-1",
-          },
-          positionInChapter: 0,
-          chapterDuration: 600,
-        };
-
-        // Dispatch CHAPTER_CHANGED with chapter 1
-        await coordinator.dispatch({
-          type: "CHAPTER_CHANGED",
-          payload: { chapter: chapter1 },
-        });
+        await coordinator.dispatch({ type: "PAUSE" });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        // updateNowPlayingMetadata called once for the chapter change
         expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+      });
 
-        // Reset mocks and dispatch NATIVE_PROGRESS_UPDATED (same chapter, no change)
+      it("calls updateNowPlayingMetadata on PLAY (resume)", async () => {
+        await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+        await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+        await coordinator.dispatch({ type: "PLAY" });
+        await coordinator.dispatch({ type: "PAUSE" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        await coordinator.dispatch({ type: "PLAY" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+      });
+
+      it("does NOT call updateNowPlayingMetadata on SET_RATE or other structural events", async () => {
+        await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+        await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+        await coordinator.dispatch({ type: "PLAY" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        await coordinator.dispatch({ type: "SET_RATE", payload: { rate: 1.5 } });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+      });
+
+      it("does NOT call updateNowPlayingMetadata on NATIVE_PROGRESS_UPDATED (position-only path)", async () => {
+        await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+        await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+        await coordinator.dispatch({ type: "PLAY" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
         jest.clearAllMocks();
         mockStore = makeMockStore();
         useAppStore.getState.mockReturnValue(mockStore);
@@ -2479,35 +2491,7 @@ describe("PlayerStateCoordinator", () => {
         });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        // updateNowPlayingMetadata must NOT be called (same chapter, position-only path)
         expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
-
-        // Reset mocks and dispatch a different chapter
-        jest.clearAllMocks();
-        mockStore = makeMockStore();
-        useAppStore.getState.mockReturnValue(mockStore);
-
-        const chapter2: any = {
-          chapter: {
-            id: "chapter-2",
-            chapterId: 2,
-            title: "Chapter 2",
-            start: 600,
-            end: 1200,
-            mediaId: "media-1",
-          },
-          positionInChapter: 0,
-          chapterDuration: 600,
-        };
-
-        await coordinator.dispatch({
-          type: "CHAPTER_CHANGED",
-          payload: { chapter: chapter2 },
-        });
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
-        // updateNowPlayingMetadata called again for the new chapter
-        expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
       });
     });
   });
@@ -2660,41 +2644,25 @@ describe("PlayerStateCoordinator", () => {
       expect(mockStore._setLastPauseTime).not.toHaveBeenCalled();
     });
 
-    it("syncToStore calls updateNowPlayingMetadata on chapter change", async () => {
+    it("syncStateToStore calls updateNowPlayingMetadata on PAUSE but not SET_RATE", async () => {
       // Reach PLAYING state
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
       await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
       await coordinator.dispatch({ type: "PLAY" });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // Reset mocks to count only the chapter-change-triggered call
+      // Reset mocks to isolate
       jest.clearAllMocks();
       mockStore = makeMockStore();
       useAppStore.getState.mockReturnValue(mockStore);
 
-      // Dispatch CHAPTER_CHANGED with a properly-structured CurrentChapter payload
-      const mockCurrentChapter: any = {
-        chapter: {
-          id: "ch-1",
-          chapterId: 1,
-          title: "Chapter 1",
-          start: 0,
-          end: 600,
-          mediaId: "m1",
-        },
-        positionInChapter: 0,
-        chapterDuration: 600,
-      };
-      await coordinator.dispatch({
-        type: "CHAPTER_CHANGED",
-        payload: { chapter: mockCurrentChapter },
-      });
+      await coordinator.dispatch({ type: "PAUSE" });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // updateNowPlayingMetadata called once for the chapter change
+      // updateNowPlayingMetadata called once for the PAUSE transition
       expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
 
-      // Dispatch another structural event that does NOT change the chapter
+      // Dispatch a structural event that does NOT warrant a metadata update
       jest.clearAllMocks();
       mockStore = makeMockStore();
       useAppStore.getState.mockReturnValue(mockStore);
@@ -2702,7 +2670,7 @@ describe("PlayerStateCoordinator", () => {
       await coordinator.dispatch({ type: "SET_RATE", payload: { rate: 1.5 } });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // updateNowPlayingMetadata must NOT be called again (same chapter id)
+      // updateNowPlayingMetadata must NOT be called for SET_RATE
       expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
     });
 

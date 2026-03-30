@@ -896,7 +896,7 @@ export class PlayerStateCoordinator extends EventEmitter {
    * synchronously via Zustand set, so store.player.currentChapter reflects the
    * updated chapter by the time the comparison runs.
    *
-   * Debounced by lastSyncedChapterId (mirrors PROP-06 in syncStateToStore).
+   * Debounced by lastSyncedChapterId to avoid redundant metadata updates.
    *
    * Guard: no-op when Zustand is unavailable (Android BGS headless context, PROP-05).
    */
@@ -939,8 +939,9 @@ export class PlayerStateCoordinator extends EventEmitter {
    * responsibility for building and setting PlayerTrack objects (Plan 02 documented
    * exception - coordinator cannot build PlayerTrack).
    *
-   * After sync, if the current chapter changed, calls updateNowPlayingMetadata()
-   * fire-and-forget (PROP-06: only on actual chapter change, not every structural sync).
+   * After sync, calls updateNowPlayingMetadata() fire-and-forget on SEEK_COMPLETE,
+   * PAUSE, and PLAY to keep the lock screen position accurate at key transitions.
+   * Chapter boundary crossings are handled by syncPositionToStore instead (CLEAN-03).
    *
    * Guard: no-op when Zustand is unavailable (Android BGS headless context, PROP-05).
    */
@@ -960,26 +961,20 @@ export class PlayerStateCoordinator extends EventEmitter {
       store._setVolume(this.context.volume);
       store._setPlaySessionId(this.context.sessionId);
 
-      // PROP-06: Only call updateNowPlayingMetadata when chapter actually changes
-      const currentChapterId = this.context.currentChapter?.chapter?.id?.toString() ?? null;
-      if (currentChapterId !== null && currentChapterId !== this.lastSyncedChapterId) {
-        this.lastSyncedChapterId = currentChapterId;
+      // Refresh lock screen metadata at key playback state transitions.
+      // Chapter boundary crossings are handled in syncPositionToStore (CLEAN-03), which
+      // reads the chapter from the store after updatePosition() runs _updateCurrentChapter.
+      //
+      // SEEK_COMPLETE: same-chapter seeks change positionInChapter without triggering a
+      // chapter boundary crossing, so syncPositionToStore's chapter detector won't fire.
+      //
+      // PAUSE / PLAY: TrackPlayer's native layer updates MPNowPlayingInfoCenter with the
+      // absolute track position when playback state changes, overwriting the chapter-relative
+      // elapsedTime we set. Re-asserting our metadata after these transitions ensures the lock
+      // screen always freezes (PAUSE) or resumes advancing (PLAY) from the correct chapter position.
+      if (event.type === "SEEK_COMPLETE" || event.type === "PAUSE" || event.type === "PLAY") {
         store.updateNowPlayingMetadata().catch((err) => {
           log.error("[Coordinator] Failed to update now playing metadata", err);
-        });
-      }
-
-      // SKIP-02: On seek completion, refresh lock screen elapsed time unconditionally.
-      // Same-chapter skips do not change currentChapterId, so PROP-06 guard above won't fire.
-      // updateNowPlayingMetadata reads positionInChapter from store.player.currentChapter,
-      // which is up-to-date because updatePosition() (called via syncPositionToStore on
-      // NATIVE_PROGRESS_UPDATED) runs _updateCurrentChapter synchronously.
-      // The coordinator bridge calls syncStateToStore after every allowed transition —
-      // SEEK_COMPLETE arrives here after TrackPlayer.seekTo resolves and the event
-      // passes the SEEKING→READY transition guard.
-      if (event.type === "SEEK_COMPLETE") {
-        store.updateNowPlayingMetadata().catch((err) => {
-          log.error("[Coordinator] Failed to update now playing metadata after seek", err);
         });
       }
     } catch {
