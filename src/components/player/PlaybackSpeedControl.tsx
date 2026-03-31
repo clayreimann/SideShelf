@@ -42,6 +42,7 @@ export default function PlaybackSpeedControl() {
         }))}
       >
         <View
+          testID="speed-control"
           style={{
             flexDirection: "row",
             alignItems: "center",

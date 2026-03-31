@@ -8,26 +8,35 @@
  */
 
 import {
+  getBookmarkTitleMode,
+  getChapterBarShowRemaining,
   getCustomUpdateUrl,
   getDiagnosticsEnabled,
   getHiddenTabs,
   getHomeLayout,
   getJumpBackwardInterval,
   getJumpForwardInterval,
+  getKeepScreenAwake,
+  getProgressFormat,
   getSmartRewindEnabled,
   getTabOrder,
   getViewMode,
+  setBookmarkTitleMode,
+  setChapterBarShowRemaining,
   setCustomUpdateUrl,
   setDiagnosticsEnabled,
   setHiddenTabs,
   setHomeLayout,
   setJumpBackwardInterval,
   setJumpForwardInterval,
+  setKeepScreenAwake,
+  setProgressFormat,
   setSmartRewindEnabled,
   setTabOrder,
   setViewMode,
 } from "@/lib/appSettings";
 import { logger } from "@/lib/logger";
+import type { ProgressFormat } from "@/lib/helpers/progressFormat";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import type { SliceCreator } from "@/types/store";
 
@@ -57,6 +66,14 @@ export interface SettingsSliceState {
     customUpdateUrl: string | null;
     /** Library view mode preference */
     viewMode: "list" | "grid";
+    /** Progress display format preference */
+    progressFormat: ProgressFormat;
+    /** Whether the chapter bar right-label shows time remaining (true) or total duration (false) */
+    chapterBarShowRemaining: boolean;
+    /** Whether the screen should stay awake during playback */
+    keepScreenAwake: boolean;
+    /** Bookmark title mode — null means user has never chosen (triggers first-tap alert) */
+    bookmarkTitleMode: "auto" | "prompt" | null;
     /** Whether the slice has been initialized */
     initialized: boolean;
     /** Whether settings are currently being loaded */
@@ -89,6 +106,14 @@ export interface SettingsSliceActions {
   updateCustomUpdateUrl: (url: string | null) => Promise<void>;
   /** Update library view mode preference */
   updateViewMode: (mode: "list" | "grid") => Promise<void>;
+  /** Update progress display format preference */
+  updateProgressFormat: (format: ProgressFormat) => Promise<void>;
+  /** Update whether the chapter bar right-label shows time remaining or total duration */
+  updateChapterBarShowRemaining: (showRemaining: boolean) => Promise<void>;
+  /** Update whether the screen should stay awake during playback */
+  updateKeepScreenAwake: (enabled: boolean) => Promise<void>;
+  /** Update bookmark title mode preference */
+  updateBookmarkTitleMode: (mode: "auto" | "prompt") => Promise<void>;
   /** Reset the slice to initial state */
   resetSettings: () => void;
 }
@@ -111,6 +136,10 @@ const DEFAULT_SETTINGS = {
   hiddenTabs: [] as string[],
   customUpdateUrl: null,
   viewMode: "list" as const,
+  progressFormat: "remaining" as const satisfies ProgressFormat,
+  chapterBarShowRemaining: false,
+  keepScreenAwake: false,
+  bookmarkTitleMode: null as "auto" | "prompt" | null,
 };
 
 /**
@@ -164,6 +193,10 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         hiddenTabs,
         customUpdateUrl,
         viewMode,
+        progressFormat,
+        chapterBarShowRemaining,
+        keepScreenAwake,
+        bookmarkTitleMode,
       ] = await Promise.all([
         getJumpForwardInterval(),
         getJumpBackwardInterval(),
@@ -174,6 +207,10 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         getHiddenTabs(),
         getCustomUpdateUrl(),
         getViewMode(),
+        getProgressFormat(),
+        getChapterBarShowRemaining(),
+        getKeepScreenAwake(),
+        getBookmarkTitleMode(),
       ]);
 
       set((state: SettingsSlice) => ({
@@ -188,13 +225,17 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           hiddenTabs: hiddenTabs,
           customUpdateUrl: customUpdateUrl,
           viewMode: viewMode,
+          progressFormat: progressFormat,
+          chapterBarShowRemaining: chapterBarShowRemaining,
+          keepScreenAwake: keepScreenAwake,
+          bookmarkTitleMode: bookmarkTitleMode,
           initialized: true,
           isLoading: false,
         },
       }));
 
       log.info(
-        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, homeLayout=${homeLayout}, diagnostics=${diagnosticsEnabled}, tabOrder=${JSON.stringify(tabOrder)}, hiddenTabs=${JSON.stringify(hiddenTabs)}`
+        `Settings loaded successfully: jumpForward=${jumpForward}, jumpBackward=${jumpBackward}, smartRewind=${smartRewind}, homeLayout=${homeLayout}, diagnostics=${diagnosticsEnabled}, tabOrder=${JSON.stringify(tabOrder)}, hiddenTabs=${JSON.stringify(hiddenTabs)}, bookmarkTitleMode=${bookmarkTitleMode}`
       );
     } catch (error) {
       log.error("Failed to load settings", error as Error);
@@ -561,6 +602,162 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           viewMode: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update progress display format preference
+   */
+  updateProgressFormat: async (format: ProgressFormat) => {
+    log.info(`Updating progress format to ${format}`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.progressFormat;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        progressFormat: format,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setProgressFormat(format);
+
+      log.info(`Progress format updated to ${format}`);
+    } catch (error) {
+      log.error("Failed to update progress format setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          progressFormat: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update whether the chapter bar right-label shows time remaining or total duration
+   */
+  updateChapterBarShowRemaining: async (showRemaining: boolean) => {
+    log.info(`${showRemaining ? "Enabling" : "Disabling"} chapter bar show remaining`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.chapterBarShowRemaining;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        chapterBarShowRemaining: showRemaining,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setChapterBarShowRemaining(showRemaining);
+
+      log.info(`Chapter bar show remaining ${showRemaining ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update chapter bar show remaining setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          chapterBarShowRemaining: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update whether the screen should stay awake during playback
+   */
+  updateKeepScreenAwake: async (enabled: boolean) => {
+    log.info(`${enabled ? "Enabling" : "Disabling"} keep screen awake`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.keepScreenAwake;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        keepScreenAwake: enabled,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setKeepScreenAwake(enabled);
+
+      log.info(`Keep screen awake ${enabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      log.error("Failed to update keep screen awake setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          keepScreenAwake: previousValue,
+        },
+      }));
+
+      throw error;
+    }
+  },
+
+  /**
+   * Update bookmark title mode preference
+   */
+  updateBookmarkTitleMode: async (mode: "auto" | "prompt") => {
+    log.info(`Updating bookmark title mode to ${mode}`);
+
+    // Capture previous value BEFORE optimistic update
+    const previousValue = get().settings.bookmarkTitleMode;
+
+    // Optimistic update
+    set((state: SettingsSlice) => ({
+      ...state,
+      settings: {
+        ...state.settings,
+        bookmarkTitleMode: mode,
+      },
+    }));
+
+    try {
+      // Persist to storage
+      await setBookmarkTitleMode(mode);
+
+      log.info(`Bookmark title mode updated to ${mode}`);
+    } catch (error) {
+      log.error("Failed to update bookmark title mode setting", error as Error);
+
+      // Revert on error
+      set((state: SettingsSlice) => ({
+        ...state,
+        settings: {
+          ...state.settings,
+          bookmarkTitleMode: previousValue,
         },
       }));
 

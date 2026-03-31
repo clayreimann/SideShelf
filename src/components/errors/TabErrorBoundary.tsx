@@ -135,6 +135,14 @@ const TabFallbackContent: React.FC<{
     },
   });
 
+  const handleGoBack = () => {
+    try {
+      router.back();
+    } catch (navError) {
+      console.error("Failed to go back:", navError);
+    }
+  };
+
   const handleGoHome = () => {
     try {
       router.push("/(tabs)/home");
@@ -154,6 +162,10 @@ const TabFallbackContent: React.FC<{
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.button} onPress={onReset}>
           <Text style={styles.buttonText}>Try Again</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.buttonSecondary} onPress={handleGoBack}>
+          <Text style={styles.buttonTextSecondary}>Go Back</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.buttonSecondary} onPress={handleGoHome}>

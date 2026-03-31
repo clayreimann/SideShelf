@@ -17,8 +17,13 @@ import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals
 import TrackPlayer from "react-native-track-player";
 import type { IPlayerServiceFacade } from "@/services/player/types";
 import { BackgroundReconnectCollaborator } from "@/services/player/BackgroundReconnectCollaborator";
+import { updateNowPlayingMetadata } from "@/lib/nowPlayingMetadata";
 
 // --- Mocks ---
+
+jest.mock("@/lib/nowPlayingMetadata", () => ({
+  updateNowPlayingMetadata: jest.fn(() => Promise.resolve()),
+}));
 
 jest.mock("react-native-track-player", () => ({
   registerPlaybackService: jest.fn(),
@@ -69,9 +74,9 @@ describe("BackgroundReconnectCollaborator", () => {
   const mockStore = {
     player: {
       currentTrack: null as any,
+      position: 0,
     },
     _setCurrentTrack: jest.fn(),
-    updateNowPlayingMetadata: jest.fn(),
   };
 
   beforeEach(() => {
@@ -153,19 +158,15 @@ describe("BackgroundReconnectCollaborator", () => {
       };
       const newCoverUri = "file:///new-container/covers/item-1.jpg";
       getCoverUri.mockReturnValue(newCoverUri);
-      // updateNowPlayingMetadata is a store method
-      mockStore.updateNowPlayingMetadata.mockResolvedValue(undefined);
-      useAppStore.getState
-        .mockReturnValueOnce(mockStore) // first getState call
-        .mockReturnValueOnce({
-          ...mockStore,
-          updateNowPlayingMetadata: mockStore.updateNowPlayingMetadata,
-        }); // second for updateNowPlayingMetadata
 
       await collaborator.refreshFilePathsAfterContainerChange();
 
       expect(mockStore._setCurrentTrack).toHaveBeenCalledWith(
         expect.objectContaining({ coverUri: newCoverUri })
+      );
+      expect(updateNowPlayingMetadata as jest.Mock).toHaveBeenCalledWith(
+        expect.objectContaining({ coverUri: newCoverUri }),
+        0
       );
     });
 

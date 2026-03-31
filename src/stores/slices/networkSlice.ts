@@ -85,6 +85,7 @@ const NETWORK_STATUS_REFRESH_INTERVAL = 10000;
 export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => NetworkSlice) => {
   let serverCheckInterval: ReturnType<typeof setInterval> | null = null;
   let networkRefreshInterval: ReturnType<typeof setInterval> | null = null;
+  let netInfoUnsubscribe: (() => void) | null = null;
 
   return {
     // Initial state
@@ -103,9 +104,23 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
 
       log.info("Initializing network slice...");
 
-      // Subscribe to network state changes
+      // Defensive: clear pre-existing subscriptions and intervals (hot-reload safety)
+      if (netInfoUnsubscribe) {
+        netInfoUnsubscribe();
+        netInfoUnsubscribe = null;
+      }
+      if (serverCheckInterval) {
+        clearInterval(serverCheckInterval);
+        serverCheckInterval = null;
+      }
+      if (networkRefreshInterval) {
+        clearInterval(networkRefreshInterval);
+        networkRefreshInterval = null;
+      }
+
+      // Subscribe to network state changes — capture unsubscribe for cleanup
       log.info("Setting up NetInfo event listener");
-      NetInfo.addEventListener((netState) => {
+      netInfoUnsubscribe = NetInfo.addEventListener((netState) => {
         log.debug("NetInfo event received");
         get()._updateNetworkState(netState);
       });
@@ -159,10 +174,6 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
       }));
 
       log.info("Network slice initialized successfully");
-
-      // Note: We don't call unsubscribe because we want to listen for the app lifetime
-      // In a production app, you might want to store the unsubscribe function
-      // and call it when the app is destroyed
     },
 
     /**
@@ -179,6 +190,9 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
         `Network state updated: connected=${isConnected}, reachable=${isInternetReachable}, type=${connectionType}`
       );
 
+      // Capture previous state before updating (to detect restore transition)
+      const wasConnected = get().network.isConnected;
+
       set((state: NetworkSlice) => ({
         ...state,
         network: {
@@ -191,10 +205,23 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
 
       // Check server reachability when network becomes available
       if (isConnected && isInternetReachable !== false) {
-        log.debug("Network available, checking server reachability");
+        const isRestoreTransition = !wasConnected;
+        log.debug(
+          `Network available, checking server reachability (restore=${isRestoreTransition})`
+        );
         get()
           .checkServerReachability()
-          .catch((error) => {
+          .then(() => {
+            // Drain pending ops only when transitioning from disconnected → connected
+            if (isRestoreTransition) {
+              // drainPendingBookmarkOps is on UserProfileSlice — combined in AppStore
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (get() as any)
+                .drainPendingBookmarkOps()
+                .catch((e: unknown) => log.warn(`[networkSlice] drain failed: ${e}`));
+            }
+          })
+          .catch((error: unknown) => {
             log.warn(`Server reachability check failed after network change: ${error}`);
           });
       } else {
@@ -276,6 +303,10 @@ export const createNetworkSlice: SliceCreator<NetworkSlice> = (set, get: () => N
      */
     resetNetwork: () => {
       log.info("Resetting network slice");
+      if (netInfoUnsubscribe) {
+        netInfoUnsubscribe();
+        netInfoUnsubscribe = null;
+      }
       if (serverCheckInterval) {
         clearInterval(serverCheckInterval);
         serverCheckInterval = null;

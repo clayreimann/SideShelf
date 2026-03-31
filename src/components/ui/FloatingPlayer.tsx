@@ -9,18 +9,26 @@
  */
 
 import PlayPauseButton from "@/components/player/PlayPauseButton";
-import CoverImage from "@/components/ui/CoverImange";
+import { AirPlayButton } from "@/components/ui/AirPlayButton";
+import CoverImage from "@/components/ui/CoverImage";
+import { formatProgress } from "@/lib/helpers/progressFormat";
+import { logger } from "@/lib/logger";
 import { borderRadius, floatingPlayer, spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
+import { writeDumpToDisk } from "@/lib/traceDump";
 import { playerService } from "@/services/PlayerService";
-import { usePlayer } from "@/stores/appStore";
+import { usePlayer, useSettings } from "@/stores/appStore";
+import * as Haptics from "expo-haptics";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
-import React from "react";
+import React, { useCallback } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
+const log = logger.forTag("FloatingPlayer");
 
 export default function FloatingPlayer() {
   const { styles, isDark, colors } = useThemedStyles();
-  const { currentTrack, currentChapter } = usePlayer();
+  const { currentTrack, currentChapter, position } = usePlayer();
+  const { progressFormat } = useSettings();
   const pathname = usePathname();
   const params = useGlobalSearchParams();
 
@@ -49,6 +57,15 @@ export default function FloatingPlayer() {
     }
   };
 
+  const handlePlayPauseLongPress = useCallback(async () => {
+    try {
+      await writeDumpToDisk("manual");
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err) {
+      log.error("[handlePlayPauseLongPress] Trace dump failed", err as Error);
+    }
+  }, []);
+
   const handlePlayerPress = () => {
     router.push("/FullScreenPlayer");
   };
@@ -67,7 +84,11 @@ export default function FloatingPlayer() {
       ]}
     >
       {/* Tappable area for opening modal */}
-      <Pressable style={componentStyles.pressableArea} onPress={handlePlayerPress}>
+      <Pressable
+        style={componentStyles.pressableArea}
+        onPress={handlePlayerPress}
+        testID="floating-player"
+      >
         {/* Cover Image */}
         <View style={componentStyles.coverContainer}>
           <CoverImage
@@ -80,15 +101,24 @@ export default function FloatingPlayer() {
         {/* Track Info */}
         <View style={componentStyles.infoContainer}>
           <Text style={[styles.text, componentStyles.chapterTitle]} numberOfLines={1}>
-            {chapterTitle}
+            {chapterTitle} | {currentTrack?.title ?? "No selection"}
           </Text>
-          <Text style={[styles.text, componentStyles.trackTitle]} numberOfLines={1}>
-            {currentTrack?.title ?? "No selection"}
+          <Text style={[styles.text, componentStyles.progressText]} numberOfLines={1}>
+            {formatProgress(progressFormat, position, currentTrack?.duration ?? 0)}
           </Text>
         </View>
       </Pressable>
 
-      <PlayPauseButton onPress={handlePlayPausePress} iconSize={32} />
+      <AirPlayButton
+        style={{ width: 36, height: 36, marginRight: 8 }}
+        tintColor={colors.textPrimary}
+        activeTintColor={colors.textPrimary}
+      />
+      <PlayPauseButton
+        onPress={handlePlayPausePress}
+        onLongPress={handlePlayPauseLongPress}
+        iconSize={32}
+      />
     </View>
   );
 }
@@ -129,11 +159,11 @@ const componentStyles = StyleSheet.create({
     marginRight: spacing.md,
   },
   chapterTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     marginBottom: 2,
   },
-  trackTitle: {
+  progressText: {
     fontSize: 12,
     opacity: 0.7,
   },

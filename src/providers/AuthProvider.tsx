@@ -1,4 +1,9 @@
-import { authHelpers, mediaProgressHelpers, userHelpers } from "@/db/helpers";
+import { extractTokensFromAuthResponse } from "@/db/helpers/tokens";
+import { marshalUserFromAuthResponse, upsertUser } from "@/db/helpers/users";
+import {
+  marshalMediaProgressFromAuthResponse,
+  upsertMediaProgress,
+} from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { wipeUserData } from "@/db/helpers/wipeUserData";
 import { useAppStore } from "@/stores/appStore";
@@ -49,11 +54,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       if (!dbInitialized) return;
 
-      // Initialize API client service (loads from secure storage)
-      await apiClientService.initialize();
-
-      // Load username separately (it's not in ApiClientService)
-      const username = await getStoredUsername();
+      // Initialize API client service and load username concurrently (both read from secure storage)
+      const [, username] = await Promise.all([apiClientService.initialize(), getStoredUsername()]);
       await persistUsername(username);
 
       // Load userId from DB if username is present
@@ -155,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         let response = await doLogin(base, username, password);
-        const { accessToken, refreshToken } = authHelpers.extractTokensFromAuthResponse(response);
+        const { accessToken, refreshToken } = extractTokensFromAuthResponse(response);
         if (!accessToken) {
           throw new Error("Missing token in response");
         }
@@ -166,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Persist username separately
         await persistUsername(username);
 
-        const user = userHelpers.marshalUserFromAuthResponse(response);
+        const user = marshalUserFromAuthResponse(response);
 
         // Update local state — include userId from the login response
         setState((prev: AuthState) => ({
@@ -175,14 +177,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           userId: user?.id ?? null,
           loginMessage: undefined,
         }));
-        const mediaProgress = mediaProgressHelpers.marshalMediaProgressFromAuthResponse(
-          response.user
-        );
+        const mediaProgress = marshalMediaProgressFromAuthResponse(response.user);
 
-        await Promise.all([
-          userHelpers.upsertUser(user),
-          mediaProgressHelpers.upsertMediaProgress(mediaProgress),
-        ]);
+        await Promise.all([upsertUser(user), upsertMediaProgress(mediaProgress)]);
       } catch (e) {
         console.error("[AuthProvider] Login error", e);
         throw new Error(e instanceof Error ? e.message : "Login failed");

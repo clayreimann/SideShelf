@@ -3,16 +3,9 @@ import { translate } from "@/i18n";
 import { borderRadius, spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
 import type { LibraryItemListRow } from "@/types/database";
-import React, { useCallback, useState } from "react";
-import {
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import React, { useCallback, useMemo, useState } from "react";
+import { RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import LibraryItem from "./LibraryItem";
 
 type ViewMode = "grid" | "list";
@@ -50,6 +43,7 @@ export default function LibraryItemList({
       <View style={componentStyles.searchContainer}>
         <View style={componentStyles.searchInputWrapper}>
           <TextInput
+            testID="library-search-input"
             placeholder={translate("library.searchPlaceholder")}
             placeholderTextColor={isDark ? "#888" : "#999"}
             style={[
@@ -81,7 +75,7 @@ export default function LibraryItemList({
     ) : null;
 
   // Calculate numColumns: use dynamic columns for grid when fewer than 3 items
-  const numColumns = React.useMemo(() => {
+  const numColumns = useMemo(() => {
     if (viewMode === "list") {
       return 1;
     }
@@ -90,15 +84,26 @@ export default function LibraryItemList({
     return 3;
   }, [viewMode]);
 
+  // FlashList requires a plain object for contentContainerStyle — flatten the array
+  const contentContainerStyle = useMemo(
+    () => ({
+      backgroundColor: styles.flatListContainer.backgroundColor,
+      width: "100%" as const,
+      paddingTop: spacing.sm,
+      paddingHorizontal: spacing.sm,
+      paddingBottom: floatingPlayerPadding.paddingBottom,
+    }),
+    [styles.flatListContainer.backgroundColor, floatingPlayerPadding.paddingBottom]
+  );
+
   return (
     <View style={componentStyles.container}>
-      <FlatList
+      <FlashList
         data={items}
         numColumns={numColumns}
         key={`${viewMode}-${numColumns}`} // Force re-render when view mode or columns change
-        columnWrapperStyle={
-          viewMode === "grid" && numColumns > 1 ? componentStyles.gridColumnWrapper : undefined
-        }
+        estimatedItemSize={viewMode === "grid" ? 160 : 80}
+        getItemType={(_item) => viewMode}
         renderItem={({ item }: { item: LibraryItemListRow }) => (
           <LibraryItem item={item} variant={viewMode} />
         )}
@@ -112,13 +117,7 @@ export default function LibraryItemList({
             />
           ) : undefined
         }
-        contentContainerStyle={[
-          styles.flatListContainer,
-          componentStyles.contentContainer,
-          floatingPlayerPadding,
-          viewMode === "list" && componentStyles.listPadding,
-          viewMode === "grid" && componentStyles.gridPadding,
-        ]}
+        contentContainerStyle={contentContainerStyle}
         indicatorStyle={isDark ? "white" : "black"}
       />
     </View>
@@ -131,7 +130,7 @@ const componentStyles = StyleSheet.create({
     width: "100%",
   },
   searchContainer: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
   searchInputWrapper: {
@@ -154,18 +153,5 @@ const componentStyles = StyleSheet.create({
   clearButtonText: {
     fontSize: 18,
     color: "#888",
-  },
-  gridColumnWrapper: {
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-  },
-  contentContainer: {
-    paddingTop: spacing.sm,
-  },
-  listPadding: {
-    paddingHorizontal: 0,
-  },
-  gridPadding: {
-    paddingHorizontal: spacing.md,
   },
 });

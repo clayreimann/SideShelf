@@ -32,6 +32,7 @@ logs/
 
 # local env files
 .env*.local
+.env.maestro
 
 # typescript
 *.tsbuildinfo
@@ -50,3 +51,5 @@ app-example
 /android
 
 prompt.md
+.claude/settings.local.json
+.worktrees/

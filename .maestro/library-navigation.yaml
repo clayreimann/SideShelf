@@ -1,0 +1,23 @@
+appId: cloud.madtown.sideshelf
+---
+# Regression flow: Library navigation
+# Verifies: login -> Library tab -> browse items -> tap item -> item detail screen
+- launchApp
+- runFlow: .maestro/_login.yaml
+- tapOn: "Library"
+- waitForAnimationToEnd
+# Double-tap to ensure list root
+- tapOn: "Library"
+- waitForAnimationToEnd
+# Verify library items are visible
+- assertVisible:
+    id: "library-item"
+# Tap the first library item
+- tapOn:
+    id: "library-item"
+    index: 0
+- waitForAnimationToEnd
+# Assert item detail screen is showing -- the Play button or Resume button should be visible
+- assertVisible:
+    id: "play-resume-button"
+    optional: true

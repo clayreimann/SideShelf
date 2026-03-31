@@ -79,6 +79,8 @@ export const en = {
   "libraryItem.actions.deleteDownload": "Delete Download",
   "libraryItem.actions.markFinished": "Mark as Finished",
   "libraryItem.actions.markUnfinished": "Mark as Unfinished",
+  "libraryItem.actions.copyLink": "Copy Link",
+  "libraryItem.alerts.linkCopied": "Link copied to clipboard",
 
   // Library Item Alerts
   "libraryItem.alerts.userNotFound": "User not found",
@@ -152,6 +154,7 @@ export const en = {
   "more.libraryStats": "Library Stats",
   "more.storage": "Storage",
   "more.trackPlayer": "Track Player & Coordinator",
+  "more.traceDumps": "Trace Dumps",
   "more.logs": "Logs",
   "more.loggerSettings": "Logger Settings",
   "more.actions": "Actions",
@@ -349,4 +352,6 @@ export const en = {
   "player.jumpMenu.titleForward": "Jump Forward",
   "player.jumpMenu.titleBackward": "Jump Backward",
   "player.jumpMenu.seconds": "{seconds} seconds",
+  "player.progressToast.label": "Jumped to {time} ({delta})",
+  "player.progressToast.undo": "Undo",
 } as const;

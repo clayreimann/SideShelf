@@ -6,9 +6,11 @@
  */
 
 import { getAuthorImageUri, isAuthorImageCached } from "@/lib/authorImages";
-import { count, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../client";
 import { AuthorRow, authors } from "../schema/authors";
+import { libraryItems } from "../schema/libraryItems";
+import { mediaMetadata } from "../schema/mediaMetadata";
 import { mediaAuthors } from "../schema/mediaJoins";
 
 export type NewAuthorRow = typeof authors.$inferInsert;
@@ -18,7 +20,7 @@ export type { AuthorRow };
  * Get all authors from database, ordered by name
  * Calculates book counts from mediaAuthors join table
  */
-export async function getAllAuthors(): Promise<AuthorRow[]> {
+export async function getAllAuthors(libraryId?: string): Promise<AuthorRow[]> {
   try {
     // Get all authors
     const allAuthors = await db.select().from(authors).orderBy(authors.name);
@@ -27,16 +29,20 @@ export async function getAllAuthors(): Promise<AuthorRow[]> {
       return [];
     }
 
-    // Get book counts for all authors in a single query using GROUP BY
+    // Count distinct library items per author, optionally filtered by library.
+    // Using DISTINCT libraryItemId ensures podcast episodes (multiple mediaMetadata rows
+    // per library item) don't inflate the count beyond the actual item count.
     const bookCountsMap = new Map<string, number>();
 
-    // Query all media-author relationships and count them
     const authorBookCounts = await db
       .select({
         authorId: mediaAuthors.authorId,
-        count: count(),
+        count: sql<number>`COUNT(DISTINCT ${libraryItems.id})`,
       })
       .from(mediaAuthors)
+      .innerJoin(mediaMetadata, eq(mediaAuthors.mediaId, mediaMetadata.id))
+      .innerJoin(libraryItems, eq(mediaMetadata.libraryItemId, libraryItems.id))
+      .where(libraryId ? eq(libraryItems.libraryId, libraryId) : undefined)
       .groupBy(mediaAuthors.authorId);
 
     // Build the map

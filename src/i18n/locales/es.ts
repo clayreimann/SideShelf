@@ -79,6 +79,8 @@ export const es = {
   "libraryItem.actions.deleteDownload": "Eliminar descarga",
   "libraryItem.actions.markFinished": "Marcar como terminado",
   "libraryItem.actions.markUnfinished": "Marcar como no terminado",
+  "libraryItem.actions.copyLink": "Copiar enlace",
+  "libraryItem.alerts.linkCopied": "Enlace copiado al portapapeles",
 
   // Library Item Alerts
   "libraryItem.alerts.userNotFound": "Usuario no encontrado",
@@ -154,6 +156,7 @@ export const es = {
   "more.libraryStats": "Estadísticas de biblioteca",
   "more.storage": "Almacenamiento",
   "more.trackPlayer": "Reproductor y Coordinador",
+  "more.traceDumps": "Volcados de Traza",
   "more.logs": "Registros",
   "more.loggerSettings": "Configuración de registros",
   "more.actions": "Acciones",

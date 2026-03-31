@@ -27,11 +27,13 @@ import { getUserByUsername } from "@/db/helpers/users";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { updateNowPlayingMetadata } from "@/lib/nowPlayingMetadata";
 import { getStoredUsername } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
 import {
   CoordinatorMetrics,
   DiagnosticEvent,
+  DispatchMeta,
   EventProcessingResult,
   LARGE_DIFF_THRESHOLD,
   MIN_PLAUSIBLE_POSITION,
@@ -48,6 +50,8 @@ import EventEmitter from "eventemitter3";
 import { State } from "react-native-track-player";
 // PlayerService is dynamically imported in executeTransition to avoid a circular dependency:
 // PlayerStateCoordinator → PlayerService → PlayerStateCoordinator
+import { trace, type SpanHandle } from "@/lib/trace";
+import { writeDumpToDisk } from "@/lib/traceDump";
 import { dispatchPlayerEvent, playerEventBus } from "./eventBus";
 import { validateTransition } from "./transitions";
 
@@ -60,7 +64,7 @@ export class PlayerStateCoordinator extends EventEmitter {
   private static instance: PlayerStateCoordinator | null = null;
 
   private context: StateContext;
-  private eventQueue: PlayerEvent[] = [];
+  private eventQueue: Array<{ event: PlayerEvent; meta?: DispatchMeta }> = [];
   private lock = new AsyncLock();
   private processingEvent = false;
 
@@ -79,6 +83,9 @@ export class PlayerStateCoordinator extends EventEmitter {
   private processingTimes: number[] = [];
   private readonly MAX_PROCESSING_TIMES = 100;
 
+  // Monotonic counter for trace event ordering
+  private machineSequence = 0;
+
   // Transition history for diagnostics
   private transitionHistory: TransitionHistoryEntry[] = [];
   private readonly MAX_HISTORY_ENTRIES = 100;
@@ -89,6 +96,12 @@ export class PlayerStateCoordinator extends EventEmitter {
 
   // Phase 4: Store bridge - track last synced chapter to debounce metadata updates
   private lastSyncedChapterId: string | null = null;
+
+  // Pending unintentional position jump awaiting flush to store
+  private _pendingProgressJump: { fromPosition: number; toPosition: number } | null = null;
+
+  // Open span for the current session sync cycle (SYNC_STARTED → SYNC_COMPLETED/FAILED)
+  private activeSyncSpan: SpanHandle | null = null;
 
   // Diagnostic logging interval
   private diagnosticInterval: NodeJS.Timeout | null = null;
@@ -137,8 +150,8 @@ export class PlayerStateCoordinator extends EventEmitter {
    * Events are queued and processed serially. Valid transitions invoke the
    * corresponding execute* method on PlayerService.
    */
-  async dispatch(event: PlayerEvent): Promise<void> {
-    this.eventQueue.push(event);
+  async dispatch(event: PlayerEvent, meta?: DispatchMeta): Promise<void> {
+    this.eventQueue.push({ event, meta });
     this.metrics.eventQueueLength = this.eventQueue.length;
 
     // Start processing if not already processing
@@ -185,12 +198,12 @@ export class PlayerStateCoordinator extends EventEmitter {
     this.processingEvent = true;
 
     while (this.eventQueue.length > 0) {
-      const event = this.eventQueue.shift()!;
+      const { event, meta } = this.eventQueue.shift()!;
       this.metrics.eventQueueLength = this.eventQueue.length;
 
       try {
         await this.lock.acquire("state-transition", async () => {
-          await this.handleEvent(event);
+          await this.handleEvent(event, meta);
         });
       } catch (error) {
         log.error(`[Coordinator] Error processing event: ${event.type}`, error as Error);
@@ -207,13 +220,62 @@ export class PlayerStateCoordinator extends EventEmitter {
    * Validates the transition, updates context, and calls executeTransition
    * to invoke the appropriate execute* method on PlayerService.
    */
-  private async handleEvent(event: PlayerEvent): Promise<void> {
+  private async handleEvent(event: PlayerEvent, meta?: DispatchMeta): Promise<void> {
     const startTime = Date.now();
     const { currentState } = this.context;
 
     // Validate transition
     const validation = validateTransition(currentState, event);
     const nextState = validation.nextState;
+
+    // Sync lifecycle: open a span when a session sync cycle begins.
+    // Closed below after executeTransition completes (or for no-op states).
+    if (event.type === "SESSION_SYNC_STARTED") {
+      this.activeSyncSpan = trace.startSpan("player.session.sync", {
+        sessionId: this.context.sessionId,
+        itemId: this.context.currentTrack?.libraryItemId,
+      });
+      trace.addEvent("session.sync.started", {}, this.activeSyncSpan.context);
+    }
+
+    // Per-event dispatch span — groups received/accepted/rejected/state.entered as children.
+    // Skipped for NATIVE_PROGRESS_UPDATED (1 Hz) and session sync events (have own span).
+    // SESSION_UPDATED fires on every DB write — same noise profile as NATIVE_PROGRESS_UPDATED.
+    const isHighFrequency =
+      event.type === "NATIVE_PROGRESS_UPDATED" ||
+      event.type === "SESSION_UPDATED" ||
+      event.type === "SESSION_SYNC_STARTED" ||
+      event.type === "SESSION_SYNC_COMPLETED" ||
+      event.type === "SESSION_SYNC_FAILED";
+    const eventSpan = isHighFrequency
+      ? null
+      : trace.startSpan("player.machine.dispatch", {
+          event: event.type,
+          fromState: currentState,
+          source: meta?.source ?? "unknown",
+        });
+    const traceCtx = eventSpan?.context;
+
+    // Trace: record every event received by the machine (pre-transition).
+    // Skip NATIVE_PROGRESS_UPDATED — 1 Hz noise; the span guard above already skips it.
+    if (!isHighFrequency) {
+      trace.addEvent(
+        "player.machine.event.received",
+        {
+          sequence: this.machineSequence++,
+          source: meta?.source ?? "unknown",
+          event: event.type,
+          fromState: currentState,
+          itemId: this.context.currentTrack?.libraryItemId,
+          chapterId: this.context.currentChapter?.id,
+          positionMs:
+            this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+          restoreSessionId: meta?.restoreSessionId,
+          ...(event.type === "NATIVE_STATE_CHANGED" ? { nativeState: event.payload.state } : {}),
+        },
+        traceCtx
+      );
+    }
 
     // Update context based on event payload (even in observer mode, for accurate tracking)
     this.updateContextFromEvent(event);
@@ -265,7 +327,39 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.previousState = currentState;
         this.context.currentState = nextState;
       }
+      // Trace: accepted transition (skip for high-frequency events to reduce noise)
+      if (!isHighFrequency) {
+        trace.addEvent(
+          "player.machine.transition.accepted",
+          {
+            sequence: this.machineSequence++,
+            source: meta?.source ?? "unknown",
+            event: event.type,
+            fromState: currentState,
+            toState: nextState ?? currentState,
+            itemId: this.context.currentTrack?.libraryItemId,
+            positionMs:
+              this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+          },
+          traceCtx
+        );
+      }
       await this.executeTransition(event, nextState);
+      // Trace: state entered (only on actual state change)
+      if (!isHighFrequency && nextState && nextState !== currentState) {
+        trace.addEvent(
+          "player.machine.state.entered",
+          {
+            sequence: this.machineSequence++,
+            state: nextState,
+            fromState: currentState,
+            event: event.type,
+            source: meta?.source ?? "unknown",
+          },
+          traceCtx
+        );
+      }
+      if (eventSpan) trace.endSpan(eventSpan, "ok", { toState: nextState ?? currentState });
       // Sync coordinator state to Zustand store (Phase 4: State Propagation)
       if (event.type === "NATIVE_PROGRESS_UPDATED") {
         this.syncPositionToStore();
@@ -273,10 +367,53 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.syncStateToStore(event);
       }
     } else {
+      // Trace: rejected transition
+      trace.addEvent(
+        "player.machine.transition.rejected",
+        {
+          sequence: this.machineSequence++,
+          source: meta?.source ?? "unknown",
+          event: event.type,
+          fromState: currentState,
+          reason: validation.reason ?? "unknown",
+          itemId: this.context.currentTrack?.libraryItemId,
+          positionMs:
+            this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
+          restoreSessionId: meta?.restoreSessionId,
+        },
+        traceCtx
+      );
+      // End the dispatch span before dumping so it is committed to the ring buffer
+      // when exportTrace reads it. writeDumpToDisk is fire-and-forget async so it
+      // always runs after this synchronous endSpan call.
+      if (eventSpan) trace.endSpan(eventSpan, "error", { reason: validation.reason });
+      // Auto-dump: fire-and-forget — NEVER await inside the lock (Pitfall 5)
+      writeDumpToDisk("rejection", {
+        type: event.type,
+        fromState: currentState,
+        reason: validation.reason,
+      }).catch((err) => log.warn("[Coordinator] Auto trace dump failed", err as Error));
       log.warn(
         `[Coordinator] Rejected: ${currentState} --[${event.type}]--> Reason: ${validation.reason || "unknown"}`
       );
       this.metrics.rejectedTransitionCount++;
+    }
+
+    // Sync lifecycle: close the open sync span when the cycle completes or fails.
+    // Runs after executeTransition so the span covers the full state change in SYNCING_SESSION,
+    // and also closes cleanly when these events arrive as no-ops in other states.
+    if (
+      (event.type === "SESSION_SYNC_COMPLETED" || event.type === "SESSION_SYNC_FAILED") &&
+      this.activeSyncSpan
+    ) {
+      const isCompleted = event.type === "SESSION_SYNC_COMPLETED";
+      trace.addEvent(
+        isCompleted ? "session.sync.completed" : "session.sync.failed",
+        isCompleted ? {} : { error: String((event as any).payload?.error ?? "unknown") },
+        this.activeSyncSpan.context
+      );
+      trace.endSpan(this.activeSyncSpan, isCompleted ? "ok" : "error");
+      this.activeSyncSpan = null;
     }
 
     // Update metrics and internal state for accurate validation
@@ -316,6 +453,8 @@ export class PlayerStateCoordinator extends EventEmitter {
         if (state.currentTrack) {
           this.context.duration = state.currentTrack.duration;
         }
+        this.context.queueStatus = "unknown";
+        this.context.hasReachedPlayingState = false;
         log.debug(
           `[Coordinator] Context updated from RESTORE_STATE: position=${state.position}, track=${state.currentTrack?.title || "none"}`
         );
@@ -325,6 +464,8 @@ export class PlayerStateCoordinator extends EventEmitter {
       // Track loading and changes
       case "LOAD_TRACK":
         this.context.isLoadingTrack = true;
+        this.context.playIntentOnLoad = true;
+        this.context.hasReachedPlayingState = false;
         break;
 
       case "NATIVE_TRACK_CHANGED":
@@ -338,19 +479,26 @@ export class PlayerStateCoordinator extends EventEmitter {
         // Set isLoadingTrack so the bridge can propagate it; QUEUE_RELOADED clears it
         // This allows store._setTrackLoading(true) to be removed from reloadTrackPlayerQueue()
         this.context.isLoadingTrack = true;
+        this.context.hasReachedPlayingState = false;
         log.debug(`[Coordinator] Context updated from RELOAD_QUEUE: isLoadingTrack=true`);
         break;
 
       case "QUEUE_RELOADED":
         this.context.isLoadingTrack = false;
         this.context.position = event.payload.position;
+        this.context.queueStatus = "valid";
         log.debug(
-          `[Coordinator] Context updated from QUEUE_RELOADED: position=${event.payload.position}`
+          `[Coordinator] Context updated from QUEUE_RELOADED: position=${event.payload.position}, queueStatus=valid`
         );
         break;
 
       // Position and duration updates
-      case "NATIVE_PROGRESS_UPDATED":
+      case "NATIVE_PROGRESS_UPDATED": {
+        const newPosition = event.payload.position;
+        const prevPosition = this.context.position;
+
+        // Capture isSeeking before clearing — used below in jump detection
+        const wasSeeking = this.context.isSeeking;
         // Clear isSeeking when progress update arrives during seek (seek is complete)
         if (this.context.isSeeking) {
           this.context.isSeeking = false;
@@ -360,15 +508,22 @@ export class PlayerStateCoordinator extends EventEmitter {
         // before the seek to the resume position completes. If we write 0 here, we
         // lose the position that resolveCanonicalPosition just resolved.
         // Once isLoadingTrack is cleared (by QUEUE_RELOADED), native 0 is accepted.
-        if (this.context.isLoadingTrack && event.payload.position === 0) {
+        if (this.context.isLoadingTrack && newPosition === 0) {
           this.context.duration = event.payload.duration; // duration update is safe
           this.context.lastPositionUpdate = Date.now();
           break;
         }
-        this.context.position = event.payload.position;
+        this.context.position = newPosition;
         this.context.duration = event.payload.duration;
         this.context.lastPositionUpdate = Date.now();
+
+        // Detect unintentional position jumps (not during seek or track load)
+        const delta = newPosition - prevPosition;
+        if (!wasSeeking && !this.context.isLoadingTrack && Math.abs(delta) >= 30) {
+          this._pendingProgressJump = { fromPosition: prevPosition, toPosition: newPosition };
+        }
         break;
+      }
 
       case "SEEK":
         this.context.preSeekState = this.context.currentState; // capture BEFORE transition
@@ -395,6 +550,7 @@ export class PlayerStateCoordinator extends EventEmitter {
 
       case "PAUSE":
         this.context.isPlaying = false;
+        this.context.playIntentOnLoad = false;
         break;
 
       case "STOP":
@@ -403,6 +559,9 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.currentTrack = null;
         this.context.sessionId = null;
         this.context.sessionStartTime = null;
+        this.context.playIntentOnLoad = false;
+        this.context.queueStatus = "unknown";
+        this.context.hasReachedPlayingState = false;
         break;
 
       // Playback configuration
@@ -462,16 +621,36 @@ export class PlayerStateCoordinator extends EventEmitter {
         // that was removed in Phase 4 (store._setTrackLoading(false) was only in Playing case)
         if (event.payload.state === State.Playing) {
           this.context.isLoadingTrack = false;
+          this.context.hasReachedPlayingState = true;
         }
         log.debug(
           `[Coordinator] Context updated from NATIVE_STATE_CHANGED: isPlaying=${this.context.isPlaying} (state=${event.payload.state})`
         );
-
+        // If the machine is PLAYING but native audio stopped (not just buffering),
+        // dispatch PAUSE to sync machine state → PAUSED. This allows togglePlayPause()
+        // to dispatch PLAY from PAUSED (which is allowed), resuming TrackPlayer.
+        // AsyncLock ensures PAUSE is processed after NATIVE_STATE_CHANGED completes.
+        //
+        // hasReachedPlayingState guards against the iOS queue-rebuild pre-play sequence:
+        // TrackPlayer.add()/seekTo() triggers Buffering→Ready→Paused before executePlay
+        // runs. Without the guard that spurious Paused fires a PAUSE that leaves the
+        // machine stuck in PAUSED. We only auto-pause once native playback has confirmed
+        // at least one State.Playing event (reset on LOAD_TRACK / RESTORE_STATE / RELOAD_QUEUE / STOP).
+        if (
+          this.context.currentState === PlayerState.PLAYING &&
+          this.context.hasReachedPlayingState &&
+          event.payload.state !== State.Playing &&
+          event.payload.state !== State.Buffering &&
+          event.payload.state !== State.Ready // transient during track load/stream init after NATIVE_TRACK_CHANGED
+        ) {
+          dispatchPlayerEvent({ type: "PAUSE" }, { source: "native_player" });
+        }
         break;
 
       // Error handling
       case "NATIVE_ERROR":
         this.context.lastError = event.payload.error;
+        this.context.playIntentOnLoad = false;
         break;
 
       case "NATIVE_PLAYBACK_ERROR":
@@ -479,6 +658,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         // Clear loading state on playback error so the bridge can propagate it
         // (BGS handlePlaybackError's store._setTrackLoading(false) removed in Phase 4)
         this.context.isLoadingTrack = false;
+        this.context.playIntentOnLoad = false;
         break;
 
       case "SESSION_SYNC_FAILED":
@@ -514,7 +694,10 @@ export class PlayerStateCoordinator extends EventEmitter {
    */
   async resolveCanonicalPosition(libraryItemId: string): Promise<ResumePositionInfo> {
     const store = useAppStore.getState();
-    const asyncStoragePosition = (await getAsyncItem(ASYNC_KEYS.position)) as number | null;
+    const [asyncStoragePosition, asyncStoragePositionUpdatedAt] = (await Promise.all([
+      getAsyncItem(ASYNC_KEYS.position),
+      getAsyncItem(ASYNC_KEYS.positionUpdatedAt),
+    ])) as [number | null, number | null];
 
     let position = store.player.position;
     let source: ResumeSource = "store";
@@ -550,55 +733,85 @@ export class PlayerStateCoordinator extends EventEmitter {
             } else {
               const sessionPosition = activeSession.currentTime;
               const sessionUpdatedAt = activeSession.updatedAt.getTime();
-              const savedPosition = savedProgress?.currentTime;
-              const savedLastUpdate = savedProgress?.lastUpdate?.getTime();
 
-              // Check if session position is implausibly small (native 0-before-loaded artifact)
-              if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
-                if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
-                  log.warn(
-                    `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : "unknown"})`
-                  );
-                  position = savedPosition;
-                  source = "savedProgress";
-                  authoritativePosition = savedPosition;
-                } else if (asyncStoragePosition && asyncStoragePosition >= MIN_PLAUSIBLE_POSITION) {
-                  log.warn(
-                    `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`
-                  );
-                  position = asyncStoragePosition;
-                  source = "asyncStorage";
-                  authoritativePosition = asyncStoragePosition;
+              // If AsyncStorage has a timestamped position that is fresher than the DB session,
+              // prefer it — the session may be stale (e.g. zombie session not closed on last run).
+              if (
+                asyncStoragePosition !== null &&
+                asyncStoragePositionUpdatedAt !== null &&
+                asyncStoragePositionUpdatedAt > sessionUpdatedAt
+              ) {
+                log.info(
+                  `[Coordinator] AsyncStorage position (${formatTime(asyncStoragePosition)}s, ` +
+                    `updated ${new Date(asyncStoragePositionUpdatedAt).toISOString()}) ` +
+                    `is more recent than active session (${formatTime(sessionPosition)}s, ` +
+                    `updated ${new Date(sessionUpdatedAt).toISOString()}) — using asyncStorage`
+                );
+                position = asyncStoragePosition;
+                source = "asyncStorage";
+                authoritativePosition = asyncStoragePosition;
+              } else {
+                const savedPosition = savedProgress?.currentTime;
+                const savedLastUpdate = savedProgress?.lastUpdate?.getTime();
+
+                // Check if session position is implausibly small (native 0-before-loaded artifact)
+                if (sessionPosition < MIN_PLAUSIBLE_POSITION) {
+                  if (savedPosition && savedPosition >= MIN_PLAUSIBLE_POSITION) {
+                    log.warn(
+                      `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s (updated ${new Date(sessionUpdatedAt).toISOString()}), using saved position ${formatTime(savedPosition)}s (updated ${savedLastUpdate ? new Date(savedLastUpdate).toISOString() : "unknown"})`
+                    );
+                    position = savedPosition;
+                    source = "savedProgress";
+                    authoritativePosition = savedPosition;
+                  } else if (
+                    asyncStoragePosition &&
+                    asyncStoragePosition >= MIN_PLAUSIBLE_POSITION
+                  ) {
+                    log.warn(
+                      `[Coordinator] Rejecting implausible session position ${formatTime(sessionPosition)}s, using AsyncStorage position ${formatTime(asyncStoragePosition)}s`
+                    );
+                    position = asyncStoragePosition;
+                    source = "asyncStorage";
+                    authoritativePosition = asyncStoragePosition;
+                  } else {
+                    // Session position is small but no better alternative exists
+                    position = sessionPosition;
+                    source = "activeSession";
+                    authoritativePosition = sessionPosition;
+                    log.info(
+                      `[Coordinator] Resume position from active session (small but no alternative): ${formatTime(position)}s`
+                    );
+                  }
+                } else if (savedPosition && savedLastUpdate) {
+                  // Both exist — compare timestamps to determine which is more recent
+                  const positionDiff = Math.abs(sessionPosition - savedPosition);
+
+                  if (positionDiff > LARGE_DIFF_THRESHOLD) {
+                    // Large discrepancy — prefer the more recently updated source
+                    const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
+                    const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
+                    const preferredSource: ResumeSource = isSessionNewer
+                      ? "activeSession"
+                      : "savedProgress";
+
+                    log.warn(
+                      `[Coordinator] Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
+                    );
+
+                    position = preferredPosition;
+                    source = preferredSource;
+                    authoritativePosition = preferredPosition;
+                  } else {
+                    // Positions are close — use session (more frequently updated)
+                    position = sessionPosition;
+                    source = "activeSession";
+                    authoritativePosition = sessionPosition;
+                    log.info(
+                      `[Coordinator] Resume position from active session: ${formatTime(position)}s`
+                    );
+                  }
                 } else {
-                  // Session position is small but no better alternative exists
-                  position = sessionPosition;
-                  source = "activeSession";
-                  authoritativePosition = sessionPosition;
-                  log.info(
-                    `[Coordinator] Resume position from active session (small but no alternative): ${formatTime(position)}s`
-                  );
-                }
-              } else if (savedPosition && savedLastUpdate) {
-                // Both exist — compare timestamps to determine which is more recent
-                const positionDiff = Math.abs(sessionPosition - savedPosition);
-
-                if (positionDiff > LARGE_DIFF_THRESHOLD) {
-                  // Large discrepancy — prefer the more recently updated source
-                  const isSessionNewer = sessionUpdatedAt > savedLastUpdate;
-                  const preferredPosition = isSessionNewer ? sessionPosition : savedPosition;
-                  const preferredSource: ResumeSource = isSessionNewer
-                    ? "activeSession"
-                    : "savedProgress";
-
-                  log.warn(
-                    `[Coordinator] Large position discrepancy: session=${formatTime(sessionPosition)}s (${new Date(sessionUpdatedAt).toISOString()}) vs saved=${formatTime(savedPosition)}s (${new Date(savedLastUpdate).toISOString()}), using ${preferredSource} position ${formatTime(preferredPosition)}s`
-                  );
-
-                  position = preferredPosition;
-                  source = preferredSource;
-                  authoritativePosition = preferredPosition;
-                } else {
-                  // Positions are close — use session (more frequently updated)
+                  // Normal case — use session position
                   position = sessionPosition;
                   source = "activeSession";
                   authoritativePosition = sessionPosition;
@@ -606,15 +819,7 @@ export class PlayerStateCoordinator extends EventEmitter {
                     `[Coordinator] Resume position from active session: ${formatTime(position)}s`
                   );
                 }
-              } else {
-                // Normal case — use session position
-                position = sessionPosition;
-                source = "activeSession";
-                authoritativePosition = sessionPosition;
-                log.info(
-                  `[Coordinator] Resume position from active session: ${formatTime(position)}s`
-                );
-              }
+              } // end else (asyncStorage not fresher than session)
             } // end else (not isFinished)
           } else if (savedProgress?.currentTime) {
             // If item is marked finished, start from beginning
@@ -660,7 +865,10 @@ export class PlayerStateCoordinator extends EventEmitter {
     this.context.position = position;
 
     // Dispatch POSITION_RECONCILED so the position flows through the event bus
-    dispatchPlayerEvent({ type: "POSITION_RECONCILED", payload: { position } });
+    dispatchPlayerEvent(
+      { type: "POSITION_RECONCILED", payload: { position } },
+      { source: "native_player" }
+    );
 
     // Sync AsyncStorage if the authoritative position differs from what was stored
     if (authoritativePosition !== null && authoritativePosition !== asyncStoragePosition) {
@@ -689,7 +897,7 @@ export class PlayerStateCoordinator extends EventEmitter {
    * synchronously via Zustand set, so store.player.currentChapter reflects the
    * updated chapter by the time the comparison runs.
    *
-   * Debounced by lastSyncedChapterId (mirrors PROP-06 in syncStateToStore).
+   * Debounced by lastSyncedChapterId to avoid redundant metadata updates.
    *
    * Guard: no-op when Zustand is unavailable (Android BGS headless context, PROP-05).
    */
@@ -698,13 +906,29 @@ export class PlayerStateCoordinator extends EventEmitter {
       const store = useAppStore.getState();
       store.updatePosition(this.context.position); // triggers _updateCurrentChapter synchronously
 
-      // Detect chapter boundary crossings; debounced by lastSyncedChapterId (mirrors PROP-06)
+      // Flush pending progress jump to store for toast display
+      if (this._pendingProgressJump) {
+        store._setPendingProgressJump({
+          ...this._pendingProgressJump,
+          timestamp: Date.now(),
+        });
+        this._pendingProgressJump = null;
+      }
+
+      // Detect chapter boundary crossings using the store's computed chapter id (set
+      // synchronously by _updateCurrentChapter above). Debounced by lastSyncedChapterId.
       const currentChapterId = store.player.currentChapter?.chapter?.id?.toString() ?? null;
       if (currentChapterId !== null && currentChapterId !== this.lastSyncedChapterId) {
         this.lastSyncedChapterId = currentChapterId;
-        store.updateNowPlayingMetadata().catch((err) => {
-          log.error("[Coordinator] Failed to update now playing metadata on chapter change", err);
-        });
+        // currentTrack comes from the store (maintained by PlayerService); position
+        // comes from this.context (coordinator's authoritative value, not delayed by
+        // the React state cycle).
+        const track = store.player.currentTrack;
+        if (track && !this.context.isLoadingTrack) {
+          updateNowPlayingMetadata(track, this.context.position).catch((err) => {
+            log.error("[Coordinator] Failed to update now playing metadata on chapter change", err);
+          });
+        }
       }
     } catch {
       // BGS headless context: Zustand store may not be available (PROP-05)
@@ -723,8 +947,9 @@ export class PlayerStateCoordinator extends EventEmitter {
    * responsibility for building and setting PlayerTrack objects (Plan 02 documented
    * exception - coordinator cannot build PlayerTrack).
    *
-   * After sync, if the current chapter changed, calls updateNowPlayingMetadata()
-   * fire-and-forget (PROP-06: only on actual chapter change, not every structural sync).
+   * After sync, calls updateNowPlayingMetadata() fire-and-forget on SEEK_COMPLETE,
+   * PAUSE, and PLAY to keep the lock screen position accurate at key transitions.
+   * Chapter boundary crossings are handled by syncPositionToStore instead (CLEAN-03).
    *
    * Guard: no-op when Zustand is unavailable (Android BGS headless context, PROP-05).
    */
@@ -744,26 +969,27 @@ export class PlayerStateCoordinator extends EventEmitter {
       store._setVolume(this.context.volume);
       store._setPlaySessionId(this.context.sessionId);
 
-      // PROP-06: Only call updateNowPlayingMetadata when chapter actually changes
-      const currentChapterId = this.context.currentChapter?.chapter?.id?.toString() ?? null;
-      if (currentChapterId !== null && currentChapterId !== this.lastSyncedChapterId) {
-        this.lastSyncedChapterId = currentChapterId;
-        store.updateNowPlayingMetadata().catch((err) => {
+      // Refresh lock screen metadata at key playback state transitions.
+      // Chapter boundary crossings are handled in syncPositionToStore (CLEAN-03), which
+      // reads the chapter from the store after updatePosition() runs _updateCurrentChapter.
+      //
+      // SEEK_COMPLETE: same-chapter seeks change positionInChapter without triggering a
+      // chapter boundary crossing, so syncPositionToStore's chapter detector won't fire.
+      //
+      // PAUSE / PLAY: TrackPlayer's native layer updates MPNowPlayingInfoCenter with the
+      // absolute track position when playback state changes, overwriting the chapter-relative
+      // elapsedTime we set. Re-asserting our metadata after these transitions ensures the lock
+      // screen always freezes (PAUSE) or resumes advancing (PLAY) from the correct chapter position.
+      // currentTrack comes from the store (maintained by PlayerService); position
+      // comes from this.context (coordinator's authoritative value).
+      const track = store.player.currentTrack;
+      if (
+        (event.type === "SEEK_COMPLETE" || event.type === "PAUSE" || event.type === "PLAY") &&
+        track &&
+        !this.context.isLoadingTrack
+      ) {
+        updateNowPlayingMetadata(track, this.context.position).catch((err) => {
           log.error("[Coordinator] Failed to update now playing metadata", err);
-        });
-      }
-
-      // SKIP-02: On seek completion, refresh lock screen elapsed time unconditionally.
-      // Same-chapter skips do not change currentChapterId, so PROP-06 guard above won't fire.
-      // updateNowPlayingMetadata reads positionInChapter from store.player.currentChapter,
-      // which is up-to-date because updatePosition() (called via syncPositionToStore on
-      // NATIVE_PROGRESS_UPDATED) runs _updateCurrentChapter synchronously.
-      // The coordinator bridge calls syncStateToStore after every allowed transition —
-      // SEEK_COMPLETE arrives here after TrackPlayer.seekTo resolves and the event
-      // passes the SEEKING→READY transition guard.
-      if (event.type === "SEEK_COMPLETE") {
-        store.updateNowPlayingMetadata().catch((err) => {
-          log.error("[Coordinator] Failed to update now playing metadata after seek", err);
         });
       }
     } catch {
@@ -782,9 +1008,9 @@ export class PlayerStateCoordinator extends EventEmitter {
    * coordinator subscribes to event bus and can call service methods.
    */
   private subscribeToEventBus(): void {
-    playerEventBus.subscribe((event) => {
-      // Dispatch to internal queue for processing
-      this.dispatch(event).catch((err) => {
+    playerEventBus.subscribe((event, meta) => {
+      // Dispatch to internal queue for processing, carrying meta for source tracing
+      this.dispatch(event, meta).catch((err) => {
         log.error("[Coordinator] Error handling event from bus", err);
       });
     });
@@ -835,6 +1061,9 @@ export class PlayerStateCoordinator extends EventEmitter {
       isSeeking: false,
       preSeekState: null,
       isLoadingTrack: false,
+      playIntentOnLoad: false,
+      queueStatus: "unknown",
+      hasReachedPlayingState: false,
       lastServerSync: null,
       pendingSyncPosition: null,
       lastError: null,
@@ -845,7 +1074,7 @@ export class PlayerStateCoordinator extends EventEmitter {
    * Get event queue snapshot (for diagnostics)
    */
   getEventQueue(): ReadonlyArray<PlayerEvent> {
-    return [...this.eventQueue];
+    return this.eventQueue.map(({ event }) => event);
   }
 
   /**
@@ -889,7 +1118,7 @@ export class PlayerStateCoordinator extends EventEmitter {
     return {
       context: { ...this.context },
       metrics: { ...this.metrics },
-      eventQueue: [...this.eventQueue],
+      eventQueue: this.eventQueue.map(({ event }) => event),
       ...(compact ? {} : { processingTimes: [...this.processingTimes] }),
       transitionHistory: history,
       historyMetadata: { ...this.historyMetadata },
@@ -906,7 +1135,9 @@ export class PlayerStateCoordinator extends EventEmitter {
     return this.transitionHistory.map((entry) => ({
       ts: entry.timestamp,
       evt: entry.event.type,
-      ...(entry.event.payload ? { pay: this.compactPayload(entry.event.payload) } : {}),
+      ...((entry.event as { type: string; payload?: unknown }).payload
+        ? { pay: this.compactPayload((entry.event as { type: string; payload: unknown }).payload) }
+        : {}),
       from: entry.fromState,
       to: entry.toState || entry.fromState,
       ok: entry.allowed,
@@ -953,10 +1184,34 @@ export class PlayerStateCoordinator extends EventEmitter {
         switch (nextState) {
           case PlayerState.LOADING:
             if (event.type === "LOAD_TRACK") {
+              // Change 3: short-circuit if same item is already actively playing or paused.
+              // previousState is the state before transitioning to LOADING.
+              // context.currentTrack reflects the track confirmed by a prior playback cycle —
+              // safe to trust in PLAYING and PAUSED. READY is excluded (see spec).
+              const { previousState, currentTrack } = this.context;
+              const wasActivelyPlayingOrPaused =
+                previousState === PlayerState.PLAYING || previousState === PlayerState.PAUSED;
+              if (
+                wasActivelyPlayingOrPaused &&
+                event.payload.libraryItemId === currentTrack?.libraryItemId
+              ) {
+                log.info(
+                  `[Coordinator] Short-circuit: ${event.payload.libraryItemId} already ${previousState} — dispatching PLAY`
+                );
+                dispatchPlayerEvent({ type: "PLAY" }, { source: "native_player" });
+                return; // skip executeLoadTrack and playIntentOnLoad check
+              }
+
               await playerService.executeLoadTrack(
                 event.payload.libraryItemId,
-                event.payload.episodeId
+                event.payload.episodeId,
+                event.payload.startPosition
               );
+              // Change 2: dispatch PLAY after successful load if intent is still set.
+              // playIntentOnLoad is cleared if PAUSE or error arrived during LOADING.
+              if (this.context.playIntentOnLoad) {
+                dispatchPlayerEvent({ type: "PLAY" }, { source: "native_player" });
+              }
             }
             break;
 
@@ -964,13 +1219,40 @@ export class PlayerStateCoordinator extends EventEmitter {
             // Resume playback if seek interrupted PLAYING state
             if (this.context.preSeekState === PlayerState.PLAYING) {
               this.context.preSeekState = null; // clear after use
-              dispatchPlayerEvent({ type: "PLAY" });
+              dispatchPlayerEvent({ type: "PLAY" }, { source: "native_player" });
             }
             break;
 
           case PlayerState.PLAYING:
             // Only call executePlay when actually transitioning into PLAYING (not same-state no-ops like SET_RATE)
             if (event.type === "PLAY") {
+              // Change 4: Inline queue rebuild if queueStatus is unknown.
+              // This handles the RESTORE_STATE and STOP paths where the OS may have
+              // cleared the TrackPlayer queue. Direct context mutations are used
+              // (not dispatchPlayerEvent) because PLAYING/PAUSED reject RELOAD_QUEUE
+              // via the transition table — bypassing the queue preserves POS-03 guard.
+              if (this.context.queueStatus === "unknown" && this.context.currentTrack) {
+                const track = this.context.currentTrack;
+                this.updateContextFromEvent({
+                  type: "RELOAD_QUEUE",
+                  payload: { libraryItemId: track.libraryItemId },
+                }); // sets isLoadingTrack=true (POS-03 guard)
+                try {
+                  const resumeInfo = await playerService.executeRebuildQueue(track);
+                  this.updateContextFromEvent({
+                    type: "QUEUE_RELOADED",
+                    payload: { position: resumeInfo.position },
+                  }); // sets isLoadingTrack=false, queueStatus='valid'
+                } catch (rebuildError) {
+                  // Clear loading state and abort — calling executePlay on an empty queue would fail
+                  this.context.isLoadingTrack = false;
+                  log.error(
+                    "[Coordinator] Failed to rebuild queue before play",
+                    rebuildError as Error
+                  );
+                  return;
+                }
+              }
               await playerService.executePlay();
             }
             break;

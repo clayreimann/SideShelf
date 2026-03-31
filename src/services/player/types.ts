@@ -15,7 +15,7 @@
  * always import IPlayerServiceFacade from this file to prevent circular deps.
  */
 
-import type { PlayerEvent } from "@/types/coordinator";
+import type { PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
 import type { PlayerTrack } from "@/types/player";
 import type { Track } from "react-native-track-player";
 
@@ -47,12 +47,17 @@ export interface IPlayerServiceFacade {
   getInitializationTimestamp(): number;
 
   /**
-   * Rebuild the current track if it is missing but should exist.
-   * Delegated to ProgressRestoreCollaborator — exposed here so
-   * PlaybackControlCollaborator can call it via the facade reference
-   * without importing ProgressRestoreCollaborator directly.
+   * Rebuild the TrackPlayer queue for the given track.
+   * Pure execution: resets queue, builds track list, resolves position.
+   * Called only by the coordinator from executeTransition. Throws on failure.
    */
-  rebuildCurrentTrackIfNeeded(): Promise<boolean>;
+  executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo>;
+
+  /**
+   * Resolve the canonical resume position for a library item.
+   * Delegates to coordinator.resolveCanonicalPosition() without exposing coordinator.
+   */
+  resolveCanonicalPosition(libraryItemId: string): Promise<ResumePositionInfo>;
 }
 
 /**
@@ -63,9 +68,9 @@ export interface IPlayerServiceFacade {
  * creation, and TrackPlayer queue management.
  */
 export interface ITrackLoadingCollaborator {
-  executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void>;
+  executeLoadTrack(libraryItemId: string, episodeId?: string, startPosition?: number): Promise<void>;
   buildTrackList(track: PlayerTrack): Promise<Track[]>;
-  reloadTrackPlayerQueue(track: PlayerTrack): Promise<boolean>;
+  executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo>;
 }
 
 /**
@@ -96,7 +101,6 @@ export interface IPlaybackControlCollaborator {
 export interface IProgressRestoreCollaborator {
   restorePlayerServiceFromSession(): Promise<void>;
   syncPositionFromDatabase(): Promise<void>;
-  rebuildCurrentTrackIfNeeded(): Promise<boolean>;
 }
 
 /**

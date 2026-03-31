@@ -1,60 +1,87 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.3
-milestone_name: TBD
-status: planning
-stopped_at: v1.2 milestone archived — ready for /gsd:new-milestone
-last_updated: "2026-03-08T03:30:00.000Z"
-last_activity: 2026-03-08 — v1.2 milestone archived, git tagged v1.2
+milestone_name: — Beta Polish
+status: executing
+stopped_at: Completed 21-maestro-ui-testing-infrastructure plan 03 — three standalone regression flows (library-navigation, playback, download)
+last_updated: "2026-03-31T17:57:59.398Z"
+last_activity: 2026-03-31
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 10
+  completed_phases: 7
+  total_plans: 37
+  completed_plans: 35
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-08)
+See: .planning/PROJECT.md (updated 2026-03-09)
 
 **Core value:** The coordinator owns player state — services execute its commands and report reality back, not the other way around.
-**Current focus:** Planning next milestone — run `/gsd:new-milestone` to start v1.3
+**Current focus:** Phase 21 — maestro-ui-testing-infrastructure
 
 ## Current Position
 
-v1.2 milestone archived 2026-03-08. Ready to start v1.3.
+Phase: 21 (maestro-ui-testing-infrastructure) — EXECUTING
+Plan: 4 of 4
+Status: Ready to execute
+Last activity: 2026-03-31
+
+Progress: [██████████] 100%
 
 ## Performance Metrics
-
-**Velocity (v1.0):**
-
-- Total plans completed: 16 (Phases 2–5 including 03.1)
-- Total execution time: ~1 month
-
-**Velocity (v1.1):**
-
-- Total plans completed: 11 (Phases 6–9)
-- Total execution time: 6 days (Feb 22 → Feb 27)
 
 **Velocity (v1.2):**
 
 - Total plans completed: 8 (Phases 10–13)
 - Total execution time: 7 days (Feb 28 → Mar 7)
-- Plan 10-01: 4 min (2 tasks, 8 files)
-- Plan 10-02: 12 min (2 tasks, 11 files)
-- Plan 11-01: 8 min (3 tasks, 10 files, 29 new tests)
-- Plan 11-02: 90 min (4 tasks, 14 files, 8 new tests)
-- Plan 12-01: 33 min (3 tasks, 13 files, 67 new tests)
-- Plan 12-02: 20 min (3 tasks, 7 files, 33 new tests)
-- Plan 13-01: 10 min (1 task, 1 file — investigation document)
-- Plan 13-02: 30 min (3 tasks, 5 files, 5 new tests)
+
+**By Phase:**
+
+| Phase | Plans | Total Time | Avg/Plan |
+| ----- | ----- | ---------- | -------- |
+| 10    | 2     | ~16 min    | ~8 min   |
+| 11    | 2     | ~98 min    | ~49 min  |
+| 12    | 2     | ~53 min    | ~27 min  |
+| 13    | 2     | ~40 min    | ~20 min  |
+
+**Recent Trend:** Stable (~20–50 min per plan depending on test surface)
+| Phase 14-progress-display-format P01 | 2 | 1 tasks | 2 files |
+| Phase 14-progress-display-format P02 | 4 | 2 tasks | 4 files |
+| Phase 14-progress-display-format P03 | 216 | 2 tasks | 5 files |
+| Phase 14-progress-display-format P04 | 3 | 1 tasks | 2 files |
+| Phase 15-collapsible-section-redesign P01 | 5 | 1 tasks | 1 files |
+| Phase 15-collapsible-section-redesign P02 | 25 | 1 tasks | 3 files |
+| Phase 16-full-screen-player-redesign-airplay P01 | 3 | 1 tasks | 3 files |
+| Phase 16-full-screen-player-redesign-airplay P02 | 4 | 2 tasks | 4 files |
+| Phase 16-full-screen-player-redesign-airplay P03 | 3 | 2 tasks | 4 files |
+| Phase 16-full-screen-player-redesign-airplay P04 | 6 | 2 tasks | 2 files |
+| Phase 17-bookmarks P01 | 4 | 2 tasks | 8 files |
+| Phase 17-bookmarks P02 | 20 | 2 tasks | 3 files |
+| Phase 17-bookmarks P03 | 11 | 3 tasks | 5 files |
+| Phase 17-bookmarks P04 | 18 | 2 tasks | 8 files |
+| Phase 17.1-add-span-tracing-debugging-aid P01 | 12 | 3 tasks | 3 files |
+| Phase 17.1-add-span-tracing-debugging-aid P02 | 15 | 1 tasks | 4 files |
+| Phase 17.1-add-span-tracing-debugging-aid P04 | 0 | 1 tasks | 3 files |
+| Phase 17.1-add-span-tracing-debugging-aid P03 | 18 | 2 tasks | 4 files |
+| Phase 17.1-add-span-tracing-debugging-aid P05 | 9 | 3 tasks | 6 files |
+| Phase 18-sleep-timer-fade-navigation-path-standardization P02 | 3 | 2 tasks | 5 files |
+| Phase 18-sleep-timer-fade-navigation-path-standardization P01 | 20 | 2 tasks | 3 files |
+| Phase 18-sleep-timer-fade-navigation-path-standardization P04 | 15 | 2 tasks | 6 files |
+| Phase 18-sleep-timer-fade-navigation-path-standardization P03 | 25 | 1 tasks | 1 files |
+| Phase 19-performance-quick-wins-orphan-reassociation P00 | 259 | 2 tasks | 7 files |
+| Phase 19-performance-quick-wins-orphan-reassociation P04 | 4 | 1 tasks | 1 files |
+| Phase 20-tree-shaking P01 | 15 | 2 tasks | 2 files |
+| Phase 21 P02 | 1 | 2 tasks | 2 files |
+| Phase 21-maestro-ui-testing-infrastructure P04 | 59 | 2 tasks | 4 files |
+| Phase 21-maestro-ui-testing-infrastructure P03 | 2 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
-### Key Decisions — carry forward to v1.3
+### Key Decisions — carry forward
 
 Full decision log is in PROJECT.md Key Decisions table.
 
@@ -62,14 +89,71 @@ Full decision log is in PROJECT.md Key Decisions table.
 - Long-press interval on skip button is one-time-apply by design — Settings controls the default
 - Partial badge (amber, top-left) pattern established for partially-downloaded items
 - Handlers-before-`.start()` is a critical invariant in DownloadService — documented with CRITICAL comment
+- progressFormat default is 'remaining' — zero visual change on first launch; stored under '@app/progressFormat'
+- formatBookmarkTime kept local in FullScreenPlayer — needs second-level precision; shared formatProgress helper uses minute-granular friendly strings
+- CollapsibleSection: gradient visibility driven by React state not animation opacity — enables queryByTestId null assertions in tests
+- CollapsibleSection: two-phase render (measure first, animate second) avoids animating to unknown height on initial render
+- chapterBarShowRemaining defaults false (show total duration); keepScreenAwake defaults false (battery-friendly); both stored under '@app/' prefix
+- AirPlay: npm package path taken (@douglowder/expo-av-route-picker-view) — builds on SDK 54 + newArch; AirPlayButton at src/components/ui/AirPlayButton.tsx; plan 03 imports from @/components/ui/AirPlayButton
+- KeepAwakeGuard guard-component pattern: top-level function component holds useKeepAwake; conditionally rendered via {keepScreenAwake && isPlaying && <KeepAwakeGuard />} — avoids conditional hook violation
+- ProgressBar rightLabel=undefined means fall back to formatTime(duration); callers pass undefined rather than explicit fallback string
+- Reanimated cross-component animated style prop type: use AnimatedStyle<ViewStyle> not ReturnType<typeof useAnimatedStyle> — the latter resolves to DefaultStyle (TextStyle union) which fails Animated.View type check
+- Static styles (marginBottom, overflow) that accompany Reanimated animations: include inside useAnimatedStyle worklet rather than array-merging at call site — avoids Reanimated style prop type errors
+- pendingBookmarkOps: no FK to users (plain text userId) — avoids cascade complications; clearPendingOps filters by userId+ids to prevent cross-user deletion
+- upsertAllBookmarks sets syncedAt=now() at import — records when ABS server data was last fetched
+- bookmarkTitleMode null sentinel: null means never-set (triggers first-tap alert in FullScreenPlayer); 'auto' means explicit user choice — stored under '@app/bookmarkTitleMode'
+- deleteBookmark API URL uses numeric time not bookmarkId: DELETE /api/me/item/:id/bookmark/:time (ABS confirmed)
+- wasConnected captured before set() in networkSlice.\_updateNetworkState to detect restore transition — after set() the state is already updated
+- drainPendingBookmarkOps stops on first failure to preserve FIFO ordering of queued offline ops
+- Offline createBookmark generates temp UUID as optimistic id — reconciled via refreshBookmarks after drain succeeds
+- ABS bookmark PATCH endpoint: PATCH /api/me/item/:id/bookmark with {time, title} body (implemented and tested)
+- bookmarkTitleMode null remains the first-run sentinel only; the settings screen now exposes explicit auto and prompt modes
+- Bookmark rename/delete actions use ActionSheetIOS on iOS and Alert plus bottom-sheet modal flows on Android
+- Bookmark creation branching stays in a pure helper so the full-screen player logic remains unit-testable
+- Human approval on 2026-03-12 closes Plan 17-05: all bookmark UX flows are now treated as validated end-to-end
+- --no-verify required for TDD RED stubs: lint-staged blocks missing-module imports even with --passWithNoTests; RED is intentional, documented in commit messages
+- expo-application not yet installed: use { virtual: true } in jest.mock() for packages not in node_modules
+- react-native custom resolver does not support virtual: true for @/ mapped paths — drop @/lib/trace mock from traceDump stub; traceDump import fails first anyway
+- traceDump writes flat payload (appVersion, platform, dumpReason at root) not nested under meta — required for test assertions on parsed.dumpReason
+- trace.ts is a zero-dependency leaf module — no imports from services, stores, or other lib files; safe to import anywhere
+- Auto-dump on rejection in PlayerStateCoordinator is fire-and-forget with .catch() — never awaited inside the AsyncLock acquire callback (would block the queue)
+- expo-application virtual mock added globally to setup.ts with { virtual: true } — integration tests pull in PlayerStateCoordinator transitively; per-file mocks would require touching every integration test
+- player.machine.\* trace calls use (event as any).source cast with eslint-disable — Plan 03 adds source to the event bus; follow-up will thread through the type properly
+- DispatchMeta is a separate type from PlayerEvent union — source/restoreSessionId not added to individual event variant types, keeping discriminated union clean; coordinator reads meta from bus side-channel
+- restoreSessionId generated as local variable per-method-call (Math.random().toString(16).slice(2)), not module-level — avoids stale IDs across concurrent restore attempts
+- All player.restore.\* child spans pass parentContext explicitly — Hermes context stack is not async-aware, implicit propagation unreliable across await boundaries
+- log.warn only takes 1 argument in this project's logger; long-press error paths use log.error(message, Error) instead
+- PlayPauseButton Pressable needs accessibilityRole="button" for getByRole("button") queries in tests
+- Span instrumentation rule: add `player.{subsystem}.{operation}` spans to any async path with branching decision points that are hard to reconstruct from logs (restore, smart rewind, seek chains, queue rebuilds); capture key decision outcomes as span attributes not just log strings; skip ring buffer for events >1 Hz with an `isHighFrequency` guard; always pass `parentContext` explicitly — Hermes does not propagate async context across `await`
+- Sleep timer fade guard uses store.player.isPlaying not TrackPlayer.getPlaybackState() — after jest.resetModules() the top-level TrackPlayer import in tests diverges from the freshly-required module instance; store state is consistently mocked
+- \_testHandlePlaybackProgressUpdated shim attached to serviceExports object (not ES export const) — module.exports = fn at bottom overwrites ES exports in this CJS file; test shims must use the serviceExports attachment pattern
+- @shopify/flash-list pinned to 2.0.2 by expo install (SDK 54 compatible version); react-native-performance at ^6.0.0 (non-SDK-managed package)
+- --no-verify also required for CoverImage rename: prettier rejects the old CoverImange.tsx path via negative glob pattern on renamed files; consistent with existing TDD RED stubs rule
+- EXPO*TREE_SHAKING env var consumed by metro.config.js (Node.js build tool) — no EXPO_PUBLIC* prefix needed; that prefix would unnecessarily expose the flag in the app JS bundle
+- .env committed to git (not gitignored) for tree shaking flag — contains no secrets and EAS cloud build needs it for metro bundling; .gitignore only blocks .env\*.local
+- Feature-flag-gated metro config pattern: read env var at top of metro.config.js, const FLAG = process.env.X === 'true', gate config mutations with if (FLAG) — instant revert via flag value change + rebuild
+
+### Roadmap Evolution
+
+- Phase 17.1 inserted after Phase 17: Add span tracing debugging aid (URGENT)
 
 ### Pending Todos
 
-1. **Standardize path handling, storage, and persistence across the app** — encoding mismatch between file:// URIs, POSIX paths, and D:/C: prefixed DB paths; discovered during Phase 13 smoke testing
-2. **Add reassociation option to orphan download screen** — allow user to link orphaned downloaded files to a known library item instead of delete-only
+1. **Standardize path handling** (now Phase 18 / DEBT-01) — COMPLETE in Phase 18
+2. **Orphan reassociation UI** (now Phase 19 / DEBT-02) — allow user to link orphaned files to known library items
+3. **Preserve resume position and skip smart rewind on explicit seeks** — cold-start play sometimes resumes from 0:00, and chapter/bookmark jumps should bypass the smart rewind phase
+4. **Contribute AirPlay component resizable icon native module upstream** — current icon is fixed size with only padding growing on resize; fix native layer to scale icon with component dimensions + open PR upstream
+5. **Audit and reduce UI-thread work in play/pause dispatch path** — noticeable icon lag and flicker between play/pause states; likely optimistic update missing + coordinator lock blocking render cycle
 
-### Open Concerns
+### Blockers/Concerns
 
-- Android `updateMetadataForTrack` artwork bug (#2287) — not verified (no Android device); carry forward
-- PERF-01 (`NATIVE_PROGRESS_UPDATED` bypass async-lock) — deferred; needs safety analysis
-- Expo SDK 55 upgrade blocked by RNTP Android bridgeless compatibility (issue #2443)
+- AirPlay package new-arch compatibility: RESOLVED — `@douglowder/expo-av-route-picker-view` builds on SDK 54 + newArchEnabled (prebuild --clean exit 0 confirmed in Plan 02)
+- Tree shaking (Phase 20): `inlineRequires` + Reanimated 4 + React Compiler triple interaction undocumented; treat as exploratory; have revert plan ready
+- ABS bookmark PATCH endpoint: RESOLVED — PATCH /api/me/item/:id/bookmark with {time, title} body (implemented in Plan 03)
+- URL scheme mismatch: app.json has `"scheme": "side-shelf"` (hyphen) but docs use `sideshelf://` — RESOLVED in Phase 18 scope; scheme will be changed to `"sideshelf"` during Phase 18 execution
+
+## Session Continuity
+
+Last session: 2026-03-31T17:57:59.395Z
+Stopped at: Completed 21-maestro-ui-testing-infrastructure plan 03 — three standalone regression flows (library-navigation, playback, download)
+Resume file: None

@@ -22,9 +22,6 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 jest.mock("react-native-track-player", () => ({
   getQueue: jest.fn(),
   seekTo: jest.fn(),
-  getActiveTrackIndex: jest.fn(),
-  getActiveTrack: jest.fn(),
-  updateMetadataForTrack: jest.fn(),
 }));
 
 // Mock ProgressService
@@ -44,10 +41,6 @@ jest.mock("../../../lib/secureStore", () => ({
   getStoredUsername: jest.fn(),
 }));
 
-// Mock track player config
-jest.mock("../../../lib/trackPlayerConfig", () => ({
-  configureTrackPlayer: jest.fn(),
-}));
 
 describe("PlayerSlice", () => {
   let store: UseBoundStore<StoreApi<PlayerSlice>>;
@@ -58,7 +51,6 @@ describe("PlayerSlice", () => {
   const mockedProgressService = progressService as jest.Mocked<typeof progressService>;
   const { getUserByUsername } = require("../../../db/helpers/users");
   const { getStoredUsername } = require("../../../lib/secureStore");
-  const { configureTrackPlayer } = require("../../../lib/trackPlayerConfig");
 
   // Mock player track data
   const mockPlayerTrack: PlayerTrack = {
@@ -105,13 +97,9 @@ describe("PlayerSlice", () => {
     mockedAsyncStorage.setItem.mockResolvedValue();
     mockedTrackPlayer.getQueue.mockResolvedValue([]);
     mockedTrackPlayer.seekTo.mockResolvedValue();
-    mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(0);
-    mockedTrackPlayer.getActiveTrack.mockResolvedValue(undefined);
-    mockedTrackPlayer.updateMetadataForTrack.mockResolvedValue();
     mockedProgressService.getCurrentSession.mockResolvedValue(null);
     getUserByUsername.mockResolvedValue({ id: "user-1" });
     getStoredUsername.mockResolvedValue("testuser");
-    configureTrackPlayer.mockResolvedValue();
   });
 
   afterEach(() => {
@@ -142,6 +130,7 @@ describe("PlayerSlice", () => {
           type: null,
           chapterTarget: null,
         },
+        pendingProgressJump: null,
       });
     });
   });
@@ -511,74 +500,6 @@ describe("PlayerSlice", () => {
         const remaining = store.getState().getSleepTimerRemaining();
         expect(remaining).toBeNull();
       });
-    });
-  });
-
-  describe("updateNowPlayingMetadata", () => {
-    it("should update TrackPlayer metadata with chapter info", async () => {
-      store.getState()._setCurrentTrack(mockPlayerTrack);
-      store.getState().updatePosition(100);
-
-      mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(0);
-      mockedTrackPlayer.getActiveTrack.mockResolvedValue({
-        id: "track-1",
-        title: "Test",
-        url: "test-url",
-      });
-
-      await store.getState().updateNowPlayingMetadata();
-
-      expect(mockedTrackPlayer.updateMetadataForTrack).toHaveBeenCalledWith(
-        0,
-        expect.objectContaining({
-          title: "Chapter 1",
-          artist: "Test Author",
-          album: "Test Book",
-          artwork: "file:///test-cover.jpg",
-          duration: 1800,
-          elapsedTime: 100,
-        })
-      );
-    });
-
-    it("should skip update when no track is loaded", async () => {
-      await store.getState().updateNowPlayingMetadata();
-
-      expect(mockedTrackPlayer.updateMetadataForTrack).not.toHaveBeenCalled();
-    });
-
-    it("should skip update when no chapter is set", async () => {
-      const trackWithoutChapters = { ...mockPlayerTrack, chapters: [] };
-      store.getState()._setCurrentTrack(trackWithoutChapters);
-
-      await store.getState().updateNowPlayingMetadata();
-
-      expect(mockedTrackPlayer.updateMetadataForTrack).not.toHaveBeenCalled();
-    });
-
-    it("should handle errors gracefully", async () => {
-      store.getState()._setCurrentTrack(mockPlayerTrack);
-      store.getState().updatePosition(100);
-
-      mockedTrackPlayer.getActiveTrackIndex.mockRejectedValue(new Error("TrackPlayer error"));
-
-      await expect(store.getState().updateNowPlayingMetadata()).resolves.not.toThrow();
-    });
-
-    it("should reconfigure TrackPlayer after metadata update", async () => {
-      store.getState()._setCurrentTrack(mockPlayerTrack);
-      store.getState().updatePosition(100);
-
-      mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(0);
-      mockedTrackPlayer.getActiveTrack.mockResolvedValue({
-        id: "track-1",
-        title: "Test",
-        url: "test-url",
-      });
-
-      await store.getState().updateNowPlayingMetadata();
-
-      expect(configureTrackPlayer).toHaveBeenCalled();
     });
   });
 

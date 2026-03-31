@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals
 import { State } from "react-native-track-player";
 import { PlayerStateCoordinator } from "../PlayerStateCoordinator";
 import { playerEventBus } from "../eventBus";
+import { updateNowPlayingMetadata } from "@/lib/nowPlayingMetadata";
 
 // Mock PlayerService
 jest.mock("../../PlayerService", () => {
@@ -22,6 +23,18 @@ jest.mock("../../PlayerService", () => {
     executeSeek: jest.fn(),
     executeSetRate: jest.fn(),
     executeSetVolume: jest.fn(),
+    executeRebuildQueue: jest.fn().mockResolvedValue({
+      position: 0,
+      source: "store",
+      authoritativePosition: null,
+      asyncStoragePosition: null,
+    }),
+    resolveCanonicalPosition: jest.fn().mockResolvedValue({
+      position: 0,
+      source: "store",
+      authoritativePosition: null,
+      asyncStoragePosition: null,
+    }),
   };
   return {
     PlayerService: {
@@ -59,6 +72,16 @@ jest.mock("@/stores/appStore", () => ({
   useAppStore: {
     getState: jest.fn(),
   },
+}));
+
+// Mock traceDump — expo-application is not installed in the test environment
+jest.mock("@/lib/traceDump", () => ({
+  writeDumpToDisk: jest.fn(() => Promise.resolve("file://mock-dump.json")),
+}));
+
+// Mock the now-playing lib so tests don't need a live TrackPlayer instance
+jest.mock("@/lib/nowPlayingMetadata", () => ({
+  updateNowPlayingMetadata: jest.fn(() => Promise.resolve()),
 }));
 
 // Mock logger
@@ -142,13 +165,18 @@ describe("PlayerStateCoordinator", () => {
       await Promise.all(events.map((e) => coordinator.dispatch(e)));
 
       // Wait for processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY internally, so we get
+      // at least 4 processed events: LOAD_TRACK, auto-PLAY, user-PLAY, PAUSE.
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
-      // Events should be processed in order
-      expect(processedEvents).toHaveLength(3);
+      // Events should be processed in order — LOAD_TRACK is always first
+      expect(processedEvents.length).toBeGreaterThanOrEqual(3);
       expect(processedEvents[0].type).toBe("LOAD_TRACK");
-      expect(processedEvents[1].type).toBe("PLAY");
-      expect(processedEvents[2].type).toBe("PAUSE");
+      // Auto-PLAY fires after LOAD_TRACK; user PLAY and PAUSE follow
+      const hasPlay = processedEvents.some((e) => e.type === "PLAY");
+      const hasPause = processedEvents.some((e) => e.type === "PAUSE");
+      expect(hasPlay).toBe(true);
+      expect(hasPause).toBe(true);
     });
 
     it("should handle errors without crashing", async () => {
@@ -189,10 +217,12 @@ describe("PlayerStateCoordinator", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const lastDiagnostic = diagnostics[diagnostics.length - 1];
-      expect(lastDiagnostic.allowed).toBe(true);
-      expect(lastDiagnostic.currentState).toBe(PlayerState.IDLE);
-      expect(lastDiagnostic.nextState).toBe(PlayerState.LOADING);
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY, so multiple diagnostics are
+      // emitted. Check the first diagnostic which is always IDLE -> LOADING.
+      const firstDiagnostic = diagnostics[0];
+      expect(firstDiagnostic.allowed).toBe(true);
+      expect(firstDiagnostic.currentState).toBe(PlayerState.IDLE);
+      expect(firstDiagnostic.nextState).toBe(PlayerState.LOADING);
     });
 
     it("should reject invalid transitions", async () => {
@@ -445,15 +475,16 @@ describe("PlayerStateCoordinator", () => {
 
   describe("execution mode behavior", () => {
     it("should execute state transitions", async () => {
-      // Load track - should transition to LOADING
+      // Load track - should trigger state transitions (IDLE -> LOADING -> READY -> PLAYING
+      // after Change 2 auto-PLAY dispatch)
       await coordinator.dispatch({
         type: "LOAD_TRACK",
         payload: { libraryItemId: "test-item" },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
-      // Verify state transition occurred
-      expect(coordinator.getState()).toBe(PlayerState.LOADING);
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY so coordinator ends in PLAYING
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
       const metrics = coordinator.getMetrics();
       expect(metrics.stateTransitionCount).toBeGreaterThan(0);
     });
@@ -861,6 +892,76 @@ describe("PlayerStateCoordinator", () => {
       expect(context.sessionId).toBeNull();
       expect(context.sessionStartTime).toBeNull();
     });
+
+    it("should initialize playIntentOnLoad=false and queueStatus='unknown' in fresh context", () => {
+      const context = coordinator.getContext();
+      expect(context.playIntentOnLoad).toBe(false);
+      expect(context.queueStatus).toBe("unknown");
+    });
+
+    it("should set playIntentOnLoad=true on LOAD_TRACK", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const context = coordinator.getContext();
+      expect(context.playIntentOnLoad).toBe(true);
+    });
+
+    it("should clear playIntentOnLoad=false on PAUSE (even if rejected during LOADING)", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const context = coordinator.getContext();
+      expect(context.playIntentOnLoad).toBe(false);
+    });
+
+    it("should clear playIntentOnLoad on STOP", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await coordinator.dispatch({ type: "STOP" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const context = coordinator.getContext();
+      expect(context.playIntentOnLoad).toBe(false);
+    });
+
+    it("should set queueStatus='valid' on QUEUE_RELOADED", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("valid");
+    });
+
+    it("should set queueStatus='unknown' on STOP", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await coordinator.dispatch({ type: "PLAY" });
+      await coordinator.dispatch({ type: "STOP" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("unknown");
+    });
+
+    it("should set queueStatus='unknown' on RESTORE_STATE", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("valid");
+
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: null,
+            position: 0,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("unknown");
+    });
   });
 
   // ============================================================================
@@ -907,11 +1008,18 @@ describe("PlayerStateCoordinator", () => {
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("test-item", undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "test-item",
+        undefined,
+        undefined
+      );
     });
 
     it("should call executePlay when transitioning to PLAYING", async () => {
-      await transitionToState(PlayerState.READY);
+      // After Change 2, transitionToState(READY) ends in PLAYING via auto-PLAY.
+      // Transition to PAUSED instead, clear mocks, then dispatch PLAY to test
+      // that executePlay is called on a PAUSED -> PLAYING transition.
+      await transitionToState(PlayerState.PAUSED);
       jest.clearAllMocks();
 
       await coordinator.dispatch({ type: "PLAY" });
@@ -993,23 +1101,33 @@ describe("PlayerStateCoordinator", () => {
     });
 
     it("should reject LOAD_TRACK from LOADING state (duplicate session prevention)", async () => {
-      // First LOAD_TRACK transitions IDLE -> LOADING
-      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(coordinator.getState()).toBe(PlayerState.LOADING);
+      // After Change 2, a 50ms wait after LOAD_TRACK leaves the coordinator in PLAYING
+      // (not LOADING), since auto-PLAY fires. To test the LOADING guard, queue both
+      // events before any processing starts (no await between them).
       const beforeRejected = coordinator.getMetrics().rejectedTransitionCount;
 
       jest.clearAllMocks();
 
-      // Second LOAD_TRACK from LOADING — should be rejected
-      await coordinator.dispatch({
+      // Queue both events synchronously before processEventQueue can run
+      const p1 = coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
+      const p2 = coordinator.dispatch({
         type: "LOAD_TRACK",
         payload: { libraryItemId: "another-item" },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await Promise.all([p1, p2]);
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
-      expect(mockPlayerService.executeLoadTrack).not.toHaveBeenCalled();
+      // Second LOAD_TRACK should have been rejected (coordinator was still in LOADING)
+      // executeLoadTrack called only once (first item), not for the second
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "test-item",
+        undefined,
+        undefined
+      );
       expect(coordinator.getMetrics().rejectedTransitionCount).toBe(beforeRejected + 1);
     });
 
@@ -1067,21 +1185,27 @@ describe("PlayerStateCoordinator", () => {
       mockPlayerService = PlayerService.getInstance();
       jest.clearAllMocks();
 
-      // Pre-load to READY state for most feedback loop tests
+      // Pre-load to PLAYING state.
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY after executeLoadTrack completes,
+      // so coordinator ends up in PLAYING (not READY) after this sequence.
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
       await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Coordinator is now in PLAYING state
       jest.clearAllMocks();
     });
 
     it("should not re-dispatch events from within executePlay", async () => {
+      // Move to PAUSED first so PLAY -> PLAYING is a valid transition
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+
       const dispatchSpy = jest.spyOn(playerEventBus, "dispatch");
 
-      // Dispatch PLAY directly to coordinator (not via bus)
       await coordinator.dispatch({ type: "PLAY" });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // execute* methods must not call dispatchPlayerEvent / playerEventBus.dispatch
       expect(dispatchSpy).not.toHaveBeenCalled();
       expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(1);
 
@@ -1304,22 +1428,16 @@ describe("PlayerStateCoordinator", () => {
 
   describe("Lock Screen Controls Integration", () => {
     it("should allow NATIVE_STATE_CHANGED from PAUSED state (lock screen play)", async () => {
-      // Setup: Transition to playing, then pause
+      // Setup: Transition to playing, then pause.
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY, so coordinator is in PLAYING
+      // after the load completes. No need to dispatch QUEUE_RELOADED or PLAY explicitly.
       await coordinator.dispatch({
         type: "LOAD_TRACK",
         payload: { libraryItemId: "test-item" },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
-      // Transition through READY to PLAYING
-      await coordinator.dispatch({
-        type: "QUEUE_RELOADED",
-        payload: { position: 0 },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      await coordinator.dispatch({ type: "PLAY" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
 
       await coordinator.dispatch({ type: "PAUSE" });
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1348,24 +1466,23 @@ describe("PlayerStateCoordinator", () => {
     });
 
     it("should allow NATIVE_STATE_CHANGED from PLAYING state (lock screen pause)", async () => {
-      // Setup: Transition to playing
+      // Setup: Transition to playing.
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY, so coordinator is in PLAYING
+      // after the load completes. No need to dispatch QUEUE_RELOADED or PLAY explicitly.
       await coordinator.dispatch({
         type: "LOAD_TRACK",
         payload: { libraryItemId: "test-item" },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Transition through READY to PLAYING
-      await coordinator.dispatch({
-        type: "QUEUE_RELOADED",
-        payload: { position: 0 },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      await coordinator.dispatch({ type: "PLAY" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Native playback confirms it has started (hasReachedPlayingState guard)
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Simulate lock screen pause button pressed
       // Native player pauses, sends NATIVE_STATE_CHANGED
@@ -1375,36 +1492,84 @@ describe("PlayerStateCoordinator", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // Should accept the event (PLAYING -> PLAYING transition allowed)
+      // Should accept the event — NATIVE_STATE_CHANGED dispatches PAUSE to sync machine
       const metrics = coordinator.getMetrics();
       expect(metrics.rejectedTransitionCount).toBe(0);
 
-      // Observer mode: Context should reflect the native state change
-      // This allows diagnostics UI to show accurate state
+      // Context should reflect the native state change
       const context = coordinator.getContext();
       expect(context.isPlaying).toBe(false);
 
-      // State machine remains in PLAYING (no-op transition)
-      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+      // State machine transitions to PAUSED so togglePlayPause() can resume via PLAY
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
     });
 
-    it("should handle duplicate NATIVE_STATE_CHANGED events (UI + native)", async () => {
-      // Setup: Transition to playing
+    it("should NOT auto-pause when NATIVE_STATE_CHANGED arrives with State.Ready during PLAYING", async () => {
+      // Regression: streaming tracks briefly emit State.Ready after NATIVE_TRACK_CHANGED
+      // during track initialization. This must not trigger the coordinator's auto-pause.
       await coordinator.dispatch({
         type: "LOAD_TRACK",
         payload: { libraryItemId: "test-item" },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
 
-      // Transition through READY to PLAYING
+      // Simulate TrackPlayer briefly reporting State.Ready during streaming track init
       await coordinator.dispatch({
-        type: "QUEUE_RELOADED",
-        payload: { position: 0 },
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Ready },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      await coordinator.dispatch({ type: "PLAY" });
+      // Should stay PLAYING — State.Ready is transient, not an external pause
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+      expect(coordinator.getMetrics().rejectedTransitionCount).toBe(0);
+    });
+
+    it("should NOT dispatch PAUSE when State.Paused fires before native play starts (queue rebuild path)", async () => {
+      // Regression: on iOS, TrackPlayer.add()+seekTo() during queue rebuild emits
+      // Buffering→Ready→Paused before executePlay() runs. The coordinator must not
+      // auto-pause from those states — hasReachedPlayingState guards against this.
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Simulate iOS pre-play state sequence (queue rebuild, before native play starts)
+      for (const state of [State.Buffering, State.Ready, State.Paused]) {
+        await coordinator.dispatch({ type: "NATIVE_STATE_CHANGED", payload: { state } });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      // Must still be PLAYING — the pre-play Paused must not have triggered auto-pause
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Now native play actually starts → hasReachedPlayingState becomes true
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
       await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Now a real external pause (e.g. lock screen) should trigger auto-pause
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Paused },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
+    });
+
+    it("should handle duplicate NATIVE_STATE_CHANGED events (UI + native)", async () => {
+      // Setup: Transition to playing.
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY, so coordinator is in PLAYING
+      // after the load completes. No need to dispatch QUEUE_RELOADED or PLAY explicitly.
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "test-item" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
 
       // User taps pause button in UI
       await coordinator.dispatch({ type: "PAUSE" });
@@ -1426,21 +1591,22 @@ describe("PlayerStateCoordinator", () => {
     });
 
     it("should track multiple lock screen interactions correctly", async () => {
-      // Setup: Load and play
+      // Setup: Load and play.
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY, so coordinator is in PLAYING
+      // after the load completes. No need to dispatch QUEUE_RELOADED or PLAY explicitly.
       await coordinator.dispatch({
         type: "LOAD_TRACK",
         payload: { libraryItemId: "test-item" },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
-      // Transition through READY to PLAYING
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Native playback confirms it has started (hasReachedPlayingState guard)
       await coordinator.dispatch({
-        type: "QUEUE_RELOADED",
-        payload: { position: 0 },
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      await coordinator.dispatch({ type: "PLAY" });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Lock screen: pause
@@ -1473,33 +1639,27 @@ describe("PlayerStateCoordinator", () => {
       context = coordinator.getContext();
       expect(context.isPlaying).toBe(false); // Context tracks native state
 
-      // State machine stays in PLAYING (all NATIVE_STATE_CHANGED from PLAYING stay in PLAYING)
-      // But context accurately reflects what the native player is doing
-      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+      // State machine ends in PAUSED: first native pause triggered PLAYING→PAUSED transition;
+      // subsequent NATIVE_STATE_CHANGED events do not re-dispatch PAUSE (machine not in PLAYING).
+      // Context accurately reflects what the native player is doing.
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
 
-      // All events should be accepted
+      // All events should be accepted (no rejected transitions)
       const metrics = coordinator.getMetrics();
       expect(metrics.rejectedTransitionCount).toBe(0);
-      expect(metrics.totalEventsProcessed).toBeGreaterThanOrEqual(6); // LOAD + QUEUE_RELOADED + PLAY + 3x NATIVE
+      // LOAD_TRACK + auto-PLAY + 3x NATIVE_STATE_CHANGED + 1 auto-PAUSE (from fix) = at least 5 processed
+      expect(metrics.totalEventsProcessed).toBeGreaterThanOrEqual(5);
     });
 
     it("should not reject NATIVE_STATE_CHANGED during SEEKING", async () => {
-      // Setup: Play then seek
+      // Setup: Play then seek.
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY, so coordinator is in PLAYING
+      // after the load completes. No need to dispatch QUEUE_RELOADED or PLAY explicitly.
       await coordinator.dispatch({
         type: "LOAD_TRACK",
         payload: { libraryItemId: "test-item" },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Transition through READY to PLAYING
-      await coordinator.dispatch({
-        type: "QUEUE_RELOADED",
-        payload: { position: 0 },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      await coordinator.dispatch({ type: "PLAY" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       await coordinator.dispatch({
         type: "SEEK",
@@ -1522,22 +1682,14 @@ describe("PlayerStateCoordinator", () => {
     });
 
     it("should not reject NATIVE_STATE_CHANGED during BUFFERING", async () => {
-      // Setup: Load and play
+      // Setup: Load and play.
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY, so coordinator is in PLAYING
+      // after the load completes. No need to dispatch QUEUE_RELOADED or PLAY explicitly.
       await coordinator.dispatch({
         type: "LOAD_TRACK",
         payload: { libraryItemId: "test-item" },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // Transition through READY to PLAYING
-      await coordinator.dispatch({
-        type: "QUEUE_RELOADED",
-        payload: { position: 0 },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      await coordinator.dispatch({ type: "PLAY" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       // Simulate buffering via BUFFERING_STARTED event
       await coordinator.dispatch({ type: "BUFFERING_STARTED" });
@@ -2038,7 +2190,12 @@ describe("PlayerStateCoordinator", () => {
     const { useAppStore } = require("@/stores/appStore");
 
     const makeMockStore = () => ({
-      player: { position: 0 },
+      player: {
+        position: 0,
+        // currentTrack must be non-null so the coordinator's updateNowPlayingMetadata
+        // guard passes (track && !isLoadingTrack).
+        currentTrack: { libraryItemId: "test-item", chapters: [], title: "Test", author: "Author", coverUri: null, duration: 3600 },
+      },
       updatePosition: jest.fn(),
       updatePlayingState: jest.fn(),
       _setCurrentTrack: jest.fn(),
@@ -2048,7 +2205,7 @@ describe("PlayerStateCoordinator", () => {
       _setVolume: jest.fn(),
       _setPlaySessionId: jest.fn(),
       _setLastPauseTime: jest.fn(),
-      updateNowPlayingMetadata: jest.fn().mockResolvedValue(undefined),
+      _setPendingProgressJump: jest.fn(),
       setSleepTimer: jest.fn(),
       cancelSleepTimer: jest.fn(),
     });
@@ -2075,41 +2232,22 @@ describe("PlayerStateCoordinator", () => {
 
     describe("PROP-01: playerSlice receives all player state from coordinator", () => {
       it("should update store via bridge at each step of a full playback lifecycle", async () => {
-        // Step 1: LOAD_TRACK — coordinator bridge should call _setTrackLoading
-        // Note: _setCurrentTrack is NOT called by bridge on LOAD_TRACK - PlayerService
-        // retains responsibility for building and setting PlayerTrack (Plan 02 exception)
+        // Step 1: LOAD_TRACK — coordinator bridge should call _setTrackLoading.
+        // After Change 2, LOAD_TRACK auto-dispatches PLAY, so coordinator progresses
+        // all the way to PLAYING. The bridge calls _setTrackLoading (on LOADING entry)
+        // and updatePlayingState(true) (on PLAYING entry).
         await coordinator.dispatch({
           type: "LOAD_TRACK",
           payload: { libraryItemId: "prop-01-item" },
         });
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 150));
 
         expect(mockStore._setTrackLoading).toHaveBeenCalled();
-        expect(mockStore.updatePlayingState).toHaveBeenCalled();
-
-        // Reset mocks for next step
-        jest.clearAllMocks();
-        mockStore = makeMockStore();
-        useAppStore.getState.mockReturnValue(mockStore);
-
-        // Step 2: PLAY — bridge should call updatePlayingState(true)
-        // First reach READY state via QUEUE_RELOADED
-        await coordinator.dispatch({
-          type: "QUEUE_RELOADED",
-          payload: { position: 0 },
-        });
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
-        jest.clearAllMocks();
-        mockStore = makeMockStore();
-        useAppStore.getState.mockReturnValue(mockStore);
-
-        await coordinator.dispatch({ type: "PLAY" });
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
+        // After auto-PLAY the bridge should have called updatePlayingState(true)
         expect(mockStore.updatePlayingState).toHaveBeenCalledWith(true);
 
-        // Reset mocks for next step
+        // Reset mocks for next step — Step 2 (QUEUE_RELOADED) is skipped since
+        // coordinator is already in PLAYING after auto-PLAY dispatch.
         jest.clearAllMocks();
         mockStore = makeMockStore();
         useAppStore.getState.mockReturnValue(mockStore);
@@ -2278,68 +2416,81 @@ describe("PlayerStateCoordinator", () => {
           type: "LOAD_TRACK",
           payload: { libraryItemId: "bgs-item" },
         });
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        // After Change 2, LOAD_TRACK auto-dispatches PLAY so coordinator ends in PLAYING
+        await new Promise((resolve) => setTimeout(resolve, 150));
 
         // Coordinator state machine still advanced correctly
-        expect(coordinator.getState()).toBe("loading");
+        expect(coordinator.getState()).toBe("playing");
         const metrics = coordinator.getMetrics();
         expect(metrics.totalEventsProcessed).toBeGreaterThan(0);
       });
     });
 
     // --------------------------------------------------------------------------
-    // PROP-06: updateNowPlayingMetadata debounce preserved
+    // Lock screen metadata updated on PAUSE / PLAY / SEEK_COMPLETE
     //
-    // updateNowPlayingMetadata is only called when chapter.id changes (not every
-    // structural sync). This prevents redundant now-playing updates at each event.
-    //
-    // Note: Periodic metadata updates (2s gate) are preserved in BGS
-    // handlePlaybackProgressUpdated — not tested here as that's BGS-specific.
+    // syncStateToStore calls updateNowPlayingMetadata on these three event types
+    // so the lock screen position is accurate when iOS freezes (PAUSE), resumes
+    // (PLAY), or the user seeks within the same chapter (SEEK_COMPLETE).
+    // Chapter boundary crossings are handled separately in syncPositionToStore.
     // --------------------------------------------------------------------------
 
-    describe("PROP-06: updateNowPlayingMetadata debounce preserved", () => {
-      it("should call updateNowPlayingMetadata once on chapter change, not again for same chapter", async () => {
-        // Reach PLAYING state
-        await coordinator.dispatch({
-          type: "LOAD_TRACK",
-          payload: { libraryItemId: "prop-06-item" },
-        });
-        await coordinator.dispatch({
-          type: "QUEUE_RELOADED",
-          payload: { position: 0 },
-        });
+    describe("lock screen metadata updated at key playback transitions", () => {
+      it("calls updateNowPlayingMetadata on PAUSE", async () => {
+        await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+        await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
         await coordinator.dispatch({ type: "PLAY" });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        // Reset mocks
         jest.clearAllMocks();
         mockStore = makeMockStore();
         useAppStore.getState.mockReturnValue(mockStore);
 
-        const chapter1: any = {
-          chapter: {
-            id: "chapter-1",
-            chapterId: 1,
-            title: "Chapter 1",
-            start: 0,
-            end: 600,
-            mediaId: "media-1",
-          },
-          positionInChapter: 0,
-          chapterDuration: 600,
-        };
-
-        // Dispatch CHAPTER_CHANGED with chapter 1
-        await coordinator.dispatch({
-          type: "CHAPTER_CHANGED",
-          payload: { chapter: chapter1 },
-        });
+        await coordinator.dispatch({ type: "PAUSE" });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        // updateNowPlayingMetadata called once for the chapter change
-        expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+        expect((updateNowPlayingMetadata as jest.Mock)).toHaveBeenCalledTimes(1);
+      });
 
-        // Reset mocks and dispatch NATIVE_PROGRESS_UPDATED (same chapter, no change)
+      it("calls updateNowPlayingMetadata on PLAY (resume)", async () => {
+        await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+        await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+        await coordinator.dispatch({ type: "PLAY" });
+        await coordinator.dispatch({ type: "PAUSE" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        await coordinator.dispatch({ type: "PLAY" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect((updateNowPlayingMetadata as jest.Mock)).toHaveBeenCalledTimes(1);
+      });
+
+      it("does NOT call updateNowPlayingMetadata on SET_RATE or other structural events", async () => {
+        await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+        await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+        await coordinator.dispatch({ type: "PLAY" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        jest.clearAllMocks();
+        mockStore = makeMockStore();
+        useAppStore.getState.mockReturnValue(mockStore);
+
+        await coordinator.dispatch({ type: "SET_RATE", payload: { rate: 1.5 } });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect((updateNowPlayingMetadata as jest.Mock)).not.toHaveBeenCalled();
+      });
+
+      it("does NOT call updateNowPlayingMetadata on NATIVE_PROGRESS_UPDATED (position-only path)", async () => {
+        await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+        await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+        await coordinator.dispatch({ type: "PLAY" });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
         jest.clearAllMocks();
         mockStore = makeMockStore();
         useAppStore.getState.mockReturnValue(mockStore);
@@ -2350,35 +2501,7 @@ describe("PlayerStateCoordinator", () => {
         });
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        // updateNowPlayingMetadata must NOT be called (same chapter, position-only path)
-        expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
-
-        // Reset mocks and dispatch a different chapter
-        jest.clearAllMocks();
-        mockStore = makeMockStore();
-        useAppStore.getState.mockReturnValue(mockStore);
-
-        const chapter2: any = {
-          chapter: {
-            id: "chapter-2",
-            chapterId: 2,
-            title: "Chapter 2",
-            start: 600,
-            end: 1200,
-            mediaId: "media-1",
-          },
-          positionInChapter: 0,
-          chapterDuration: 600,
-        };
-
-        await coordinator.dispatch({
-          type: "CHAPTER_CHANGED",
-          payload: { chapter: chapter2 },
-        });
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
-        // updateNowPlayingMetadata called again for the new chapter
-        expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+        expect((updateNowPlayingMetadata as jest.Mock)).not.toHaveBeenCalled();
       });
     });
   });
@@ -2392,7 +2515,12 @@ describe("PlayerStateCoordinator", () => {
 
     // Create a mock store with all playerSlice mutators as jest.fn() spies
     const makeMockStore = () => ({
-      player: { position: 0 },
+      player: {
+        position: 0,
+        // currentTrack must be non-null so the coordinator's updateNowPlayingMetadata
+        // guard passes (track && !isLoadingTrack).
+        currentTrack: { libraryItemId: "test-item", chapters: [], title: "Test", author: "Author", coverUri: null, duration: 3600 },
+      },
       updatePosition: jest.fn(),
       updatePlayingState: jest.fn(),
       _setCurrentTrack: jest.fn(),
@@ -2402,7 +2530,7 @@ describe("PlayerStateCoordinator", () => {
       _setVolume: jest.fn(),
       _setPlaySessionId: jest.fn(),
       _setLastPauseTime: jest.fn(),
-      updateNowPlayingMetadata: jest.fn().mockResolvedValue(undefined),
+      _setPendingProgressJump: jest.fn(),
       setSleepTimer: jest.fn(),
       cancelSleepTimer: jest.fn(),
     });
@@ -2471,7 +2599,7 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Assert updateNowPlayingMetadata called once for the chapter change
-      expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+      expect((updateNowPlayingMetadata as jest.Mock)).toHaveBeenCalledTimes(1);
 
       // Reset mocks — dispatch again with SAME chapter (no change expected)
       jest.clearAllMocks();
@@ -2486,7 +2614,7 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Debounce: same chapter id — updateNowPlayingMetadata must NOT be called again
-      expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+      expect((updateNowPlayingMetadata as jest.Mock)).not.toHaveBeenCalled();
     });
 
     it("syncStateToStore updates all fields on structural transition (LOAD_TRACK)", async () => {
@@ -2530,41 +2658,25 @@ describe("PlayerStateCoordinator", () => {
       expect(mockStore._setLastPauseTime).not.toHaveBeenCalled();
     });
 
-    it("syncToStore calls updateNowPlayingMetadata on chapter change", async () => {
+    it("syncStateToStore calls updateNowPlayingMetadata on PAUSE but not SET_RATE", async () => {
       // Reach PLAYING state
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
       await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
       await coordinator.dispatch({ type: "PLAY" });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // Reset mocks to count only the chapter-change-triggered call
+      // Reset mocks to isolate
       jest.clearAllMocks();
       mockStore = makeMockStore();
       useAppStore.getState.mockReturnValue(mockStore);
 
-      // Dispatch CHAPTER_CHANGED with a properly-structured CurrentChapter payload
-      const mockCurrentChapter: any = {
-        chapter: {
-          id: "ch-1",
-          chapterId: 1,
-          title: "Chapter 1",
-          start: 0,
-          end: 600,
-          mediaId: "m1",
-        },
-        positionInChapter: 0,
-        chapterDuration: 600,
-      };
-      await coordinator.dispatch({
-        type: "CHAPTER_CHANGED",
-        payload: { chapter: mockCurrentChapter },
-      });
+      await coordinator.dispatch({ type: "PAUSE" });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // updateNowPlayingMetadata called once for the chapter change
-      expect(mockStore.updateNowPlayingMetadata).toHaveBeenCalledTimes(1);
+      // updateNowPlayingMetadata called once for the PAUSE transition
+      expect((updateNowPlayingMetadata as jest.Mock)).toHaveBeenCalledTimes(1);
 
-      // Dispatch another structural event that does NOT change the chapter
+      // Dispatch a structural event that does NOT warrant a metadata update
       jest.clearAllMocks();
       mockStore = makeMockStore();
       useAppStore.getState.mockReturnValue(mockStore);
@@ -2572,8 +2684,8 @@ describe("PlayerStateCoordinator", () => {
       await coordinator.dispatch({ type: "SET_RATE", payload: { rate: 1.5 } });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // updateNowPlayingMetadata must NOT be called again (same chapter id)
-      expect(mockStore.updateNowPlayingMetadata).not.toHaveBeenCalled();
+      // updateNowPlayingMetadata must NOT be called for SET_RATE
+      expect((updateNowPlayingMetadata as jest.Mock)).not.toHaveBeenCalled();
     });
 
     it("syncToStore handles BGS context gracefully when getState throws", async () => {
@@ -2617,32 +2729,27 @@ describe("PlayerStateCoordinator", () => {
     });
 
     it("should call execute* methods in correct order across full playback lifecycle", async () => {
-      // Phase 1: Load track (IDLE -> LOADING)
+      // Phase 1: Load track (IDLE -> LOADING -> READY -> PLAYING via auto-PLAY)
+      // After Change 2, LOAD_TRACK auto-dispatches PLAY after executeLoadTrack completes,
+      // so coordinator ends up in PLAYING (not LOADING) after the async operations complete.
       await coordinator.dispatch({
         type: "LOAD_TRACK",
         payload: { libraryItemId: "lifecycle-item" },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
-      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith("lifecycle-item", undefined);
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "lifecycle-item",
+        undefined,
+        undefined
+      );
       expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
-      expect(coordinator.getState()).toBe(PlayerState.LOADING);
-
-      // Phase 2: Queue reloaded (LOADING -> READY)
-      await coordinator.dispatch({
-        type: "QUEUE_RELOADED",
-        payload: { position: 100 },
-      });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(coordinator.getState()).toBe(PlayerState.READY);
-
-      // Phase 3: Play (READY -> PLAYING)
-      await coordinator.dispatch({ type: "PLAY" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
+      // Auto-PLAY fires after executeLoadTrack completes: LOADING -> READY -> PLAYING
       expect(mockPlayerService.executePlay).toHaveBeenCalledTimes(1);
       expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      // Phase 2 (QUEUE_RELOADED) and Phase 3 (PLAY) are now handled internally by
+      // the auto-PLAY mechanism. Continue the lifecycle from PLAYING state.
 
       // Phase 4: Progress ticks (PLAYING -> PLAYING, position-only)
       await coordinator.dispatch({
@@ -2803,6 +2910,436 @@ describe("PlayerStateCoordinator", () => {
         expect((progressEntry as any).pay.position).toBe(123.46); // rounded to 2 decimals
         expect((progressEntry as any).pay.duration).toBe(600.12); // rounded to 2 decimals
       }
+    });
+  });
+
+  // ============================================================================
+  // Change 2: playIntentOnLoad — coordinator dispatches PLAY after executeLoadTrack
+  // ============================================================================
+
+  describe("Change 2: playIntentOnLoad — coordinator dispatches PLAY after executeLoadTrack", () => {
+    let mockPlayerService: {
+      executeLoadTrack: ReturnType<typeof jest.fn>;
+      executePlay: ReturnType<typeof jest.fn>;
+      executeRebuildQueue: ReturnType<typeof jest.fn>;
+      resolveCanonicalPosition: ReturnType<typeof jest.fn>;
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      jest.clearAllMocks();
+    });
+
+    it("dispatches PLAY after executeLoadTrack when playIntentOnLoad is true", async () => {
+      const dispatchSpy = jest.spyOn(coordinator, "dispatch");
+
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "item-1",
+        undefined,
+        undefined
+      );
+
+      const playDispatches = dispatchSpy.mock.calls.filter(([evt]: [any]) => evt.type === "PLAY");
+      expect(playDispatches.length).toBeGreaterThan(0);
+
+      dispatchSpy.mockRestore();
+    });
+
+    it("eventually calls executePlay after executeLoadTrack (via dispatched PLAY)", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(mockPlayerService.executePlay).toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // Change 3: coordinator short-circuits LOAD_TRACK when same item already active
+  // ============================================================================
+
+  describe("Change 3: coordinator short-circuits LOAD_TRACK when same item already active", () => {
+    let mockPlayerService: {
+      executeLoadTrack: ReturnType<typeof jest.fn>;
+      executePlay: ReturnType<typeof jest.fn>;
+    };
+    const mockTrack: any = {
+      libraryItemId: "item-1",
+      mediaId: "media-1",
+      title: "Test",
+      duration: 3600,
+      audioFiles: [],
+      chapters: [],
+      isDownloaded: true,
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      jest.clearAllMocks();
+    });
+
+    it("does NOT short-circuit when LOAD_TRACK is for a different item while PLAYING", async () => {
+      // Drive to PLAYING with item-1
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await coordinator.dispatch({ type: "NATIVE_TRACK_CHANGED", payload: { track: mockTrack } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      jest.clearAllMocks();
+
+      // Load a different item — should NOT short-circuit
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-2" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledWith(
+        "item-2",
+        undefined,
+        undefined
+      );
+    });
+
+    it("skips executeLoadTrack and dispatches PLAY when same item re-requested while PLAYING", async () => {
+      // Drive to PLAYING with item-1 and set currentTrack via NATIVE_TRACK_CHANGED
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      // Coordinator is PLAYING after auto-PLAY (Change 2)
+      await coordinator.dispatch({ type: "NATIVE_TRACK_CHANGED", payload: { track: mockTrack } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      jest.clearAllMocks();
+      const dispatchSpy = jest.spyOn(coordinator, "dispatch");
+
+      // Re-dispatch LOAD_TRACK for the same item while PLAYING
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // executeLoadTrack should NOT have been called (short-circuited)
+      expect(mockPlayerService.executeLoadTrack).not.toHaveBeenCalled();
+      // PLAY should have been dispatched instead
+      const playDispatches = dispatchSpy.mock.calls.filter(([evt]: [any]) => evt.type === "PLAY");
+      expect(playDispatches.length).toBeGreaterThan(0);
+
+      dispatchSpy.mockRestore();
+    });
+  });
+
+  describe("Change 4: coordinator performs inline queue rebuild when queueStatus is unknown", () => {
+    let mockPlayerService: {
+      executePlay: ReturnType<typeof jest.fn>;
+      executeRebuildQueue: ReturnType<typeof jest.fn>;
+    };
+    const mockResumeInfo = {
+      position: 120,
+      source: "activeSession" as const,
+      authoritativePosition: 120,
+      asyncStoragePosition: null,
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      (mockPlayerService.executeRebuildQueue as jest.Mock).mockResolvedValue(mockResumeInfo);
+      jest.clearAllMocks();
+    });
+
+    it("calls executeRebuildQueue before executePlay when queueStatus is unknown", async () => {
+      // Drive to RESTORING state (sets queueStatus='unknown')
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: {
+              libraryItemId: "item-1",
+              mediaId: "media-1",
+              title: "Test",
+              duration: 3600,
+              audioFiles: [],
+              chapters: [],
+              isDownloaded: true,
+            } as any,
+            position: 100,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("unknown");
+      jest.clearAllMocks();
+
+      // Dispatch PLAY — queueStatus is unknown, should trigger inline rebuild
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockPlayerService.executeRebuildQueue).toHaveBeenCalled();
+      expect(mockPlayerService.executePlay).toHaveBeenCalled();
+    });
+
+    it("sets queueStatus to 'valid' after inline rebuild completes", async () => {
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: {
+              libraryItemId: "item-1",
+              mediaId: "media-1",
+              title: "Test",
+              duration: 3600,
+              audioFiles: [],
+              chapters: [],
+              isDownloaded: true,
+            } as any,
+            position: 100,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(coordinator.getContext().queueStatus).toBe("valid");
+    });
+
+    it("skips executeRebuildQueue when queueStatus is valid", async () => {
+      // Drive coordinator to PLAYING with queueStatus='valid'
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      // After Change 2 auto-PLAY, coordinator is in PLAYING with queueStatus dependent on QUEUE_RELOADED
+      // Force queueStatus='valid' via QUEUE_RELOADED
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+
+      // Drive to PAUSED (queueStatus still valid)
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+
+      // Dispatch PLAY — queueStatus is valid, should skip rebuild
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockPlayerService.executeRebuildQueue).not.toHaveBeenCalled();
+      expect(mockPlayerService.executePlay).toHaveBeenCalled();
+    });
+
+    it("does not call executePlay and clears isLoadingTrack when rebuild fails", async () => {
+      (mockPlayerService.executeRebuildQueue as jest.Mock).mockRejectedValue(
+        new Error("No playable sources found")
+      );
+
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: {
+              libraryItemId: "item-1",
+              mediaId: "media-1",
+              title: "Test",
+              duration: 3600,
+              audioFiles: [],
+              chapters: [],
+              isDownloaded: true,
+            } as any,
+            position: 100,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+      (mockPlayerService.executeRebuildQueue as jest.Mock).mockRejectedValue(
+        new Error("No playable sources found")
+      );
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockPlayerService.executeRebuildQueue).toHaveBeenCalled();
+      expect(mockPlayerService.executePlay).not.toHaveBeenCalled();
+      expect(coordinator.getContext().isLoadingTrack).toBe(false);
+    });
+  });
+
+  // ============================================================================
+  // Jump detection: _pendingProgressJump set only for unintentional large deltas
+  // ============================================================================
+
+  describe("Jump detection (NATIVE_PROGRESS_UPDATED)", () => {
+    const { useAppStore } = require("@/stores/appStore");
+
+    const makeMockStore = () => ({
+      player: { position: 0 },
+      updatePosition: jest.fn(),
+      updatePlayingState: jest.fn(),
+      _setCurrentTrack: jest.fn(),
+      _setTrackLoading: jest.fn(),
+      _setSeeking: jest.fn(),
+      _setPlaybackRate: jest.fn(),
+      _setVolume: jest.fn(),
+      _setPlaySessionId: jest.fn(),
+      _setLastPauseTime: jest.fn(),
+      _setPendingProgressJump: jest.fn(),
+      updateNowPlayingMetadata: jest.fn().mockResolvedValue(undefined),
+      setSleepTimer: jest.fn(),
+      cancelSleepTimer: jest.fn(),
+    });
+
+    let mockStore: ReturnType<typeof makeMockStore>;
+
+    beforeEach(() => {
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+      jest.clearAllMocks();
+      // Re-apply after clearAllMocks
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+    });
+
+    it("detects jump and calls _setPendingProgressJump on large delta (≥30s)", async () => {
+      // Set initial context position directly via a progress update
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks, then dispatch a 40s jump
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 140, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockStore._setPendingProgressJump).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fromPosition: 100,
+          toPosition: 140,
+          timestamp: expect.any(Number),
+        })
+      );
+    });
+
+    it("suppresses jump detection when isSeeking was true before the update", async () => {
+      // Establish a baseline position
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Simulate an in-flight seek: set isSeeking in coordinator context
+      // We dispatch SEEK which sets isSeeking=true, then dispatch progress to trigger clear
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "seek-item" } });
+      await new Promise((resolve) => setTimeout(resolve, 150)); // let auto-PLAY complete
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Establish new baseline at 100s in PLAYING state
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Trigger a seek (sets isSeeking=true in context)
+      await coordinator.dispatch({ type: "SEEK", payload: { position: 140 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Progress arrives — isSeeking=true at start of this handler, cleared inside it
+      // The 40s jump must NOT trigger _setPendingProgressJump
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 140, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockStore._setPendingProgressJump).not.toHaveBeenCalled();
+    });
+
+    it("suppresses jump detection when isLoadingTrack is true", async () => {
+      // Establish a baseline position via a progress update from IDLE state
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Dispatch LOAD_TRACK to set isLoadingTrack=true
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "load-item" } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Progress arrives during load — 40s jump must NOT trigger _setPendingProgressJump
+      // Note: position 0 is filtered by POS-03; use a non-zero position to reach jump detection
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 140, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockStore._setPendingProgressJump).not.toHaveBeenCalled();
+    });
+
+    it("does not detect jump for small delta (<30s)", async () => {
+      // Establish a baseline position
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Reset mocks
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      // Dispatch a small 5s delta (normal playback tick)
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 105, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockStore._setPendingProgressJump).not.toHaveBeenCalled();
     });
   });
 });

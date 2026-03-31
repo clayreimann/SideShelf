@@ -45,7 +45,10 @@ export enum PlayerState {
  */
 export type PlayerEvent =
   // Command events (from user/UI)
-  | { type: "LOAD_TRACK"; payload: { libraryItemId: string; episodeId?: string } }
+  | {
+      type: "LOAD_TRACK";
+      payload: { libraryItemId: string; episodeId?: string; startPosition?: number };
+    }
   | { type: "PLAY" }
   | { type: "PAUSE" }
   | { type: "STOP" }
@@ -122,6 +125,23 @@ export interface StateContext {
   /** State before seek started, used to restore playback after seek */
   preSeekState: PlayerState | null;
   isLoadingTrack: boolean;
+
+  /** Set true when LOAD_TRACK arrives; cleared on PAUSE, error, or STOP.
+   *  Coordinator uses this to dispatch PLAY after executeLoadTrack completes. */
+  playIntentOnLoad: boolean;
+
+  /** Whether the TrackPlayer queue is known to be populated and valid.
+   *  'unknown' after RESTORE_STATE or STOP (queue may have been cleared by OS/BGS).
+   *  'valid' after QUEUE_RELOADED (coordinator just rebuilt and confirmed the queue). */
+  queueStatus: "unknown" | "valid";
+
+  /** Guards the auto-pause dispatch in NATIVE_STATE_CHANGED.
+   *  Set true when native State.Playing fires (native playback has begun).
+   *  Reset on LOAD_TRACK, RESTORE_STATE, RELOAD_QUEUE, and STOP.
+   *  Without this guard, the Buffering→Ready→Paused sequence emitted by iOS
+   *  during queue rebuild (before executePlay runs) would trigger a spurious
+   *  PAUSE and leave the machine stuck in PAUSED immediately after LOAD_TRACK. */
+  hasReachedPlayingState: boolean;
 
   // Sync state
   lastServerSync: number | null;
@@ -280,6 +300,29 @@ export const LARGE_DIFF_THRESHOLD = 30; // seconds
  * - "store" — Zustand in-memory store (last resort)
  */
 export type ResumeSource = "activeSession" | "savedProgress" | "asyncStorage" | "store";
+
+/**
+ * Source of a player event dispatch — used for tracing and debugging.
+ * Identifies which subsystem originated the event.
+ */
+export type EventSource =
+  | "ui"
+  | "restore"
+  | "native_player"
+  | "audio_focus"
+  | "remote_command"
+  | "sleep_timer"
+  | "startup_bootstrap"
+  | "unknown";
+
+/**
+ * Optional metadata attached to dispatchPlayerEvent() calls.
+ * Carried through the bus into coordinator for tracing; not stored on PlayerEvent union.
+ */
+export type DispatchMeta = {
+  source?: EventSource;
+  restoreSessionId?: string;
+};
 
 /**
  * Result of position reconciliation across multiple sources.

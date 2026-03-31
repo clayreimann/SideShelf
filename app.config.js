@@ -21,7 +21,7 @@ module.exports = ({ config }) => {
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "side-shelf",
+    scheme: "sideshelf",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     jsEngine: "hermes",

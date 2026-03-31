@@ -7,7 +7,7 @@
  * - Cache invalidation
  */
 
-import { statisticsHelpers } from "@/db/helpers";
+import * as statisticsHelpers from "@/db/helpers/statistics";
 import { logger } from "@/lib/logger";
 import type { SliceCreator } from "@/types/store";
 

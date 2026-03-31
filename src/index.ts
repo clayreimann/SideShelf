@@ -13,6 +13,7 @@
 // Import crypto polyfill for React Native (required for UUID generation)
 import "react-native-get-random-values";
 
+import { trace } from "@/lib/trace";
 import { getAllDownloadedAudioFiles } from "@/db/helpers/localData";
 import {
   getFullVersionString,
@@ -34,9 +35,6 @@ import TrackPlayer from "react-native-track-player";
 
 const log = logger.forTag("App");
 
-// Ensure that the coordinator is initialized on app startup
-const coordinator = getCoordinator();
-export { coordinator };
 /**
  * Initialize all singleton services
  *
@@ -45,6 +43,16 @@ export { coordinator };
  * and singletons that the app depends on.
  */
 export async function initializeApp(): Promise<void> {
+  // Defer coordinator instantiation to runtime (was module-scope — avoids eager init cost)
+  getCoordinator();
+
+  // Configure trace buffer before any service initialization — synchronous, no await
+  trace.configure({
+    bufferSize: 800,
+    maxEventsPerSpan: 30,
+    redactKeys: ["token", "authorization", "password", "cookie"],
+  });
+
   // Use console.log for this initial message since logger isn't initialized yet
   console.log("[App] Starting application initialization...");
 
@@ -110,7 +118,7 @@ export async function initializeApp(): Promise<void> {
     // Restore persisted player state on cold boot
     try {
       // Notify coordinator that app is starting state restoration
-      dispatchPlayerEvent({ type: "APP_FOREGROUNDED" });
+      dispatchPlayerEvent({ type: "APP_FOREGROUNDED" }, { source: "startup_bootstrap" });
 
       await useAppStore.getState().restorePersistedState();
       log.info("Player state restored from persistence");

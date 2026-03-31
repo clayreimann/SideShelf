@@ -132,7 +132,10 @@ export default function SkipButton({
       }}
       onLongPress={() => {
         suppressNextPress.current = true;
-        menuRef.current?.show();
+        // show() is only implemented on Android; iOS relies on shouldOpenOnLongPress natively
+        if (typeof menuRef.current?.show === "function") {
+          menuRef.current.show();
+        }
       }}
       style={({ pressed }) => ({
         width: hitBoxSize,

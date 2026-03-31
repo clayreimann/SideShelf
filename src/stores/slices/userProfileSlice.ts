@@ -5,16 +5,113 @@
  * - Device info (OS, model, version, etc.)
  * - User database record
  * - Server information
+ * - Bookmark CRUD with offline-aware create/delete/rename
+ * - Pending bookmark ops queue drain on network restore
  */
 
 import { getUserByUsername, UserRow } from "@/db/helpers/users";
-import { createBookmark, deleteBookmark, fetchMe, getDeviceInfo } from "@/lib/api/endpoints";
+import {
+  upsertBookmark,
+  upsertAllBookmarks,
+  deleteBookmarkLocal,
+  enqueuePendingOp,
+  dequeuePendingOps,
+  clearPendingOps,
+} from "@/db/helpers/bookmarks";
+import {
+  createBookmark as apiCreateBookmark,
+  deleteBookmark as apiDeleteBookmark,
+  renameBookmark as apiRenameBookmark,
+  fetchMe,
+  getDeviceInfo,
+} from "@/lib/api/endpoints";
 import { logger } from "@/lib/logger";
 import type { ApiAudioBookmark } from "@/types/api";
 import type { SliceCreator } from "@/types/store";
+import { v4 as uuidv4 } from "uuid";
 
 // Create cached sublogger for this slice
 const log = logger.forTag("UserProfileSlice");
+
+function buildLocalBookmarkId(params: {
+  libraryItemId: string;
+  time: number;
+  title: string;
+}): string {
+  return `${params.libraryItemId}:${params.time}:${params.title}`;
+}
+
+function getBookmarkIdentity(bookmark: Pick<ApiAudioBookmark, "libraryItemId" | "time">): string {
+  return `${bookmark.libraryItemId}:${bookmark.time}`;
+}
+
+function coerceBookmark(
+  payload: { bookmark?: ApiAudioBookmark | null } | ApiAudioBookmark | null | undefined,
+  fallback: { libraryItemId: string; time: number; title: string }
+): ApiAudioBookmark {
+  const bookmarkCandidate =
+    payload && typeof payload === "object" && "bookmark" in payload ? payload.bookmark : payload;
+  const bookmark = bookmarkCandidate as Partial<ApiAudioBookmark> | null;
+
+  if (!bookmark) {
+    return {
+      id: buildLocalBookmarkId(fallback),
+      libraryItemId: fallback.libraryItemId,
+      title: fallback.title,
+      time: fallback.time,
+      createdAt: Date.now(),
+    };
+  }
+
+  return {
+    id:
+      bookmark.id ||
+      buildLocalBookmarkId({
+        libraryItemId: bookmark.libraryItemId ?? fallback.libraryItemId,
+        time: bookmark.time ?? fallback.time,
+        title: bookmark.title ?? fallback.title,
+      }),
+    libraryItemId: bookmark.libraryItemId ?? fallback.libraryItemId,
+    title: bookmark.title ?? fallback.title,
+    time: bookmark.time ?? fallback.time,
+    createdAt: bookmark.createdAt ?? Date.now(),
+  };
+}
+
+function normalizeBookmarks(
+  payload: Array<{ bookmark?: ApiAudioBookmark | null } | ApiAudioBookmark | null | undefined>
+): ApiAudioBookmark[] {
+  const deduped = new Map<string, ApiAudioBookmark>();
+
+  for (const entry of payload) {
+    const bookmark = coerceBookmark(entry, {
+      libraryItemId:
+        (entry &&
+          typeof entry === "object" &&
+          "bookmark" in entry &&
+          entry.bookmark?.libraryItemId) ||
+        (entry as ApiAudioBookmark | null | undefined)?.libraryItemId ||
+        "",
+      time:
+        (entry && typeof entry === "object" && "bookmark" in entry && entry.bookmark?.time) ||
+        (entry as ApiAudioBookmark | null | undefined)?.time ||
+        0,
+      title:
+        (entry && typeof entry === "object" && "bookmark" in entry && entry.bookmark?.title) ||
+        (entry as ApiAudioBookmark | null | undefined)?.title ||
+        "Bookmark",
+    });
+    deduped.set(getBookmarkIdentity(bookmark), bookmark);
+  }
+
+  return [...deduped.values()].sort((a, b) => a.time - b.time);
+}
+
+function upsertBookmarkInState(bookmarks: ApiAudioBookmark[], nextBookmark: ApiAudioBookmark) {
+  const identity = getBookmarkIdentity(nextBookmark);
+  const filtered = bookmarks.filter((bookmark) => getBookmarkIdentity(bookmark) !== identity);
+  return [...filtered, nextBookmark].sort((a, b) => a.time - b.time);
+}
 
 /**
  * Device information type
@@ -49,6 +146,8 @@ export interface UserProfileSliceState {
     deviceInfo: DeviceInfo | null;
     /** Current user database record */
     user: UserRow | null;
+    /** Active authenticated user id, even if the local users row is missing */
+    activeUserId: string | null;
     /** Server information */
     serverInfo: ServerInfo | null;
     /** User's bookmarks */
@@ -75,16 +174,20 @@ export interface UserProfileSliceActions {
   updateUser: (username: string) => Promise<void>;
   /** Fetch and update bookmarks from server */
   refreshBookmarks: () => Promise<void>;
-  /** Create a new bookmark */
+  /** Create a new bookmark (offline-aware) */
   createBookmark: (
     libraryItemId: string,
     time: number,
     title?: string
   ) => Promise<ApiAudioBookmark>;
-  /** Delete a bookmark */
-  deleteBookmark: (libraryItemId: string, bookmarkId: string) => Promise<void>;
+  /** Delete a bookmark by time position (offline-aware) */
+  deleteBookmark: (libraryItemId: string, time: number) => Promise<void>;
+  /** Rename a bookmark (offline-aware) */
+  renameBookmark: (libraryItemId: string, time: number, newTitle: string) => Promise<void>;
   /** Get bookmarks for a specific library item */
   getItemBookmarks: (libraryItemId: string) => ApiAudioBookmark[];
+  /** Drain pending bookmark ops queue, replaying ops in FIFO order */
+  drainPendingBookmarkOps: () => Promise<void>;
   /** Reset the slice to initial state */
   resetUserProfile: () => void;
 }
@@ -101,6 +204,7 @@ const initialState: UserProfileSliceState = {
   userProfile: {
     deviceInfo: null,
     user: null,
+    activeUserId: null,
     serverInfo: null,
     bookmarks: [],
     initialized: false,
@@ -116,7 +220,8 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
   ...initialState,
 
   /**
-   * Initialize the slice with username
+   * Initialize the slice with username.
+   * Also populates SQLite with server bookmarks via upsertAllBookmarks.
    */
   initializeUserProfile: async (username: string) => {
     const state = get();
@@ -144,20 +249,27 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
         fetchMe(),
       ]);
 
+      const userId = user?.id ?? meResponse.id;
+      const bookmarksFromServer = normalizeBookmarks(meResponse.bookmarks || []);
+
+      // Populate SQLite with server bookmarks
+      await upsertAllBookmarks(userId, bookmarksFromServer);
+
       set((state: UserProfileSlice) => ({
         ...state,
         userProfile: {
           ...state.userProfile,
           deviceInfo,
           user,
-          bookmarks: meResponse.bookmarks || [],
+          activeUserId: userId,
+          bookmarks: bookmarksFromServer,
           initialized: true,
           isLoading: false,
         },
       }));
 
       log.info(
-        `User profile initialized successfully: username=${username}, deviceId=${deviceInfo.deviceId}, bookmarks=${meResponse.bookmarks?.length || 0}`
+        `User profile initialized successfully: username=${username}, deviceId=${deviceInfo.deviceId}, bookmarks=${bookmarksFromServer.length}`
       );
     } catch (error) {
       log.error("Failed to initialize user profile", error as Error);
@@ -238,6 +350,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
         userProfile: {
           ...state.userProfile,
           user,
+          activeUserId: user?.id ?? state.userProfile.activeUserId,
         },
       }));
 
@@ -261,7 +374,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
         ...state,
         userProfile: {
           ...state.userProfile,
-          bookmarks: meResponse.bookmarks || [],
+          bookmarks: normalizeBookmarks(meResponse.bookmarks || []),
         },
       }));
 
@@ -273,54 +386,206 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
   },
 
   /**
-   * Create a new bookmark
+   * Create a new bookmark — offline-aware.
+   * Online: calls API, upserts to SQLite.
+   * Offline: creates optimistic bookmark in state + SQLite, enqueues pending op.
    */
   createBookmark: async (libraryItemId: string, time: number, title?: string) => {
-    log.info(`Creating bookmark for item ${libraryItemId} at ${time}s...`);
+    log.info(`[createBookmark] libraryItemId=${libraryItemId} time=${time}`);
 
-    try {
-      const response = await createBookmark(libraryItemId, time, title);
-      const newBookmark = response.bookmark;
+    const isOnline = get().network.isConnected && get().network.isInternetReachable !== false;
 
-      // Add the new bookmark to the state
+    if (isOnline) {
+      const response = await apiCreateBookmark(libraryItemId, time, title);
+      const newBookmark = coerceBookmark(response, {
+        libraryItemId,
+        time,
+        title: title ?? `Bookmark at ${time}s`,
+      });
+
+      // Upsert to SQLite with syncedAt = now
+      await upsertBookmark({
+        id: newBookmark.id,
+        userId: get().userProfile.activeUserId ?? "",
+        libraryItemId: newBookmark.libraryItemId,
+        title: newBookmark.title,
+        time: newBookmark.time,
+        createdAt: new Date(newBookmark.createdAt),
+        syncedAt: new Date(),
+      });
+
       set((state: UserProfileSlice) => ({
         ...state,
         userProfile: {
           ...state.userProfile,
-          bookmarks: [...state.userProfile.bookmarks, newBookmark],
+          bookmarks: upsertBookmarkInState(state.userProfile.bookmarks, newBookmark),
         },
       }));
 
-      log.info(`Bookmark created successfully: ${newBookmark.id}`);
+      log.info(`[createBookmark] created successfully: ${newBookmark.id}`);
       return newBookmark;
-    } catch (error) {
-      log.error("Failed to create bookmark", error as Error);
-      throw error;
+    } else {
+      // Offline: create optimistic bookmark
+      const tempId = uuidv4();
+      const userId = get().userProfile.activeUserId ?? "";
+      const optimisticBookmark: ApiAudioBookmark = {
+        id: tempId,
+        libraryItemId,
+        title: title ?? `Bookmark at ${time}s`,
+        time,
+        createdAt: Date.now(),
+      };
+
+      // Upsert to SQLite (syncedAt = null — pending)
+      await upsertBookmark({
+        id: tempId,
+        userId,
+        libraryItemId,
+        title: optimisticBookmark.title,
+        time,
+        createdAt: new Date(),
+        syncedAt: null,
+      });
+
+      // Enqueue pending op
+      await enqueuePendingOp({
+        id: uuidv4(),
+        userId,
+        libraryItemId,
+        operationType: "create",
+        time,
+        title: optimisticBookmark.title,
+        createdAt: new Date(),
+      });
+
+      // Optimistic state update
+      set((state: UserProfileSlice) => ({
+        ...state,
+        userProfile: {
+          ...state.userProfile,
+          bookmarks: upsertBookmarkInState(state.userProfile.bookmarks, optimisticBookmark),
+        },
+      }));
+
+      log.info(`[createBookmark] queued offline create for time=${time}`);
+      return optimisticBookmark;
     }
   },
 
   /**
-   * Delete a bookmark
+   * Delete a bookmark by time — offline-aware.
+   * Online: calls API + removes from SQLite.
+   * Offline: removes from SQLite + enqueues pending delete op.
+   * Always removes from state (optimistic).
    */
-  deleteBookmark: async (libraryItemId: string, bookmarkId: string) => {
-    log.info(`Deleting bookmark ${bookmarkId}...`);
+  deleteBookmark: async (libraryItemId: string, time: number) => {
+    log.info(`[deleteBookmark] libraryItemId=${libraryItemId} time=${time}`);
 
-    try {
-      await deleteBookmark(libraryItemId, bookmarkId);
+    const userId = get().userProfile.activeUserId ?? "";
 
-      // Remove the bookmark from the state
-      set((state: UserProfileSlice) => ({
-        ...state,
-        userProfile: {
-          ...state.userProfile,
-          bookmarks: state.userProfile.bookmarks.filter((b) => b.id !== bookmarkId),
-        },
-      }));
+    // Optimistic state update (filter by libraryItemId + time)
+    set((state: UserProfileSlice) => ({
+      ...state,
+      userProfile: {
+        ...state.userProfile,
+        bookmarks: state.userProfile.bookmarks.filter(
+          (b) => !(b.libraryItemId === libraryItemId && b.time === time)
+        ),
+      },
+    }));
 
-      log.info(`Bookmark deleted successfully: ${bookmarkId}`);
-    } catch (error) {
-      log.error("Failed to delete bookmark", error as Error);
-      throw error;
+    const isOnline = get().network.isConnected && get().network.isInternetReachable !== false;
+
+    if (isOnline) {
+      await apiDeleteBookmark(libraryItemId, time);
+    } else {
+      await enqueuePendingOp({
+        id: uuidv4(),
+        userId,
+        libraryItemId,
+        operationType: "delete",
+        time,
+        title: null,
+        createdAt: new Date(),
+      });
+    }
+
+    // Always remove from SQLite
+    await deleteBookmarkLocal(userId, libraryItemId, time);
+
+    log.info(`[deleteBookmark] done isOnline=${isOnline}`);
+  },
+
+  /**
+   * Rename a bookmark — offline-aware.
+   * Online: calls API, upserts updated bookmark to SQLite.
+   * Offline: updates SQLite optimistically, enqueues pending rename op.
+   */
+  renameBookmark: async (libraryItemId: string, time: number, newTitle: string) => {
+    log.info(`[renameBookmark] libraryItemId=${libraryItemId} time=${time} newTitle=${newTitle}`);
+
+    const userId = get().userProfile.activeUserId ?? "";
+    const isOnline = get().network.isConnected && get().network.isInternetReachable !== false;
+
+    // Optimistic state update
+    set((state: UserProfileSlice) => ({
+      ...state,
+      userProfile: {
+        ...state.userProfile,
+        bookmarks: state.userProfile.bookmarks.map((b) =>
+          b.libraryItemId === libraryItemId && b.time === time ? { ...b, title: newTitle } : b
+        ),
+      },
+    }));
+
+    if (isOnline) {
+      const response = await apiRenameBookmark(libraryItemId, time, newTitle);
+      const updatedBm = coerceBookmark(response, {
+        libraryItemId,
+        time,
+        title: newTitle,
+      });
+
+      await upsertBookmark({
+        id: updatedBm.id,
+        userId,
+        libraryItemId: updatedBm.libraryItemId,
+        title: updatedBm.title,
+        time: updatedBm.time,
+        createdAt: new Date(updatedBm.createdAt),
+        syncedAt: new Date(),
+      });
+
+      log.info(`[renameBookmark] API success`);
+    } else {
+      // Find the bookmark to get its id for upsert
+      const existing = get().userProfile.bookmarks.find(
+        (b: ApiAudioBookmark) => b.libraryItemId === libraryItemId && b.time === time
+      );
+
+      if (existing) {
+        await upsertBookmark({
+          id: existing.id,
+          userId,
+          libraryItemId,
+          title: newTitle,
+          time,
+          createdAt: new Date(existing.createdAt),
+          syncedAt: null,
+        });
+      }
+
+      await enqueuePendingOp({
+        id: uuidv4(),
+        userId,
+        libraryItemId,
+        operationType: "rename",
+        time,
+        title: newTitle,
+        createdAt: new Date(),
+      });
+
+      log.info(`[renameBookmark] queued offline rename`);
     }
   },
 
@@ -332,6 +597,63 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
     return state.userProfile.bookmarks.filter(
       (b: ApiAudioBookmark) => b.libraryItemId === libraryItemId
     );
+  },
+
+  /**
+   * Drain the pending bookmark ops queue.
+   * Replays ops in FIFO order (createdAt ascending).
+   * Stops on first failure to preserve ordering.
+   * Calls refreshBookmarks after any successful ops to reconcile state.
+   */
+  drainPendingBookmarkOps: async () => {
+    const userId = get().userProfile.activeUserId;
+    if (!userId) {
+      log.debug("[drainPendingBookmarkOps] no userId, skipping");
+      return;
+    }
+
+    log.info("[drainPendingBookmarkOps] starting");
+    const ops = await dequeuePendingOps(userId);
+
+    if (!ops.length) {
+      log.debug("[drainPendingBookmarkOps] no pending ops");
+      return;
+    }
+
+    const succeededIds: string[] = [];
+
+    for (const op of ops) {
+      try {
+        if (op.operationType === "create") {
+          const bm = await apiCreateBookmark(op.libraryItemId, op.time, op.title ?? undefined);
+          await upsertBookmark({
+            id: bm.bookmark.id,
+            userId,
+            libraryItemId: bm.bookmark.libraryItemId,
+            title: bm.bookmark.title,
+            time: bm.bookmark.time,
+            createdAt: new Date(bm.bookmark.createdAt),
+            syncedAt: new Date(),
+          });
+        } else if (op.operationType === "delete") {
+          await apiDeleteBookmark(op.libraryItemId, op.time);
+        } else if (op.operationType === "rename" && op.title) {
+          await apiRenameBookmark(op.libraryItemId, op.time, op.title);
+        }
+        succeededIds.push(op.id);
+      } catch (error) {
+        log.warn(`[drainPendingBookmarkOps] op failed, leaving in queue: ${error}`);
+        // Stop draining on first failure to preserve order
+        break;
+      }
+    }
+
+    if (succeededIds.length > 0) {
+      await clearPendingOps(userId, succeededIds);
+      await get().refreshBookmarks();
+    }
+
+    log.info(`[drainPendingBookmarkOps] done: ${succeededIds.length}/${ops.length} ops succeeded`);
   },
 
   /**

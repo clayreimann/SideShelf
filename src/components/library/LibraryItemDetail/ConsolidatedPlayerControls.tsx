@@ -1,31 +1,43 @@
 import BookmarkButton from "@/components/player/BookmarkButton";
-import FullScreenButton from "@/components/player/FullScreenButton";
 import PlayPauseButton from "@/components/player/PlayPauseButton";
 import SkipButton from "@/components/player/SkipButton";
 import { ProgressBar } from "@/components/ui";
+import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import { translate } from "@/i18n";
+import { getAutoBookmarkTitle } from "@/lib/helpers/bookmarks";
+import { formatTime } from "@/lib/helpers/formatters";
+import { formatProgress } from "@/lib/helpers/progressFormat";
+import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { trace } from "@/lib/trace";
+import { writeDumpToDisk } from "@/lib/traceDump";
 import { playerService } from "@/services/PlayerService";
 import { usePlayer, useSettings, useUserProfile } from "@/stores/appStore";
+import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Alert, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Pressable, Text, TouchableOpacity, View } from "react-native";
+
+const log = logger.forTag("ConsolidatedPlayerControls");
 
 interface ConsolidatedPlayerControlsProps {
   libraryItemId: string;
   isDownloaded: boolean;
   serverReachable: boolean | null;
+  initialBookmarkPosition: number;
 }
 
 export default function ConsolidatedPlayerControls({
   libraryItemId,
   isDownloaded,
   serverReachable,
+  initialBookmarkPosition,
 }: ConsolidatedPlayerControlsProps) {
   const { colors } = useThemedStyles();
   const { currentTrack, position, currentChapter, isLoadingTrack } = usePlayer();
   const { createBookmark } = useUserProfile();
-  const { jumpForwardInterval, jumpBackwardInterval } = useSettings();
+  const { jumpForwardInterval, jumpBackwardInterval, progressFormat, chapterBarShowRemaining } =
+    useSettings();
   const [isCreatingBookmark, setIsCreatingBookmark] = useState(false);
 
   // Check if this is the currently playing item
@@ -47,7 +59,14 @@ export default function ConsolidatedPlayerControls({
 
   const handleSkipBackward = useCallback(async () => {
     try {
-      await playerService.seekTo(Math.max(position - jumpBackwardInterval, 0));
+      const targetPosition = Math.max(position - jumpBackwardInterval, 0);
+      trace.addEvent("player.ui.skip", {
+        direction: "backward",
+        fromPositionMs: Math.round(position * 1000),
+        targetPositionMs: Math.round(targetPosition * 1000),
+        intervalSeconds: jumpBackwardInterval,
+      });
+      await playerService.seekTo(targetPosition);
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to skip backward:", error);
     }
@@ -55,7 +74,14 @@ export default function ConsolidatedPlayerControls({
 
   const handleSkipForward = useCallback(async () => {
     try {
-      await playerService.seekTo(position + jumpForwardInterval);
+      const targetPosition = position + jumpForwardInterval;
+      trace.addEvent("player.ui.skip", {
+        direction: "forward",
+        fromPositionMs: Math.round(position * 1000),
+        targetPositionMs: Math.round(targetPosition * 1000),
+        intervalSeconds: jumpForwardInterval,
+      });
+      await playerService.seekTo(targetPosition);
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to skip forward:", error);
     }
@@ -65,14 +91,29 @@ export default function ConsolidatedPlayerControls({
     router.push("/FullScreenPlayer");
   }, []);
 
+  const handlePlayPauseLongPress = useCallback(async () => {
+    try {
+      await writeDumpToDisk("manual");
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err) {
+      log.error("[handlePlayPauseLongPress] Trace dump failed", err as Error);
+    }
+  }, []);
+
   const handleCreateBookmark = useCallback(async () => {
     if (!currentTrack || isCreatingBookmark) {
       return;
     }
 
+    const bookmarkPosition = position > 0 ? position : initialBookmarkPosition;
+    const bookmarkTitle = getAutoBookmarkTitle({
+      chapterTitle: currentChapter?.chapter.title,
+      position: bookmarkPosition,
+    });
+
     setIsCreatingBookmark(true);
     try {
-      await createBookmark(currentTrack.libraryItemId, position);
+      await createBookmark(currentTrack.libraryItemId, bookmarkPosition, bookmarkTitle);
       Alert.alert("Bookmark Created", "Bookmark created successfully");
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to create bookmark:", error);
@@ -80,7 +121,14 @@ export default function ConsolidatedPlayerControls({
     } finally {
       setIsCreatingBookmark(false);
     }
-  }, [currentTrack, position, createBookmark, isCreatingBookmark]);
+  }, [
+    currentTrack,
+    position,
+    currentChapter,
+    initialBookmarkPosition,
+    createBookmark,
+    isCreatingBookmark,
+  ]);
 
   // Calculate chapter progress
   const chapterPosition = currentChapter?.positionInChapter || 0;
@@ -88,12 +136,17 @@ export default function ConsolidatedPlayerControls({
   const chapterProgress = chapterDuration > 0 ? chapterPosition / chapterDuration : 0;
   const chapterTitle = currentChapter?.chapter.title || "";
 
+  const chapterBarRightLabel = chapterBarShowRemaining
+    ? `-${formatTime(chapterDuration - chapterPosition)}`
+    : undefined;
+
   const isDisabled = isLoadingTrack || (!isDownloaded && serverReachable === false);
 
   if (!isCurrentlyPlaying) {
     return (
       <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
         <TouchableOpacity
+          testID="play-resume-button"
           style={{
             backgroundColor: "#34C759",
             borderRadius: 8,
@@ -123,7 +176,8 @@ export default function ConsolidatedPlayerControls({
   }
 
   return (
-    <View
+    <Pressable
+      onPress={handleOpenFullScreenPlayer}
       style={{
         marginBottom: 16,
         paddingHorizontal: 16,
@@ -145,14 +199,22 @@ export default function ConsolidatedPlayerControls({
         </View>
         {/* Chapter Progress - only show if this item is currently playing */}
         {isCurrentlyPlaying && (
-          <ProgressBar
-            progress={chapterProgress}
-            variant="medium"
-            showTimeLabels={true}
-            currentTime={chapterPosition}
-            duration={chapterDuration}
-            showPercentage={false}
-          />
+          <>
+            <ProgressBar
+              progress={chapterProgress}
+              variant="medium"
+              showTimeLabels={true}
+              currentTime={chapterPosition}
+              duration={chapterDuration}
+              showPercentage={true}
+              customPercentageText={formatProgress(
+                progressFormat,
+                position,
+                currentTrack?.duration ?? 0
+              )}
+              rightLabel={chapterBarRightLabel}
+            />
+          </>
         )}
 
         {/* Player Controls */}
@@ -183,7 +245,12 @@ export default function ConsolidatedPlayerControls({
           />
 
           {/* Play/Pause Button */}
-          <PlayPauseButton onPress={handlePlayPause} iconSize={48} hitBoxSize={48} />
+          <PlayPauseButton
+            onPress={handlePlayPause}
+            onLongPress={handlePlayPauseLongPress}
+            iconSize={48}
+            hitBoxSize={48}
+          />
 
           {/* Skip Forward - only show if currently playing */}
           <SkipButton
@@ -194,10 +261,17 @@ export default function ConsolidatedPlayerControls({
             hitBoxSize={48}
           />
 
-          {/* Open Full Screen Player Button - only show if currently playing */}
-          <FullScreenButton onPress={handleOpenFullScreenPlayer} iconSize={24} hitBoxSize={48} />
+          {/* AirPlay route picker */}
+          <AirPlayButton
+            style={{
+              width: 48,
+              height: 48,
+            }}
+            tintColor={colors.textPrimary}
+            activeTintColor={colors.textPrimary}
+          />
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }

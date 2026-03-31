@@ -166,10 +166,26 @@ export class ProgressService {
         );
       }
 
-      // Use the most recently updated session
-      const session = activeSessions.sort(
+      // Use the most recently updated session as winner
+      const [session, ...losers] = activeSessions.sort(
         (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-      )[0];
+      );
+
+      // Always close all non-winner sessions to prevent zombie persistence across boots
+      if (losers.length > 0) {
+        log.info(`Closing ${losers.length} loser session(s) to prevent zombie persistence`);
+        for (const loser of losers) {
+          const isBrandNew = loser.currentTime === loser.startTime;
+          if (!isBrandNew) {
+            // Has real listening progress — sync before closing
+            log.info(`Syncing loser session with real progress before closing: ${loser.id}`);
+            await this.syncSessionToServer(context.userId, loser.libraryItemId, loser.id);
+          } else {
+            log.info(`Closing zombie loser session silently (no progress to sync): ${loser.id}`);
+          }
+          await endStaleListeningSession(loser.id, loser.currentTime);
+        }
+      }
 
       // If a specific library item ID was provided, verify it matches
       if (matchLibraryItemId && session.libraryItemId !== matchLibraryItemId) {
@@ -389,10 +405,13 @@ export class ProgressService {
       // Session is now in DB - no need to store in instance
 
       // Notify coordinator that a session has been created
-      dispatchPlayerEvent({
-        type: "SESSION_CREATED",
-        payload: { sessionId },
-      });
+      dispatchPlayerEvent(
+        {
+          type: "SESSION_CREATED",
+          payload: { sessionId },
+        },
+        { source: "startup_bootstrap" }
+      );
 
       // If we have an existing server session ID (from streaming), use it
       if (existingServerSessionId) {
@@ -437,10 +456,13 @@ export class ProgressService {
         await this.syncSessionToServer(userId, libraryItemId, session.id);
 
         // Notify coordinator that session has ended
-        dispatchPlayerEvent({
-          type: "SESSION_ENDED",
-          payload: { sessionId: session.id },
-        });
+        dispatchPlayerEvent(
+          {
+            type: "SESSION_ENDED",
+            payload: { sessionId: session.id },
+          },
+          { source: "startup_bootstrap" }
+        );
 
         log.info(`Ended session ${session.id} session=${session.id} item=${libraryItemId}`);
       } else {
@@ -608,10 +630,13 @@ export class ProgressService {
 
       // Notify coordinator of session update (throttled via 10s check to avoid spam)
       if (Math.floor(currentTime) % 10 === 0) {
-        dispatchPlayerEvent({
-          type: "SESSION_UPDATED",
-          payload: { position: currentTime },
-        });
+        dispatchPlayerEvent(
+          {
+            type: "SESSION_UPDATED",
+            payload: { position: currentTime },
+          },
+          { source: "startup_bootstrap" }
+        );
       }
 
       // Diagnostic: log DB update every 10 seconds to verify updates are happening
@@ -771,7 +796,7 @@ export class ProgressService {
   ): Promise<void> {
     try {
       // Notify coordinator that session sync is starting
-      dispatchPlayerEvent({ type: "SESSION_SYNC_STARTED" });
+      dispatchPlayerEvent({ type: "SESSION_SYNC_STARTED" }, { source: "startup_bootstrap" });
 
       // Check network connectivity
       const netInfo = await NetInfo.fetch();
@@ -808,7 +833,7 @@ export class ProgressService {
       await this.syncSingleSession(sessionData);
 
       // Notify coordinator that session sync completed successfully
-      dispatchPlayerEvent({ type: "SESSION_SYNC_COMPLETED" });
+      dispatchPlayerEvent({ type: "SESSION_SYNC_COMPLETED" }, { source: "startup_bootstrap" });
     } catch (error) {
       const session = await getActiveSession(userId, libraryItemId);
       log.error(
@@ -816,10 +841,13 @@ export class ProgressService {
       );
 
       // Notify coordinator that session sync failed
-      dispatchPlayerEvent({
-        type: "SESSION_SYNC_FAILED",
-        payload: { error: error as Error },
-      });
+      dispatchPlayerEvent(
+        {
+          type: "SESSION_SYNC_FAILED",
+          payload: { error: error as Error },
+        },
+        { source: "startup_bootstrap" }
+      );
     }
   }
 

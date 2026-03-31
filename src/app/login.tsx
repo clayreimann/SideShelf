@@ -116,6 +116,7 @@ export default function LoginModal() {
           {loginMessage ?? translate("auth.connectToAudiobookshelf")}
         </Text>
         <TextInput
+          testID="login-server-url-input"
           placeholder={translate("auth.serverUrlPlaceholder")}
           autoCapitalize="none"
           autoCorrect={false}
@@ -127,6 +128,7 @@ export default function LoginModal() {
           textContentType="URL"
         />
         <TextInput
+          testID="login-username-input"
           placeholder={translate("auth.usernamePlaceholder")}
           autoCapitalize="none"
           autoCorrect={false}
@@ -136,6 +138,7 @@ export default function LoginModal() {
           textContentType="username"
         />
         <TextInput
+          testID="login-password-input"
           placeholder={translate("auth.passwordPlaceholder")}
           autoCapitalize="none"
           autoCorrect={false}
@@ -153,6 +156,7 @@ export default function LoginModal() {
           </Text>
         ) : null}
         <TouchableOpacity
+          testID="login-button"
           style={[styles.button, !canSubmit && styles.buttonDisabled]}
           onPress={onSubmit}
           disabled={!canSubmit}

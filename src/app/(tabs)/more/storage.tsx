@@ -15,6 +15,7 @@ import {
 import { audioFiles } from "@/db/schema/audioFiles";
 import { libraryFiles } from "@/db/schema/libraryFiles";
 import { mediaMetadata } from "@/db/schema/mediaMetadata";
+import { associateOrphanFile } from "@/lib/orphanAssociation";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,7 +27,8 @@ import {
 } from "@/lib/iCloudBackupExclusion";
 import { useThemedStyles } from "@/lib/theme";
 import { type StorageEntry, useStatistics } from "@/stores";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
+import { logger } from "@/lib/logger";
 import { Directory, File, Paths } from "expo-file-system";
 import { OrphanFile, scanForOrphanFiles } from "@/lib/orphanScanner";
 import { Stack, useFocusEffect } from "expo-router";
@@ -49,6 +51,7 @@ type ActionItem = {
   isLegend?: boolean;
   legendItems?: string[];
   trashAction?: () => void;
+  linkAction?: () => void;
 };
 
 type StorageBucketStats = {
@@ -469,6 +472,14 @@ export default function StorageScreen() {
     }
   }, []);
 
+  const handleAssociateOrphan = useCallback(
+    (orphan: OrphanFile) =>
+      associateOrphanFile(orphan, (uri) =>
+        setOrphanFiles((prev) => prev.filter((f) => f.uri !== uri))
+      ),
+    []
+  );
+
   // Determine if we should show the backup column
   const showBackupColumn = isICloudBackupExclusionAvailable();
 
@@ -565,6 +576,7 @@ export default function StorageScreen() {
               sublabel: formatBytes(orphan.size),
               onPress: disabledOnPress,
               disabled: true,
+              linkAction: () => void handleAssociateOrphan(orphan),
               trashAction: () => {
                 Alert.alert(
                   "Delete Unknown File",
@@ -683,6 +695,15 @@ export default function StorageScreen() {
                   <Text style={[styles.text, { fontSize: 12, opacity: 0.6 }]}>{item.sublabel}</Text>
                 )}
               </View>
+              {item.linkAction && (
+                <Pressable
+                  onPress={item.linkAction}
+                  style={{ padding: 8 }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="link-outline" size={20} color="#007AFF" />
+                </Pressable>
+              )}
               {item.trashAction && (
                 <Pressable
                   onPress={item.trashAction}

@@ -13,7 +13,6 @@ import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore"
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
-import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { progressService } from "@/services/ProgressService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import type { CurrentChapter, PlayerTrack } from "@/types/player";
@@ -63,6 +62,12 @@ export interface PlayerSliceState {
       /** Chapter target: 'current' or 'next', only used when type is 'chapter' */
       chapterTarget: "current" | "next" | null;
     };
+    /** Pending unintentional progress jump awaiting user acknowledgement */
+    pendingProgressJump: {
+      fromPosition: number;
+      toPosition: number;
+      timestamp: number;
+    } | null;
   };
 }
 
@@ -104,8 +109,10 @@ export interface PlayerSliceActions {
   _setPlaySessionId: (sessionId: string | null) => void;
   /** Set last pause time (for smart rewind) */
   _setLastPauseTime: (timestamp: number | null) => void;
-  /** Update now playing metadata with chapter information */
-  updateNowPlayingMetadata: () => Promise<void>;
+  /** Set or clear the pending progress jump toast */
+  _setPendingProgressJump: (
+    jump: { fromPosition: number; toPosition: number; timestamp: number } | null
+  ) => void;
   /** Set sleep timer with duration in minutes */
   setSleepTimer: (minutes: number) => void;
   /** Set sleep timer to end at chapter boundary */
@@ -319,24 +326,30 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     // Notify coordinator that state has been restored
     const finalState = get();
-    dispatchPlayerEvent({
-      type: "RESTORE_STATE",
-      payload: {
-        state: {
-          currentTrack: finalState.player.currentTrack,
-          position: finalState.player.position,
-          playbackRate: finalState.player.playbackRate,
-          volume: finalState.player.volume,
-          isPlaying: finalState.player.isPlaying,
-          currentPlaySessionId: finalState.player.currentPlaySessionId,
+    dispatchPlayerEvent(
+      {
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: finalState.player.currentTrack,
+            position: finalState.player.position,
+            playbackRate: finalState.player.playbackRate,
+            volume: finalState.player.volume,
+            isPlaying: finalState.player.isPlaying,
+            currentPlaySessionId: finalState.player.currentPlaySessionId,
+          },
         },
       },
-    });
+      { source: "restore" }
+    );
 
     // Signal that restoration is complete
-    dispatchPlayerEvent({
-      type: "RESTORE_COMPLETE",
-    });
+    dispatchPlayerEvent(
+      {
+        type: "RESTORE_COMPLETE",
+      },
+      { source: "restore" }
+    );
   },
   // Initial scoped state
   player: {
@@ -359,6 +372,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       type: null,
       chapterTarget: null,
     },
+    pendingProgressJump: null,
   },
 
   // Actions
@@ -394,6 +408,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     saveItem(ASYNC_KEYS.position, position);
+    saveItem(ASYNC_KEYS.positionUpdatedAt, Date.now());
     // Update current chapter (calculates chapter-relative position internally)
     state._updateCurrentChapter(position);
   },
@@ -560,71 +575,10 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     // Note: lastPauseTime is not persisted - it's ephemeral state for smart rewind
   },
 
-  /**
-   * Update now playing metadata with chapter information
-   *
-   * Updates the now playing center with:
-   * - Title: Current chapter title
-   * - Album: Book title
-   * - Duration: Chapter duration (so progress bar shows chapter progress)
-   * - Elapsed time: Chapter-relative position (resets to 0 at start of each chapter)
-   *
-   * Note: TrackPlayer's actual playback position is always absolute (book position),
-   * but we set elapsedTime to chapter-relative position so the now playing center
-   * shows progress within the current chapter.
-   */
-  updateNowPlayingMetadata: async () => {
-    try {
-      const state = get();
-      const { currentTrack, currentChapter } = state.player;
-      if (!currentTrack || !currentChapter) {
-        log.debug("Skipping now playing metadata update - missing track or chapter");
-        return;
-      }
-
-      log.debug(
-        `Updating now playing metadata for track=${currentTrack.libraryItemId} chapter=${currentChapter.chapter.id}`
-      );
-
-      // Use chapter-relative position for elapsed time
-      // positionInChapter is calculated as: absolutePosition - chapter.start
-      const chapterElapsedTime = currentChapter.positionInChapter;
-      const chapterDuration = currentChapter.chapterDuration;
-      const chapterTitle = currentChapter.chapter.title;
-      const bookTitle = currentTrack.title;
-      const author = currentTrack.author;
-
-      // Get the active track index to update its metadata
-      const activeTrackIndex = await TrackPlayer.getActiveTrackIndex();
-      if (activeTrackIndex === undefined || activeTrackIndex === null || activeTrackIndex < 0) {
-        log.warn("Cannot update now playing metadata - no active track index");
-        return;
-      }
-
-      const activeTrack = await TrackPlayer.getActiveTrack();
-      // Update now playing metadata with chapter info
-      // TrackPlayer will use this for the lock screen and notification controls
-      await TrackPlayer.updateMetadataForTrack(activeTrackIndex, {
-        title: chapterTitle,
-        artist: author,
-        album: bookTitle,
-        // Always set artwork when available to ensure it displays
-        artwork: currentTrack.coverUri || undefined,
-        duration: chapterDuration,
-        // @ts-ignore - elapsedTime is used by iOS native code (Metadata.swift) but not in TypeScript types
-        elapsedTime: chapterElapsedTime,
-      });
-
-      // Double check that we don't lose the trackplayer controls on the lock screen
-      await configureTrackPlayer();
-
-      log.debug(
-        `Updated now playing: chapter="${chapterTitle}" elapsed=${formatTime(chapterElapsedTime)}/${formatTime(chapterDuration)}`
-      );
-    } catch (error) {
-      log.error("Failed to update now playing metadata:", error as Error);
-    }
+  _setPendingProgressJump: (jump) => {
+    set((state) => ({ player: { ...state.player, pendingProgressJump: jump } }));
   },
+
 
   setSleepTimer: (minutes: number) => {
     const endTime = Date.now() + minutes * 60 * 1000;

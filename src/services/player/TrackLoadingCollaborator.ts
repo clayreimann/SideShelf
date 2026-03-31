@@ -1,8 +1,8 @@
 /**
  * TrackLoadingCollaborator
  *
- * Concern group: track loading, track list building, and queue reload.
- * Owns: executeLoadTrack, buildTrackList, reloadTrackPlayerQueue.
+ * Concern group: track loading, track list building, and queue rebuild.
+ * Owns: executeLoadTrack, buildTrackList, executeRebuildQueue.
  *
  * These three methods share DB lookups, path repair, streaming session
  * creation, and TrackPlayer queue management.
@@ -11,7 +11,7 @@
  * always use IPlayerServiceFacade from "./types" to prevent circular imports.
  */
 
-import { clearAudioFileDownloadStatus } from "@/db/helpers/audioFiles";
+import { clearAudioFileDownloadStatus, markAudioFileAsDownloaded } from "@/db/helpers/audioFiles";
 import { getChaptersForMedia } from "@/db/helpers/chapters";
 import type { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
@@ -21,23 +21,30 @@ import { getUserByUsername } from "@/db/helpers/users";
 import { startPlaySession } from "@/lib/api/endpoints";
 import { getCoverUri } from "@/lib/covers";
 import { ensureItemInDocuments } from "@/lib/fileLifecycleManager";
-import { resolveAppPath, verifyFileExists } from "@/lib/fileSystem";
+import {
+  getAudioFileLocation,
+  getDownloadPath,
+  resolveAppPath,
+  verifyFileExists,
+} from "@/lib/fileSystem";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { trace } from "@/lib/trace";
 import { getStoredUsername } from "@/lib/secureStore";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { downloadService } from "@/services/DownloadService";
-import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
+import type { ResumePositionInfo } from "@/types/coordinator";
 import type { PlayerTrack } from "@/types/player";
-import TrackPlayer, { State, Track } from "react-native-track-player";
+import TrackPlayer, { Track } from "react-native-track-player";
 import type { IPlayerServiceFacade, ITrackLoadingCollaborator } from "./types";
 
 const log = logger.forTag("PlayerService");
 const diagLog = logger.forDiagnostics("PlayerService");
 
 /**
- * Handles track loading, track list construction, and queue reload.
+ * Handles track loading, track list construction, and queue rebuild.
  */
 export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
   constructor(private facade: IPlayerServiceFacade) {}
@@ -45,7 +52,11 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
   /**
    * Execute track loading (Internal - Called by Coordinator).
    */
-  async executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void> {
+  async executeLoadTrack(
+    libraryItemId: string,
+    episodeId?: string,
+    startPosition?: number
+  ): Promise<void> {
     try {
       diagLog.info(`playTrack called for libraryItemId: ${libraryItemId}`);
       log.info(`Loading track for library item: ${libraryItemId}`);
@@ -59,7 +70,8 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
 
       // Repair download paths to account for iOS container path changes
       try {
-        await downloadService.repairDownloadStatus(libraryItemId);
+        const repairedCount = await downloadService.repairDownloadStatus(libraryItemId);
+        trace.addEvent("player.load.repair_completed", { libraryItemId, repairedCount });
       } catch (error) {
         log.warn(`Failed to repair download status, continuing with playback: ${error}`);
       }
@@ -76,28 +88,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         throw new Error("User not found in database");
       }
 
-      // Check if already playing this item - if so, just resume
       const store = useAppStore.getState();
-      if (store.player.currentTrack?.libraryItemId === libraryItemId) {
-        const state = await TrackPlayer.getPlaybackState();
-        const queue = await TrackPlayer.getQueue();
-
-        // Only short-circuit if we actually have tracks in the queue
-        if (queue.length > 0) {
-          if (state.state === State.Playing) {
-            log.info("Already playing this item - syncing coordinator state");
-            this.facade.dispatchEvent({ type: "PLAY" });
-            return;
-          } else if (state.state === State.Paused) {
-            log.info("Resuming paused playback via coordinator");
-            this.facade.dispatchEvent({ type: "PLAY" });
-            return;
-          }
-        } else {
-          // Queue is empty even though we have a currentTrack - need to reload
-          log.warn("Current track set but queue is empty - reloading track");
-        }
-      }
 
       // Fetch required data from database
       const libraryItem = await getLibraryItemById(libraryItemId);
@@ -183,15 +174,42 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       // Add tracks to queue
       await TrackPlayer.add(tracks);
 
-      const coordinator = getCoordinator();
-      const resumeInfo = await coordinator.resolveCanonicalPosition(libraryItemId);
-
-      // Seek to resume position first (if applicable)
-      if (resumeInfo.position > 0) {
-        await TrackPlayer.seekTo(resumeInfo.position);
-        log.info(
-          `Resuming playback from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
+      let seekPosition: number;
+      if (startPosition !== undefined) {
+        // Caller-specified chapter position — skip resolveCanonicalPosition to avoid
+        // spurious progress-jump toast and timing race during queue rebuild.
+        seekPosition = startPosition;
+        dispatchPlayerEvent(
+          { type: "POSITION_RECONCILED", payload: { position: startPosition } },
+          { source: "restore" }
         );
+        log.info(
+          `[executeLoadTrack] Using caller-specified startPosition: ${formatTime(startPosition)}s`
+        );
+      } else {
+        // Reset position context when switching to a different book to prevent
+        // the previous book's position bleeding into resolveCanonicalPosition's
+        // "store" fallback (which reads store.player.position as last resort).
+        const currentItemId = store.player.currentTrack?.libraryItemId;
+        if (currentItemId && currentItemId !== libraryItemId) {
+          store.updatePosition(0);
+          log.debug(
+            `[executeLoadTrack] Switching books (${currentItemId} → ${libraryItemId}): reset store position to 0`
+          );
+        }
+        const resumeInfo = await this.facade.resolveCanonicalPosition(libraryItemId);
+        seekPosition = resumeInfo.position;
+        // Sync store position so executePlay reads the correct value via store.player.position.
+        // Without this, applySmartRewind would read 0 from the store on the first play of a
+        // streaming book (TrackPlayer hasn't buffered to seekTo position yet).
+        store.updatePosition(seekPosition);
+        log.info(
+          `[executeLoadTrack] Resuming from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
+        );
+      }
+
+      if (seekPosition > 0) {
+        await TrackPlayer.seekTo(seekPosition);
       }
 
       // Apply playback settings from store to TrackPlayer
@@ -208,10 +226,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         log.info(`Applied volume from store: ${currentVolume}`);
       }
 
-      // Dispatch PLAY so the coordinator transitions to PLAYING and calls executePlay().
-      this.facade.dispatchEvent({ type: "PLAY" });
-
-      log.info("Track loaded, PLAY dispatched to coordinator");
+      log.info("Track loaded, returning to coordinator");
     } catch (error) {
       log.error(" Failed to load track:", error as Error);
       // Clear loading state on error
@@ -225,10 +240,17 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
    * Build track list from PlayerTrack.
    */
   async buildTrackList(playerTrack: PlayerTrack): Promise<Track[]> {
+    const parentSpan = trace.startSpan("player.load.build_track_list", {
+      libraryItemId: playerTrack.libraryItemId,
+    });
+
     const tracks: Track[] = [];
 
     // First, check which files we have locally
     const locallyAvailableFiles = new Set<string>();
+    // Tracks repaired paths for files whose stored path was stale (legacy absolute path after
+    // iOS container UUID rotation). Used in the second loop to serve the correct URL.
+    const repairedPaths = new Map<string, string>(); // audioFileId → repaired path
     for (const audioFile of playerTrack.audioFiles) {
       if (audioFile.downloadInfo?.isDownloaded && audioFile.downloadInfo.downloadPath) {
         const storedPath = audioFile.downloadInfo.downloadPath;
@@ -237,14 +259,33 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
           locallyAvailableFiles.add(audioFile.id);
         } else {
           const resolvedPath = resolveAppPath(storedPath);
-          log.warn(`File marked as downloaded but missing: ${resolvedPath}`);
+          log.warn(`File marked as downloaded but missing at stored path: ${resolvedPath}`);
 
-          // Clean up database
-          try {
-            await clearAudioFileDownloadStatus(audioFile.id);
-            log.info(`Cleared download status for missing file: ${audioFile.id}`);
-          } catch (error) {
-            log.error("Failed to clear download status", error as Error);
+          // Before clearing, check both Documents and Caches using current container paths.
+          // This handles legacy absolute stored paths that became stale after an iOS UUID rotation.
+          const foundLocation = getAudioFileLocation(playerTrack.libraryItemId, audioFile.filename);
+          if (foundLocation !== null) {
+            const repairedPath = getDownloadPath(
+              playerTrack.libraryItemId,
+              audioFile.filename,
+              foundLocation
+            );
+            log.info(`  ✓ Found at ${foundLocation}, repairing path: ${repairedPath}`);
+            try {
+              await markAudioFileAsDownloaded(audioFile.id, repairedPath);
+            } catch (error) {
+              log.error("Failed to repair download path in buildTrackList", error as Error);
+            }
+            repairedPaths.set(audioFile.id, repairedPath);
+            locallyAvailableFiles.add(audioFile.id);
+          } else {
+            // File truly not found in either location — clean up database
+            try {
+              await clearAudioFileDownloadStatus(audioFile.id);
+              log.info(`Cleared download status for missing file: ${audioFile.id}`);
+            } catch (error) {
+              log.error("Failed to clear download status", error as Error);
+            }
           }
         }
       }
@@ -286,15 +327,27 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
     // Get API info once for all streaming URLs
     let cachedApiInfo = this.facade.getApiInfo();
 
+    let localCount = 0;
+    let streamingCount = 0;
+    let missingCount = 0;
+
     // Process each audio file in a single loop
     for (const audioFile of playerTrack.audioFiles) {
       let url: string | undefined;
-      let sourceType: "local" | "streaming" = "local";
+      let sourceType: "local" | "streaming" | "missing" = "missing";
+      let storedPath: string | undefined;
+      let resolvedPath: string | undefined;
+      let fileExists = false;
 
       // First, try to use local file if available
       if (locallyAvailableFiles.has(audioFile.id) && audioFile.downloadInfo?.downloadPath) {
-        url = resolveAppPath(audioFile.downloadInfo.downloadPath);
+        // Use repaired path if the stored path was stale; fall back to resolveAppPath for normal paths
+        storedPath = repairedPaths.get(audioFile.id) ?? audioFile.downloadInfo.downloadPath;
+        resolvedPath = repairedPaths.has(audioFile.id) ? storedPath : resolveAppPath(storedPath);
+        url = resolvedPath;
         sourceType = "local";
+        fileExists = true;
+        localCount++;
       }
       // If no local file, try streaming
       else if (playSession && playSession.audioTracks.length > 0) {
@@ -307,8 +360,27 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
           const separator = streamingTrack.contentUrl.includes("?") ? "&" : "?";
           url = `${cachedApiInfo.baseUrl}${streamingTrack.contentUrl}${separator}token=${cachedApiInfo.accessToken}`;
           sourceType = "streaming";
+          streamingCount++;
         }
       }
+
+      if (sourceType === "missing") {
+        missingCount++;
+      }
+
+      const fileSpan = trace.startSpan(
+        "player.load.file_verify",
+        {
+          audioFileId: audioFile.id,
+          filename: audioFile.filename,
+          storedPath: storedPath ?? null,
+          resolvedPath: resolvedPath ?? null,
+          fileExists,
+          sourceType,
+        },
+        parentSpan.context
+      );
+      trace.endSpan(fileSpan, "ok");
 
       // Add track if we have a valid URL
       if (url) {
@@ -332,74 +404,58 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       }
     }
 
+    trace.endSpan(parentSpan, "ok", {
+      totalFiles: playerTrack.audioFiles.length,
+      localCount,
+      streamingCount,
+      missingCount,
+    });
+
     return tracks;
   }
 
   /**
-   * Prepare TrackPlayer queue based on the current track stored in playerSlice.
+   * Rebuild TrackPlayer queue for the given track (pure execution).
+   * No coordinator imports, no event dispatches, throws on failure.
+   * Called only by the coordinator via IPlayerServiceFacade.executeRebuildQueue.
    */
-  async reloadTrackPlayerQueue(track: PlayerTrack): Promise<boolean> {
-    // Dispatch RELOAD_QUEUE event to state machine
-    this.facade.dispatchEvent({
-      type: "RELOAD_QUEUE",
-      payload: { libraryItemId: track.libraryItemId },
-    });
+  async executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo> {
+    await TrackPlayer.reset();
 
-    let success = false;
-
-    try {
-      await TrackPlayer.reset();
-
-      const tracks = await this.buildTrackList(track);
-      if (tracks.length === 0) {
-        log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
-        return false;
-      }
-
-      await TrackPlayer.add(tracks);
-
-      const coordinator = getCoordinator();
-      const resumeInfo = await coordinator.resolveCanonicalPosition(track.libraryItemId);
-
-      if (resumeInfo.position > 0) {
-        await TrackPlayer.seekTo(resumeInfo.position);
-        log.info(
-          `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
-        );
-
-        const updatedStore = useAppStore.getState();
-        updatedStore._updateCurrentChapter(resumeInfo.position);
-      } else {
-        log.info("Prepared queue with no resume position (starting from beginning)");
-      }
-
-      const updatedStore = useAppStore.getState();
-      if (updatedStore.player.playbackRate !== 1.0) {
-        await TrackPlayer.setRate(updatedStore.player.playbackRate);
-        log.info(`Applied stored playback rate: ${updatedStore.player.playbackRate}`);
-      }
-
-      if (updatedStore.player.volume !== 1.0) {
-        await TrackPlayer.setVolume(updatedStore.player.volume);
-        log.info(`Applied stored volume: ${updatedStore.player.volume}`);
-      }
-
-      // Dispatch QUEUE_RELOADED event to state machine
-      this.facade.dispatchEvent({
-        type: "QUEUE_RELOADED",
-        payload: { position: resumeInfo.position },
-      });
-
-      success = true;
-      return true;
-    } catch (error) {
-      log.error("Failed to rebuild TrackPlayer queue", error as Error);
-      return false;
-    } finally {
-      if (!success) {
-        const updatedStore = useAppStore.getState();
-        updatedStore._setTrackLoading(false);
-      }
+    const tracks = await this.buildTrackList(track);
+    if (tracks.length === 0) {
+      log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
+      throw new Error(
+        `No playable sources found while rebuilding queue for ${track.libraryItemId}`
+      );
     }
+
+    await TrackPlayer.add(tracks);
+
+    const resumeInfo = await this.facade.resolveCanonicalPosition(track.libraryItemId);
+
+    if (resumeInfo.position > 0) {
+      await TrackPlayer.seekTo(resumeInfo.position);
+      log.info(
+        `Prepared resume position from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
+      );
+      const store = useAppStore.getState();
+      store._updateCurrentChapter(resumeInfo.position);
+    } else {
+      log.info("Prepared queue with no resume position (starting from beginning)");
+    }
+
+    const store = useAppStore.getState();
+    if (store.player.playbackRate !== 1.0) {
+      await TrackPlayer.setRate(store.player.playbackRate);
+      log.info(`Applied stored playback rate: ${store.player.playbackRate}`);
+    }
+
+    if (store.player.volume !== 1.0) {
+      await TrackPlayer.setVolume(store.player.volume);
+      log.info(`Applied stored volume: ${store.player.volume}`);
+    }
+
+    return resumeInfo;
   }
 }

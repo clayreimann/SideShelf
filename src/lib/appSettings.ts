@@ -6,6 +6,8 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import type { ProgressFormat } from "@/lib/helpers/progressFormat";
+
 const SETTINGS_KEYS = {
   jumpForwardInterval: "@app/jumpForwardInterval",
   jumpBackwardInterval: "@app/jumpBackwardInterval",
@@ -18,7 +20,13 @@ const SETTINGS_KEYS = {
   customUpdateUrl: "@app/customUpdateUrl",
   lastHomeSectionCount: "@app/lastHomeSectionCount",
   viewMode: "@app/viewMode",
+  progressFormat: "@app/progressFormat",
+  chapterBarShowRemaining: "@app/chapterBarShowRemaining",
+  keepScreenAwake: "@app/keepScreenAwake",
+  bookmarkTitleMode: "@app/bookmarkTitleMode",
 } as const;
+
+const DEFAULT_PROGRESS_FORMAT = "remaining" as const satisfies ProgressFormat;
 
 // Default values
 const DEFAULT_JUMP_FORWARD_INTERVAL = 30;
@@ -352,6 +360,122 @@ export async function setViewMode(mode: "list" | "grid"): Promise<void> {
     await AsyncStorage.setItem(SETTINGS_KEYS.viewMode, mode);
   } catch (error) {
     console.error("[AppSettings] Failed to save view mode setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get progress display format preference
+ * Default: 'remaining' — shows time remaining (e.g. "2h 21m remaining")
+ */
+export async function getProgressFormat(): Promise<ProgressFormat> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.progressFormat);
+    if (value === "remaining" || value === "elapsed" || value === "percent") {
+      return value;
+    }
+    return DEFAULT_PROGRESS_FORMAT;
+  } catch (error) {
+    console.error("[AppSettings] Failed to get progress format setting:", error);
+    return DEFAULT_PROGRESS_FORMAT;
+  }
+}
+
+/**
+ * Set progress display format preference
+ */
+export async function setProgressFormat(format: ProgressFormat): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.progressFormat, format);
+  } catch (error) {
+    console.error("[AppSettings] Failed to save progress format setting:", error);
+    throw error;
+  }
+}
+
+const DEFAULT_CHAPTER_BAR_SHOW_REMAINING = false;
+const DEFAULT_KEEP_SCREEN_AWAKE = false;
+
+/**
+ * Get whether the chapter bar right-label shows time remaining (true) or total duration (false)
+ * Default: false (show total duration)
+ */
+export async function getChapterBarShowRemaining(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.chapterBarShowRemaining);
+    return value === null ? DEFAULT_CHAPTER_BAR_SHOW_REMAINING : value === "true";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get chapter bar show remaining setting:", error);
+    return DEFAULT_CHAPTER_BAR_SHOW_REMAINING;
+  }
+}
+
+/**
+ * Set whether the chapter bar right-label shows time remaining or total duration
+ */
+export async function setChapterBarShowRemaining(showRemaining: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      SETTINGS_KEYS.chapterBarShowRemaining,
+      showRemaining ? "true" : "false"
+    );
+  } catch (error) {
+    console.error("[AppSettings] Failed to save chapter bar show remaining setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get whether the screen should stay awake during playback
+ * Default: false (allow screen to sleep normally)
+ */
+export async function getKeepScreenAwake(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.keepScreenAwake);
+    return value === null ? DEFAULT_KEEP_SCREEN_AWAKE : value === "true";
+  } catch (error) {
+    console.error("[AppSettings] Failed to get keep screen awake setting:", error);
+    return DEFAULT_KEEP_SCREEN_AWAKE;
+  }
+}
+
+/**
+ * Set whether the screen should stay awake during playback
+ */
+export async function setKeepScreenAwake(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.keepScreenAwake, enabled ? "true" : "false");
+  } catch (error) {
+    console.error("[AppSettings] Failed to save keep screen awake setting:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get bookmark title mode preference
+ * Returns null when the user has never made a choice (triggers first-tap alert in FullScreenPlayer)
+ * Default: null (not yet set)
+ */
+export async function getBookmarkTitleMode(): Promise<"auto" | "prompt" | null> {
+  try {
+    const value = await AsyncStorage.getItem(SETTINGS_KEYS.bookmarkTitleMode);
+    if (value === "prompt") return "prompt";
+    if (value === "auto") return "auto";
+    return null; // null = user has never made a choice (triggers first-tap alert)
+  } catch (error) {
+    console.error("[AppSettings] Failed to get bookmark title mode:", error);
+    return null;
+  }
+}
+
+/**
+ * Set bookmark title mode preference
+ */
+export async function setBookmarkTitleMode(mode: "auto" | "prompt"): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEYS.bookmarkTitleMode, mode);
+  } catch (error) {
+    console.error("[AppSettings] Failed to save bookmark title mode:", error);
     throw error;
   }
 }

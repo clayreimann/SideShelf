@@ -12,6 +12,7 @@ import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { calculateSmartRewindTime, getSmartRewindEnabled } from "@/lib/appSettings";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { trace } from "@/lib/trace";
 import { useAppStore } from "@/stores/appStore";
 import { getCurrentUser } from "@/utils/userHelpers";
 import TrackPlayer from "react-native-track-player";
@@ -38,17 +39,22 @@ const log = logger.forTag("SmartRewind");
  *                        This prevents race conditions when TrackPlayer hasn't finished seeking yet.
  */
 export async function applySmartRewind(currentPosition?: number): Promise<void> {
+  const span = trace.startSpan("player.play.smart_rewind");
+
   // Check if smart rewind is enabled
   const smartRewindEnabled = await getSmartRewindEnabled();
   if (!smartRewindEnabled) {
+    trace.endSpan(span, "ok", { enabled: false });
     return;
   }
   const store = useAppStore.getState();
   let lastPlayedTime: number | null = null;
+  let lastPlayedSource: "memory" | "active_session" | "saved_progress" | "none" = "none";
 
   // First, try to use the in-memory pause time from playerSlice
   if (store.player.lastPauseTime) {
     lastPlayedTime = store.player.lastPauseTime;
+    lastPlayedSource = "memory";
     log.info(
       `Using current session pause time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
     );
@@ -58,6 +64,12 @@ export async function applySmartRewind(currentPosition?: number): Promise<void> 
       const user = await getCurrentUser();
       if (!user || !user.id) {
         log.info("No user found, skipping smart rewind");
+        trace.endSpan(span, "ok", {
+          enabled: true,
+          source: "none",
+          rewindSeconds: 0,
+          earlyExit: "no_user",
+        });
         return;
       }
 
@@ -77,28 +89,35 @@ export async function applySmartRewind(currentPosition?: number): Promise<void> 
 
         if (sessionTime > progressTime) {
           lastPlayedTime = sessionTime;
+          lastPlayedSource = "active_session";
           log.info(
             `Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
           );
         } else {
           lastPlayedTime = progressTime;
+          lastPlayedSource = "saved_progress";
           log.info(
             `Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
           );
         }
       } else if (activeSession) {
         lastPlayedTime = activeSession.updatedAt.getTime();
+        lastPlayedSource = "active_session";
         log.info(
           `Using active session update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
         );
       } else if (savedProgress?.lastUpdate) {
         lastPlayedTime = savedProgress.lastUpdate.getTime();
+        lastPlayedSource = "saved_progress";
         log.info(
           `Using saved progress update time for smart rewind: ${new Date(lastPlayedTime).toISOString()}`
         );
       }
     } catch (error) {
       log.error("Failed to get last played time from database for smart rewind", error as Error);
+      trace.recordError(error, span);
+      trace.endSpan(span, "error");
+      return;
     }
   }
 
@@ -117,8 +136,22 @@ export async function applySmartRewind(currentPosition?: number): Promise<void> 
       );
       useAppStore.getState().updatePosition(newPosition);
       await TrackPlayer.seekTo(newPosition);
+      trace.endSpan(span, "ok", {
+        enabled: true,
+        source: lastPlayedSource,
+        rewindSeconds,
+        positionBeforeMs: Math.round(position * 1000),
+        positionAfterMs: Math.round(newPosition * 1000),
+      });
+      return;
     }
   } else {
     log.info("No last played time available, skipping smart rewind");
   }
+
+  trace.endSpan(span, "ok", {
+    enabled: true,
+    source: lastPlayedSource,
+    rewindSeconds: 0,
+  });
 }

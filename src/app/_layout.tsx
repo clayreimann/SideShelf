@@ -1,16 +1,23 @@
+import PlayerProgressToast from "@/components/ui/PlayerProgressToast";
 import { initializeApp } from "@/index";
+import { handleDeepLinkUrl } from "@/lib/deepLinkHandler";
 import { formatTimeRemaining } from "@/lib/helpers/formatters";
 import { runDownloadReconciliationScan } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { pruneTraceDumps } from "@/lib/traceDump";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { useAppStore } from "@/stores/appStore";
+import { PlayerState } from "@/types/coordinator";
 import { ErrorBoundary } from "@/components/errors";
-import { FontAwesome6, MaterialCommunityIcons, Octicons } from "@expo/vector-icons";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import Octicons from "@expo/vector-icons/Octicons";
 import { useFonts } from "expo-font";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -66,7 +73,7 @@ export default function RootLayout() {
   }, []);
 
   // Handle app state changes for refetching progress and reconnection
-  const lastBackgroundTime = useRef<number>(0);
+  const lastBackgroundTime = useRef<number>(Date.now());
   const playerInitTimestamp = useRef<number>(0);
   useEffect(() => {
     // Store the player init timestamp on mount
@@ -81,6 +88,9 @@ export default function RootLayout() {
         // Trigger log purge when app goes to background
         logger.manualTrim();
       } else if (nextAppState === "active") {
+        // Prune old trace dumps on foreground (mirrors logger.manualTrim pattern)
+        pruneTraceDumps().catch((e) => log.warn("Trace dump prune failed", e));
+
         const timeInBackground = Date.now() - lastBackgroundTime.current;
         const wasLongBackground = timeInBackground > 30000; // 30 seconds
 
@@ -151,13 +161,22 @@ export default function RootLayout() {
         }
 
         if (wasLongBackground || contextRecreated) {
-          log.info(
-            `App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, restoring persisted state`
-          );
+          const machineState = getCoordinator().getState();
+          const needsRestore =
+            machineState === PlayerState.IDLE || machineState === PlayerState.RESTORING;
 
-          // Restore current track from AsyncStore if missing
-          // Coordinator bridge keeps store in sync; no manual reconciliation needed
-          await useAppStore.getState().restorePersistedState();
+          if (needsRestore) {
+            log.info(
+              `App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, restoring persisted state`
+            );
+            // Restore current track from AsyncStore if missing
+            // Coordinator bridge keeps store in sync; no manual reconciliation needed
+            await useAppStore.getState().restorePersistedState();
+          } else {
+            log.info(
+              `[RootLayout] Skipping restore on foreground — machine already in ${machineState}`
+            );
+          }
         }
 
         log.info("Triggering progress refetch on app foreground");
@@ -198,6 +217,7 @@ export default function RootLayout() {
      * - side-shelf://bundle-loader?url=https://example.com/bundle
      */
     const handleDeepLink = async (url: string) => {
+      log.info(`[handleDeepLink] received url="${url}"`);
       try {
         const urlObj = new URL(url);
 
@@ -284,6 +304,12 @@ export default function RootLayout() {
           return;
         }
 
+        // Handle sideshelf:// navigation deep links
+        if (url.startsWith("sideshelf://")) {
+          await handleDeepLinkUrl(url);
+          return;
+        }
+
         // Unknown deep link type
         log.warn(`Unrecognized deep link format: ${url}`);
       } catch (error) {
@@ -293,6 +319,7 @@ export default function RootLayout() {
 
     // Handle initial URL if app was opened via deep link
     Linking.getInitialURL().then((url) => {
+      log.info(`[RootLayout] getInitialURL="${url ?? "null"}"`);
       if (url) {
         handleDeepLink(url);
       }
@@ -300,6 +327,7 @@ export default function RootLayout() {
 
     // Listen for deep links while app is running
     const subscription = Linking.addEventListener("url", (event) => {
+      log.info(`[RootLayout] Linking.addEventListener url="${event.url}"`);
       handleDeepLink(event.url);
     });
 
@@ -348,6 +376,7 @@ export default function RootLayout() {
                   }}
                 />
               </Stack>
+              <PlayerProgressToast />
             </StoreProvider>
           </AuthProvider>
         </DbProvider>

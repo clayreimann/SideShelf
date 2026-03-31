@@ -178,8 +178,10 @@ export const createAuthorsSlice: SliceCreator<AuthorsSlice> = (set, get) => ({
     try {
       console.log("[AuthorsSlice] Refreshing authors from database...");
 
-      // Fetch authors from database
-      const authors = await getAllAuthors();
+      // Fetch authors from database, filtered to the selected library so book
+      // counts match what the author detail screen shows.
+      const libraryId = get().library?.selectedLibraryId ?? undefined;
+      const authors = await getAllAuthors(libraryId);
       let displayItems = transformAuthorsToDisplayFormat(authors);
 
       // Initial update with authors (includes already cached images)

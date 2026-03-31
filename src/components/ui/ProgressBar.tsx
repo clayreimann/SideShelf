@@ -1,13 +1,13 @@
 import { useThemedStyles } from "@/lib/theme";
 import React, { useState } from "react";
 import {
-    GestureResponderEvent,
-    LayoutChangeEvent,
-    PanResponder,
-    Text,
-    TextStyle,
-    View,
-    ViewStyle,
+  GestureResponderEvent,
+  LayoutChangeEvent,
+  PanResponder,
+  Text,
+  TextStyle,
+  View,
+  ViewStyle,
 } from "react-native";
 
 /**
@@ -53,6 +53,10 @@ interface ProgressBarProps {
   maxValue?: number;
   /** Minimum value for seeking (defaults to 0) */
   minValue?: number;
+  /** Override for the right-side time label. When provided, replaces formatTime(duration) on the right side of the progress bar. */
+  rightLabel?: string;
+  /** Test ID for Maestro/E2E targeting (applied to the interactive wrapper View) */
+  testID?: string;
 }
 
 // Helper function to format time in seconds to HH:MM:SS or MM:SS
@@ -62,9 +66,7 @@ function formatTime(seconds: number): string {
   const secs = Math.floor(seconds % 60);
 
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs
-      .toString()
-      .padStart(2, "0")}`;
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   } else {
     return `${minutes}:${secs.toString().padStart(2, "0")}`;
   }
@@ -90,6 +92,8 @@ export default function ProgressBar({
   onSeekComplete,
   maxValue,
   minValue = 0,
+  rightLabel,
+  testID,
 }: ProgressBarProps) {
   const { styles, colors, isDark } = useThemedStyles();
   const [progressBarWidth, setProgressBarWidth] = useState(0);
@@ -125,19 +129,15 @@ export default function ProgressBar({
 
   // When seeking, use seekValue; otherwise use progress
   const currentValue =
-    seekValue > 0
-      ? seekValue
-      : currentTime !== undefined
-      ? currentTime
-      : progress * seekMaxValue;
+    seekValue > 0 ? seekValue : currentTime !== undefined ? currentTime : progress * seekMaxValue;
 
   // For time display, show relative time within the range (seekValue - minValue) when seeking
   const displayTime =
     seekValue > 0
       ? seekValue - minValue
       : currentTime !== undefined
-      ? currentTime
-      : progress * seekMaxValue;
+        ? currentTime
+        : progress * seekMaxValue;
 
   // Calculate progress as a percentage (0-1) for display
   const progressPercentage =
@@ -147,10 +147,8 @@ export default function ProgressBar({
 
   // Default colors
   const defaultProgressColor = progressColor || colors.link || "#007AFF";
-  const defaultBackgroundColor =
-    backgroundColor || colors.separator || (isDark ? "#555" : "#ddd");
-  const defaultBorderRadius =
-    borderRadius !== undefined ? borderRadius : defaults.borderRadius;
+  const defaultBackgroundColor = backgroundColor || colors.separator || (isDark ? "#555" : "#ddd");
+  const defaultBorderRadius = borderRadius !== undefined ? borderRadius : defaults.borderRadius;
   const defaultHeight = height !== undefined ? height : defaults.height;
 
   // Handle layout changes to get the progress bar width
@@ -168,10 +166,7 @@ export default function ProgressBar({
       const { locationX } = evt.nativeEvent;
       const seekValue = Math.max(
         minValue,
-        Math.min(
-          seekMaxValue,
-          minValue + (locationX / progressBarWidth) * seekRange
-        )
+        Math.min(seekMaxValue, minValue + (locationX / progressBarWidth) * seekRange)
       );
       setSeekValue(seekValue);
       onSeekStart?.(seekValue);
@@ -181,10 +176,7 @@ export default function ProgressBar({
       const { locationX } = evt.nativeEvent;
       const seekValue = Math.max(
         minValue,
-        Math.min(
-          seekMaxValue,
-          minValue + (locationX / progressBarWidth) * seekRange
-        )
+        Math.min(seekMaxValue, minValue + (locationX / progressBarWidth) * seekRange)
       );
       setSeekValue(seekValue);
       onSeekChange?.(seekValue);
@@ -194,10 +186,7 @@ export default function ProgressBar({
       const { locationX } = evt.nativeEvent;
       const seekValue = Math.max(
         minValue,
-        Math.min(
-          seekMaxValue,
-          minValue + (locationX / progressBarWidth) * seekRange
-        )
+        Math.min(seekMaxValue, minValue + (locationX / progressBarWidth) * seekRange)
       );
       onSeekComplete?.(seekValue);
       setSeekValue(0);
@@ -207,6 +196,7 @@ export default function ProgressBar({
   return (
     <View style={[{ marginTop: defaults.marginTop }, containerStyle]}>
       <View
+        testID={interactive ? testID : undefined}
         style={{
           paddingVertical: interactive ? 8 : 0, // Add touch area for interactive bars
         }}
@@ -263,56 +253,53 @@ export default function ProgressBar({
           }}
         >
           {/* Time labels */}
-          {showTimeLabels &&
-            currentTime !== undefined &&
-            duration !== undefined && (
-              <>
+          {showTimeLabels && currentTime !== undefined && duration !== undefined && (
+            <>
+              <Text
+                style={[
+                  styles.text,
+                  {
+                    opacity: 0.7,
+                    fontSize: defaults.fontSize,
+                    fontVariant: ["tabular-nums"],
+                  },
+                  textStyle,
+                ]}
+              >
+                {formatTime(displayTime)}
+              </Text>
+              {/* Percentage or custom text */}
+              {(showPercentage || customPercentageText) && (
                 <Text
                   style={[
                     styles.text,
                     {
-                      opacity: 0.7,
+                      opacity: 0.6,
                       fontSize: defaults.fontSize,
-                      fontVariant: ['tabular-nums'] 
+                      fontVariant: ["tabular-nums"],
                     },
                     textStyle,
                   ]}
                 >
-                  {formatTime(displayTime)}
+                  {customPercentageText || `${Math.round(progressPercentage * 100)}% finished`}
                 </Text>
-                {/* Percentage or custom text */}
-                {(showPercentage || customPercentageText) && (
-                  <Text
-                    style={[
-                      styles.text,
-                      {
-                        opacity: 0.6,
-                        fontSize: defaults.fontSize,
-                        fontVariant: ['tabular-nums'],
-                      },
-                      textStyle,
-                    ]}
-                  >
-                    {customPercentageText ||
-                      `${Math.round(progressPercentage * 100)}% finished`}
-                  </Text>
-                )}
+              )}
 
-                <Text
-                  style={[
-                    styles.text,
-                    {
-                      opacity: 0.7,
-                      fontSize: defaults.fontSize,
-                      fontVariant: ['tabular-nums'],
-                    },
-                    textStyle,
-                  ]}
-                >
-                  {formatTime(duration)}
-                </Text>
-              </>
-            )}
+              <Text
+                style={[
+                  styles.text,
+                  {
+                    opacity: 0.7,
+                    fontSize: defaults.fontSize,
+                    fontVariant: ["tabular-nums"],
+                  },
+                  textStyle,
+                ]}
+              >
+                {rightLabel !== undefined ? rightLabel : formatTime(duration)}
+              </Text>
+            </>
+          )}
         </View>
       )}
     </View>

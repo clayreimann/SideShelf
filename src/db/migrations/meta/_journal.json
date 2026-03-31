@@ -92,6 +92,13 @@
       "when": 1772627152616,
       "tag": "0012_hot_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1773275502843,
+      "tag": "0013_giant_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,7 @@ import { useHome, useNetwork } from "@/stores";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Animated, FlatList, RefreshControl, ScrollView, Text, View } from "react-native";
+import performance from "react-native-performance";
 
 interface HomeSection {
   title: string;
@@ -85,6 +86,7 @@ export default function HomeScreen() {
   // Fade real content in when loading completes and sections are present
   useEffect(() => {
     if (!isLoadingHome && sections.length > 0) {
+      performance.mark("screenInteractive");
       contentOpacity.setValue(0);
       Animated.timing(contentOpacity, {
         toValue: 1,

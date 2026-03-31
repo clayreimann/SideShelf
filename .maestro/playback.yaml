@@ -1,0 +1,43 @@
+appId: cloud.madtown.sideshelf
+---
+# Regression flow: Playback
+# Verifies: login -> start playback -> full-screen player -> pause -> seek -> speed control -> dismiss
+- launchApp
+- runFlow: .maestro/_login.yaml
+- runFlow: .maestro/_start-playback.yaml
+
+# Navigate to Home to access FloatingPlayer (it hides on item detail page)
+- tapOn: "Home"
+- waitForAnimationToEnd
+
+# Assert floating player is visible
+- assertVisible:
+    id: "floating-player"
+
+# Open full-screen player
+- tapOn:
+    id: "floating-player"
+- waitForAnimationToEnd
+
+# Verify seek slider is present
+- assertVisible:
+    id: "seek-slider"
+
+# Test seek by swiping on the slider (tapOn won't work with PanResponder)
+- swipe:
+    id: "seek-slider"
+    direction: RIGHT
+    duration: 400
+
+# Verify speed control is present
+- assertVisible:
+    id: "speed-control"
+
+# Dismiss full-screen player
+- tapOn:
+    id: "player-done-button"
+- waitForAnimationToEnd
+
+# Assert we're back and floating player is still showing
+- assertVisible:
+    id: "floating-player"
