@@ -34,7 +34,8 @@
     "test:coverage": "jest --coverage",
     "test:report": "jest --coverage --json --outputFile=test-results.json && echo 'open test-report.html coverage/lcov-report/index.html'",
     "drizzle:generate": "drizzle-kit generate --config=drizzle.config.ts",
-    "screenshots": "bash scripts/run-screenshots.sh"
+    "screenshots": "bash scripts/run-screenshots.sh",
+    "maestro:test": "bash scripts/run-maestro-tests.sh"
   },
   "dependencies": {
     "@douglowder/expo-av-route-picker-view": "^0.0.5",
