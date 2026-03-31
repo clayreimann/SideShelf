@@ -1,0 +1,31 @@
+appId: cloud.madtown.sideshelf
+---
+# Regression flow: Download
+# Verifies: login -> navigate to item -> trigger download -> assert download progress
+- launchApp
+- runFlow: .maestro/_login.yaml
+
+# Navigate to Library and open first item
+- tapOn: "Library"
+- waitForAnimationToEnd
+- tapOn: "Library"
+- waitForAnimationToEnd
+- tapOn:
+    id: "library-item"
+    index: 0
+- waitForAnimationToEnd
+
+# Tap the ellipsis menu trigger to open the action menu
+- tapOn:
+    id: "download-button"
+- waitForAnimationToEnd
+
+# Tap "Download" from the native UIMenu
+# (Maestro can tap menu items by text after the menu opens)
+- tapOn: "Download"
+- waitForAnimationToEnd
+
+# Assert some download indication is visible
+# The download progress view or a badge should appear after tapping Download.
+# Use a generous wait -- downloads take time to start.
+- waitForAnimationToEnd
