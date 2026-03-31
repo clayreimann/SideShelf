@@ -1,0 +1,26 @@
+appId: cloud.madtown.sideshelf
+---
+# Idempotent login subflow
+# If already on home/library screen, skip login.
+# Credentials injected via --env flags from .env.maestro.
+- runFlow:
+    when:
+      notVisible: "Library"
+    commands:
+      - tapOn:
+          id: "login-server-url-input"
+      - clearText
+      - inputText: ${MAESTRO_SERVER_URL}
+      - tapOn:
+          id: "login-username-input"
+      - waitForAnimationToEnd
+      - clearText
+      - inputText: ${MAESTRO_USERNAME}
+      - tapOn:
+          id: "login-password-input"
+      - clearText
+      - inputText: ${MAESTRO_PASSWORD}
+      - waitForAnimationToEnd
+      - tapOn:
+          id: "login-button"
+      - waitForAnimationToEnd
