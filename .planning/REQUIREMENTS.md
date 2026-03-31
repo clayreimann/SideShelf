@@ -71,10 +71,10 @@ Requirements for the Beta Polish milestone. Each maps to roadmap phases.
 ### UI Testing (TESTING)
 
 - [ ] **TESTING-01**: Login screen inputs have `testID` attributes enabling automated authentication in Maestro
-- [ ] **TESTING-02**: Maestro `_login.yaml` subflow authenticates from environment variable credentials and is idempotent (safe to call when already logged in)
+- [x] **TESTING-02**: Maestro `_login.yaml` subflow authenticates from environment variable credentials and is idempotent (safe to call when already logged in)
 - [ ] **TESTING-03**: Key interactive elements have `testID` attributes (play-resume-button, player-done-button, seek-slider, speed-control, download-button, library-search-input)
-- [ ] **TESTING-04**: Maestro flows decomposed into reusable subflows (`_login`, `_start-playback`) and standalone screen flows
-- [ ] **TESTING-05**: Maestro regression suite covers library navigation, playback, and download flows as independently executable test files
+- [x] **TESTING-04**: Maestro flows decomposed into reusable subflows (`_login`, `_start-playback`) and standalone screen flows
+- [x] **TESTING-05**: Maestro regression suite covers library navigation, playback, and download flows as independently executable test files
 
 ## v2 Requirements
 
@@ -145,10 +145,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEBT-02       | Phase 19 | Complete |
 | DEBT-03       | Phase 22 | Pending  |
 | TESTING-01    | Phase 21 | Pending  |
-| TESTING-02    | Phase 21 | Pending  |
+| TESTING-02    | Phase 21 | Complete |
 | TESTING-03    | Phase 21 | Pending  |
-| TESTING-04    | Phase 21 | Pending  |
-| TESTING-05    | Phase 21 | Pending  |
+| TESTING-04    | Phase 21 | Complete |
+| TESTING-05    | Phase 21 | Complete |
 
 **Coverage:**
 

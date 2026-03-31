@@ -242,9 +242,9 @@ Plans:
 Plans:
 
 - [ ] 21-01-PLAN.md — Add testID attributes to login screen, player, and library elements (TESTING-01, TESTING-03)
-- [ ] 21-02-PLAN.md — Create reusable Maestro subflows: \_login.yaml and \_start-playback.yaml (TESTING-02, TESTING-04)
+- [x] 21-02-PLAN.md — Create reusable Maestro subflows: \_login.yaml and \_start-playback.yaml (TESTING-02, TESTING-04)
 - [ ] 21-03-PLAN.md — Create standalone regression flows: library-navigation, playback, download (TESTING-04, TESTING-05)
-- [ ] 21-04-PLAN.md — Project setup: .env.maestro, .gitignore, maestro:test npm script (TESTING-02, TESTING-05)
+- [x] 21-04-PLAN.md — Project setup: .env.maestro, .gitignore, maestro:test npm script (TESTING-02, TESTING-05)
 
 ### Phase 22: ProgressService Decomposition
 
@@ -284,5 +284,5 @@ Plans:
 | 18. Sleep Timer Fade + Navigation + Path Std      | 4/5       | Complete       |             | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | 2/5       | Complete       | 2026-03-18  | -          |
 | 20. Tree Shaking                                  | 2/2       | Complete       | 2026-03-30  | -          |
-| 21. Maestro UI Testing Infrastructure             | v1.3      | 0/4            | Not started | -          |
+| 21. Maestro UI Testing Infrastructure             | v1.3      | 2/4 | In Progress|  |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
