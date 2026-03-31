@@ -1,0 +1,21 @@
+appId: cloud.madtown.sideshelf
+---
+# Subflow: open first library item and start playback
+- tapOn: "Library"
+- waitForAnimationToEnd
+# Double-tap Library tab to ensure we're at the list root
+# (same pattern as capture-screenshots.yaml)
+- tapOn: "Library"
+- waitForAnimationToEnd
+- tapOn:
+    id: "library-item"
+    index: 0
+- waitForAnimationToEnd
+# Tap Play or Resume (label varies depending on prior state)
+- tapOn:
+    id: "play-resume-button"
+    optional: true
+- tapOn:
+    text: "Resume"
+    optional: true
+- waitForAnimationToEnd
