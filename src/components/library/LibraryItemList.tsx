@@ -43,6 +43,7 @@ export default function LibraryItemList({
       <View style={componentStyles.searchContainer}>
         <View style={componentStyles.searchInputWrapper}>
           <TextInput
+            testID="library-search-input"
             placeholder={translate("library.searchPlaceholder")}
             placeholderTextColor={isDark ? "#888" : "#999"}
             style={[

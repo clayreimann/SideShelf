@@ -146,6 +146,7 @@ export default function ConsolidatedPlayerControls({
     return (
       <View style={{ marginBottom: 16, paddingHorizontal: 16 }}>
         <TouchableOpacity
+          testID="play-resume-button"
           style={{
             backgroundColor: "#34C759",
             borderRadius: 8,

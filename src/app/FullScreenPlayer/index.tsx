@@ -529,6 +529,7 @@ export default function FullScreenPlayer() {
         }}
       >
         <TouchableOpacity
+          testID="player-done-button"
           onPress={handleClose}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
@@ -644,6 +645,7 @@ export default function FullScreenPlayer() {
             </Text>
           </View>
           <ProgressBar
+            testID="seek-slider"
             progress={chapterPosition / chapterDuration}
             variant="large"
             interactive={true}

@@ -620,7 +620,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
               }}
               actions={menuActions}
             >
-              <View style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
+              <View testID="download-button" style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
                 <Ionicons name="ellipsis-horizontal" size={24} color={colors.textPrimary} />
               </View>
             </MenuView>

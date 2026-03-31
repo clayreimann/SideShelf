@@ -55,6 +55,8 @@ interface ProgressBarProps {
   minValue?: number;
   /** Override for the right-side time label. When provided, replaces formatTime(duration) on the right side of the progress bar. */
   rightLabel?: string;
+  /** Test ID for Maestro/E2E targeting (applied to the interactive wrapper View) */
+  testID?: string;
 }
 
 // Helper function to format time in seconds to HH:MM:SS or MM:SS
@@ -91,6 +93,7 @@ export default function ProgressBar({
   maxValue,
   minValue = 0,
   rightLabel,
+  testID,
 }: ProgressBarProps) {
   const { styles, colors, isDark } = useThemedStyles();
   const [progressBarWidth, setProgressBarWidth] = useState(0);
@@ -193,6 +196,7 @@ export default function ProgressBar({
   return (
     <View style={[{ marginTop: defaults.marginTop }, containerStyle]}>
       <View
+        testID={interactive ? testID : undefined}
         style={{
           paddingVertical: interactive ? 8 : 0, // Add touch area for interactive bars
         }}

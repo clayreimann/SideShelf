@@ -18,6 +18,7 @@ export interface PlayPauseButtonProps {
   iconSize?: number;
   onPress: () => void;
   onLongPress?: () => void;
+  testID?: string;
 }
 
 export default function PlayPauseButton({
@@ -25,6 +26,7 @@ export default function PlayPauseButton({
   onLongPress,
   hitBoxSize = 44,
   iconSize = 24,
+  testID,
 }: PlayPauseButtonProps) {
   const { colors } = useThemedStyles();
   const isLoadingTrack = usePlayerState((state) => state.player.loading.isLoadingTrack);
@@ -47,6 +49,7 @@ export default function PlayPauseButton({
 
   return (
     <Pressable
+      testID={testID}
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityRole="button"
