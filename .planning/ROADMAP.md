@@ -5,7 +5,7 @@
 - ✅ **v1.0 — Player State Machine Migration** — Phases 1–5 (shipped 2026-02-20)
 - ✅ **v1.1 — Bug Fixes & Polish** — Phases 6–9 (shipped 2026-02-27)
 - ✅ **v1.2 — Tech Cleanup** — Phases 10–13 (shipped 2026-03-08)
-- 🚧 **v1.3 — Beta Polish** — Phases 14–22 (in progress)
+- 🚧 **v1.3 — Beta Polish** — Phases 14–23 (in progress)
 
 ## Phases
 
@@ -60,6 +60,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 - [x] **Phase 20: Tree Shaking** — Standalone production bundle optimization requiring TestFlight verification (completed 2026-03-30)
 - [ ] **Phase 21: Maestro UI Testing Infrastructure** — testID coverage, reusable subflows, regression suite
 - [ ] **Phase 22: ProgressService Decomposition** — Facade + collaborator refactor maintaining 90%+ coverage
+- [ ] **Phase 23: Pre-Release Todos and Notes** — Auth flicker fix, chapter tap seek, smart rewind bypass, optimistic play/pause, More deep navigation
 
 ## Phase Details
 
@@ -258,6 +259,20 @@ Plans:
 3. Progress is saved correctly after 5+ minutes of uninterrupted playback (background sync timer path intact)
    **Plans**: [To be planned]
 
+### Phase 23: Pre-Release Todos and Notes
+
+**Goal:** Fix five known pre-release bugs: auth startup login flicker + expired token UX, chapter tap seek+play, smart rewind bypass on explicit seeks, play/pause icon lag + flicker, and More-tab deep navigation to item detail
+**Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17, D-18
+**Depends on:** Nothing (independent bug fixes; no dependency on Phase 22)
+**Plans:** 4 plans
+
+Plans:
+
+- [ ] 23-01-PLAN.md — Auth startup flicker fix + expired token modal UX
+- [ ] 23-02-PLAN.md — Chapter tap seek + smart rewind bypass + cold-start position display
+- [ ] 23-03-PLAN.md — Play/pause optimistic icon update + flicker fix
+- [ ] 23-04-PLAN.md — More-tab deep navigation to item detail
+
 ## Progress
 
 | Phase                                             | Milestone | Plans Complete | Status      | Completed  |
@@ -284,5 +299,6 @@ Plans:
 | 18. Sleep Timer Fade + Navigation + Path Std      | 4/5       | Complete       |             | -          |
 | 19. Performance Quick Wins + Orphan Reassociation | 2/5       | Complete       | 2026-03-18  | -          |
 | 20. Tree Shaking                                  | 2/2       | Complete       | 2026-03-30  | -          |
-| 21. Maestro UI Testing Infrastructure             | v1.3      | 3/4 | In Progress|  |
+| 21. Maestro UI Testing Infrastructure             | v1.3      | 4/4            | Complete    | 2026-03-31 |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
+| 23. Pre-Release Todos and Notes                   | v1.3      | 0/4            | Not started | -          |
