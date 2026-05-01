@@ -154,6 +154,24 @@ describe("PlaybackControlCollaborator", () => {
 
       expect(applySmartRewind).toHaveBeenCalledWith(0);
     });
+
+    it("calls applySmartRewind when no meta is passed (default behavior preserved)", async () => {
+      await collaborator.executePlay();
+
+      expect(applySmartRewind).toHaveBeenCalled();
+    });
+
+    it("does NOT call applySmartRewind when skipSmartRewind is true in meta", async () => {
+      await collaborator.executePlay({ skipSmartRewind: true });
+
+      expect(applySmartRewind).not.toHaveBeenCalled();
+    });
+
+    it("calls applySmartRewind when skipSmartRewind is false in meta (explicit false = same as default)", async () => {
+      await collaborator.executePlay({ skipSmartRewind: false });
+
+      expect(applySmartRewind).toHaveBeenCalled();
+    });
   });
 
   describe("executePause", () => {
