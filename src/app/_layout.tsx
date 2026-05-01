@@ -6,7 +6,7 @@ import { runDownloadReconciliationScan } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
 import { pruneTraceDumps } from "@/lib/traceDump";
-import { AuthProvider } from "@/providers/AuthProvider";
+import { AuthProvider, authInitializedPromise } from "@/providers/AuthProvider";
 import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
@@ -51,9 +51,12 @@ export default function RootLayout() {
     FontAwesome6: FontAwesome6.font,
   });
 
-  // Wait for fonts to load before rendering the app
+  // Wait for fonts to load AND auth to initialize before hiding the splash screen.
+  // authInitializedPromise resolves when AuthProvider.setInitialized(true) fires,
+  // preventing the 100-500ms login screen flash on cold start when already authenticated.
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded || fontsError) {
+      await authInitializedPromise;
       await SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontsError]);

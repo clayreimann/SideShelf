@@ -15,6 +15,14 @@ import { apiClientService } from "@/services/ApiClientService";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AppState, AppStateStatus } from "react-native";
 
+// Module-level promise that resolves when auth is initialized.
+// Used by RootLayout to hold the splash screen until auth state is known,
+// preventing the login screen flash when already authenticated.
+let _onAuthInitialized: (() => void) | null = null;
+export const authInitializedPromise = new Promise<void>((resolve) => {
+  _onAuthInitialized = resolve;
+});
+
 type AuthState = {
   serverUrl: string | null;
   accessToken: string | null;
@@ -75,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       setInitialized(true);
+      _onAuthInitialized?.();
     })();
   }, [dbInitialized]);
 
