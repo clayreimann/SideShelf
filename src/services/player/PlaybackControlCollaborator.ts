@@ -13,6 +13,7 @@ import { logger } from "@/lib/logger";
 import { useAppStore } from "@/stores/appStore";
 import TrackPlayer from "react-native-track-player";
 import type { IPlaybackControlCollaborator, IPlayerServiceFacade } from "./types";
+import type { DispatchMeta } from "@/types/coordinator";
 
 const log = logger.forTag("PlayerService");
 
@@ -27,7 +28,7 @@ export class PlaybackControlCollaborator implements IPlaybackControlCollaborator
    * Applies smart rewind and starts playback. The coordinator ensures the
    * queue is already built before calling this method.
    */
-  async executePlay(): Promise<void> {
+  async executePlay(meta?: DispatchMeta): Promise<void> {
     try {
       const store = useAppStore.getState();
       // Read position before play() — for streaming tracks, TrackPlayer.getProgress().position
@@ -40,7 +41,9 @@ export class PlaybackControlCollaborator implements IPlaybackControlCollaborator
       // Calling seekTo() on a paused track before play() can trigger a
       // spurious iOS RemotePause ~200ms later (observed in trace seq 175, 233).
       await TrackPlayer.play();
-      await applySmartRewind(currentPosition);
+      if (!meta?.skipSmartRewind) {
+        await applySmartRewind(currentPosition);
+      }
 
       // Clear pause time since we're resuming
       store._setLastPauseTime(null);

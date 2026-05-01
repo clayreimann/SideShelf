@@ -15,7 +15,7 @@
  * always import IPlayerServiceFacade from this file to prevent circular deps.
  */
 
-import type { PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
+import type { DispatchMeta, PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
 import type { PlayerTrack } from "@/types/player";
 import type { Track } from "react-native-track-player";
 
@@ -82,7 +82,7 @@ export interface ITrackLoadingCollaborator {
  * store side-effects (e.g., _setLastPauseTime on pause).
  */
 export interface IPlaybackControlCollaborator {
-  executePlay(): Promise<void>;
+  executePlay(meta?: DispatchMeta): Promise<void>;
   executePause(): Promise<void>;
   executeStop(): Promise<void>;
   executeSeek(position: number): Promise<void>;

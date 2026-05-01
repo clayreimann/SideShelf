@@ -322,6 +322,11 @@ export type EventSource =
 export type DispatchMeta = {
   source?: EventSource;
   restoreSessionId?: string;
+  /** When true, skips the smart rewind phase in executePlay.
+   *  Set by explicit seeks (chapter taps, bookmark jumps) where the
+   *  user has intentionally jumped to a position — smart rewind would
+   *  be unwanted and confusing. */
+  skipSmartRewind?: boolean;
 };
 
 /**
