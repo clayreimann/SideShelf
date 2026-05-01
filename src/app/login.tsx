@@ -76,8 +76,16 @@ export default function LoginModal() {
 
   useEffect(() => {
     if (initialized && isAuthenticated) {
-      console.log("[login] Authenticated, redirecting to back");
-      router.replace("/");
+      // When presented as a formSheet modal (token expired flow), canGoBack() is true —
+      // dismiss the sheet and return to the previous screen without any navigation change.
+      // When presented as the initial login (no back stack), replace with tabs root.
+      if (router.canGoBack()) {
+        console.log("[login] Authenticated via modal, dismissing sheet");
+        router.back();
+      } else {
+        console.log("[login] Authenticated, navigating to tabs");
+        router.replace("/");
+      }
     }
   }, [initialized, isAuthenticated]);
 
@@ -96,7 +104,9 @@ export default function LoginModal() {
       });
       await login({ serverUrl: baseUrl, username, password });
       console.log("[login] Success");
-      router.replace("/");
+      // Navigation is handled by the useEffect below reacting to isAuthenticated becoming true.
+      // Do not call router.replace here — it races with that effect and causes a double-navigation
+      // that triggers "Maximum update depth exceeded" via Stack.Screen setOptions.
     } catch (e: any) {
       console.log("[login] Error", e);
       setError(e?.message || translate("auth.loginFailed"));
