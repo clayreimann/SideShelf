@@ -60,7 +60,7 @@ See `.planning/milestones/v1.2-ROADMAP.md` for full phase details.
 - [x] **Phase 20: Tree Shaking** — Standalone production bundle optimization requiring TestFlight verification (completed 2026-03-30)
 - [ ] **Phase 21: Maestro UI Testing Infrastructure** — testID coverage, reusable subflows, regression suite
 - [ ] **Phase 22: ProgressService Decomposition** — Facade + collaborator refactor maintaining 90%+ coverage
-- [ ] **Phase 23: Pre-Release Todos and Notes** — Auth flicker fix, chapter tap seek, smart rewind bypass, optimistic play/pause, More deep navigation
+- [x] **Phase 23: Pre-Release Todos and Notes** — Auth flicker fix, chapter tap seek, smart rewind bypass, optimistic play/pause, More deep navigation (completed 2026-05-01)
 
 ## Phase Details
 
@@ -264,13 +264,13 @@ Plans:
 **Goal:** Fix five known pre-release bugs: auth startup login flicker + expired token UX, chapter tap seek+play, smart rewind bypass on explicit seeks, play/pause icon lag + flicker, and More-tab deep navigation to item detail
 **Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17, D-18
 **Depends on:** Nothing (independent bug fixes; no dependency on Phase 22)
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
 - [x] 23-01-PLAN.md — Auth startup flicker fix + expired token modal UX
 - [x] 23-02-PLAN.md — Chapter tap seek + smart rewind bypass + cold-start position display
-- [ ] 23-03-PLAN.md — Play/pause optimistic icon update + flicker fix
+- [x] 23-03-PLAN.md — Play/pause optimistic icon update + flicker fix
 - [x] 23-04-PLAN.md — More-tab deep navigation to item detail
 
 ## Progress
@@ -301,4 +301,4 @@ Plans:
 | 20. Tree Shaking                                  | 2/2       | Complete       | 2026-03-30  | -          |
 | 21. Maestro UI Testing Infrastructure             | v1.3      | 4/4            | Complete    | 2026-03-31 |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
-| 23. Pre-Release Todos and Notes                   | v1.3      | 3/4 | In Progress|  |
+| 23. Pre-Release Todos and Notes                   | v1.3      | 4/4 | Complete   | 2026-05-01 |
