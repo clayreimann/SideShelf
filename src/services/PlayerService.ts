@@ -19,7 +19,7 @@ import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { formatTime } from "@/lib/helpers/formatters";
 import { useAppStore } from "@/stores/appStore";
-import type { PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
+import type { DispatchMeta, PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
 import type { PlayerTrack } from "@/types/player";
 import TrackPlayer, {
   AndroidAudioContentType,
@@ -336,8 +336,8 @@ export class PlayerService implements IPlayerServiceFacade {
   /**
    * Execute play (Internal - Called by Coordinator)
    */
-  async executePlay(): Promise<void> {
-    return this.playbackControl.executePlay();
+  async executePlay(meta?: DispatchMeta): Promise<void> {
+    return this.playbackControl.executePlay(meta);
   }
 
   /**

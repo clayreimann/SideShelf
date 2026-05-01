@@ -344,7 +344,7 @@ export class PlayerStateCoordinator extends EventEmitter {
           traceCtx
         );
       }
-      await this.executeTransition(event, nextState);
+      await this.executeTransition(event, nextState, meta);
       // Trace: state entered (only on actual state change)
       if (!isHighFrequency && nextState && nextState !== currentState) {
         trace.addEvent(
@@ -1172,7 +1172,8 @@ export class PlayerStateCoordinator extends EventEmitter {
    */
   private async executeTransition(
     event: PlayerEvent,
-    nextState: PlayerState | null
+    nextState: PlayerState | null,
+    meta?: DispatchMeta
   ): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PlayerService } = require("../PlayerService") as typeof import("../PlayerService");
@@ -1195,10 +1196,24 @@ export class PlayerStateCoordinator extends EventEmitter {
                 wasActivelyPlayingOrPaused &&
                 event.payload.libraryItemId === currentTrack?.libraryItemId
               ) {
-                log.info(
-                  `[Coordinator] Short-circuit: ${event.payload.libraryItemId} already ${previousState} — dispatching PLAY`
-                );
-                dispatchPlayerEvent({ type: "PLAY" }, { source: "native_player" });
+                // If a startPosition is provided and differs from current position,
+                // dispatch SEEK first so the chapter tap lands at the right spot.
+                const startPos = event.payload.startPosition;
+                // Use context.position (coordinator's canonical position) rather than
+                // the store to avoid test environment issues where store mock is minimal.
+                const currentPos = this.context.position;
+                if (startPos !== undefined && Math.abs(startPos - currentPos) > 1) {
+                  log.info(
+                    `[Coordinator] Short-circuit with seek: ${currentPos.toFixed(1)} -> ${startPos.toFixed(1)}`
+                  );
+                  dispatchPlayerEvent({ type: "SEEK", payload: { position: startPos } });
+                } else {
+                  log.info(
+                    `[Coordinator] Short-circuit: ${event.payload.libraryItemId} already ${previousState} — dispatching PLAY`
+                  );
+                }
+                // Thread meta so skipSmartRewind reaches executePlay
+                dispatchPlayerEvent({ type: "PLAY" }, meta ?? { source: "native_player" });
                 return; // skip executeLoadTrack and playIntentOnLoad check
               }
 
@@ -1210,7 +1225,7 @@ export class PlayerStateCoordinator extends EventEmitter {
               // Change 2: dispatch PLAY after successful load if intent is still set.
               // playIntentOnLoad is cleared if PAUSE or error arrived during LOADING.
               if (this.context.playIntentOnLoad) {
-                dispatchPlayerEvent({ type: "PLAY" }, { source: "native_player" });
+                dispatchPlayerEvent({ type: "PLAY" }, meta ?? { source: "native_player" });
               }
             }
             break;
@@ -1253,7 +1268,7 @@ export class PlayerStateCoordinator extends EventEmitter {
                   return;
                 }
               }
-              await playerService.executePlay();
+              await playerService.executePlay(meta);
             }
             break;
 

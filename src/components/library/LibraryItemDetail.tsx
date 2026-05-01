@@ -592,7 +592,14 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
             end: ch.end,
             title: ch.title,
           }))}
-          currentPosition={currentTrack?.libraryItemId === itemId ? position : 0}
+          currentPosition={
+            currentTrack?.libraryItemId === itemId
+              ? // On cold start, player.position is 0 until native track loads.
+                // Fall back to persisted mediaProgress.currentTime so the correct
+                // chapter is highlighted immediately (display-only, no playback impact).
+                position || (progress?.currentTime ?? 0)
+              : progress?.currentTime ?? 0
+          }
           libraryItemId={itemId}
           isCurrentlyPlaying={currentTrack?.libraryItemId === itemId}
         />

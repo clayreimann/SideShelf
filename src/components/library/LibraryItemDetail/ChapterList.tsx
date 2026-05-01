@@ -4,7 +4,7 @@ import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
-import { playerService } from "@/services/PlayerService";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { ApiBookChapter } from "@/types/api";
 import { ChapterRow } from "@/types/database";
 import React, { useCallback, useMemo, useState } from "react";
@@ -69,19 +69,19 @@ export default function ChapterList({
   }, [playedChapters]);
 
   const handleChapterPress = useCallback(
-    async (chapterStart: number) => {
+    (chapterStart: number) => {
       if (!libraryItemId) return;
-      try {
-        if (!isCurrentlyPlaying) {
-          await playerService.playTrack(libraryItemId, undefined, chapterStart);
-        } else {
-          await playerService.seekTo(chapterStart);
-        }
-      } catch (error) {
-        log.error("[handleChapterPress] Failed to jump to chapter:", error as Error);
-      }
+      // Dispatch LOAD_TRACK with skipSmartRewind=true for all chapter taps.
+      // The coordinator short-circuit handles the paused/already-playing case
+      // (dispatches SEEK then PLAY without re-loading the track).
+      // skipSmartRewind prevents the smart rewind phase after an intentional seek.
+      log.info(`[handleChapterPress] Jumping to chapter at ${chapterStart.toFixed(1)}s`);
+      dispatchPlayerEvent(
+        { type: "LOAD_TRACK", payload: { libraryItemId, startPosition: chapterStart } },
+        { source: "ui", skipSmartRewind: true }
+      );
     },
-    [libraryItemId, isCurrentlyPlaying]
+    [libraryItemId]
   );
 
   if (chapters.length === 0) {
