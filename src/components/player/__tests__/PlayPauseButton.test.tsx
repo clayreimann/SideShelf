@@ -14,41 +14,27 @@ import { describe, expect, it, jest, beforeEach } from "@jest/globals";
 import React from "react";
 import { render, fireEvent, act } from "@testing-library/react-native";
 import PlayPauseButton from "@/components/player/PlayPauseButton";
+import { usePlayerState } from "@/stores";
 
 jest.mock("@/lib/theme", () => ({
   useThemedStyles: () => ({ colors: { textPrimary: "#000" } }),
 }));
 
-// Mock usePlayerState as a selector-based hook
-const mockPlayerState = {
-  player: {
-    isPlaying: false,
-    loading: {
-      isLoadingTrack: false,
-    },
-  },
-};
-
 jest.mock("@/stores", () => ({
-  usePlayerState: jest.fn((selector: (state: typeof mockPlayerState) => unknown) =>
-    selector(mockPlayerState)
-  ),
+  usePlayerState: jest.fn(),
 }));
 
 jest.mock("expo-symbols", () => ({ SymbolView: "SymbolView" }));
 
 jest.mock("@expo/vector-icons/MaterialIcons", () => "MaterialIcons");
 
-import { usePlayerState } from "@/stores";
+const mockUsePlayerState = jest.mocked(usePlayerState);
 
-const mockUsePlayerState = usePlayerState as jest.MockedFunction<typeof usePlayerState>;
+type MockState = { player: { isPlaying: boolean; loading: { isLoadingTrack: boolean } } };
 
 function setMockState(isPlaying: boolean, isLoadingTrack: boolean) {
-  mockPlayerState.player.isPlaying = isPlaying;
-  mockPlayerState.player.loading.isLoadingTrack = isLoadingTrack;
-  mockUsePlayerState.mockImplementation((selector: (state: typeof mockPlayerState) => unknown) =>
-    selector(mockPlayerState)
-  );
+  const state: MockState = { player: { isPlaying, loading: { isLoadingTrack } } };
+  mockUsePlayerState.mockImplementation((selector) => selector(state as never));
 }
 
 describe("PlayPauseButton", () => {
@@ -74,7 +60,6 @@ describe("PlayPauseButton", () => {
     setMockState(false, false);
     const { getByRole, UNSAFE_getByType } = render(<PlayPauseButton onPress={jest.fn()} />);
 
-    // Before press: icon should be play
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const SymbolView = require("expo-symbols").SymbolView;
     const getSymbol = () => UNSAFE_getByType(SymbolView).props.name as string;
