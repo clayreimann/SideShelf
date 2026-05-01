@@ -264,14 +264,14 @@ Plans:
 **Goal:** Fix five known pre-release bugs: auth startup login flicker + expired token UX, chapter tap seek+play, smart rewind bypass on explicit seeks, play/pause icon lag + flicker, and More-tab deep navigation to item detail
 **Requirements**: D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-17, D-18
 **Depends on:** Nothing (independent bug fixes; no dependency on Phase 22)
-**Plans:** 1/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 
 - [x] 23-01-PLAN.md — Auth startup flicker fix + expired token modal UX
-- [ ] 23-02-PLAN.md — Chapter tap seek + smart rewind bypass + cold-start position display
+- [x] 23-02-PLAN.md — Chapter tap seek + smart rewind bypass + cold-start position display
 - [ ] 23-03-PLAN.md — Play/pause optimistic icon update + flicker fix
-- [ ] 23-04-PLAN.md — More-tab deep navigation to item detail
+- [x] 23-04-PLAN.md — More-tab deep navigation to item detail
 
 ## Progress
 
@@ -301,4 +301,4 @@ Plans:
 | 20. Tree Shaking                                  | 2/2       | Complete       | 2026-03-30  | -          |
 | 21. Maestro UI Testing Infrastructure             | v1.3      | 4/4            | Complete    | 2026-03-31 |
 | 22. ProgressService Decomposition                 | v1.3      | 0/TBD          | Not started | -          |
-| 23. Pre-Release Todos and Notes                   | v1.3      | 1/4 | In Progress|  |
+| 23. Pre-Release Todos and Notes                   | v1.3      | 3/4 | In Progress|  |
