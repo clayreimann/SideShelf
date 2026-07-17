@@ -226,6 +226,10 @@ jest.mock("@/lib/logger", () => ({
       warn: jest.fn(),
       error: jest.fn(),
     })),
+    // Defaults to enabled to preserve prior (unconditional) mock-logging behavior
+    // for tests that don't care about tag gating; tests that do (e.g. api.test.ts's
+    // lazy-detailed-logging tests) override this per-test with mockReturnValueOnce.
+    isTagEnabled: jest.fn(() => true),
   },
 }));
 

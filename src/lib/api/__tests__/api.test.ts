@@ -37,25 +37,51 @@ jest.mock("@/services/ApiClientService", () => ({
 }));
 
 import { apiFetch } from "@/lib/api/api";
+import { logger } from "@/lib/logger";
 import { apiClientService } from "@/services/ApiClientService";
 
 const mockHandleUnauthorized = apiClientService.handleUnauthorized as jest.MockedFunction<
   typeof apiClientService.handleUnauthorized
 >;
 
-function makeResponse(status: number): Response {
+function makeResponse(
+  status: number,
+  options?: { body?: string; headers?: Record<string, string> }
+): Response {
+  const body = options?.body ?? "";
+  const headerEntries = Object.entries(options?.headers ?? {});
   return {
     ok: status >= 200 && status < 300,
     status,
     headers: {
-      get: () => null,
+      get: (key: string) =>
+        headerEntries.find(([k]) => k.toLowerCase() === key.toLowerCase())?.[1] ?? null,
+      forEach: (cb: (value: string, key: string) => void) => {
+        for (const [k, v] of headerEntries) cb(v, k);
+      },
     },
     clone() {
       return this;
     },
-    text: async () => "",
+    text: async () => body,
   } as unknown as Response;
 }
+
+/**
+ * The mocked logger's forTag() (see src/__tests__/setup.ts) returns a fresh stub
+ * object per call. api.ts creates its "api:fetch:detailed" sublogger once, at
+ * module-load time — so we capture that same reference here (before any test's
+ * jest.clearAllMocks() wipes the forTag mock's call history) to make assertions
+ * against the exact sublogger instance apiFetch actually logs through.
+ */
+function getSubLoggerFor(tag: string) {
+  const calls = (logger.forTag as jest.Mock).mock.calls;
+  const idx = calls.findIndex((call) => call[0] === tag);
+  if (idx === -1) throw new Error(`logger.forTag was never called with tag "${tag}"`);
+  return (logger.forTag as jest.Mock).mock.results[idx].value;
+}
+
+const detailedSubLogger = getSubLoggerFor("api:fetch:detailed");
 
 describe("apiFetch 401 handling", () => {
   beforeEach(() => {
@@ -127,5 +153,94 @@ describe("apiFetch 401 handling", () => {
     // Bounded: original request + exactly one retry, never more
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(mockHandleUnauthorized).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Tests for Brief D (logging): lazy evaluation and body/header redaction on the
+ * "api:fetch:detailed" logging path.
+ *
+ * Problem: this path used to build its log strings — including cloning and fully
+ * reading the response body — unconditionally, on every single API response in
+ * the app, even though the tag is disabled by default (DEFAULT_DISABLED_TAGS in
+ * src/lib/logger/index.ts). It also logged raw, unredacted bodies, so a /login or
+ * /api/me response (which carries access/refresh tokens) or a /login request
+ * (which carries a password) would land in the SQLite-persisted, exportable log
+ * store verbatim whenever a user (or a maliciously-crafted deep link, see
+ * src/app/_layout.tsx) had detailed logging turned on.
+ */
+describe("apiFetch detailed logging (api:fetch:detailed)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (global as any).fetch = jest.fn();
+    // Explicit default per test — clearAllMocks() clears call history but not a
+    // previously-set mockReturnValue, so don't rely on cross-test carryover.
+    (logger.isTagEnabled as jest.Mock).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("never clones or reads the response body when api:fetch:detailed is disabled", async () => {
+    (logger.isTagEnabled as jest.Mock).mockReturnValue(false);
+    const cloneSpy = jest.fn(() => ({ text: async () => "should never be read" }));
+    const response = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null, forEach: () => {} },
+      clone: cloneSpy,
+      text: async () => "should never be read",
+    } as unknown as Response;
+    (global.fetch as jest.Mock).mockResolvedValue(response);
+
+    await apiFetch("/api/me");
+
+    expect(cloneSpy).not.toHaveBeenCalled();
+    expect(detailedSubLogger.info).not.toHaveBeenCalled();
+  });
+
+  it("does not build the detailed log string (JSON.stringify/redact work) when disabled", async () => {
+    (logger.isTagEnabled as jest.Mock).mockReturnValue(false);
+    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(200, { body: "{}" }));
+
+    await apiFetch("/api/me", { method: "POST", body: JSON.stringify({ password: "hunter2" }) });
+
+    // Even the *request*-side detailed log (no fetch/clone involved) must be skipped.
+    expect(detailedSubLogger.info).not.toHaveBeenCalled();
+  });
+
+  it("logs a redacted /login-shaped response body when api:fetch:detailed is enabled", async () => {
+    (logger.isTagEnabled as jest.Mock).mockReturnValue(true);
+    const responseBody = JSON.stringify({
+      user: { id: "u1", username: "clay" },
+      accessToken: "eyJ.access.secret",
+      refreshToken: "eyJ.refresh.secret",
+    });
+    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(200, { body: responseBody }));
+
+    await apiFetch("/login", { method: "POST", body: JSON.stringify({ password: "hunter2" }) });
+
+    expect(detailedSubLogger.info).toHaveBeenCalled();
+    const loggedMessages = (detailedSubLogger.info as jest.Mock).mock.calls.map((c) => c[0]);
+    const combined = loggedMessages.join("\n");
+
+    // Body IS logged (the feature works) but with credentials scrubbed.
+    expect(combined).toContain("clay");
+    expect(combined).not.toContain("eyJ.access.secret");
+    expect(combined).not.toContain("eyJ.refresh.secret");
+    expect(combined).not.toContain("hunter2");
+  });
+
+  it("redacts the Authorization header in the detailed request log when enabled", async () => {
+    (logger.isTagEnabled as jest.Mock).mockReturnValue(true);
+    (apiClientService.getAccessToken as jest.Mock).mockReturnValue("bearer-secret-token");
+    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(200, { body: "{}" }));
+
+    await apiFetch("/api/me");
+
+    const loggedMessages = (detailedSubLogger.info as jest.Mock).mock.calls.map((c) => c[0]);
+    const combined = loggedMessages.join("\n");
+    expect(combined).not.toContain("bearer-secret-token");
   });
 });
