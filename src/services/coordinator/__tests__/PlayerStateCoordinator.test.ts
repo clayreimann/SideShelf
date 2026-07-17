@@ -3438,56 +3438,87 @@ describe("PlayerStateCoordinator", () => {
       jest.clearAllMocks();
     });
 
-    /** Dispatches LOAD_TRACK with executeLoadTrack held pending, so the machine
-     *  genuinely stays in LOADING (no auto-PLAY races ahead) until the test
-     *  resolves it. Returns the resolve function for cleanup. */
-    async function enterGenuineLoading(): Promise<() => void> {
-      let resolveLoad!: () => void;
-      mockPlayerService.executeLoadTrack.mockImplementation(
-        () => new Promise<void>((resolve) => (resolveLoad = resolve))
-      );
-      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(coordinator.getState()).toBe(PlayerState.LOADING);
-      return () => resolveLoad();
-    }
+    // IMPORTANT (non-vacuity): these tests must enter LOADING while leaving
+    // the coordinator's AsyncLock FREE. Holding executeLoadTrack pending (an
+    // earlier version of these tests did that) keeps handleEvent awaiting
+    // inside the lock, so a subsequently dispatched SEEK/PAUSE is never
+    // PROCESSED — it just sits in the queue and "context unchanged" passes on
+    // both old and new code, proving nothing. RELOAD_QUEUE enters LOADING
+    // without any execute* await (executeTransition's LOADING case only calls
+    // executeLoadTrack for LOAD_TRACK events), so the lock releases and the
+    // machine genuinely SITS in LOADING. Each test also asserts
+    // rejectedTransitionCount increased, guaranteeing the event was actually
+    // processed-and-rejected rather than still queued.
 
     it("does not set isSeeking/position on SEEK rejected during LOADING", async () => {
-      const resolveLoad = await enterGenuineLoading();
-      const positionBefore = coordinator.getContext().position;
+      // Enter LOADING with the lock free (see block comment above).
+      await coordinator.dispatch({ type: "RELOAD_QUEUE", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getState()).toBe(PlayerState.LOADING);
+
+      // Give context a nonzero position so the "position unchanged" assertion
+      // discriminates from SEEK's payload. NATIVE_PROGRESS_UPDATED with a
+      // nonzero position is allowed during LOADING (passes the POS-03 guard).
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 500, duration: 3600 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().position).toBe(500);
+      const rejectedBefore = coordinator.getMetrics().rejectedTransitionCount;
 
       // LOADING has no SEEK entry in the transition table — must be rejected.
       await coordinator.dispatch({ type: "SEEK", payload: { position: 4242 } });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
+      // Prove the SEEK was actually processed and rejected (not still queued).
+      expect(coordinator.getMetrics().rejectedTransitionCount).toBe(rejectedBefore + 1);
+
       const context = coordinator.getContext();
-      expect(context.isSeeking).toBe(false);
-      expect(context.position).toBe(positionBefore);
+      expect(context.isSeeking).toBe(false); // old code: true — stuck, no SEEK_COMPLETE coming
+      expect(context.position).toBe(500); // old code: overwritten to 4242
       expect(mockPlayerService.executeSeek).not.toHaveBeenCalled();
       expect(coordinator.getState()).toBe(PlayerState.LOADING);
-
-      resolveLoad();
     });
 
-    it("does not clear isPlaying/playIntentOnLoad on PAUSE rejected during LOADING", async () => {
-      const resolveLoad = await enterGenuineLoading();
-      expect(coordinator.getContext().playIntentOnLoad).toBe(true);
-      expect(coordinator.getContext().isPlaying).toBe(false);
+    it("does not clear isPlaying on PAUSE rejected during LOADING", async () => {
+      // Reach LOADING with isPlaying=true and the lock free: RESTORE_STATE
+      // (isPlaying: true) puts the machine in RESTORING with isPlaying=true,
+      // then RELOAD_QUEUE (allowed from RESTORING) enters LOADING without any
+      // execute* await (see block comment above).
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: { libraryItemId: "test" } as any,
+            position: 100,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: true,
+            currentPlaySessionId: "session-1",
+          },
+        },
+      });
+      await coordinator.dispatch({ type: "RELOAD_QUEUE", payload: { libraryItemId: "test" } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getState()).toBe(PlayerState.LOADING);
+      expect(coordinator.getContext().isPlaying).toBe(true);
+      const rejectedBefore = coordinator.getMetrics().rejectedTransitionCount;
 
       // LOADING has no PAUSE entry — must be rejected. Under the pre-fix
-      // behavior this would still flip isPlaying=false and clear
-      // playIntentOnLoad, even though executePause never ran — corrupting the
-      // flag PlayerService.togglePlayPause() reads to decide PLAY vs PAUSE.
+      // behavior this would still flip isPlaying=false even though
+      // executePause never ran — corrupting the flag
+      // PlayerService.togglePlayPause() reads to decide PLAY vs PAUSE.
       await coordinator.dispatch({ type: "PAUSE" });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
+      // Prove the PAUSE was actually processed and rejected (not still queued).
+      expect(coordinator.getMetrics().rejectedTransitionCount).toBe(rejectedBefore + 1);
+
       const context = coordinator.getContext();
-      expect(context.isPlaying).toBe(false); // unchanged, not "set to false by PAUSE"
-      expect(context.playIntentOnLoad).toBe(true); // NOT cleared — PAUSE was rejected
+      expect(context.isPlaying).toBe(true); // old code: flipped to false
       expect(mockPlayerService.executePause).not.toHaveBeenCalled();
       expect(coordinator.getState()).toBe(PlayerState.LOADING);
-
-      resolveLoad();
     });
 
     it("does not reset state on STOP rejected during RESTORING", async () => {
