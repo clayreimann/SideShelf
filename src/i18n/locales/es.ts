@@ -8,6 +8,10 @@ export const es = {
   "auth.loginFailed": "Error al iniciar sesión",
   "auth.connectedToServer": "Conectado al servidor",
   "auth.searchingForServer": "Buscando servidor…",
+  "auth.insecureLogin.title": "Conexión sin cifrar",
+  "auth.insecureLogin.message":
+    "Este servidor usa una conexión sin cifrar (http://). Tu nombre de usuario y contraseña se enviarán sin cifrar. ¿Deseas continuar de todos modos?",
+  "auth.insecureLogin.continue": "Continuar de todos modos",
 
   // Navigation Tabs
   "tabs.home": "Inicio",

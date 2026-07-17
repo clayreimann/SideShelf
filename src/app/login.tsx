@@ -1,10 +1,12 @@
 import { translate } from "@/i18n";
 import { doPing } from "@/lib/api/endpoints";
+import { isInsecureLoginUrl } from "@/lib/helpers/networkAddress";
 import { useThemedStyles } from "@/lib/theme";
 import { Stack, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -93,8 +95,7 @@ export default function LoginModal() {
     return !!baseUrl && !!username && !!password && !submitting && didPing;
   }, [baseUrl, username, password, submitting, didPing]);
 
-  async function onSubmit() {
-    if (!canSubmit) return;
+  async function performLogin() {
     setSubmitting(true);
     setError(null);
     try {
@@ -113,6 +114,26 @@ export default function LoginModal() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function onSubmit() {
+    if (!canSubmit) return;
+
+    if (isInsecureLoginUrl(baseUrl)) {
+      Alert.alert(translate("auth.insecureLogin.title"), translate("auth.insecureLogin.message"), [
+        { text: translate("common.cancel"), style: "cancel" },
+        {
+          text: translate("auth.insecureLogin.continue"),
+          style: "destructive",
+          onPress: () => {
+            void performLogin();
+          },
+        },
+      ]);
+      return;
+    }
+
+    void performLogin();
   }
 
   return (

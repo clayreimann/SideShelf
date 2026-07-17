@@ -30,6 +30,31 @@ module.exports = ({ config }) => {
       resizeMode: "cover",
       backgroundColor: "#000000",
     },
+    // --- Transport security (cleartext HTTP) decision ---------------------
+    // SideShelf talks to self-hosted Audiobookshelf servers, and a real
+    // fraction of those are reachable only over plain http:// — LAN IPs
+    // without a cert, or DDNS hostnames (e.g. myhome.duckdns.org) that were
+    // never put behind TLS. Restricting cleartext to RFC1918/.local hosts
+    // only (iOS's NSAllowsLocalNetworking) would silently break that
+    // DDNS-over-HTTP case, which is common enough for this kind of app that
+    // breaking it outright is too aggressive.
+    //
+    // Decision: keep cleartext HTTP allowed to ANY host on both platforms
+    // (NSAllowsArbitraryLoads on iOS, usesCleartextTraffic on Android —
+    // see below), and instead warn the user in the login screen
+    // (src/app/login.tsx, via src/lib/helpers/networkAddress.ts) when the
+    // server URL is http:// AND the host is not private/LAN, before
+    // credentials are submitted. Certificate pinning is deliberately not
+    // used (self-hosted servers use arbitrary/self-signed certs).
+    //
+    // Effective Android behavior before this change: apps targeting API 28+
+    // (this app does, via Expo SDK 54) get cleartext traffic BLOCKED by
+    // default at the OS level unless usesCleartextTraffic/a network security
+    // config says otherwise. Since neither was set here, Android was
+    // actually MORE restrictive than iOS — any http:// request (including
+    // to LAN servers) would already fail with a network security exception.
+    // usesCleartextTraffic: true below restores parity with the iOS
+    // decision above (allow cleartext, warn on login instead of blocking).
     ios: {
       supportsTablet: true,
       infoPlist: {
@@ -44,6 +69,7 @@ module.exports = ({ config }) => {
       bundleIdentifier: "cloud.madtown.sideshelf",
     },
     android: {
+      usesCleartextTraffic: true,
       adaptiveIcon: {
         backgroundColor: "#E6F4FE",
         foregroundImage: "./assets/images/android-icon-foreground.png",
