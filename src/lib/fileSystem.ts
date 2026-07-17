@@ -217,6 +217,26 @@ export function downloadFileExists(
 }
 
 /**
+ * Delete a single downloaded file if it exists. Used by forceRedownload to clear a
+ * corrupt/partial file before re-fetching it, instead of relying on the downloader's
+ * overwrite semantics.
+ * @param libraryItemId - The library item ID
+ * @param filename - The filename to delete
+ * @param location - Where to delete from ('documents' or 'caches')
+ */
+export function deleteDownloadFile(
+  libraryItemId: string,
+  filename: string,
+  location: StorageLocation = "caches"
+): void {
+  const dir = getDownloadsDirectory(libraryItemId, location);
+  const file = new File(dir, filename);
+  if (file.exists) {
+    file.delete();
+  }
+}
+
+/**
  * Verify that a file actually exists at the given path
  * This is important for cache directories where the OS might delete files
  */
