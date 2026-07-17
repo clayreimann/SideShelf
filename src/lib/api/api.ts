@@ -27,6 +27,24 @@ export type ApiFetchOptions = Omit<RequestInit, "signal"> & {
 };
 
 export async function apiFetch(pathOrUrl: string, init?: ApiFetchOptions): Promise<Response> {
+  return apiFetchWithRetryGuard(pathOrUrl, init, /* isRetry */ false);
+}
+
+/**
+ * Internal implementation with a one-retry guard on 401s.
+ *
+ * A 401 triggers at most one refresh + retry cycle. If the retried request
+ * also comes back 401 (e.g. a revoked user, a permission-scoped endpoint, or
+ * a reverse-proxy auth mismatch where /auth/refresh keeps succeeding but the
+ * resource keeps rejecting), that second 401 is returned to the caller as-is
+ * instead of recursing again — otherwise a misbehaving server can drive an
+ * unbounded refresh/retry loop.
+ */
+async function apiFetchWithRetryGuard(
+  pathOrUrl: string,
+  init: ApiFetchOptions | undefined,
+  isRetry: boolean
+): Promise<Response> {
   const url = resolveUrl(pathOrUrl);
   const { auth = true, timeout, headers, ...rest } = init || {};
   const token = apiClientService.getAccessToken();
@@ -63,12 +81,13 @@ export async function apiFetch(pathOrUrl: string, init?: ApiFetchOptions): Promi
     detailedLog.info(
       `<- ${res.status} ${method} ${scrubUrl(url)} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()} [${duration}ms]`
     );
-    if (res.status === 401) {
+    if (res.status === 401 && !isRetry) {
       log.info("access token expired, refreshing token...");
       const success = await apiClientService.handleUnauthorized();
       if (success) {
-        // Retry with fresh token (recursive call will have its own timing)
-        return await apiFetch(pathOrUrl, init);
+        // Retry once with fresh token. isRetry=true ensures a second 401 is
+        // returned as-is rather than triggering another refresh cycle.
+        return await apiFetchWithRetryGuard(pathOrUrl, init, /* isRetry */ true);
       }
     }
     if (!res.ok) {

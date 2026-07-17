@@ -171,8 +171,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error("Missing token in response");
         }
 
-        // Update tokens in ApiClientService
-        await apiClientService.setTokens(accessToken, refreshToken!, username);
+        // Update tokens in ApiClientService.
+        // Servers older than Audiobookshelf v2.26 return only an access
+        // token from /login with no refresh token (see
+        // extractTokensFromAuthResponse in src/db/helpers/tokens.ts, which
+        // models this by returning refreshToken: null). Rather than reject
+        // the login, we support token-only auth (option b): store the
+        // access token with no refresh token. A later 401 will find no
+        // refresh token in ApiClientService.performTokenRefresh and
+        // terminate the session (clearTokens) instead of attempting to
+        // refresh — the user sees "Session expired" and must log in again.
+        await apiClientService.setTokens(accessToken, refreshToken, username);
 
         // Persist username separately
         await persistUsername(username);
