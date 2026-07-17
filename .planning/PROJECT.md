@@ -70,11 +70,19 @@ The coordinator owns player state — services execute its commands and report r
 - [ ] Tech debt: path standardization, orphan reassociation, ProgressService decomposition (DEBT-01–03)
 - [ ] Maestro UI testing: deep links, self-contained login, testID coverage, flow decomposition, regression suite (TESTING-01–05)
 
+### Future Public Roadmap
+
+The existing v1.0–v1.3 milestone names describe pre-release engineering history. Public version numbering starts with the initial store release.
+
+- **Public 1.1 — Podcasts:** full-featured listening for existing Audiobookshelf podcast libraries, including episode-aware playback/progress, manual and automatic device downloads, retention, played state, and podcast-only Up Next. RNTP remains the production baseline. See `docs/superpowers/specs/2026-07-17-public-v1.1-podcasts-design.md`.
+- **Public 1.2 — Audio Browser + cars:** migrate local playback from RNTP to Audio Browser and add browsable CarPlay/Android Auto support without regressing audiobooks or public 1.1 podcasts. See `docs/superpowers/specs/2026-07-17-public-v1.2-audio-browser-carplay-android-auto-design.md`.
+
 ### Out of Scope
 
 - Full playerSlice removal — Zustand/React integration is valuable; stays as read-only proxy
 - Changing the state machine topology — Phase 1 validated the transition matrix; it stays
 - iOS native intents, Siri shortcuts — deferred to a future features milestone
+- Google Cast support — deferred indefinitely pending demonstrated user demand and a sustainable real-device test practice; requirements and open questions are recorded in `docs/investigation/google-cast-support.md`
 - Cloudflare feedback worker — deferred to a future milestone
 - PERF-01: NATIVE_PROGRESS_UPDATED bypass of async-lock — requires explicit safety analysis; deferred
 - DIAG-01/02: Coordinator diagnostics to crash reporting — deferred
