@@ -75,6 +75,23 @@ export async function initializeApp(): Promise<void> {
       useAppStore.getState().logger.updateErrorCounts();
     });
 
+    // Subscribe logger to purge events so the store's error-acknowledgment state stays
+    // in sync with trimmed log history. This is the store-side half of the inversion
+    // that keeps src/lib/logger free of any dependency on src/stores — see
+    // Logger.subscribeToPurge() for details.
+    logger.subscribeToPurge((cutoffTimestamp) => {
+      const loggerSlice = useAppStore.getState().logger;
+      if (
+        loggerSlice.errorsAcknowledgedTimestamp !== null &&
+        loggerSlice.errorsAcknowledgedTimestamp < cutoffTimestamp
+      ) {
+        // Acknowledgment timestamp is older than the cutoff - reset it
+        loggerSlice.resetErrorAcknowledgment();
+      }
+      // Update counts to check for any remaining errors/warnings
+      loggerSlice.updateErrorCounts();
+    });
+
     // Trigger initial purge on app start
     logger.manualTrim();
 

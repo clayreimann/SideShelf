@@ -34,6 +34,7 @@
     "test:coverage": "jest --coverage",
     "test:report": "jest --coverage --json --outputFile=test-results.json && echo 'open test-report.html coverage/lcov-report/index.html'",
     "drizzle:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "check:circular": "node scripts/check-circular.mjs",
     "screenshots": "bash scripts/run-screenshots.sh",
     "maestro:test": "bash scripts/run-maestro-tests.sh"
   },
@@ -101,6 +102,7 @@
     "@types/react": "~19.1.0",
     "babel-plugin-inline-import": "3.0.0",
     "better-sqlite3": "^12.4.1",
+    "dpdm": "^4.2.0",
     "drizzle-kit": "^0.31.4",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",

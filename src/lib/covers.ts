@@ -1,6 +1,7 @@
 import { db } from "@/db/client";
 import { setLocalCoverCached } from "@/db/helpers/localData";
 import { libraryItems } from "@/db/schema/libraryItems";
+import { mediaMetadata } from "@/db/schema/mediaMetadata";
 import { apiFetch } from "@/lib/api/api";
 import { fetchLibraryItemCoverHead } from "@/lib/api/endpoints";
 import { eq } from "drizzle-orm";
@@ -57,6 +58,26 @@ export async function cacheCoverIfMissing(
     console.error(`[covers] Failed to download cover for ${libraryItemId}:`, error);
     return { uri: "", wasDownloaded: false };
   }
+}
+
+/**
+ * Download a library item's cover if missing, and persist the local cache record.
+ *
+ * Extracted so both @/db/helpers/mediaMetadata (which resolves mediaId from
+ * libraryItemId via its own DB query) and repairMissingCoverArt below (which already
+ * has both IDs from its own query) can share this logic. Callers pass mediaId
+ * explicitly rather than covers.ts importing back into mediaMetadata.ts to look it up
+ * — that reverse import used to form a circular dependency between the two modules.
+ */
+export async function cacheCoverAndPersist(
+  libraryItemId: string,
+  mediaId: string
+): Promise<{ uri: string; wasDownloaded: boolean }> {
+  const result = await cacheCoverIfMissing(libraryItemId);
+  if (result.uri) {
+    await setLocalCoverCached(mediaId, result.uri);
+  }
+  return result;
 }
 
 export async function cacheCoversForLibrary(libraryId: string): Promise<void> {
@@ -128,12 +149,8 @@ export async function clearCoverCache(libraryItemId: string): Promise<void> {
  */
 export async function repairMissingCoverArt(): Promise<void> {
   try {
-    const { db } = await import("@/db/client");
-    const { mediaMetadata } = await import("@/db/schema/mediaMetadata");
-    const { cacheCoverAndUpdateMetadata } = await import("@/db/helpers/mediaMetadata");
-
     const allItems = await db
-      .select({ libraryItemId: mediaMetadata.libraryItemId })
+      .select({ libraryItemId: mediaMetadata.libraryItemId, mediaId: mediaMetadata.id })
       .from(mediaMetadata);
 
     const itemsNeedingCovers = allItems.filter(
@@ -154,7 +171,9 @@ export async function repairMissingCoverArt(): Promise<void> {
       const results = await Promise.all(
         batch.map((item) =>
           item.libraryItemId
-            ? cacheCoverAndUpdateMetadata(item.libraryItemId).catch(() => false)
+            ? cacheCoverAndPersist(item.libraryItemId, item.mediaId)
+                .then((result) => result.wasDownloaded)
+                .catch(() => false)
             : Promise.resolve(false)
         )
       );
