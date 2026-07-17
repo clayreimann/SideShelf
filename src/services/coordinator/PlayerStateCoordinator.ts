@@ -669,6 +669,27 @@ export class PlayerStateCoordinator extends EventEmitter {
         // (BGS handlePlaybackError's store._setTrackLoading(false) removed in Phase 4)
         this.context.isLoadingTrack = false;
         this.context.playIntentOnLoad = false;
+        // Brief E (streaming auth header migration): mark the queue stale so the
+        // next PLAY rebuilds it via the existing queueStatus==='unknown' inline
+        // path (see case PlayerState.PLAYING above) instead of resuming the same
+        // queue that just failed. Streamed tracks carry the access token as a
+        // per-track Authorization header set once when the queue was built; if
+        // the token rotates mid-playback (ApiClientService's refresh flow), the
+        // queued track's header goes stale and the native player will keep
+        // failing against the same URL/header. RNTP surfaces this as a generic
+        // playback error (Android: PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+        // for ANY bad HTTP status incl. 401, not 401-specific; iOS: no HTTP-status
+        // detail at all — react-native-track-player 4.1.2's iOS PlaybackError event
+        // only carries `{error: string}`, no code — confirmed at
+        // ios/RNTrackPlayer/RNTrackPlayer.swift:838 and doublesymmetry/
+        // react-native-track-player GitHub issue #1437). Since neither platform
+        // reliably distinguishes "401 from a stale token" from other playback
+        // failures, we don't gate on event.code/message — instead any playback
+        // error invalidates the queue so the NEXT play attempt (user retry or
+        // app-driven) rebuilds with a fresh play session + fresh token via
+        // executeRebuildQueue. A non-token-related failure just fails again with
+        // a fresh NATIVE_PLAYBACK_ERROR — no worse than today.
+        this.context.queueStatus = "unknown";
         break;
 
       case "SESSION_SYNC_FAILED":

@@ -3252,6 +3252,110 @@ describe("PlayerStateCoordinator", () => {
   });
 
   // ============================================================================
+  // Brief E: NATIVE_PLAYBACK_ERROR marks the queue stale so a retry rebuilds
+  // with a fresh play session / access token, instead of resuming the same
+  // (possibly stale-token) queue that just failed. Reuses the existing
+  // queueStatus==='unknown' inline-rebuild path from Change 4 — no parallel
+  // recovery mechanism.
+  // ============================================================================
+
+  describe("Brief E: NATIVE_PLAYBACK_ERROR marks queue stale for fresh-credential retry", () => {
+    let mockPlayerService: {
+      executeLoadTrack: ReturnType<typeof jest.fn>;
+      executePlay: ReturnType<typeof jest.fn>;
+      executeRebuildQueue: ReturnType<typeof jest.fn>;
+    };
+    const mockResumeInfo = {
+      position: 45,
+      source: "activeSession" as const,
+      authoritativePosition: 45,
+      asyncStoragePosition: null,
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      (mockPlayerService.executeRebuildQueue as jest.Mock).mockResolvedValue(mockResumeInfo);
+      jest.clearAllMocks();
+    });
+
+    const mockTrack: any = {
+      libraryItemId: "item-1",
+      mediaId: "media-1",
+      title: "Test",
+      duration: 3600,
+      audioFiles: [],
+      chapters: [],
+      isDownloaded: true,
+    };
+
+    /** Drive the coordinator to PLAYING with currentTrack set and queueStatus='valid'. */
+    async function reachPlayingWithValidQueue() {
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: mockTrack,
+            position: 10,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // RESTORING -> LOADING
+      await coordinator.dispatch({
+        type: "RELOAD_QUEUE",
+        payload: { libraryItemId: "item-1" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // LOADING -> READY, queueStatus='valid'
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 10 } });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().queueStatus).toBe("valid");
+      // READY -> PLAYING
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(coordinator.getContext().currentState).toBe(PlayerState.PLAYING);
+    }
+
+    it("flips queueStatus from 'valid' to 'unknown' when a playback error occurs while PLAYING", async () => {
+      await reachPlayingWithValidQueue();
+      jest.clearAllMocks();
+
+      await coordinator.dispatch({
+        type: "NATIVE_PLAYBACK_ERROR",
+        payload: { code: "android-io-bad-http-status", message: "Response code: 401" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getContext().currentState).toBe(PlayerState.ERROR);
+      expect(coordinator.getContext().queueStatus).toBe("unknown");
+    });
+
+    it("rebuilds the queue (fresh session/token) via executeRebuildQueue when PLAY is retried from ERROR", async () => {
+      await reachPlayingWithValidQueue();
+
+      await coordinator.dispatch({
+        type: "NATIVE_PLAYBACK_ERROR",
+        payload: { code: "android-io-bad-http-status", message: "Response code: 401" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.clearAllMocks();
+
+      // User (or app) retries playback — ERROR allows PLAY -> PLAYING
+      await coordinator.dispatch({ type: "PLAY" });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(mockPlayerService.executeRebuildQueue).toHaveBeenCalled();
+      expect(mockPlayerService.executePlay).toHaveBeenCalled();
+      expect(coordinator.getContext().queueStatus).toBe("valid");
+    });
+  });
+
+  // ============================================================================
   // Jump detection: _pendingProgressJump set only for unintentional large deltas
   // ============================================================================
 
