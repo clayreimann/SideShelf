@@ -277,8 +277,18 @@ export class PlayerStateCoordinator extends EventEmitter {
       );
     }
 
-    // Update context based on event payload (even in observer mode, for accurate tracking)
-    this.updateContextFromEvent(event);
+    // Update context based on event payload — ONLY for allowed transitions.
+    // Core state-machine invariant: a rejected event must have zero effect on
+    // context. Previously this ran unconditionally, so e.g. a SEEK rejected
+    // during LOADING would still set isSeeking=true/position, and a PAUSE
+    // rejected during LOADING would still clear isPlaying/playIntentOnLoad —
+    // corrupting context without the corresponding execute* ever running.
+    // Kept at this position (before the diagnosticEvent snapshot below) so
+    // diagnostics/trace semantics for ALLOWED events are unchanged: the
+    // diagnostic and history entries still capture post-update context.
+    if (validation.allowed) {
+      this.updateContextFromEvent(event);
+    }
 
     // Log diagnostic event
     const diagnosticEvent: DiagnosticEvent = {
@@ -1310,7 +1320,26 @@ export class PlayerStateCoordinator extends EventEmitter {
         `[Coordinator] Error executing transition: ${event.type} -> ${nextState}`,
         error as Error
       );
-      // We might want to dispatch an error event here, but be careful of infinite loops
+      // Recovery: route to ERROR so the machine doesn't get stuck (e.g. LOADING
+      // has no JS-reachable exit — only native events that never arrive after a
+      // JS-side throw). ERROR allows PLAY/LOAD_TRACK/STOP, so the user can retry.
+      //
+      // Loop protection — do not re-dispatch when:
+      // 1. the failing event was itself an error event (NATIVE_ERROR /
+      //    NATIVE_PLAYBACK_ERROR) — avoids recursing if handling an error event
+      //    itself throws.
+      // 2. the machine is already in ERROR/FATAL_ERROR — avoids dispatching a
+      //    fresh error while one is already being handled.
+      const isErrorEvent = event.type === "NATIVE_ERROR" || event.type === "NATIVE_PLAYBACK_ERROR";
+      const alreadyInErrorState =
+        this.context.currentState === PlayerState.ERROR ||
+        this.context.currentState === PlayerState.FATAL_ERROR;
+      if (!isErrorEvent && !alreadyInErrorState) {
+        dispatchPlayerEvent(
+          { type: "NATIVE_ERROR", payload: { error: error as Error } },
+          { source: "native_player" }
+        );
+      }
     }
   }
 }

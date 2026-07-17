@@ -30,6 +30,7 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
     NATIVE_STATE_CHANGED: PlayerState.LOADING, // Allow state changes during loading
     NATIVE_PROGRESS_UPDATED: PlayerState.LOADING, // Allow progress updates during loading
+    STOP: PlayerState.IDLE, // Allow bailing out of a hung/stuck load (review-b)
   },
 
   [PlayerState.READY]: {
