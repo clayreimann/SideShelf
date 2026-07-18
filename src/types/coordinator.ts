@@ -313,6 +313,7 @@ export type EventSource =
   | "remote_command"
   | "sleep_timer"
   | "startup_bootstrap"
+  | "progress_service"
   | "unknown";
 
 /**

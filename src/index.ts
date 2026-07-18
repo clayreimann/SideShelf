@@ -151,6 +151,17 @@ export async function initializeApp(): Promise<void> {
       // Don't throw - continue initialization even if state restoration fails
     }
 
+    // Start ProgressService periodic background sync — only when a user is logged in.
+    // (Previously started as a constructor side effect, running even when logged out.)
+    // AuthProvider.login/logout call initialize()/shutdown() for mid-session auth changes;
+    // both are idempotent.
+    const currentUser = await getCurrentUser();
+    if (currentUser) {
+      progressService.initialize();
+    } else {
+      log.info("No authenticated user — ProgressService periodic sync not started");
+    }
+
     // Initialize other services here as needed
     // await downloadService.initialize();
     // await otherService.initialize();

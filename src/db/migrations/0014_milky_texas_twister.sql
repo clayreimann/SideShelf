@@ -1,0 +1,1 @@
+CREATE INDEX `local_listening_sessions_user_library_idx` ON `local_listening_sessions` (`user_id`,`library_item_id`);
