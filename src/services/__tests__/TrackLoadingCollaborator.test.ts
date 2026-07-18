@@ -336,7 +336,7 @@ describe("TrackLoadingCollaborator", () => {
       expect(tracks).toHaveLength(0);
     });
 
-    it("uses streaming URL when file is not downloaded and session available", async () => {
+    it("uses streaming URL with Authorization header, no token in URL, when file is not downloaded and session available", async () => {
       const streamingAudioFile = {
         ...mockAudioFiles[0],
         downloadInfo: { isDownloaded: false, downloadPath: null },
@@ -358,8 +358,43 @@ describe("TrackLoadingCollaborator", () => {
       const tracks = await collaborator.buildTrackList(trackWithStreaming as any);
 
       expect(tracks).toHaveLength(1);
-      expect(tracks[0].url).toContain("http://test");
-      expect(tracks[0].url).toContain("token=tok123");
+      expect(tracks[0].url).toBe("http://test/api/items/item-1/play");
+      expect(tracks[0].url).not.toContain("token=");
+      expect(tracks[0].url).not.toContain("tok123");
+      expect(tracks[0].headers).toEqual({ Authorization: "Bearer tok123" });
+    });
+
+    it("preserves existing query params on the streaming content URL (no token appended)", async () => {
+      const streamingAudioFile = {
+        ...mockAudioFiles[0],
+        downloadInfo: { isDownloaded: false, downloadPath: null },
+      };
+      const trackWithStreaming = { ...baseTrack, audioFiles: [streamingAudioFile] };
+
+      require("@/lib/api/endpoints").startPlaySession.mockResolvedValue({
+        id: "sess-1",
+        audioTracks: [
+          {
+            index: 0,
+            contentUrl: "/api/items/item-1/play?ts=123",
+            mimeType: "audio/mp4",
+            metadata: { filename: "test.m4b" },
+          },
+        ],
+      });
+
+      const tracks = await collaborator.buildTrackList(trackWithStreaming as any);
+
+      expect(tracks[0].url).toBe("http://test/api/items/item-1/play?ts=123");
+      expect(tracks[0].headers).toEqual({ Authorization: "Bearer tok123" });
+    });
+
+    it("does not set headers on local (downloaded) file tracks", async () => {
+      const tracks = await collaborator.buildTrackList(baseTrack as any);
+
+      expect(tracks).toHaveLength(1);
+      expect(tracks[0].url).toBe("/full/path/to/downloads/test.m4b");
+      expect(tracks[0].headers).toBeUndefined();
     });
   });
 

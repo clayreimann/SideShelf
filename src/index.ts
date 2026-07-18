@@ -75,6 +75,23 @@ export async function initializeApp(): Promise<void> {
       useAppStore.getState().logger.updateErrorCounts();
     });
 
+    // Subscribe logger to purge events so the store's error-acknowledgment state stays
+    // in sync with trimmed log history. This is the store-side half of the inversion
+    // that keeps src/lib/logger free of any dependency on src/stores — see
+    // Logger.subscribeToPurge() for details.
+    logger.subscribeToPurge((cutoffTimestamp) => {
+      const loggerSlice = useAppStore.getState().logger;
+      if (
+        loggerSlice.errorsAcknowledgedTimestamp !== null &&
+        loggerSlice.errorsAcknowledgedTimestamp < cutoffTimestamp
+      ) {
+        // Acknowledgment timestamp is older than the cutoff - reset it
+        loggerSlice.resetErrorAcknowledgment();
+      }
+      // Update counts to check for any remaining errors/warnings
+      loggerSlice.updateErrorCounts();
+    });
+
     // Trigger initial purge on app start
     logger.manualTrim();
 
@@ -132,6 +149,17 @@ export async function initializeApp(): Promise<void> {
     } catch (error) {
       log.error("Failed to restore persisted player state", error as Error);
       // Don't throw - continue initialization even if state restoration fails
+    }
+
+    // Start ProgressService periodic background sync — only when a user is logged in.
+    // (Previously started as a constructor side effect, running even when logged out.)
+    // AuthProvider.login/logout call initialize()/shutdown() for mid-session auth changes;
+    // both are idempotent.
+    const currentUser = await getCurrentUser();
+    if (currentUser) {
+      progressService.initialize();
+    } else {
+      log.info("No authenticated user — ProgressService periodic sync not started");
     }
 
     // Initialize other services here as needed

@@ -277,8 +277,18 @@ export class PlayerStateCoordinator extends EventEmitter {
       );
     }
 
-    // Update context based on event payload (even in observer mode, for accurate tracking)
-    this.updateContextFromEvent(event);
+    // Update context based on event payload — ONLY for allowed transitions.
+    // Core state-machine invariant: a rejected event must have zero effect on
+    // context. Previously this ran unconditionally, so e.g. a SEEK rejected
+    // during LOADING would still set isSeeking=true/position, and a PAUSE
+    // rejected during LOADING would still clear isPlaying/playIntentOnLoad —
+    // corrupting context without the corresponding execute* ever running.
+    // Kept at this position (before the diagnosticEvent snapshot below) so
+    // diagnostics/trace semantics for ALLOWED events are unchanged: the
+    // diagnostic and history entries still capture post-update context.
+    if (validation.allowed) {
+      this.updateContextFromEvent(event);
+    }
 
     // Log diagnostic event
     const diagnosticEvent: DiagnosticEvent = {
@@ -659,6 +669,27 @@ export class PlayerStateCoordinator extends EventEmitter {
         // (BGS handlePlaybackError's store._setTrackLoading(false) removed in Phase 4)
         this.context.isLoadingTrack = false;
         this.context.playIntentOnLoad = false;
+        // Brief E (streaming auth header migration): mark the queue stale so the
+        // next PLAY rebuilds it via the existing queueStatus==='unknown' inline
+        // path (see case PlayerState.PLAYING above) instead of resuming the same
+        // queue that just failed. Streamed tracks carry the access token as a
+        // per-track Authorization header set once when the queue was built; if
+        // the token rotates mid-playback (ApiClientService's refresh flow), the
+        // queued track's header goes stale and the native player will keep
+        // failing against the same URL/header. RNTP surfaces this as a generic
+        // playback error (Android: PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+        // for ANY bad HTTP status incl. 401, not 401-specific; iOS: no HTTP-status
+        // detail at all — react-native-track-player 4.1.2's iOS PlaybackError event
+        // only carries `{error: string}`, no code — confirmed at
+        // ios/RNTrackPlayer/RNTrackPlayer.swift:838 and doublesymmetry/
+        // react-native-track-player GitHub issue #1437). Since neither platform
+        // reliably distinguishes "401 from a stale token" from other playback
+        // failures, we don't gate on event.code/message — instead any playback
+        // error invalidates the queue so the NEXT play attempt (user retry or
+        // app-driven) rebuilds with a fresh play session + fresh token via
+        // executeRebuildQueue. A non-token-related failure just fails again with
+        // a fresh NATIVE_PLAYBACK_ERROR — no worse than today.
+        this.context.queueStatus = "unknown";
         break;
 
       case "SESSION_SYNC_FAILED":
@@ -1310,7 +1341,26 @@ export class PlayerStateCoordinator extends EventEmitter {
         `[Coordinator] Error executing transition: ${event.type} -> ${nextState}`,
         error as Error
       );
-      // We might want to dispatch an error event here, but be careful of infinite loops
+      // Recovery: route to ERROR so the machine doesn't get stuck (e.g. LOADING
+      // has no JS-reachable exit — only native events that never arrive after a
+      // JS-side throw). ERROR allows PLAY/LOAD_TRACK/STOP, so the user can retry.
+      //
+      // Loop protection — do not re-dispatch when:
+      // 1. the failing event was itself an error event (NATIVE_ERROR /
+      //    NATIVE_PLAYBACK_ERROR) — avoids recursing if handling an error event
+      //    itself throws.
+      // 2. the machine is already in ERROR/FATAL_ERROR — avoids dispatching a
+      //    fresh error while one is already being handled.
+      const isErrorEvent = event.type === "NATIVE_ERROR" || event.type === "NATIVE_PLAYBACK_ERROR";
+      const alreadyInErrorState =
+        this.context.currentState === PlayerState.ERROR ||
+        this.context.currentState === PlayerState.FATAL_ERROR;
+      if (!isErrorEvent && !alreadyInErrorState) {
+        dispatchPlayerEvent(
+          { type: "NATIVE_ERROR", payload: { error: error as Error } },
+          { source: "native_player" }
+        );
+      }
     }
   }
 }

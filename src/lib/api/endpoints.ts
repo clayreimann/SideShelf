@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/api";
+import { redactBody } from "@/lib/api/redact";
 import { logger } from "@/lib/logger";
 import type {
   ApiAudioBookmark,
@@ -59,7 +60,11 @@ export function normalizeBookmarkResponse(
 async function handleResponseError(response: Response, defaultMessage: string) {
   if (!response.ok) {
     const text = await response.clone().text();
-    log.error(`${defaultMessage}: ${text}`);
+    // This log runs on every failed request across the app (not gated behind a
+    // detailed-logging tag), including a failed /login — redact before it ever
+    // hits the persisted log store in case a server echoes request/session data
+    // back in an error body.
+    log.error(`${defaultMessage}: ${redactBody(text)}`);
     try {
       const error: ApiError = JSON.parse(text);
       throw new Error(error.message || error.error || defaultMessage);
@@ -67,7 +72,7 @@ async function handleResponseError(response: Response, defaultMessage: string) {
       // If JSON parsing fails, the server returned plain text (e.g., "OK", "Offline")
       // Use the raw text as the error message instead of exposing the parse error
       const errorMessage = text?.trim() || defaultMessage;
-      log.warn(`Server returned non-JSON error response: ${errorMessage}`);
+      log.warn(`Server returned non-JSON error response: ${redactBody(errorMessage)}`);
       throw new Error(errorMessage);
     }
   }

@@ -159,26 +159,13 @@ const sqliteTransport = (props: any) => {
       const { vacuumDatabase } = require("./db");
       vacuumDatabase();
 
-      // If there's an acknowledgment timestamp older than the cutoff,
-      // reset it so new errors/warnings will show the badge again
+      // Notify subscribers so they can react to the purge (e.g., the store mirrors
+      // acknowledgment state). Inverted from a direct appStore require() to keep this
+      // module free of any dependency on src/stores — see Logger.subscribeToPurge().
       try {
-        // Lazy import to avoid circular dependency
-        const { useAppStore } = require("@/stores/appStore");
-        const loggerSlice = useAppStore.getState().logger;
-        if (
-          loggerSlice?.errorsAcknowledgedTimestamp !== null &&
-          loggerSlice.errorsAcknowledgedTimestamp < cutoffTimestamp
-        ) {
-          // Acknowledgment timestamp is older than the cutoff - reset it
-          loggerSlice.resetErrorAcknowledgment();
-          // Also update counts to check for any remaining errors/warnings
-          loggerSlice.updateErrorCounts();
-        } else {
-          // Just update counts in case there are new errors/warnings
-          loggerSlice?.updateErrorCounts();
-        }
+        Logger.getInstance().notifyPurge(cutoffTimestamp);
       } catch (error) {
-        // Ignore errors - store might not be available yet
+        // Ignore errors - subscribers might not be registered yet
       }
     } catch (error) {
       console.error("[Logger] Failed to trim old logs:", error);
@@ -260,6 +247,8 @@ let rnLoggerInstance = rnLogger.createLogger(getConfig());
  * Logger facade that provides a consistent API with cached subloggers
  */
 type LogCountUpdateCallback = (errorCount: number, warningCount: number) => void;
+/** Fired after a log purge completes, with the cutoff timestamp used for deletion. */
+type PurgeCallback = (cutoffTimestamp: number) => void;
 
 class Logger {
   private static instance: Logger | null = null;
@@ -268,6 +257,7 @@ class Logger {
   private tagLevels: Map<string, LogLevel> = new Map();
   private initialized: boolean = false;
   private countUpdateCallbacks: Set<LogCountUpdateCallback> = new Set();
+  private purgeCallbacks: Set<PurgeCallback> = new Set();
 
   private constructor() {
     // Load persisted settings on initialization
@@ -547,27 +537,13 @@ class Logger {
       logWriteCount = 0;
       lastPurgeTime = Date.now();
 
-      // If there's an acknowledgment timestamp older than the cutoff,
-      // reset it so new errors/warnings will show the badge again
+      // Notify subscribers so they can react to the purge (e.g., the store mirrors
+      // acknowledgment state). Inverted from a direct appStore require() to keep this
+      // module free of any dependency on src/stores — see Logger.subscribeToPurge().
       try {
-        // Lazy import to avoid circular dependency
-        const { useAppStore } = require("@/stores/appStore");
-        const loggerSlice = useAppStore.getState().logger;
-        if (
-          loggerSlice?.errorsAcknowledgedTimestamp !== null &&
-          loggerSlice.errorsAcknowledgedTimestamp < cutoffTimestamp
-        ) {
-          // Acknowledgment timestamp is older than the cutoff - reset it
-          loggerSlice.resetErrorAcknowledgment();
-          // Also update counts to check for any remaining errors/warnings
-          loggerSlice.updateErrorCounts();
-        } else {
-          // Just update counts in case there are new errors/warnings
-          loggerSlice?.updateErrorCounts();
-        }
+        this.notifyPurge(cutoffTimestamp);
       } catch (error) {
-        // Ignore errors - store might not be available yet
-        console.error("[Logger] Failed to update acknowledgment after trim:", error);
+        console.error("[Logger] Failed to notify purge subscribers:", error);
       }
     } catch (error) {
       console.error("[Logger] Failed to manually trim logs:", error);
@@ -810,6 +786,38 @@ class Logger {
       }
     } catch (error) {
       console.error("[Logger] Failed to notify count update:", error);
+    }
+  }
+
+  /**
+   * Subscribe to log purge events (fired after old logs are trimmed, whether via the
+   * periodic sqliteTransport purge or manualTrim()). The callback receives the cutoff
+   * timestamp used for deletion, so subscribers can decide whether any state that
+   * depends on log history (e.g. an error-acknowledgment timestamp) needs to reset.
+   *
+   * This exists so consumers outside src/lib/logger — like the Zustand store — never
+   * need to be imported by this module. Never import from src/stores here; have the
+   * store subscribe instead (see src/index.ts's initializeApp for the store-side wiring).
+   *
+   * Returns an unsubscribe function.
+   */
+  subscribeToPurge(callback: PurgeCallback): () => void {
+    this.purgeCallbacks.add(callback);
+    return () => {
+      this.purgeCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Notify all purge subscribers. Called internally after a purge completes.
+   */
+  notifyPurge(cutoffTimestamp: number): void {
+    for (const cb of this.purgeCallbacks) {
+      try {
+        cb(cutoffTimestamp);
+      } catch (error) {
+        console.error("[Logger] Purge subscriber threw:", error);
+      }
     }
   }
 }

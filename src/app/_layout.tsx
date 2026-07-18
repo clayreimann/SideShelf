@@ -1,6 +1,11 @@
 import PlayerProgressToast from "@/components/ui/PlayerProgressToast";
 import { initializeApp } from "@/index";
 import { handleDeepLinkUrl } from "@/lib/deepLinkHandler";
+import {
+  describeLoggerDeepLinkParams,
+  hasLoggerDeepLinkChanges,
+  parseLoggerDeepLinkParams,
+} from "@/lib/deepLinkLoggerParams";
 import { formatTimeRemaining } from "@/lib/helpers/formatters";
 import { runDownloadReconciliationScan } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
@@ -22,7 +27,7 @@ import { useFonts } from "expo-font";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useRef } from "react";
-import { AppState, AppStateStatus, Linking, View } from "react-native";
+import { Alert, AppState, AppStateStatus, Linking, View } from "react-native";
 import TrackPlayer, { State } from "react-native-track-player";
 
 // Create cached sublogger for this component
@@ -250,59 +255,54 @@ export default function RootLayout() {
         if (url.includes("://logger")) {
           log.info(`Processing logger deep link: ${url}`);
 
-          // Parse query parameters with bracket notation
-          const tagLevels: Record<string, string> = {};
-          const tagEnabled: Record<string, string> = {};
+          const params = parseLoggerDeepLinkParams(url);
 
-          urlObj.searchParams.forEach((value, key) => {
-            // Parse level[TAG_NAME]=warn format
-            const levelMatch = key.match(/^level\[(.+)\]$/);
-            if (levelMatch) {
-              const tagName = decodeURIComponent(levelMatch[1]);
-              tagLevels[tagName] = value;
-            }
-
-            // Parse enabled[TAG_NAME]=false format
-            const enabledMatch = key.match(/^enabled\[(.+)\]$/);
-            if (enabledMatch) {
-              const tagName = decodeURIComponent(enabledMatch[1]);
-              tagEnabled[tagName] = value;
-            }
-          });
-
-          // Apply logger configurations
-          let configApplied = false;
-
-          // Set log levels
-          for (const [tag, level] of Object.entries(tagLevels)) {
-            const logLevel = level.toLowerCase() as "debug" | "info" | "warn" | "error";
-            if (["debug", "info", "warn", "error"].includes(logLevel)) {
-              await logger.setTagLevel(tag, logLevel);
-              log.info(`Set log level for tag "${tag}" to ${logLevel}`);
-              configApplied = true;
-            }
-          }
-
-          // Set enabled/disabled state
-          for (const [tag, enabledValue] of Object.entries(tagEnabled)) {
-            const isEnabled = enabledValue.toLowerCase() !== "false";
-            if (isEnabled) {
-              logger.enableTag(tag);
-              log.info(`Enabled tag "${tag}"`);
-            } else {
-              logger.disableTag(tag);
-              log.info(`Disabled tag "${tag}"`);
-            }
-            configApplied = true;
-          }
-
-          if (configApplied) {
-            // Navigate to logger settings screen
-            router.push("/more/logger-settings");
-            log.info("Logger configuration applied, navigating to logger settings");
-          } else {
+          if (!hasLoggerDeepLinkChanges(params)) {
             log.warn("No valid logger configuration found in deep link");
+            return;
           }
+
+          // A tapped link can otherwise silently flip on verbose logging tags
+          // (e.g. "api:fetch:detailed", which logs full request/response bodies —
+          // see src/lib/api/redact.ts) with no user awareness. Logs are later
+          // exportable via expo-sharing (src/lib/exportUtils.ts), so require
+          // explicit confirmation before applying anything from a deep link.
+          const changeDescriptions = describeLoggerDeepLinkParams(params);
+          Alert.alert(
+            "Logger Configuration Change",
+            `This link is requesting the following logging changes:\n\n${changeDescriptions.join("\n")}\n\nDetailed logging can capture sensitive data, including login credentials and session tokens. Only apply this if you trust the source of this link.`,
+            [
+              {
+                text: "Cancel",
+                style: "cancel",
+                onPress: () => {
+                  log.info("Logger deep link changes declined by user");
+                },
+              },
+              {
+                text: "Apply",
+                onPress: async () => {
+                  for (const [tag, level] of Object.entries(params.tagLevels)) {
+                    await logger.setTagLevel(tag, level);
+                    log.info(`Set log level for tag "${tag}" to ${level}`);
+                  }
+
+                  for (const [tag, enabled] of Object.entries(params.tagEnabled)) {
+                    if (enabled) {
+                      logger.enableTag(tag);
+                      log.info(`Enabled tag "${tag}"`);
+                    } else {
+                      logger.disableTag(tag);
+                      log.info(`Disabled tag "${tag}"`);
+                    }
+                  }
+
+                  router.push("/more/logger-settings");
+                  log.info("Logger configuration applied, navigating to logger settings");
+                },
+              },
+            ]
+          );
 
           return;
         }

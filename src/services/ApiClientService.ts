@@ -109,9 +109,20 @@ class ApiClientService {
   }
 
   /**
-   * Set tokens and persist to secure storage
+   * Set tokens and persist to secure storage.
+   *
+   * `refreshToken` may be null for servers older than Audiobookshelf v2.26,
+   * which return only an access token from /login (see
+   * extractTokensFromAuthResponse in src/db/helpers/tokens.ts). We support
+   * this token-only auth mode rather than rejecting the login: a later 401
+   * will find no refresh token in performTokenRefresh and terminate the
+   * session instead of attempting to refresh.
    */
-  async setTokens(accessToken: string, refreshToken: string, username?: string): Promise<void> {
+  async setTokens(
+    accessToken: string,
+    refreshToken: string | null,
+    username?: string
+  ): Promise<void> {
     log.info("Updating tokens");
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
@@ -173,6 +184,17 @@ class ApiClientService {
 
   /**
    * Perform the actual token refresh by calling the /auth/refresh endpoint
+   *
+   * Failure discrimination (see review brief "auth resilience"):
+   * - No refresh token available (e.g. legacy/token-only session): terminal —
+   *   clear tokens, nothing to refresh with.
+   * - Server definitively rejects the refresh (401/403): terminal — the
+   *   refresh token itself is invalid/revoked, clear tokens.
+   * - 5xx responses and network-level failures (fetch throw/abort/timeout):
+   *   transient — return false WITHOUT clearing tokens, so a flaky network
+   *   blip or a momentarily-down server doesn't force-log-out a user with a
+   *   still-valid refresh token. The current request fails, but the session
+   *   survives for a later retry.
    */
   private async performTokenRefresh(): Promise<boolean> {
     if (!this.baseUrl || !this.refreshToken) {
@@ -198,9 +220,16 @@ class ApiClientService {
       clearTimeout(timeoutId);
       log.info(`Token refresh response: ${response.status}`);
 
-      if (!response.ok) {
-        log.error(`Token refresh failed with status ${response.status}`);
+      if (response.status === 401 || response.status === 403) {
+        log.error(`Token refresh rejected by server with status ${response.status}`);
         await this.clearTokens();
+        return false;
+      }
+
+      if (!response.ok) {
+        // Transient server-side failure (5xx, etc.) — do not clear tokens,
+        // the refresh token may still be valid.
+        log.error(`Token refresh failed with status ${response.status} (session preserved)`);
         return false;
       }
 
@@ -218,8 +247,9 @@ class ApiClientService {
       return true;
     } catch (error) {
       clearTimeout(timeoutId);
-      log.error("Token refresh error:", error as Error);
-      await this.clearTokens();
+      // Network-level failure (offline, timeout/abort, DNS, etc.) — not a
+      // rejection of the refresh token. Do not clear tokens.
+      log.error("Token refresh network error (session preserved):", error as Error);
       return false;
     }
   }

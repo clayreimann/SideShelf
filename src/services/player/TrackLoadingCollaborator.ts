@@ -338,6 +338,9 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       let storedPath: string | undefined;
       let resolvedPath: string | undefined;
       let fileExists = false;
+      // Only set for streaming tracks — carries the bearer token so it never
+      // touches the URL (see header-vs-query-param rationale below).
+      let trackHeaders: Record<string, string> | undefined;
 
       // First, try to use local file if available
       if (locallyAvailableFiles.has(audioFile.id) && audioFile.downloadInfo?.downloadPath) {
@@ -357,8 +360,34 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
         );
 
         if (streamingTrack && cachedApiInfo) {
-          const separator = streamingTrack.contentUrl.includes("?") ? "&" : "?";
-          url = `${cachedApiInfo.baseUrl}${streamingTrack.contentUrl}${separator}token=${cachedApiInfo.accessToken}`;
+          // Auth is sent via the Authorization header (below), not a `?token=`
+          // query param — access tokens in URLs leak into server access logs,
+          // reverse-proxy logs, and native player state. Downloads already use
+          // header auth (DownloadService.createDownloadTask); this matches it.
+          //
+          // Range-request propagation verified for react-native-track-player
+          // 4.1.2 on both platforms — headers are NOT re-sent per HTTP request,
+          // they're attached once at the player/asset level and apply to every
+          // request the native player issues for that track, including
+          // byte-range requests triggered by seeking:
+          //   - iOS: headers become AVURLAssetHTTPHeaderFieldsKey on the
+          //     AVURLAsset at creation time (ios/Pods/SwiftAudioEx/Sources/
+          //     SwiftAudioEx/AVPlayerWrapper/AVPlayerWrapper.swift, load()).
+          //     Apple docs: this key's headers are used for "all requests"
+          //     AVURLAsset issues for that asset. AVPlayerWrapper.seek() calls
+          //     avPlayer.seek(to:) on the existing item — it does not recreate
+          //     the asset — so the same headers keep applying across seeks.
+          //   - Android: headers are set once via
+          //     DefaultHttpDataSource.Factory.setDefaultRequestProperties()
+          //     in KotlinAudio's BaseAudioPlayer.getMediaSourceFromAudioItem()
+          //     (github.com/doublesymmetry/KotlinAudio, v2.1.0 pinned in
+          //     node_modules/react-native-track-player/android/build.gradle).
+          //     Per ExoPlayer/Media3 docs, default request properties apply to
+          //     every HTTP request the factory's DataSource makes, including
+          //     the ranged re-opens ExoPlayer issues when seeking outside the
+          //     buffered window.
+          url = `${cachedApiInfo.baseUrl}${streamingTrack.contentUrl}`;
+          trackHeaders = { Authorization: `Bearer ${cachedApiInfo.accessToken}` };
           sourceType = "streaming";
           streamingCount++;
         }
@@ -384,11 +413,11 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
 
       // Add track if we have a valid URL
       if (url) {
-        const displayUrl =
-          sourceType === "streaming"
-            ? url.replace(cachedApiInfo?.accessToken || "", "<token>")
-            : url;
-        log.info(`Using ${sourceType} file for ${audioFile.filename}: ${displayUrl}`);
+        // The access token now travels only in the Authorization header
+        // (trackHeaders), never in the URL, so the URL itself is safe to log
+        // as-is — no redaction needed. Guard against ever logging the header
+        // value: log the url only, never trackHeaders.
+        log.info(`Using ${sourceType} file for ${audioFile.filename}: ${url}`);
 
         tracks.push({
           id: audioFile.id,
@@ -398,6 +427,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
           album: playerTrack.title,
           artwork: playerTrack.coverUri || undefined,
           duration: audioFile.duration || undefined,
+          ...(trackHeaders ? { headers: trackHeaders } : {}),
         });
       } else {
         log.warn(`No playable source found for: ${audioFile.filename}`);

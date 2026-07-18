@@ -8,6 +8,10 @@ export const en = {
   "auth.loginFailed": "Login failed",
   "auth.connectedToServer": "Connected to server",
   "auth.searchingForServer": "Searching for server…",
+  "auth.insecureLogin.title": "Unencrypted Connection",
+  "auth.insecureLogin.message":
+    "This server uses an unencrypted (http://) connection. Your username and password will be sent without encryption. Continue anyway?",
+  "auth.insecureLogin.continue": "Continue Anyway",
 
   // Navigation Tabs
   "tabs.home": "Home",

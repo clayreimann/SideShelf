@@ -92,11 +92,65 @@ export class ProgressService {
   public readonly SYNC_INTERVAL_METERED = 60000; // 60 seconds on metered connections
   private readonly BACKGROUND_SYNC_INTERVAL = 120000; // 2 minutes for background sync
   private readonly MIN_SESSION_DURATION = 5; // 5 seconds minimum to record a session
+
+  // --- Session heuristics (named thresholds; values are hard-won offline-sync tuning) ---
+
+  /** Why: a session with no DB update for this long is considered abandoned ("stale") and is
+   *  ended at its last known position rather than resumed. Unified value — startSession
+   *  previously used an inline 10-minute literal while updateProgress/rehydrateActiveSession
+   *  used 15; one deliberate cutoff avoids a window where the same session is simultaneously
+   *  resumable in one code path and stale in another. */
   private readonly PAUSE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 
+  /** Why: playback ticks arrive at ~1 Hz, so a gap over a minute since the last session
+   *  update means playback almost certainly stopped — used to infer "paused" without
+   *  explicit pause state in the DB row. */
+  private readonly PAUSED_INFERENCE_THRESHOLD_MS = 60 * 1000; // 60 seconds
+
+  /** Why: duplicate-session cleanup treats a session that never progressed past the first
+   *  few seconds as invalid (likely a race-created zombie), safe to end without sync. */
+  private readonly DUPLICATE_MIN_VALID_POSITION_S = 5; // seconds of media progress
+
+  /** Why: when two valid duplicate sessions exist, one lagging the best session's update
+   *  time by more than this window is clearly an older orphan, not a live contender.
+   *  Intentionally narrower than PAUSE_TIMEOUT — this compares two sessions to each other,
+   *  not a session to "now". */
+  private readonly DUPLICATE_SESSION_AGE_GAP_MS = 10 * 60 * 1000; // 10 minutes
+
+  /** Why: a session position at or below ~1 s usually means TrackPlayer had not restored
+   *  the real position yet when the session row was written; fall back to saved progress. */
+  private readonly RESUME_MIN_SESSION_POSITION_S = 1; // seconds
+
+  /** Why: wall-clock deltas between ticks are only credited as listening time when they
+   *  look like real contiguous playback — at least one tick interval, but less than the
+   *  gap left by a suspend/kill (which must not be counted as listening). */
+  private readonly LISTENING_DELTA_MIN_S = 1; // seconds
+  private readonly LISTENING_DELTA_MAX_S = 10; // seconds
+
+  /** Why: position moves >= this between consecutive ticks indicate a seek/jump worth
+   *  logging for diagnostics (normal 1 Hz playback moves ~1 s per tick). */
+  private readonly POSITION_JUMP_LOG_THRESHOLD_S = 30; // seconds
+
+  /** Why: coordinator SESSION_UPDATED notifications and the diagnostic DB-write log are
+   *  throttled to once per this many ms of WALL time. (Previously throttled by media
+   *  position % 10, which misfires at non-1x rates, double-fires on repeated ticks within
+   *  one media second, and skips entirely across seeks.) */
+  private readonly SESSION_UPDATE_NOTIFY_THROTTLE_MS = 10 * 1000; // 10 seconds
+
+  // --- Hot-path state ---
+
+  /** Wall-clock timestamp of the last throttled SESSION_UPDATED dispatch + diagnostic log. */
+  private _lastSessionUpdateNotifyAt = 0;
+
+  /** Cached active-session row for the 1 Hz updateProgress hot path, avoiding a DB query
+   *  per tick. Invalidated on session start/end/stale-detection/rehydration/sync — cache
+   *  correctness over coverage; other (non-1 Hz) paths query the DB directly. */
+  private _cachedActiveSession: LocalListeningSessionRow | null = null;
+
   private constructor() {
-    this.startPeriodicSync();
-    // Note: rehydrateActiveSession() is now called explicitly during app initialization
+    // Periodic background sync is started explicitly via initialize() (gated on an
+    // authenticated user) — no import-side-effect timers.
+    // Note: rehydrateActiveSession() is called explicitly during app initialization.
   }
 
   static getInstance(): ProgressService {
@@ -104,6 +158,38 @@ export class ProgressService {
       ProgressService.instance = new ProgressService();
     }
     return ProgressService.instance;
+  }
+
+  /**
+   * Start the periodic background sync of unsynced sessions.
+   * Idempotent — safe to call on every login/app start; only one interval ever runs.
+   * Call from app init / login when an authenticated user exists; paired with shutdown().
+   */
+  initialize(): void {
+    if (this.syncInterval) {
+      log.info("[initialize] Periodic sync already running, skipping");
+      return;
+    }
+    log.info("[initialize] Starting periodic background sync");
+    this.startPeriodicSync();
+  }
+
+  /** Invalidate the hot-path session cache. Called whenever a session row may have been
+   *  created, ended, or mutated outside the updateProgress tick path. */
+  private _invalidateActiveSessionCache(): void {
+    this._cachedActiveSession = null;
+  }
+
+  /** Infer paused state from the gap since the session's last DB update.
+   *  Single definition of the "paused" heuristic (was duplicated in seconds and ms). */
+  private _isSessionInferredPaused(session: LocalListeningSessionRow, nowMs: number): boolean {
+    return nowMs - session.updatedAt.getTime() > this.PAUSED_INFERENCE_THRESHOLD_MS;
+  }
+
+  /** A session that never advanced past its start position ("brand new") has no real
+   *  listening progress — safe to close without syncing to the server. */
+  private _isBrandNewSession(session: LocalListeningSessionRow): boolean {
+    return session.currentTime === session.startTime;
   }
 
   /**
@@ -147,6 +233,8 @@ export class ProgressService {
    * Optionally match against a specific library item ID (e.g., from TrackPlayer)
    */
   async rehydrateActiveSession(matchLibraryItemId?: string): Promise<void> {
+    // Rehydration may end/replace sessions — drop any cached row up front
+    this._invalidateActiveSessionCache();
     try {
       const context = await this.getCurrentUserContext();
       if (!context) {
@@ -175,8 +263,7 @@ export class ProgressService {
       if (losers.length > 0) {
         log.info(`Closing ${losers.length} loser session(s) to prevent zombie persistence`);
         for (const loser of losers) {
-          const isBrandNew = loser.currentTime === loser.startTime;
-          if (!isBrandNew) {
+          if (!this._isBrandNewSession(loser)) {
             // Has real listening progress — sync before closing
             log.info(`Syncing loser session with real progress before closing: ${loser.id}`);
             await this.syncSessionToServer(context.userId, loser.libraryItemId, loser.id);
@@ -240,6 +327,8 @@ export class ProgressService {
     volume: number = 1.0,
     existingServerSessionId?: string
   ): Promise<void> {
+    // Session rows are ended/created below — the hot-path cache must not survive this
+    this._invalidateActiveSessionCache();
     try {
       log.info(`Starting session for library item ${libraryItemId}, media ${mediaId}`);
       if (existingServerSessionId) {
@@ -272,8 +361,7 @@ export class ProgressService {
         const sessionDetails = allActiveSessionsForItem
           .map((s) => {
             const age = now - s.createdAt.getTime();
-            const isBrandNew = s.currentTime === s.startTime;
-            return `${s.id.slice(0, 8)}(age=${age}ms, brandNew=${isBrandNew}, pos=${formatTime(s.currentTime)}s)`;
+            return `${s.id.slice(0, 8)}(age=${age}ms, brandNew=${this._isBrandNewSession(s)}, pos=${formatTime(s.currentTime)}s)`;
           })
           .join(", ");
         log.info(
@@ -297,9 +385,10 @@ export class ProgressService {
         const sessionsToEnd = sortedSessions.slice(1);
 
         for (const session of sessionsToEnd) {
-          const hasInvalidProgress = session.currentTime < 5;
+          const hasInvalidProgress = session.currentTime < this.DUPLICATE_MIN_VALID_POSITION_S;
           const isMuchOlder =
-            bestSession.updatedAt.getTime() - session.updatedAt.getTime() > 10 * 60 * 1000; // 10 minutes
+            bestSession.updatedAt.getTime() - session.updatedAt.getTime() >
+            this.DUPLICATE_SESSION_AGE_GAP_MS;
 
           if (hasInvalidProgress || isMuchOlder) {
             log.info(
@@ -329,19 +418,20 @@ export class ProgressService {
       const savedProgress = await getMediaProgressForLibraryItem(libraryItemId, user.id);
 
       if (existingSession) {
-        // Check if session is stale (more than 10 minutes old)
+        // Check if session is stale (no update within PAUSE_TIMEOUT — unified with
+        // updateProgress/rehydrateActiveSession, was an inline 10-minute literal)
         const sessionAge = Date.now() - existingSession.updatedAt.getTime();
-        const isStale = sessionAge > 10 * 60 * 1000; // 10 minutes
+        const isStale = sessionAge > this.PAUSE_TIMEOUT;
 
         if (isStale) {
-          log.info("Found stale active session (>10 min), ending it");
+          log.info("Found stale active session (exceeded PAUSE_TIMEOUT), ending it");
           shouldEndExistingSession = true;
         } else {
           log.info("Found recent active session for same item, will resume");
           shouldEndExistingSession = false;
           // Use active session's current time (most recent position)
           // But if currentTime is 0 or very small, fall back to saved progress
-          if (existingSession.currentTime > 1) {
+          if (existingSession.currentTime > this.RESUME_MIN_SESSION_POSITION_S) {
             resumePosition = existingSession.currentTime;
             resumeSource = "activeSession";
             log.info(`Resuming from active session: ${resumePosition}`);
@@ -410,7 +500,7 @@ export class ProgressService {
           type: "SESSION_CREATED",
           payload: { sessionId },
         },
-        { source: "startup_bootstrap" }
+        { source: "progress_service" }
       );
 
       // If we have an existing server session ID (from streaming), use it
@@ -437,6 +527,7 @@ export class ProgressService {
    * End the current listening session
    */
   async endCurrentSession(userId: string, libraryItemId: string, endTime?: number): Promise<void> {
+    this._invalidateActiveSessionCache();
     try {
       const session = await getActiveSession(userId, libraryItemId);
       if (!session) {
@@ -461,7 +552,7 @@ export class ProgressService {
             type: "SESSION_ENDED",
             payload: { sessionId: session.id },
           },
-          { source: "startup_bootstrap" }
+          { source: "progress_service" }
         );
 
         log.info(`Ended session ${session.id} session=${session.id} item=${libraryItemId}`);
@@ -485,6 +576,7 @@ export class ProgressService {
     libraryItemId: string,
     endTime?: number
   ): Promise<void> {
+    this._invalidateActiveSessionCache();
     try {
       const session = await getActiveSession(userId, libraryItemId);
       if (!session) {
@@ -524,8 +616,13 @@ export class ProgressService {
     isPlaying: boolean = true
   ): Promise<void> {
     try {
-      // Get session from DB
-      const session = await getActiveSession(userId, libraryItemId);
+      // Hot path (1 Hz): serve the session from cache when possible; fall back to a DB
+      // query on cache miss. Cache is invalidated on session start/end/stale/rehydrate/sync.
+      let session = this._cachedActiveSession;
+      if (!session || session.userId !== userId || session.libraryItemId !== libraryItemId) {
+        session = await getActiveSession(userId, libraryItemId);
+        this._cachedActiveSession = session;
+      }
       if (!session) {
         // If playback is active but no session exists, we can't update progress
         // PlayerBackgroundService should handle creating a new session
@@ -537,11 +634,13 @@ export class ProgressService {
         return;
       }
 
-      // Check if session is stale (more than 15 minutes since last update)
+      // Check if session is stale (no update within PAUSE_TIMEOUT)
       const sessionAge = Date.now() - session.updatedAt.getTime();
       const isStale = sessionAge > this.PAUSE_TIMEOUT;
 
       if (isStale) {
+        // The cached row is about to be ended/replaced
+        this._invalidateActiveSessionCache();
         log.info(
           `Handling stale session - ending old session and starting new one session=${session.id} item=${libraryItemId}`
         );
@@ -596,16 +695,17 @@ export class ProgressService {
       // Get last update time from session's updatedAt
       if (isPlaying && session.updatedAt) {
         const timeSinceLastUpdate = (now - session.updatedAt.getTime()) / 1000; // Convert to seconds
-        if (timeSinceLastUpdate >= 1 && timeSinceLastUpdate < 10) {
+        if (
+          timeSinceLastUpdate >= this.LISTENING_DELTA_MIN_S &&
+          timeSinceLastUpdate < this.LISTENING_DELTA_MAX_S
+        ) {
           // Only count reasonable intervals
           await updateSessionListeningTime(session.id, timeSinceLastUpdate);
         }
       }
 
-      // Handle pause/play state changes
-      // Check if session was paused by comparing updatedAt to current time
-      const timeSinceUpdate = (now - session.updatedAt.getTime()) / 1000;
-      const wasPaused = timeSinceUpdate > 60; // If > 60 seconds since update, likely paused
+      // Handle pause/play state changes — infer pause from the update gap
+      const wasPaused = this._isSessionInferredPaused(session, now);
 
       // Prevent writing currentTime=0 for active sessions (likely indicates TrackPlayer not restored yet)
       // Use the session's existing position if incoming position is 0 and session has a valid position
@@ -618,7 +718,7 @@ export class ProgressService {
       }
 
       const diffFromStored = currentTime - session.currentTime;
-      if (Math.abs(diffFromStored) >= 30) {
+      if (Math.abs(diffFromStored) >= this.POSITION_JUMP_LOG_THRESHOLD_S) {
         const direction = diffFromStored >= 0 ? "forward" : "backward";
         log.info(
           `Detected ${direction} jump during progress update session=${session.id} item=${libraryItemId} stored=${formatTime(session.currentTime)}s incoming=${formatTime(currentTime)}s delta=${formatTime(Math.abs(diffFromStored))}s`
@@ -626,21 +726,30 @@ export class ProgressService {
       }
 
       // Update session progress in DB - this happens on EVERY progress update
+      // (crash-recovery mechanism — the resume-position guarantee depends on it)
       await updateSessionProgress(session.id, currentTime, playbackRate, volume);
 
-      // Notify coordinator of session update (throttled via 10s check to avoid spam)
-      if (Math.floor(currentTime) % 10 === 0) {
+      // Mirror the write into the cached row so the next tick sees fresh
+      // currentTime/updatedAt without re-querying (updateSessionProgress sets
+      // updatedAt = now in the DB).
+      this._cachedActiveSession = {
+        ...session,
+        currentTime,
+        updatedAt: new Date(now),
+        ...(playbackRate !== undefined && { playbackRate }),
+        ...(volume !== undefined && { volume }),
+      };
+
+      // Notify coordinator + diagnostic log, throttled by WALL time (not media position)
+      if (now - this._lastSessionUpdateNotifyAt >= this.SESSION_UPDATE_NOTIFY_THROTTLE_MS) {
+        this._lastSessionUpdateNotifyAt = now;
         dispatchPlayerEvent(
           {
             type: "SESSION_UPDATED",
             payload: { position: currentTime },
           },
-          { source: "startup_bootstrap" }
+          { source: "progress_service" }
         );
-      }
-
-      // Diagnostic: log DB update every 10 seconds to verify updates are happening
-      if (Math.floor(currentTime) % 10 === 0) {
         log.debug(
           `DB session updated: position=${formatTime(currentTime)}s session=${session.id} item=${libraryItemId}`
         );
@@ -732,9 +841,8 @@ export class ProgressService {
       return { shouldSync: false, reason: "No active session" };
     }
 
-    // Check if session appears paused (no update in last 60 seconds)
-    const timeSinceUpdate = Date.now() - session.updatedAt.getTime();
-    const isPaused = timeSinceUpdate > 60000; // 60 seconds
+    // Check if session appears paused (no update within the pause-inference threshold)
+    const isPaused = this._isSessionInferredPaused(session, Date.now());
     if (isPaused) {
       return { shouldSync: false, reason: "Playback is paused" };
     }
@@ -796,7 +904,7 @@ export class ProgressService {
   ): Promise<void> {
     try {
       // Notify coordinator that session sync is starting
-      dispatchPlayerEvent({ type: "SESSION_SYNC_STARTED" }, { source: "startup_bootstrap" });
+      dispatchPlayerEvent({ type: "SESSION_SYNC_STARTED" }, { source: "progress_service" });
 
       // Check network connectivity
       const netInfo = await NetInfo.fetch();
@@ -833,7 +941,7 @@ export class ProgressService {
       await this.syncSingleSession(sessionData);
 
       // Notify coordinator that session sync completed successfully
-      dispatchPlayerEvent({ type: "SESSION_SYNC_COMPLETED" }, { source: "startup_bootstrap" });
+      dispatchPlayerEvent({ type: "SESSION_SYNC_COMPLETED" }, { source: "progress_service" });
     } catch (error) {
       const session = await getActiveSession(userId, libraryItemId);
       log.error(
@@ -846,7 +954,7 @@ export class ProgressService {
           type: "SESSION_SYNC_FAILED",
           payload: { error: error as Error },
         },
-        { source: "startup_bootstrap" }
+        { source: "progress_service" }
       );
     }
   }
@@ -867,6 +975,10 @@ export class ProgressService {
     session: LocalListeningSessionRow,
     allowSessionRecreate: boolean = true
   ): Promise<void> {
+    // Sync mutates session rows (markSessionAsSynced/updateServerSessionId bump updatedAt)
+    // — invalidate the hot-path cache rather than let it drift from the DB
+    this._invalidateActiveSessionCache();
+
     // Use current time for active sessions, endTime for completed sessions
     const currentTime = session.endTime || session.currentTime;
 
@@ -1148,6 +1260,8 @@ export class ProgressService {
    * Useful when local position gets out of sync with server
    */
   async forceResyncPosition(userId: string, libraryItemId: string): Promise<void> {
+    // Server position overwrites the session row — the cached copy is no longer valid
+    this._invalidateActiveSessionCache();
     try {
       log.info(
         `Forcing position resync from server userId=${userId} libraryItemId=${libraryItemId}`
@@ -1189,13 +1303,18 @@ export class ProgressService {
   }
 
   /**
-   * Cleanup and shutdown
+   * Cleanup and shutdown (called on logout; paired with initialize()).
+   * Idempotent — safe to call repeatedly or before initialize().
    */
   shutdown(): void {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
     }
+
+    // Drop hot-path state — a different user may log in next
+    this._invalidateActiveSessionCache();
+    this._lastSessionUpdateNotifyAt = 0;
 
     // Note: Cannot end current session here without userId/libraryItemId
     // Sessions will be cleaned up by stale session detection on next app start
