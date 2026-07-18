@@ -14,6 +14,24 @@ const IS_PREVIEW = process.env.APP_VARIANT === "preview";
 // Example: EXPO_PUBLIC_UPDATE_URL=https://your-domain.com/updates
 const CUSTOM_UPDATE_URL = process.env.EXPO_PUBLIC_UPDATE_URL;
 
+// Build number: timestamp-style (YYYYmmDDHHMMSS), e.g. 20260717153045.
+// The build script (package.json "build-testflight") exports BUILD_NUMBER once
+// so every config evaluation across the build's processes sees the SAME value —
+// computing new Date() here per-evaluation would drift between prebuild and
+// later steps. The fallback below only applies to ad-hoc local runs.
+// Note: this is iOS-only (CFBundleVersion accepts large numerics). Android's
+// versionCode is a 32-bit int (max ~2.1e9) and CANNOT hold a 14-digit
+// timestamp — if Android builds are added later, derive a shorter code.
+function timestampBuildNumber() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}` +
+    `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+  );
+}
+const BUILD_NUMBER = process.env.BUILD_NUMBER || timestampBuildNumber();
+
 module.exports = ({ config }) => {
   const baseConfig = {
     name: "SideShelf",
@@ -57,6 +75,7 @@ module.exports = ({ config }) => {
     // decision above (allow cleartext, warn on login instead of blocking).
     ios: {
       supportsTablet: true,
+      buildNumber: BUILD_NUMBER,
       infoPlist: {
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: true,
