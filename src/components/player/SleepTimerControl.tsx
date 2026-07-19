@@ -124,6 +124,10 @@ export default function SleepTimerControl() {
         actions={actions}
       >
         <View
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={translate("accessibility.sleepTimer")}
+          accessibilityValue={{ text: getDisplayText() }}
           style={{
             flexDirection: "row",
             alignItems: "center",
