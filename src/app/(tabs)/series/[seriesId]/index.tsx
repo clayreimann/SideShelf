@@ -286,6 +286,12 @@ export default function SeriesDetailScreen() {
             <TouchableOpacity
               onPress={handleDownloadAllUnfinished}
               disabled={isDownloadingAll || serverReachable === false}
+              accessibilityRole="button"
+              accessibilityLabel={translate("accessibility.download")}
+              accessibilityState={{
+                disabled: isDownloadingAll || serverReachable === false,
+                busy: isDownloadingAll,
+              }}
               style={{
                 paddingHorizontal: 16,
                 paddingVertical: 4,

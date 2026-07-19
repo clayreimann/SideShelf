@@ -45,6 +45,7 @@ export default function LibraryItemList({
           <TextInput
             testID="library-search-input"
             placeholder={translate("library.searchPlaceholder")}
+            accessibilityLabel={translate("library.searchPlaceholder")}
             placeholderTextColor={isDark ? "#888" : "#999"}
             style={[
               componentStyles.searchInput,

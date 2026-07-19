@@ -50,7 +50,11 @@ export default function HeaderControls({
     viewToggleLabel || (viewMode === "grid" ? translate("common.list") : translate("common.grid"));
 
   const sortButton = (
-    <Pressable onPress={onSort} style={[buttonStyle, { marginRight: 0 }]}>
+    <Pressable
+      onPress={onSort}
+      style={[buttonStyle, { marginRight: 0 }]}
+      accessibilityRole="button"
+    >
       <Text style={textStyle}>{computedSortLabel}</Text>
     </Pressable>
   );

@@ -209,6 +209,7 @@ export default function BookmarksSection({
               onChangeText={setRenameValue}
               autoFocus
               returnKeyType="done"
+              accessibilityLabel="Bookmark title"
               style={{
                 borderWidth: 1,
                 borderColor: isDark ? "#444" : "#ccc",

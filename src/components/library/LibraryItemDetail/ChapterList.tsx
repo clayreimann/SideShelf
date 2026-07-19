@@ -100,6 +100,7 @@ export default function ChapterList({
       {playedChapters.length > 0 && !showPlayedChapters && (
         <TouchableOpacity
           onPress={() => setShowPlayedChapters(true)}
+          accessibilityRole="button"
           style={{
             paddingVertical: 12,
             paddingHorizontal: 16,
@@ -120,6 +121,7 @@ export default function ChapterList({
       {playedChapters.length > 0 && showPlayedChapters && (
         <TouchableOpacity
           onPress={() => setShowPlayedChapters(false)}
+          accessibilityRole="button"
           style={{
             paddingVertical: 12,
             paddingHorizontal: 16,

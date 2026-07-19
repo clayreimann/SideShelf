@@ -164,6 +164,8 @@ export default function SettingsScreen() {
                   <Pressable
                     key={library.id}
                     onPress={() => selectLibrary(library.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: selectedLibrary?.id === library.id }}
                     style={{
                       paddingVertical: 8,
                       paddingHorizontal: 16,
@@ -215,6 +217,7 @@ export default function SettingsScreen() {
           {/* Tab Bar Settings */}
           <Pressable
             onPress={() => router.push("/more/tab-bar-settings")}
+            accessibilityRole="button"
             style={{
               flexDirection: "row",
               justifyContent: "space-between",
@@ -261,6 +264,7 @@ export default function SettingsScreen() {
           {/* Progress Format */}
           <Pressable
             onPress={() => router.push("/more/progress-format")}
+            accessibilityRole="button"
             style={{
               flexDirection: "row",
               justifyContent: "space-between",
@@ -293,6 +297,7 @@ export default function SettingsScreen() {
           {/* Bookmark Title Mode */}
           <Pressable
             onPress={() => router.push("/more/bookmark-title-mode" as Href)}
+            accessibilityRole="button"
             style={{
               flexDirection: "row",
               justifyContent: "space-between",
@@ -367,7 +372,7 @@ export default function SettingsScreen() {
                 state: jumpForwardInterval === seconds ? "on" : "off",
               }))}
             >
-              <Pressable>
+              <Pressable accessibilityRole="button">
                 <Text style={{ color: colors.link, fontSize: 15, textDecorationLine: "underline" }}>
                   {jumpForwardInterval}s
                 </Text>
@@ -404,7 +409,7 @@ export default function SettingsScreen() {
                 state: jumpBackwardInterval === seconds ? "on" : "off",
               }))}
             >
-              <Pressable>
+              <Pressable accessibilityRole="button">
                 <Text style={{ color: colors.link, fontSize: 15, textDecorationLine: "underline" }}>
                   {jumpBackwardInterval}s
                 </Text>
@@ -498,6 +503,7 @@ export default function SettingsScreen() {
           {/* Bundle Loader Link */}
           <Pressable
             onPress={() => router.push("/(tabs)/more/bundle-loader")}
+            accessibilityRole="button"
             style={{
               flexDirection: "row",
               justifyContent: "space-between",

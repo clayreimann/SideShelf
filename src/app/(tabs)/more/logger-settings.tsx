@@ -217,7 +217,7 @@ export default function LoggerSettingsScreen() {
             state: defaultLogLevel === level.value ? "on" : "off",
           }))}
         >
-          <Pressable>
+          <Pressable accessibilityRole="button">
             <Text style={{ fontSize: 15, color: colors.link, textDecorationLine: "underline" }}>
               {levelLabel}
             </Text>
@@ -257,7 +257,7 @@ export default function LoggerSettingsScreen() {
             state: retentionHours === option.hours ? "on" : "off",
           }))}
         >
-          <Pressable>
+          <Pressable accessibilityRole="button">
             <Text style={{ fontSize: 15, color: colors.link, textDecorationLine: "underline" }}>
               {currentRetention?.label || translate("loggerSettings.notSet")}
             </Text>
@@ -303,7 +303,7 @@ export default function LoggerSettingsScreen() {
               state: currentLevel === level.value ? "on" : "off",
             }))}
           >
-            <Pressable style={{ marginRight: 16 }}>
+            <Pressable accessibilityRole="button" style={{ marginRight: 16 }}>
               <Text style={{ fontSize: 15, color: colors.link, textDecorationLine: "underline" }}>
                 {levelLabel}
               </Text>
@@ -351,6 +351,8 @@ export default function LoggerSettingsScreen() {
           <Pressable
             onPress={handleEnableAll}
             disabled={disabledTags.length === 0}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: disabledTags.length === 0 }}
             style={{
               flex: 1,
               backgroundColor: disabledTags.length === 0 ? cardBackground : primaryColor,
@@ -373,6 +375,8 @@ export default function LoggerSettingsScreen() {
           <Pressable
             onPress={handleDisableAll}
             disabled={disabledTags.length === availableTags.length}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: disabledTags.length === availableTags.length }}
             style={{
               flex: 1,
               backgroundColor:

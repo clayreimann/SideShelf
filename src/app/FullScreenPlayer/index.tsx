@@ -684,6 +684,8 @@ export default function FullScreenPlayer() {
           {chapters.length > 0 && (
             <TouchableOpacity
               onPress={toggleChapterList}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showChapterList }}
               style={{
                 paddingVertical: 8,
                 paddingHorizontal: 12,

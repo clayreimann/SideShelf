@@ -181,7 +181,17 @@ export function CollapsibleSection({
   return (
     <View style={{ marginBottom: 16 }}>
       {sizer}
-      {isCollapsible ? <Pressable onPress={toggle}>{clippedContent}</Pressable> : clippedContent}
+      {isCollapsible ? (
+        <Pressable
+          onPress={toggle}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: isExpanded }}
+        >
+          {clippedContent}
+        </Pressable>
+      ) : (
+        clippedContent
+      )}
     </View>
   );
 }

@@ -202,6 +202,9 @@ export default function LoginModal() {
           style={[styles.button, !canSubmit && styles.buttonDisabled]}
           onPress={onSubmit}
           disabled={!canSubmit}
+          accessibilityRole="button"
+          accessibilityLabel={translate("auth.signIn")}
+          accessibilityState={{ disabled: !canSubmit, busy: submitting }}
         >
           {submitting ? (
             <ActivityIndicator color="#fff" />
