@@ -143,4 +143,16 @@ describe("PlayPauseButton", () => {
     // Icon must NOT revert to play during loading
     expect(getSymbol()).toBe("pause.circle.fill");
   });
+
+  it("accessibilityLabel is 'Pause' when isPlaying=true", () => {
+    setMockState(true, false);
+    const { getByRole } = render(<PlayPauseButton onPress={jest.fn()} />);
+    expect(getByRole("button").props.accessibilityLabel).toBe("Pause");
+  });
+
+  it("accessibilityLabel is 'Play' when isPlaying=false", () => {
+    setMockState(false, false);
+    const { getByRole } = render(<PlayPauseButton onPress={jest.fn()} />);
+    expect(getByRole("button").props.accessibilityLabel).toBe("Play");
+  });
 });

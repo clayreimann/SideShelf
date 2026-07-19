@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { usePlayerState } from "@/stores";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -72,6 +73,9 @@ export default function PlayPauseButton({
           justifyContent: "center",
           alignItems: "center",
         }}
+        accessibilityRole="button"
+        accessibilityLabel={translate("accessibility.loading")}
+        accessibilityState={{ busy: true }}
       >
         <ActivityIndicator size="small" color={colors.textPrimary} />
       </View>
@@ -84,6 +88,10 @@ export default function PlayPauseButton({
       onPress={handlePress}
       onLongPress={onLongPress}
       accessibilityRole="button"
+      accessibilityLabel={
+        displayIsPlaying ? translate("accessibility.pause") : translate("accessibility.play")
+      }
+      accessibilityState={{ selected: displayIsPlaying }}
       style={({ pressed }) => ({
         width: hitBoxSize,
         height: hitBoxSize,
