@@ -280,6 +280,11 @@ export default function MoreScreen() {
             style={({ pressed }) => [styles.listItem, pressed && { opacity: 0.6 }]}
             onPress={item.onPress}
             android_ripple={{ color: textSecondary }}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={
+              item.badge !== undefined ? `${item.label}, ${item.badge}` : item.label
+            }
           >
             <View
               style={{
