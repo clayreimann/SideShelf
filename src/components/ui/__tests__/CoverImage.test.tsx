@@ -49,7 +49,7 @@ describe("CoverImage", () => {
       const { getByTestId } = render(
         <CoverImage uri="https://example.com/cover.jpg" title="Test Book" fontSize={14} />
       );
-      expect(getByTestId("expo-image")).toBeTruthy();
+      expect(getByTestId("expo-image", { includeHiddenElements: true })).toBeTruthy();
     });
 
     it("passes cachePolicy memory-disk", () => {
@@ -89,7 +89,7 @@ describe("CoverImage", () => {
           libraryItemId="lib-item-123"
         />
       );
-      expect(getByTestId("dim-overlay")).toBeTruthy();
+      expect(getByTestId("dim-overlay", { includeHiddenElements: true })).toBeTruthy();
     });
 
     it("does not show dim overlay when item is downloaded", () => {
@@ -111,7 +111,7 @@ describe("CoverImage", () => {
 
     it("shows title fallback text when uri is null", () => {
       const { getByText } = render(<CoverImage uri={null} title="My Audiobook" fontSize={14} />);
-      expect(getByText("My Audiobook")).toBeTruthy();
+      expect(getByText("My Audiobook", { includeHiddenElements: true })).toBeTruthy();
     });
   });
 });

@@ -26,7 +26,12 @@ export default function CoverImage({ uri, title, fontSize, libraryItemId }: Cove
   const showOfflineIcon = isOffline && !isDownloaded && libraryItemId;
 
   return (
-    <View style={{ width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }}>
+    <View
+      style={{ width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }}
+      // Decorative: parent rows compose title/download state into their own label
+      accessibilityElementsHidden={true}
+      importantForAccessibility="no-hide-descendants"
+    >
       {uri ? (
         <Image
           source={{ uri }}
