@@ -27,6 +27,8 @@ export const es = {
   "home.errors.loadHomeData": "Error al cargar los datos de la pantalla de inicio",
   "home.loading": "Cargando tu biblioteca...",
   "home.requireLogin": "Por favor inicia sesión para ver tu biblioteca",
+  "home.reauthRequired": "Inicia sesión de nuevo para actualizar esta sección.",
+  "home.noDownloads": "No hay contenido descargado disponible en este dispositivo.",
   "home.emptyState":
     "¡Bienvenido a tu biblioteca!\n\nTus libros aparecerán aquí cuando comiences a escucharlos.",
 

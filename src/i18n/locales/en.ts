@@ -27,6 +27,8 @@ export const en = {
   "home.errors.loadHomeData": "Failed to load home screen data",
   "home.loading": "Loading your library...",
   "home.requireLogin": "Please log in to view your library",
+  "home.reauthRequired": "Sign in again to refresh this section.",
+  "home.noDownloads": "No downloaded media is available on this device.",
   "home.emptyState":
     "Welcome to your library!\n\nYour books will appear here as you start listening to them.",
 
