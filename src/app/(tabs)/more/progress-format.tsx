@@ -8,9 +8,9 @@
 import { useThemedStyles } from "@/lib/theme";
 import { useSettings } from "@/stores";
 import type { ProgressFormat } from "@/lib/helpers/progressFormat";
-import { Ionicons } from "@expo/vector-icons";
+import { OptionRow } from "@/components/ui";
 import { Stack } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 type FormatOption = {
   value: ProgressFormat;
@@ -38,37 +38,12 @@ export default function ProgressFormatScreen() {
           {FORMAT_OPTIONS.map((option) => {
             const isActive = progressFormat === option.value;
             return (
-              <Pressable
+              <OptionRow
                 key={option.value}
+                label={option.label}
+                selected={isActive}
                 onPress={() => updateProgressFormat(option.value)}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel={option.label}
-                accessibilityState={{ selected: isActive }}
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  paddingVertical: 14,
-                  paddingHorizontal: 16,
-                  backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
-                  borderRadius: 10,
-                  marginBottom: 8,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 15,
-                    color: colors.textPrimary,
-                    fontWeight: "500",
-                  }}
-                >
-                  {option.label}
-                </Text>
-                {isActive && (
-                  <Ionicons name="checkmark" size={20} color={isDark ? "#4A9EFF" : "#007AFF"} />
-                )}
-              </Pressable>
+              />
             );
           })}
 

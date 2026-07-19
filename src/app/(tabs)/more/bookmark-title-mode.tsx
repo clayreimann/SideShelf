@@ -1,8 +1,8 @@
 import { useThemedStyles } from "@/lib/theme";
 import { useSettings } from "@/stores";
-import { Ionicons } from "@expo/vector-icons";
+import { OptionRow } from "@/components/ui";
 import { Stack } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 type BookmarkTitleModeOption = {
   value: "auto" | "prompt";
@@ -37,46 +37,13 @@ export default function BookmarkTitleModeScreen() {
           {OPTIONS.map((option) => {
             const isActive = bookmarkTitleMode === option.value;
             return (
-              <Pressable
+              <OptionRow
                 key={option.value}
+                label={option.label}
+                description={option.description}
+                selected={isActive}
                 onPress={() => void updateBookmarkTitleMode(option.value)}
-                accessible={true}
-                accessibilityRole="button"
-                accessibilityLabel={`${option.label}. ${option.description}`}
-                accessibilityState={{ selected: isActive }}
-                style={{
-                  paddingVertical: 14,
-                  paddingHorizontal: 16,
-                  backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
-                  borderRadius: 10,
-                  marginBottom: 8,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 15,
-                      color: colors.textPrimary,
-                      fontWeight: "500",
-                    }}
-                  >
-                    {option.label}
-                  </Text>
-                  {isActive && (
-                    <Ionicons name="checkmark" size={20} color={isDark ? "#4A9EFF" : "#007AFF"} />
-                  )}
-                </View>
-                <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
-                  {option.description}
-                </Text>
-              </Pressable>
+              />
             );
           })}
 
