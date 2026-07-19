@@ -146,7 +146,7 @@ export default function TraceDumps() {
           Trace Dumps ({dumps.length})
         </Text>
         {dumps.length > 0 && (
-          <TouchableOpacity onPress={handleClearAll}>
+          <TouchableOpacity onPress={handleClearAll} accessibilityRole="button">
             <Text style={[styles.clearButton, { color: colors.error }]}>Clear All</Text>
           </TouchableOpacity>
         )}
@@ -162,6 +162,8 @@ export default function TraceDumps() {
           onPress={() =>
             router.push({ pathname: "/more/trace-dump-detail", params: { name: dump.name } })
           }
+          accessibilityRole="button"
+          accessibilityLabel={`${dump.timestamp}, ${formatBytes(dump.sizeBytes)}`}
           style={[
             styles.dumpRow,
             { backgroundColor: cardBackground, borderColor: colors.separator },
@@ -176,10 +178,20 @@ export default function TraceDumps() {
             </Text>
           </View>
           <View style={styles.dumpActions}>
-            <TouchableOpacity onPress={() => handleShare(dump)} style={styles.actionButton}>
+            <TouchableOpacity
+              onPress={() => handleShare(dump)}
+              accessibilityRole="button"
+              accessibilityLabel={`Share ${dump.timestamp}`}
+              style={styles.actionButton}
+            >
               <Text style={[styles.actionText, { color: colors.link }]}>Share</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(dump)} style={styles.actionButton}>
+            <TouchableOpacity
+              onPress={() => handleDelete(dump)}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${dump.timestamp}`}
+              style={styles.actionButton}
+            >
               <Text style={[styles.actionText, { color: colors.error }]}>Delete</Text>
             </TouchableOpacity>
           </View>
