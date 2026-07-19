@@ -10,6 +10,7 @@
  * - Playback rate and volume controls
  */
 
+import { translate } from "@/i18n";
 import BookmarkButton from "@/components/player/BookmarkButton";
 import ChapterList from "@/components/player/ChapterList";
 import JumpTrackButton from "@/components/player/JumpTrackButton";
@@ -463,6 +464,7 @@ export default function FullScreenPlayer() {
                 value={promptValue}
                 onChangeText={setPromptValue}
                 autoFocus
+                accessibilityLabel="Bookmark Title"
                 returnKeyType="done"
                 style={{
                   borderWidth: 1,
@@ -482,7 +484,12 @@ export default function FullScreenPlayer() {
                 }}
               />
               <View style={{ flexDirection: "row", gap: 12, justifyContent: "flex-end" }}>
-                <TouchableOpacity onPress={() => setShowPromptModal(false)} style={{ padding: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setShowPromptModal(false)}
+                  style={{ padding: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={translate("accessibility.cancel")}
+                >
                   <Text style={{ color: colors.textPrimary, fontSize: 15 }}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -494,6 +501,8 @@ export default function FullScreenPlayer() {
                     setShowPromptModal(false);
                   }}
                   style={{ padding: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={translate("accessibility.save")}
                 >
                   <Text style={{ color: colors.link, fontSize: 15, fontWeight: "600" }}>Save</Text>
                 </TouchableOpacity>
@@ -532,6 +541,8 @@ export default function FullScreenPlayer() {
           testID="player-done-button"
           onPress={handleClose}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel={translate("accessibility.closePlayer")}
         >
           <Ionicons name="chevron-down" size={28} color={colors.textPrimary} />
         </TouchableOpacity>
@@ -606,7 +617,12 @@ export default function FullScreenPlayer() {
             },
           ]}
         >
-          <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={translate("accessibility.playerSettings")}
+          >
             <Ionicons name="settings-outline" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
         </MenuView>
