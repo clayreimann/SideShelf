@@ -155,20 +155,28 @@ const TabFallbackContent: React.FC<{
     <View style={styles.container}>
       <Text style={styles.tabName}>{tabName} Tab</Text>
       <Text style={styles.title}>Something Went Wrong</Text>
-      <Text style={styles.message}>
+      <Text style={styles.message} accessibilityRole="alert">
         An error occurred in this tab. Other tabs should still work normally.
       </Text>
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={onReset}>
+        <TouchableOpacity style={styles.button} onPress={onReset} accessibilityRole="button">
           <Text style={styles.buttonText}>Try Again</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.buttonSecondary} onPress={handleGoBack}>
+        <TouchableOpacity
+          style={styles.buttonSecondary}
+          onPress={handleGoBack}
+          accessibilityRole="button"
+        >
           <Text style={styles.buttonTextSecondary}>Go Back</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.buttonSecondary} onPress={handleGoHome}>
+        <TouchableOpacity
+          style={styles.buttonSecondary}
+          onPress={handleGoHome}
+          accessibilityRole="button"
+        >
           <Text style={styles.buttonTextSecondary}>Go to Home</Text>
         </TouchableOpacity>
       </View>

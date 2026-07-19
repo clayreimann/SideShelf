@@ -57,7 +57,7 @@ export default function PlayerProgressToast() {
   return (
     <View style={styles.container} pointerEvents="box-none">
       <View style={[styles.toast, { backgroundColor: toastBg }]}>
-        <View style={styles.content}>
+        <View style={styles.content} accessibilityLiveRegion="polite">
           <Text style={styles.label}>
             {translate("player.progressToast.label", {
               time: formatTime(toPosition),
@@ -65,10 +65,22 @@ export default function PlayerProgressToast() {
             })}
           </Text>
         </View>
-        <Pressable onPress={handleUndo} style={styles.undoButton} hitSlop={8}>
+        <Pressable
+          onPress={handleUndo}
+          style={styles.undoButton}
+          hitSlop={8}
+          accessibilityRole="button"
+        >
           <Text style={styles.undoLabel}>{translate("player.progressToast.undo")}</Text>
         </Pressable>
-        <Pressable onPress={handleDismiss} style={styles.dismissButton} hitSlop={8}>
+        <Pressable
+          onPress={handleDismiss}
+          style={styles.dismissButton}
+          hitSlop={8}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={translate("accessibility.dismiss")}
+        >
           <Text style={styles.dismissLabel}>✕</Text>
         </Pressable>
       </View>

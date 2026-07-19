@@ -13,9 +13,9 @@
  */
 
 import { translate } from "@/i18n";
-import { logger } from '@/lib/logger';
+import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
-import React, { Component, type ReactNode } from 'react';
+import React, { Component, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface Props {
@@ -97,12 +97,12 @@ const DefaultFallback: React.FC<{
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{translate('common.error')}</Text>
-      <Text style={styles.message}>
+      <Text style={styles.title}>{translate("common.error")}</Text>
+      <Text style={styles.message} accessibilityRole="alert">
         Something went wrong in this section. The error has been logged.
       </Text>
 
-      <TouchableOpacity style={styles.button} onPress={onReset}>
+      <TouchableOpacity style={styles.button} onPress={onReset} accessibilityRole="button">
         <Text style={styles.buttonText}>Try Again</Text>
       </TouchableOpacity>
 
@@ -120,7 +120,7 @@ const DefaultFallback: React.FC<{
 };
 
 export class ErrorBoundary extends Component<Props, State> {
-  private log = logger.forTag('ErrorBoundary');
+  private log = logger.forTag("ErrorBoundary");
 
   constructor(props: Props) {
     super(props);
@@ -140,19 +140,14 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    const boundaryName = this.props.boundaryName || 'ErrorBoundary';
+    const boundaryName = this.props.boundaryName || "ErrorBoundary";
 
     // Log the error to our logging system
-    this.log.error(
-      `Error caught in ${boundaryName}: ${error.message}`,
-      error
-    );
+    this.log.error(`Error caught in ${boundaryName}: ${error.message}`, error);
 
     // Also log component stack if in dev mode
     if (__DEV__) {
-      this.log.error(
-        `Component stack for ${boundaryName}: ${errorInfo.componentStack}`,
-      );
+      this.log.error(`Component stack for ${boundaryName}: ${errorInfo.componentStack}`);
     }
 
     // Update state with error info
@@ -184,7 +179,7 @@ export class ErrorBoundary extends Component<Props, State> {
           error={this.state.error}
           errorInfo={this.state.errorInfo}
           onReset={this.resetErrorBoundary}
-          boundaryName={this.props.boundaryName || 'ErrorBoundary'}
+          boundaryName={this.props.boundaryName || "ErrorBoundary"}
         />
       );
     }

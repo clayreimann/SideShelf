@@ -49,6 +49,7 @@ export const es = {
   "accessibility.openAuthor": "Abre los libros del autor",
   "accessibility.bookmarkOptions": "Opciones para {title}",
   "accessibility.closeMenu": "Cerrar menú",
+  "accessibility.dismiss": "Descartar",
 
   // Navigation Tabs
   "tabs.home": "Inicio",
