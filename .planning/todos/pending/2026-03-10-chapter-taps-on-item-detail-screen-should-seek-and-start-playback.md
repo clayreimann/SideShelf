@@ -1,6 +1,7 @@
 ---
 created: 2026-03-10T18:17:53.965Z
 title: Chapter taps on item detail screen should seek and start playback
+phase: 23
 area: services
 files:
   - src/components/library/LibraryItemDetail/

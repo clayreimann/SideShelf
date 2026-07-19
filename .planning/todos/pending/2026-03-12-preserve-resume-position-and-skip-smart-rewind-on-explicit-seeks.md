@@ -1,6 +1,7 @@
 ---
 created: 2026-03-12T14:08:50.986Z
 title: Preserve resume position and skip smart rewind on explicit seeks
+phase: 23
 area: services
 files:
   - src/components/library/LibraryItemDetail/ConsolidatedPlayerControls.tsx

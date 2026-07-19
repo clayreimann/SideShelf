@@ -1,6 +1,7 @@
 ---
 created: 2026-03-18T00:58:25.505Z
 title: Audit and reduce UI-thread work in play-pause dispatch path
+phase: 23
 area: ui
 files:
   - src/components/player/PlayPauseButton.tsx
