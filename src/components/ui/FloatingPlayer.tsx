@@ -11,6 +11,7 @@
 import PlayPauseButton from "@/components/player/PlayPauseButton";
 import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import CoverImage from "@/components/ui/CoverImage";
+import { translate } from "@/i18n";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { logger } from "@/lib/logger";
 import { borderRadius, floatingPlayer, spacing } from "@/lib/styles";
@@ -88,6 +89,14 @@ export default function FloatingPlayer() {
         style={componentStyles.pressableArea}
         onPress={handlePlayerPress}
         testID="floating-player"
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={translate("accessibility.nowPlaying", {
+          title: currentTrack?.title ?? "",
+          chapter: chapterTitle,
+          progress: formatProgress(progressFormat, position, currentTrack?.duration ?? 0),
+        })}
+        accessibilityHint={translate("accessibility.openFullPlayer")}
       >
         {/* Cover Image */}
         <View style={componentStyles.coverContainer}>
