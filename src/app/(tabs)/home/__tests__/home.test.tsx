@@ -48,8 +48,8 @@ jest.mock("@/hooks/useFloatingPlayerPadding", () => ({
 }));
 
 jest.mock("@/lib/appSettings", () => ({
-  getLastHomeSectionCount: jest.fn().mockResolvedValue(3),
-  setLastHomeSectionCount: jest.fn().mockResolvedValue(undefined),
+  getLastHomeSectionCount: jest.fn(async () => 3),
+  setLastHomeSectionCount: jest.fn(async () => undefined),
 }));
 
 jest.mock("@react-navigation/native", () => ({
@@ -57,11 +57,13 @@ jest.mock("@react-navigation/native", () => ({
 }));
 
 jest.mock("@/db/helpers/users", () => ({
-  getUserByUsername: jest.fn().mockResolvedValue({ id: "user-1", username: "alice" }),
+  getUserByUsername: jest.fn(async () => ({ id: "user-1", username: "alice" })),
 }));
 
 jest.mock("@/services/ProgressService", () => ({
-  progressService: { fetchServerProgress: jest.fn().mockResolvedValue(undefined) },
+  progressService: {
+    fetchServerProgress: jest.fn(async () => undefined),
+  },
 }));
 
 jest.mock("@/i18n", () => ({
