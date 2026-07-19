@@ -1,6 +1,8 @@
 import CoverImage from "@/components/ui/CoverImage";
+import { translate } from "@/i18n";
 import { borderRadius, spacing } from "@/lib/styles";
 import { useThemedStyles } from "@/lib/theme";
+import { useDownloads } from "@/stores";
 import { LibraryItemDisplayRow } from "@/types/components";
 import { Link } from "expo-router";
 import React from "react";
@@ -14,9 +16,23 @@ interface LibraryItemProps {
 
 export function GridItem({ item }: { item: LibraryItemDisplayRow }) {
   const { colors } = useThemedStyles();
+  const { isItemDownloaded, isItemPartiallyDownloaded } = useDownloads();
+  const downloadState = isItemDownloaded(item.id)
+    ? translate("accessibility.downloaded")
+    : isItemPartiallyDownloaded(item.id)
+      ? translate("accessibility.partiallyDownloaded")
+      : undefined;
+  const accessibilityLabel = [item.title, item.author, downloadState].filter(Boolean).join(", ");
   return (
     <Link href={{ pathname: "/(tabs)/library/[item]", params: { item: item.id } }} asChild>
-      <Pressable style={styles.gridItemContainer} testID="library-item">
+      <Pressable
+        style={styles.gridItemContainer}
+        testID="library-item"
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={translate("accessibility.openItemDetails")}
+      >
         <View style={[styles.gridCoverContainer, { backgroundColor: colors.coverBackground }]}>
           <CoverImage
             uri={item.coverUri}
@@ -32,11 +48,22 @@ export function GridItem({ item }: { item: LibraryItemDisplayRow }) {
 
 export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
   const { colors } = useThemedStyles();
+  const { isItemDownloaded, isItemPartiallyDownloaded } = useDownloads();
+  const downloadState = isItemDownloaded(item.id)
+    ? translate("accessibility.downloaded")
+    : isItemPartiallyDownloaded(item.id)
+      ? translate("accessibility.partiallyDownloaded")
+      : undefined;
+  const accessibilityLabel = [item.title, item.author, downloadState].filter(Boolean).join(", ");
   return (
     <Link href={{ pathname: "/(tabs)/library/[item]", params: { item: item.id } }} asChild>
       <Pressable
         style={[styles.listItemContainer, { backgroundColor: colors.background }]}
         testID="library-item"
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={translate("accessibility.openItemDetails")}
       >
         <View style={styles.listItemContent}>
           <View style={[styles.listCoverContainer, { backgroundColor: colors.coverBackground }]}>
