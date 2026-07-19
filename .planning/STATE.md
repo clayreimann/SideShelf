@@ -148,6 +148,8 @@ Full decision log is in PROJECT.md Key Decisions table.
 3. **Preserve resume position and skip smart rewind on explicit seeks** — cold-start play sometimes resumes from 0:00, and chapter/bookmark jumps should bypass the smart rewind phase
 4. **Contribute AirPlay component resizable icon native module upstream** — current icon is fixed size with only padding growing on resize; fix native layer to scale icon with component dimensions + open PR upstream
 5. **Audit and reduce UI-thread work in play/pause dispatch path** — noticeable icon lag and flicker between play/pause states; likely optimistic update missing + coordinator lock blocking render cycle
+6. **Internationalize hardcoded FullScreenPlayer strings** — "Speed"/"Bookmark"/"Sleep Timer" captions and bookmark prompt title bypass translate(); visual-text gap only (a11y labels are translated)
+7. **Add missing progressToast translations to es locale** — player.progressToast.\* keys missing from es.ts; causes standing tsc error at src/i18n/index.ts:87
 
 ### Blockers/Concerns
 
