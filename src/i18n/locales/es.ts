@@ -47,6 +47,7 @@ export const es = {
   "accessibility.deleteDownload": "Eliminar descarga",
   "accessibility.openSeries": "Abre la lista de libros de la serie",
   "accessibility.openAuthor": "Abre los libros del autor",
+  "accessibility.bookmarkOptions": "Opciones para {title}",
 
   // Navigation Tabs
   "tabs.home": "Inicio",

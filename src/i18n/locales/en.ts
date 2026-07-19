@@ -47,6 +47,7 @@ export const en = {
   "accessibility.deleteDownload": "Delete download",
   "accessibility.openSeries": "Opens the series book list",
   "accessibility.openAuthor": "Opens the author's books",
+  "accessibility.bookmarkOptions": "Options for {title}",
 
   // Navigation Tabs
   "tabs.home": "Home",

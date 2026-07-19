@@ -1,4 +1,5 @@
 import { CollapsibleSection } from "@/components/ui";
+import { translate } from "@/i18n";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
@@ -163,7 +164,9 @@ export default function BookmarksSection({
                 style={{ padding: 4 }}
                 accessible={true}
                 accessibilityRole="button"
-                accessibilityLabel={bookmark.title}
+                accessibilityLabel={translate("accessibility.bookmarkOptions", {
+                  title: bookmark.title,
+                })}
               >
                 <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
               </Pressable>
