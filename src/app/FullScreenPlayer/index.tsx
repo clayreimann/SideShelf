@@ -762,13 +762,21 @@ export default function FullScreenPlayer() {
           }}
         >
           <View style={{ alignItems: "center" }}>
-            <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
+            <Text
+              style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}
+              accessibilityElementsHidden={true}
+              importantForAccessibility="no"
+            >
               Speed
             </Text>
             <PlaybackSpeedControl />
           </View>
           <View style={{ alignItems: "center" }}>
-            <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
+            <Text
+              style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}
+              accessibilityElementsHidden={true}
+              importantForAccessibility="no"
+            >
               Bookmark
             </Text>
             <View
@@ -792,7 +800,11 @@ export default function FullScreenPlayer() {
             </View>
           </View>
           <View style={{ alignItems: "center" }}>
-            <Text style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}>
+            <Text
+              style={[styles.text, { fontSize: 12, opacity: 0.7, marginBottom: 8 }]}
+              accessibilityElementsHidden={true}
+              importantForAccessibility="no"
+            >
               Sleep Timer
             </Text>
             <SleepTimerControl />
