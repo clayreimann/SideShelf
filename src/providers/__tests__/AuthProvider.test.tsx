@@ -93,6 +93,7 @@ import {
   upsertMediaProgress,
 } from "@/db/helpers/mediaProgress";
 import { login as doLogin } from "@/lib/api/endpoints";
+import { progressService } from "@/services/ProgressService";
 function makeUserRow(id: string, username: string): UserRow {
   return {
     id,
@@ -148,6 +149,12 @@ const mockClearTokens = apiClientService.clearTokens as jest.MockedFunction<
 >;
 const mockSubscribe = apiClientService.subscribe as jest.MockedFunction<
   typeof apiClientService.subscribe
+>;
+const mockProgressInitialize = progressService.initialize as jest.MockedFunction<
+  typeof progressService.initialize
+>;
+const mockProgressShutdown = progressService.shutdown as jest.MockedFunction<
+  typeof progressService.shutdown
 >;
 
 // Consumer that exposes the auth context to the test via a callback ref and
@@ -296,6 +303,7 @@ describe("AuthProvider", () => {
       });
 
       expect(getByTestId("auth-status").props.children).toBe("authenticated");
+      expect(mockProgressInitialize).toHaveBeenCalled();
     });
 
     it("reconstructs reauthRequired after restart when the prior local user remains but tokens are gone", async () => {
@@ -351,6 +359,7 @@ describe("AuthProvider", () => {
       });
 
       const listener = mockSubscribe.mock.calls[mockSubscribe.mock.calls.length - 1][0];
+      mockProgressShutdown.mockClear();
 
       mockGetAccessToken.mockReturnValue(null);
       mockGetRefreshToken.mockReturnValue(null);
@@ -360,6 +369,55 @@ describe("AuthProvider", () => {
       });
 
       expect(getByTestId("auth-status").props.children).toBe("reauthRequired");
+      expect(mockProgressShutdown).toHaveBeenCalled();
+    });
+
+    it("restarts progress sync after successful reauthentication", async () => {
+      mockGetAccessToken.mockReturnValue(null);
+      mockGetRefreshToken.mockReturnValue(null);
+      mockSetTokens.mockResolvedValue(undefined);
+      mockDoLogin.mockResolvedValue({ user: { token: "new-access-token" } } as any);
+      mockExtractTokens.mockReturnValue({
+        accessToken: "new-access-token",
+        refreshToken: "new-refresh-token",
+      });
+      mockMarshalUser.mockReturnValue(makeUserRow("user-2", "dave"));
+      mockMarshalMediaProgress.mockReturnValue([]);
+      mockUpsertUser.mockResolvedValue(undefined);
+      mockUpsertMediaProgress.mockResolvedValue(undefined);
+
+      let ctx: ReturnType<typeof useAuth> | undefined;
+      const { getByTestId } = render(
+        <AuthProvider>
+          <AuthConsumer onReady={(value) => (ctx = value)} />
+        </AuthProvider>
+      );
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(getByTestId("auth-status").props.children).toBe("reauthRequired");
+      expect(mockProgressInitialize).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await ctx!.login({
+          serverUrl: "http://example.com",
+          username: "dave",
+          password: "pw",
+        });
+      });
+
+      const listener = mockSubscribe.mock.calls[mockSubscribe.mock.calls.length - 1][0];
+      mockGetAccessToken.mockReturnValue("new-access-token");
+      mockGetRefreshToken.mockReturnValue("new-refresh-token");
+
+      act(() => {
+        listener();
+      });
+
+      expect(getByTestId("auth-status").props.children).toBe("authenticated");
+      expect(mockProgressInitialize).toHaveBeenCalledTimes(1);
     });
 
     it("transitions to signedOut on explicit logout instead of reauthRequired", async () => {
@@ -376,11 +434,14 @@ describe("AuthProvider", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
+      mockProgressShutdown.mockClear();
+
       await act(async () => {
         await ctx!.logout();
       });
 
       expect(getByTestId("auth-status").props.children).toBe("signedOut");
+      expect(mockProgressShutdown).toHaveBeenCalled();
     });
   });
 

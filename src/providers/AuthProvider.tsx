@@ -123,6 +123,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [initialized, state.accessToken, state.serverUrl, state.userId, state.username]);
   const isAuthenticated = authStatus === "authenticated";
 
+  // AuthProvider is the single owner of the authenticated progress-sync lifecycle.
+  // Local identity is deliberately insufficient: terminal token expiry preserves the
+  // user for offline access but must stop all periodic server work until reauthentication.
+  useEffect(() => {
+    if (authStatus === "authenticated") {
+      progressService.initialize();
+      return () => progressService.shutdown();
+    }
+
+    progressService.shutdown();
+  }, [authStatus]);
+
   // Handle app state changes for progress syncing
   useEffect(() => {
     if (!isAuthenticated || !state.username) return;
@@ -207,10 +219,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const mediaProgress = marshalMediaProgressFromAuthResponse(response.user);
 
         await Promise.all([upsertUser(user), upsertMediaProgress(mediaProgress)]);
-
-        // Start periodic progress sync now that a user is authenticated (idempotent —
-        // no-op if app init already started it)
-        progressService.initialize();
       } catch (e) {
         console.error("[AuthProvider] Login error", e);
         throw new Error(e instanceof Error ? e.message : "Login failed");
@@ -220,8 +228,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    // Stop periodic progress sync and drop cached session state (idempotent)
-    progressService.shutdown();
     explicitLogoutInProgress.current = true;
     setState((s: AuthState) => ({
       ...s,

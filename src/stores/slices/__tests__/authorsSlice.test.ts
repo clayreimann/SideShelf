@@ -109,6 +109,7 @@ describe("AuthorsSlice", () => {
         },
         initialized: false,
         ready: false,
+        apiConfigured: false,
       });
     });
   });
@@ -165,7 +166,7 @@ describe("AuthorsSlice", () => {
       expect(state.authors.authors).toEqual(mockAuthors);
     });
 
-    it("should fetch cached authors when only the database is ready", async () => {
+    it("should load cached authors without requesting missing images when only the database is ready", async () => {
       getAllAuthors.mockResolvedValue(mockAuthors);
       transformAuthorsToDisplayFormat.mockReturnValue(mockDisplayAuthors);
 
@@ -173,6 +174,9 @@ describe("AuthorsSlice", () => {
 
       expect(getAllAuthors).toHaveBeenCalled();
       expect(store.getState().authors.authors).toEqual(mockAuthors);
+      expect(store.getState().authors.ready).toBe(true);
+      expect(store.getState().authors.initialized).toBe(true);
+      expect(cacheAuthorImageIfMissing).not.toHaveBeenCalled();
     });
 
     it("should not fetch authors when not ready", async () => {
