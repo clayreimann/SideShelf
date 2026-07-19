@@ -1,6 +1,8 @@
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import React, { useState } from "react";
 import {
+  AccessibilityActionEvent,
   GestureResponderEvent,
   LayoutChangeEvent,
   PanResponder,
@@ -193,6 +195,23 @@ export default function ProgressBar({
     },
   });
 
+  // VoiceOver/TalkBack cannot perform pan gestures. The "adjustable" role lets
+  // swipe-up/down fire increment/decrement; we seek by a fixed step and reuse
+  // the same onSeekComplete path the pan responder uses.
+  const a11ySeekStep = currentTime !== undefined ? 30 : seekRange * 0.05;
+  const handleAccessibilityAction = (event: AccessibilityActionEvent) => {
+    if (!interactive) return;
+    const base = currentTime !== undefined ? currentTime : progress * seekMaxValue;
+    const delta = event.nativeEvent.actionName === "increment" ? a11ySeekStep : -a11ySeekStep;
+    const next = Math.max(minValue, Math.min(seekMaxValue, base + delta));
+    onSeekComplete?.(next);
+  };
+
+  const a11yValueText =
+    currentTime !== undefined && duration !== undefined
+      ? `${formatTime(displayTime)} of ${formatTime(duration)}`
+      : `${Math.round(progressPercentage * 100)}%`;
+
   return (
     <View style={[{ marginTop: defaults.marginTop }, containerStyle]}>
       <View
@@ -201,6 +220,24 @@ export default function ProgressBar({
           paddingVertical: interactive ? 8 : 0, // Add touch area for interactive bars
         }}
         {...(interactive ? panResponder.panHandlers : {})}
+        {...(interactive
+          ? {
+              accessible: true,
+              accessibilityRole: "adjustable" as const,
+              accessibilityLabel: translate("accessibility.playbackPosition"),
+              accessibilityValue: {
+                min: 0,
+                max: 100,
+                now: Math.round(progressPercentage * 100),
+                text: a11yValueText,
+              },
+              accessibilityActions: [
+                { name: "increment" as const },
+                { name: "decrement" as const },
+              ],
+              onAccessibilityAction: handleAccessibilityAction,
+            }
+          : {})}
       >
         <View
           style={{
