@@ -43,6 +43,10 @@ export const es = {
   "accessibility.password": "Contraseña",
   "accessibility.cancel": "Cancelar",
   "accessibility.save": "Guardar",
+  "accessibility.download": "Descargar",
+  "accessibility.deleteDownload": "Eliminar descarga",
+  "accessibility.openSeries": "Abre la lista de libros de la serie",
+  "accessibility.openAuthor": "Abre los libros del autor",
 
   // Navigation Tabs
   "tabs.home": "Inicio",

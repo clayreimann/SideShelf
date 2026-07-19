@@ -43,6 +43,10 @@ export const en = {
   "accessibility.password": "Password",
   "accessibility.cancel": "Cancel",
   "accessibility.save": "Save",
+  "accessibility.download": "Download",
+  "accessibility.deleteDownload": "Delete download",
+  "accessibility.openSeries": "Opens the series book list",
+  "accessibility.openAuthor": "Opens the author's books",
 
   // Navigation Tabs
   "tabs.home": "Home",
