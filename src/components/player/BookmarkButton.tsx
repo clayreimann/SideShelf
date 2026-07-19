@@ -1,3 +1,4 @@
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { SymbolView } from "expo-symbols";
@@ -42,6 +43,9 @@ export default function BookmarkButton({
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={translate("accessibility.addBookmark")}
+      accessibilityState={{ disabled, busy: isCreating }}
       style={({ pressed }) => ({
         width: hitBoxSize,
         height: hitBoxSize,

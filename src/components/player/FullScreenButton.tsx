@@ -1,3 +1,4 @@
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { SymbolView } from "expo-symbols";
@@ -33,6 +34,9 @@ export default function FullScreenButton({
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={translate("accessibility.openFullPlayer")}
+      accessibilityState={{ disabled }}
       style={({ pressed }) => ({
         width: hitBoxSize,
         height: hitBoxSize,
