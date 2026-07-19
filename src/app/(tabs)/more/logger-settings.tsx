@@ -310,7 +310,11 @@ export default function LoggerSettingsScreen() {
             </Pressable>
           </MenuView>
 
-          <Toggle value={isEnabled} onValueChange={() => toggleTagEnabled(tag)} />
+          <Toggle
+            value={isEnabled}
+            onValueChange={() => toggleTagEnabled(tag)}
+            accessibilityLabel={tag}
+          />
         </View>
       </View>
     );

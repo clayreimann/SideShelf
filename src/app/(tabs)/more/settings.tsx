@@ -438,7 +438,11 @@ export default function SettingsScreen() {
                 {translate("settings.smartRewindDescription")}
               </Text>
             </View>
-            <Toggle value={smartRewindEnabled} onValueChange={toggleSmartRewind} />
+            <Toggle
+              value={smartRewindEnabled}
+              onValueChange={toggleSmartRewind}
+              accessibilityLabel={translate("settings.smartRewind")}
+            />
           </View>
         </View>
 
@@ -484,7 +488,11 @@ export default function SettingsScreen() {
                 {translate("settings.diagnosticsDescription")}
               </Text>
             </View>
-            <Toggle value={diagnosticsEnabled} onValueChange={toggleDiagnostics} />
+            <Toggle
+              value={diagnosticsEnabled}
+              onValueChange={toggleDiagnostics}
+              accessibilityLabel={translate("settings.diagnostics")}
+            />
           </View>
 
           {/* Bundle Loader Link */}
