@@ -185,6 +185,7 @@ export default function DownloadProgressView({
               paddingHorizontal: 16,
             }}
             onPress={onPause}
+            accessibilityRole="button"
           >
             <Text
               style={{
@@ -207,6 +208,7 @@ export default function DownloadProgressView({
               paddingHorizontal: 16,
             }}
             onPress={onResume}
+            accessibilityRole="button"
           >
             <Text
               style={{
@@ -229,6 +231,7 @@ export default function DownloadProgressView({
               paddingHorizontal: 16,
             }}
             onPress={onCancel}
+            accessibilityRole="button"
           >
             <Text
               style={{

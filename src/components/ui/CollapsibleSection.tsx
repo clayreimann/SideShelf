@@ -142,7 +142,13 @@ export function CollapsibleSection({
       return (
         <View style={{ marginBottom: 16 }}>
           {sizer}
-          <Pressable testID="collapsible-header" onPress={toggle}>
+          <Pressable
+            testID="collapsible-header"
+            onPress={toggle}
+            accessibilityRole="button"
+            accessibilityLabel={title}
+            accessibilityState={{ expanded: isExpanded }}
+          >
             <View style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8 }}>
               {headerContent}
             </View>
@@ -160,6 +166,9 @@ export function CollapsibleSection({
           testID="collapsible-header"
           onPress={isCollapsible ? toggle : undefined}
           style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={title}
+          accessibilityState={{ expanded: isExpanded }}
         >
           {headerContent}
         </Pressable>

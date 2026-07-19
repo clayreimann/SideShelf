@@ -164,6 +164,8 @@ export default function ConsolidatedPlayerControls({
           }}
           onPress={handlePlayPause}
           disabled={playButtonState.disabled}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: playButtonState.disabled }}
         >
           <Text
             style={{
@@ -182,6 +184,7 @@ export default function ConsolidatedPlayerControls({
   return (
     <Pressable
       onPress={handleOpenFullScreenPlayer}
+      accessible={false}
       style={{
         marginBottom: 16,
         paddingHorizontal: 16,
@@ -198,7 +201,13 @@ export default function ConsolidatedPlayerControls({
           padding: 12,
         }}
       >
-        <View style={{ alignItems: "center", marginBottom: 8 }}>
+        <View
+          style={{ alignItems: "center", marginBottom: 8 }}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={chapterTitle}
+          accessibilityHint={translate("accessibility.openFullPlayer")}
+        >
           <Text style={{ color: colors.textPrimary }}>{chapterTitle}</Text>
         </View>
         {/* Chapter Progress - only show if this item is currently playing */}

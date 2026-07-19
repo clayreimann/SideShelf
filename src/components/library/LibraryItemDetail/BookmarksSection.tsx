@@ -128,6 +128,9 @@ export default function BookmarksSection({
             <Pressable
               style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}
               onPress={() => void handleJumpToBookmark(bookmark.time)}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel={`${bookmark.title}, ${formatTime(bookmark.time)}`}
             >
               <Ionicons name="bookmark" size={16} color={colors.textPrimary} />
               <View style={{ flex: 1 }}>
@@ -155,7 +158,13 @@ export default function BookmarksSection({
                 { id: "delete", title: "Delete", attributes: { destructive: true } },
               ]}
             >
-              <Pressable hitSlop={8} style={{ padding: 4 }}>
+              <Pressable
+                hitSlop={8}
+                style={{ padding: 4 }}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={bookmark.title}
+              >
                 <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
               </Pressable>
             </MenuView>
@@ -215,10 +224,15 @@ export default function BookmarksSection({
                   setRenamingBookmark(null);
                 }}
                 style={{ padding: 8 }}
+                accessibilityRole="button"
               >
                 <Text style={{ color: colors.textPrimary, fontSize: 15 }}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={() => void handleSaveRename()} style={{ padding: 8 }}>
+              <Pressable
+                onPress={() => void handleSaveRename()}
+                style={{ padding: 8 }}
+                accessibilityRole="button"
+              >
                 <Text style={{ color: colors.link, fontSize: 15, fontWeight: "600" }}>Save</Text>
               </Pressable>
             </View>

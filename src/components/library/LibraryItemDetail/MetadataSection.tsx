@@ -97,6 +97,11 @@ export default function MetadataSection({
             }
           }}
           disabled={!authorId}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={author}
+          accessibilityHint={authorId ? translate("accessibility.openAuthor") : undefined}
+          accessibilityState={{ disabled: !authorId }}
         >
           <AuthorIcon style={{ marginRight: 8 }} />
           <Text
@@ -141,6 +146,11 @@ export default function MetadataSection({
             }
           }}
           disabled={!seriesId}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={series ?? undefined}
+          accessibilityHint={seriesId ? translate("accessibility.openSeries") : undefined}
+          accessibilityState={{ disabled: !seriesId }}
         >
           <SeriesIcon />
           <Text
