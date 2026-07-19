@@ -104,6 +104,11 @@ export default function SkipButton({
     return (
       <Pressable
         onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={translate(
+          direction === "forward" ? "accessibility.skipForward" : "accessibility.skipBackward",
+          { seconds }
+        )}
         style={({ pressed }) => ({
           width: hitBoxSize,
           height: hitBoxSize,
@@ -137,6 +142,12 @@ export default function SkipButton({
           menuRef.current.show();
         }
       }}
+      accessibilityRole="button"
+      accessibilityLabel={translate(
+        direction === "forward" ? "accessibility.skipForward" : "accessibility.skipBackward",
+        { seconds }
+      )}
+      accessibilityHint={translate("accessibility.skipHint")}
       style={({ pressed }) => ({
         width: hitBoxSize,
         height: hitBoxSize,
