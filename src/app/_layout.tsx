@@ -28,6 +28,7 @@ import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useRef } from "react";
 import { Alert, AppState, AppStateStatus, Linking, View } from "react-native";
+import { ReducedMotionConfig, ReduceMotion } from "react-native-reanimated";
 import TrackPlayer, { State } from "react-native-track-player";
 
 // Create cached sublogger for this component
@@ -345,6 +346,7 @@ export default function RootLayout() {
 
   return (
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <ReducedMotionConfig mode={ReduceMotion.System} />
       <ErrorBoundary boundaryName="AppRoot">
         <DbProvider>
           <AuthProvider>
