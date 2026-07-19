@@ -1,6 +1,7 @@
 import CoverImage from "@/components/ui/CoverImage";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { type HomeScreenItem } from "@/db/helpers/homeScreen";
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
@@ -23,8 +24,18 @@ export default function CoverItem({ item, showProgress = false }: CoverItemProps
   return (
     <Pressable
       onPress={() => router.push(`/home/item/${item.id}`)}
+      accessible={true}
       accessibilityRole="button"
-      accessibilityHint={`Open details for ${item.title}`}
+      accessibilityLabel={[
+        item.title,
+        item.authorName,
+        showProgress && item.progress !== undefined && item.progress > 0
+          ? translate("accessibility.percentFinished", { percent: Math.round(item.progress * 100) })
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(", ")}
+      accessibilityHint={translate("accessibility.openItemDetails")}
       style={{ marginRight: 16 }}
     >
       <View style={{ width: coverSize }}>

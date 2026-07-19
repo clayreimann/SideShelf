@@ -6,6 +6,7 @@
  */
 
 import { getCurrentChapterIndex } from "@/db/helpers/chapters";
+import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
 import { useThemedStyles } from "@/lib/theme";
 import type { CurrentChapter, PlayerTrack } from "@/types/player";
@@ -111,6 +112,15 @@ export default function ChapterList({
       return (
         <TouchableOpacity
           onPress={() => onChapterPress(item.start)}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isCurrentChapter }}
+          accessibilityLabel={
+            translate("accessibility.chapterRow", {
+              title: item.title,
+              duration: formatTime(chapterDuration),
+            }) + (isCurrentChapter ? `, ${translate("accessibility.currentChapter")}` : "")
+          }
           style={{
             paddingVertical: 12,
             paddingHorizontal: 16,

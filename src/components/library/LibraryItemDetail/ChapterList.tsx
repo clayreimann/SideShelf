@@ -137,11 +137,22 @@ export default function ChapterList({
       {displayedChapters.map((chapter, index) => {
         const isPlayed = isChapterPlayed(chapter.id);
         const chapterDuration = chapter.end - chapter.start;
+        const isCurrentChapter =
+          isCurrentlyPlaying && currentPosition >= chapter.start && currentPosition < chapter.end;
 
         return (
           <TouchableOpacity
             key={chapter.id}
             onPress={() => handleChapterPress(chapter.start)}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isCurrentChapter }}
+            accessibilityLabel={
+              translate("accessibility.chapterRow", {
+                title: chapter.title,
+                duration: formatTime(chapterDuration),
+              }) + (isCurrentChapter ? `, ${translate("accessibility.currentChapter")}` : "")
+            }
             style={{
               paddingVertical: 8,
               borderBottomWidth: index < displayedChapters.length - 1 ? 1 : 0,
