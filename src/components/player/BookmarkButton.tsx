@@ -1,8 +1,9 @@
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
+import IconButton from "@/components/ui/IconButton";
 import { Ionicons } from "@expo/vector-icons";
 import { SymbolView } from "expo-symbols";
-import { Platform, Pressable } from "react-native";
+import { Platform } from "react-native";
 
 /**
  * BookmarkButton component
@@ -39,20 +40,13 @@ export default function BookmarkButton({
   const { colors } = useThemedStyles();
 
   return (
-    <Pressable
+    <IconButton
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}
-      accessibilityRole="button"
+      busy={isCreating}
+      hitBoxSize={hitBoxSize}
       accessibilityLabel={translate("accessibility.addBookmark")}
-      accessibilityState={{ disabled, busy: isCreating }}
-      style={({ pressed }) => ({
-        width: hitBoxSize,
-        height: hitBoxSize,
-        justifyContent: "center",
-        alignItems: "center",
-        opacity: pressed ? 0.5 : disabled ? 0.5 : 1,
-      })}
     >
       {Platform.OS === "ios" ? (
         <SymbolView
@@ -68,6 +62,6 @@ export default function BookmarkButton({
           color={colors.textPrimary}
         />
       )}
-    </Pressable>
+    </IconButton>
   );
 }

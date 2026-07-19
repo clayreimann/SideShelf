@@ -1,8 +1,9 @@
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
+import IconButton from "@/components/ui/IconButton";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SymbolView } from "expo-symbols";
-import { Platform, Pressable } from "react-native";
+import { Platform } from "react-native";
 
 /**
  * JumpTrackButton component
@@ -29,19 +30,12 @@ export default function JumpTrackButton({
   const { colors } = useThemedStyles();
 
   return (
-    <Pressable
+    <IconButton
       onPress={onPress}
-      accessibilityRole="button"
+      hitBoxSize={hitBoxSize}
       accessibilityLabel={translate(
         direction === "forward" ? "accessibility.nextChapter" : "accessibility.previousChapter"
       )}
-      style={({ pressed }) => ({
-        width: hitBoxSize,
-        height: hitBoxSize,
-        justifyContent: "center",
-        alignItems: "center",
-        opacity: pressed ? 0.5 : 1,
-      })}
     >
       {Platform.OS === "ios" ? (
         <SymbolView
@@ -56,6 +50,6 @@ export default function JumpTrackButton({
           color={colors.textPrimary}
         />
       )}
-    </Pressable>
+    </IconButton>
   );
 }

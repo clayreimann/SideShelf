@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { usePlayerState } from "@/stores";
+import IconButton from "@/components/ui/IconButton";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SymbolView } from "expo-symbols";
-import { ActivityIndicator, Platform, Pressable, View } from "react-native";
+import { ActivityIndicator, Platform, View } from "react-native";
 
 /**
  * PlayPauseButton component
@@ -83,22 +84,15 @@ export default function PlayPauseButton({
   }
 
   return (
-    <Pressable
+    <IconButton
       testID={testID}
       onPress={handlePress}
       onLongPress={onLongPress}
-      accessibilityRole="button"
+      hitBoxSize={hitBoxSize}
       accessibilityLabel={
         displayIsPlaying ? translate("accessibility.pause") : translate("accessibility.play")
       }
-      accessibilityState={{ selected: displayIsPlaying }}
-      style={({ pressed }) => ({
-        width: hitBoxSize,
-        height: hitBoxSize,
-        justifyContent: "center",
-        alignItems: "center",
-        opacity: pressed ? 0.5 : 1,
-      })}
+      selected={displayIsPlaying}
     >
       {Platform.OS === "ios" ? (
         <SymbolView
@@ -113,6 +107,6 @@ export default function PlayPauseButton({
           color={colors.textPrimary}
         />
       )}
-    </Pressable>
+    </IconButton>
   );
 }

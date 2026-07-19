@@ -1,8 +1,9 @@
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
+import IconButton from "@/components/ui/IconButton";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SymbolView } from "expo-symbols";
-import { Platform, TouchableOpacity } from "react-native";
+import { Platform } from "react-native";
 
 /**
  * DownloadButton component
@@ -33,19 +34,13 @@ export default function DownloadButton({
   const { colors } = useThemedStyles();
 
   return (
-    <TouchableOpacity
+    <IconButton
       onPress={onPress}
       disabled={disabled}
-      style={{
-        alignContent: "center",
-        padding: 8,
-        opacity: disabled ? 0.5 : 1,
-      }}
-      accessibilityRole="button"
+      hitBoxSize={size + 16}
       accessibilityLabel={translate(
         isDownloaded ? "accessibility.deleteDownload" : "accessibility.download"
       )}
-      accessibilityState={{ disabled }}
     >
       {Platform.OS === "ios" ? (
         <SymbolView
@@ -61,6 +56,6 @@ export default function DownloadButton({
           color={colors.textPrimary}
         />
       )}
-    </TouchableOpacity>
+    </IconButton>
   );
 }
