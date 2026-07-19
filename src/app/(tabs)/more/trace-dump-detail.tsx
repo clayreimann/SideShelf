@@ -205,6 +205,8 @@ export default function TraceDumpDetailScreen() {
             key={v}
             style={[styles.toggleTab, view === v && { backgroundColor: colors.link }]}
             onPress={() => setView(v)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: view === v }}
           >
             <Text
               style={[styles.toggleLabel, { color: view === v ? "#fff" : colors.textSecondary }]}

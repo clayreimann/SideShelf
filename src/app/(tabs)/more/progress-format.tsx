@@ -41,6 +41,10 @@ export default function ProgressFormatScreen() {
               <Pressable
                 key={option.value}
                 onPress={() => updateProgressFormat(option.value)}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={option.label}
+                accessibilityState={{ selected: isActive }}
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",

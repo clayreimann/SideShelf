@@ -700,6 +700,9 @@ export default function StorageScreen() {
                   onPress={item.linkAction}
                   style={{ padding: 8 }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Associate ${item.label} with a library item`}
                 >
                   <Ionicons name="link-outline" size={20} color="#007AFF" />
                 </Pressable>
@@ -709,6 +712,9 @@ export default function StorageScreen() {
                   onPress={item.trashAction}
                   style={{ padding: 8 }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${item.label}`}
                 >
                   <Ionicons name="trash-outline" size={20} color="#FF3B30" />
                 </Pressable>

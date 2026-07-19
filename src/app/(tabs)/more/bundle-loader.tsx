@@ -343,11 +343,13 @@ export default function BundleLoaderScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
+            accessibilityLabel="Custom Update URL"
           />
 
           <View style={{ flexDirection: "row", gap: 8 }}>
             <Pressable
               onPress={handleSaveUrl}
+              accessibilityRole="button"
               style={{
                 flex: 1,
                 backgroundColor: primaryColor,
@@ -361,6 +363,7 @@ export default function BundleLoaderScreen() {
 
             <Pressable
               onPress={handleClearUrl}
+              accessibilityRole="button"
               style={{
                 backgroundColor: isDark ? "#1C1C1E" : "#F5F5F5",
                 borderRadius: 10,
@@ -391,6 +394,8 @@ export default function BundleLoaderScreen() {
           <Pressable
             onPress={handleSwitchUrl}
             disabled={isLoading || !updatesEnabled}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isLoading || !updatesEnabled }}
             style={{
               backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
               borderRadius: 10,
@@ -424,6 +429,8 @@ export default function BundleLoaderScreen() {
           <Pressable
             onPress={handleCheckForUpdate}
             disabled={isLoading}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isLoading }}
             style={{
               backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
               borderRadius: 10,
@@ -452,6 +459,8 @@ export default function BundleLoaderScreen() {
           <Pressable
             onPress={handleReload}
             disabled={isLoading || !updatesEnabled}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isLoading || !updatesEnabled }}
             style={{
               backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
               borderRadius: 10,

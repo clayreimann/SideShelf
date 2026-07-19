@@ -40,6 +40,10 @@ export default function BookmarkTitleModeScreen() {
               <Pressable
                 key={option.value}
                 onPress={() => void updateBookmarkTitleMode(option.value)}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={`${option.label}. ${option.description}`}
+                accessibilityState={{ selected: isActive }}
                 style={{
                   paddingVertical: 14,
                   paddingHorizontal: 16,

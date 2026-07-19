@@ -152,6 +152,8 @@ const FilterButton: React.FC<FilterButtonProps> = React.memo(
     return (
       <Pressable
         onPress={onPress}
+        accessibilityRole="button"
+        accessibilityState={{ selected: isSelected }}
         style={[
           localStyles.filterButton,
           {
@@ -181,6 +183,10 @@ const TagButton: React.FC<TagButtonProps> = React.memo(({ tag, isVisible, onPres
   return (
     <Pressable
       onPress={onPress}
+      accessible={true}
+      accessibilityRole="button"
+      accessibilityLabel={tag}
+      accessibilityState={{ selected: isVisible }}
       style={[
         localStyles.tagButton,
         {
@@ -215,6 +221,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
         <View style={localStyles.actionButtonRow}>
           <Pressable
             onPress={onRefresh}
+            accessibilityRole="button"
             style={[localStyles.actionButton, { backgroundColor: colors.cardBackground }]}
           >
             <Text style={[localStyles.actionButtonText, { color: colors.textPrimary }]}>
@@ -224,6 +231,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
 
           <Pressable
             onPress={onScrollToBottom}
+            accessibilityRole="button"
             style={[
               localStyles.actionButton,
               localStyles.actionButtonMiddle,
@@ -237,6 +245,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
 
           <Pressable
             onPress={onClear}
+            accessibilityRole="button"
             style={[localStyles.actionButton, { backgroundColor: colors.dangerColor }]}
           >
             <Text style={[localStyles.actionButtonText, { color: "#FFFFFF" }]}>
@@ -249,6 +258,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
         <View style={localStyles.actionButtonRow}>
           <Pressable
             onPress={onCopyToClipboard}
+            accessibilityRole="button"
             style={[
               localStyles.actionButton,
               localStyles.actionButtonHalf,
@@ -262,6 +272,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = React.memo(
 
           <Pressable
             onPress={onShareFile}
+            accessibilityRole="button"
             style={[localStyles.actionButton, { backgroundColor: colors.primaryColor }]}
           >
             <Text style={[localStyles.actionButtonText, { color: "#FFFFFF" }]}>
@@ -485,6 +496,9 @@ export default function LogsScreen() {
           headerRight: () => (
             <Pressable
               onPress={() => router.push("/more/logger-settings")}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel={translate("more.loggerSettings")}
               style={localStyles.headerButton}
             >
               <Ionicons name="settings-outline" size={24} color={colors.textPrimary} />
@@ -511,6 +525,7 @@ export default function LogsScreen() {
             placeholderTextColor={themeColors.textSecondary}
             value={searchText}
             onChangeText={setSearchText}
+            accessibilityLabel={translate("logs.searchPlaceholder")}
           />
 
           {/* Level filter buttons */}
@@ -559,6 +574,9 @@ export default function LogsScreen() {
           {/* Tag filter toggle */}
           <Pressable
             onPress={() => setShowTagFilter(!showTagFilter)}
+            accessibilityRole="button"
+            accessibilityLabel={translate("logs.filterByTag")}
+            accessibilityState={{ expanded: showTagFilter }}
             style={localStyles.tagFilterToggle}
           >
             <Text style={[localStyles.tagFilterTitle, { color: colors.textPrimary }]}>

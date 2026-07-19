@@ -94,7 +94,12 @@ export default function ActionsScreen() {
         )}
         renderItem={({ item }: { item: ActionItem }) => (
           <View style={styles.listItem}>
-            <Pressable onPress={item.onPress} disabled={item.disabled}>
+            <Pressable
+              onPress={item.onPress}
+              disabled={item.disabled}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: item.disabled }}
+            >
               <Text style={item.disabled ? styles.text : styles.link}>{item.label}</Text>
             </Pressable>
           </View>

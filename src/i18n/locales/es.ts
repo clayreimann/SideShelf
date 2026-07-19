@@ -50,6 +50,8 @@ export const es = {
   "accessibility.bookmarkOptions": "Opciones para {title}",
   "accessibility.closeMenu": "Cerrar menú",
   "accessibility.dismiss": "Descartar",
+  "accessibility.moveTabToMoreMenu": "Mover {tab} al menú Más",
+  "accessibility.moveTabToTabBar": "Mover {tab} a la barra de pestañas",
 
   // Navigation Tabs
   "tabs.home": "Inicio",

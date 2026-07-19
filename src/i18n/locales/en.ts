@@ -50,6 +50,8 @@ export const en = {
   "accessibility.bookmarkOptions": "Options for {title}",
   "accessibility.closeMenu": "Close menu",
   "accessibility.dismiss": "Dismiss",
+  "accessibility.moveTabToMoreMenu": "Move {tab} to the More menu",
+  "accessibility.moveTabToTabBar": "Move {tab} to the tab bar",
 
   // Navigation Tabs
   "tabs.home": "Home",
