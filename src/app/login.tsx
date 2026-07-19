@@ -6,6 +6,7 @@ import { useThemedStyles } from "@/lib/theme";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
@@ -109,7 +110,9 @@ export default function LoginModal() {
       // that triggers "Maximum update depth exceeded" via Stack.Screen setOptions.
     } catch (e: any) {
       console.log("[login] Error", e);
-      setError(e?.message || translate("auth.loginFailed"));
+      const message = e?.message || translate("auth.loginFailed");
+      setError(message);
+      AccessibilityInfo.announceForAccessibility(message);
     } finally {
       setSubmitting(false);
     }
@@ -150,6 +153,7 @@ export default function LoginModal() {
         <TextInput
           testID="login-server-url-input"
           placeholder={translate("auth.serverUrlPlaceholder")}
+          accessibilityLabel={translate("accessibility.serverUrl")}
           autoCapitalize="none"
           autoCorrect={false}
           style={{ ...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
@@ -162,6 +166,7 @@ export default function LoginModal() {
         <TextInput
           testID="login-username-input"
           placeholder={translate("auth.usernamePlaceholder")}
+          accessibilityLabel={translate("accessibility.username")}
           autoCapitalize="none"
           autoCorrect={false}
           style={{ ...styles.input, color: colors.textPrimary, borderColor: colors.separator }}
@@ -172,6 +177,7 @@ export default function LoginModal() {
         <TextInput
           testID="login-password-input"
           placeholder={translate("auth.passwordPlaceholder")}
+          accessibilityLabel={translate("accessibility.password")}
           autoCapitalize="none"
           autoCorrect={false}
           secureTextEntry
@@ -181,7 +187,11 @@ export default function LoginModal() {
           onChangeText={setPassword}
           textContentType="password"
         />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? (
+          <Text accessibilityLiveRegion="polite" accessibilityRole="alert" style={styles.error}>
+            {error}
+          </Text>
+        ) : null}
         {baseUrl ? (
           <Text style={{ color: colors.textPrimary, textAlign: "center" }}>
             {didPing ? translate("auth.connectedToServer") : translate("auth.searchingForServer")}
