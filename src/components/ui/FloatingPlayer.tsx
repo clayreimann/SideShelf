@@ -109,10 +109,18 @@ export default function FloatingPlayer() {
 
         {/* Track Info */}
         <View style={componentStyles.infoContainer}>
-          <Text style={[styles.text, componentStyles.chapterTitle]} numberOfLines={1}>
+          <Text
+            style={[styles.text, componentStyles.chapterTitle]}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.5}
+          >
             {chapterTitle} | {currentTrack?.title ?? "No selection"}
           </Text>
-          <Text style={[styles.text, componentStyles.progressText]} numberOfLines={1}>
+          <Text
+            style={[styles.text, componentStyles.progressText]}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.5}
+          >
             {formatProgress(progressFormat, position, currentTrack?.duration ?? 0)}
           </Text>
         </View>
@@ -138,7 +146,7 @@ const componentStyles = StyleSheet.create({
     bottom: floatingPlayer.bottomOffset,
     left: spacing.md,
     right: spacing.md,
-    height: floatingPlayer.height,
+    minHeight: floatingPlayer.height,
     borderRadius: borderRadius.md,
     borderTopWidth: 1,
     flexDirection: "row",
