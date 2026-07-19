@@ -275,10 +275,11 @@ export const createSeriesSlice: SliceCreator<SeriesSlice> = (set, get) => ({
   },
 
   /**
-   * Set ready state based on API and DB initialization
+   * Set ready state based on DB initialization.
+   * Series data is local-only and remains available without API credentials.
    */
   _setSeriesReady: (apiConfigured: boolean, dbInitialized: boolean) => {
-    const ready = apiConfigured && dbInitialized;
+    const ready = dbInitialized;
     console.log(
       `[SeriesSlice] Setting ready state: ${ready} (api=${apiConfigured}, db=${dbInitialized})`
     );

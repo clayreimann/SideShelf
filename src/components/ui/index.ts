@@ -1,4 +1,5 @@
 export { CollapsibleSection } from "./CollapsibleSection";
+export { default as AppStatusIndicators } from "./AppStatusIndicators";
 export { default as FloatingPlayer } from "./FloatingPlayer";
 export { default as HeaderControls } from "./HeaderControls";
 export { default as PaddedFlatList } from "./PaddedFlatList";

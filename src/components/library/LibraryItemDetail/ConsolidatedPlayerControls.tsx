@@ -6,9 +6,11 @@ import { AirPlayButton } from "@/components/ui/AirPlayButton";
 import { translate } from "@/i18n";
 import { getAutoBookmarkTitle } from "@/lib/helpers/bookmarks";
 import { formatTime } from "@/lib/helpers/formatters";
+import { getPlayButtonState } from "@/lib/helpers/playbackAvailability";
 import { formatProgress } from "@/lib/helpers/progressFormat";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
+import { useAuth } from "@/providers/AuthProvider";
 import { trace } from "@/lib/trace";
 import { writeDumpToDisk } from "@/lib/traceDump";
 import { playerService } from "@/services/PlayerService";
@@ -34,6 +36,7 @@ export default function ConsolidatedPlayerControls({
   initialBookmarkPosition,
 }: ConsolidatedPlayerControlsProps) {
   const { colors } = useThemedStyles();
+  const { authStatus } = useAuth();
   const { currentTrack, position, currentChapter, isLoadingTrack } = usePlayer();
   const { createBookmark } = useUserProfile();
   const { jumpForwardInterval, jumpBackwardInterval, progressFormat, chapterBarShowRemaining } =
@@ -140,7 +143,12 @@ export default function ConsolidatedPlayerControls({
     ? `-${formatTime(chapterDuration - chapterPosition)}`
     : undefined;
 
-  const isDisabled = isLoadingTrack || (!isDownloaded && serverReachable === false);
+  const playButtonState = getPlayButtonState({
+    authStatus,
+    isDownloaded,
+    isLoadingTrack,
+    serverReachable,
+  });
 
   if (!isCurrentlyPlaying) {
     return (
@@ -152,10 +160,10 @@ export default function ConsolidatedPlayerControls({
             borderRadius: 8,
             padding: 12,
             alignItems: "center",
-            opacity: isDisabled ? 0.5 : 1,
+            opacity: playButtonState.disabled ? 0.5 : 1,
           }}
           onPress={handlePlayPause}
-          disabled={isDisabled}
+          disabled={playButtonState.disabled}
         >
           <Text
             style={{
@@ -164,11 +172,7 @@ export default function ConsolidatedPlayerControls({
               fontWeight: "600",
             }}
           >
-            {isLoadingTrack
-              ? translate("common.loading")
-              : !isDownloaded && serverReachable === false
-                ? translate("common.offline")
-                : translate("common.play")}
+            {translate(playButtonState.labelKey)}
           </Text>
         </TouchableOpacity>
       </View>

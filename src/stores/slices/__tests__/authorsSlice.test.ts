@@ -32,7 +32,11 @@ describe("AuthorsSlice", () => {
 
   // Get mocked functions for type safety
   const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
-  const { getAllAuthors, getAuthorById, transformAuthorsToDisplayFormat } = require("@/db/helpers/authors");
+  const {
+    getAllAuthors,
+    getAuthorById,
+    transformAuthorsToDisplayFormat,
+  } = require("@/db/helpers/authors");
   const { cacheAuthorImageIfMissing } = require("@/lib/authorImages");
 
   // Mock author data
@@ -143,7 +147,7 @@ describe("AuthorsSlice", () => {
 
       store.getState().resetAuthors();
       await store.getState().initializeAuthors(false, true);
-      expect(store.getState().authors.ready).toBe(false);
+      expect(store.getState().authors.ready).toBe(true);
 
       store.getState().resetAuthors();
       await store.getState().initializeAuthors(true, false);
@@ -159,6 +163,16 @@ describe("AuthorsSlice", () => {
       expect(getAllAuthors).toHaveBeenCalled();
       const state = store.getState();
       expect(state.authors.authors).toEqual(mockAuthors);
+    });
+
+    it("should fetch cached authors when only the database is ready", async () => {
+      getAllAuthors.mockResolvedValue(mockAuthors);
+      transformAuthorsToDisplayFormat.mockReturnValue(mockDisplayAuthors);
+
+      await store.getState().initializeAuthors(false, true);
+
+      expect(getAllAuthors).toHaveBeenCalled();
+      expect(store.getState().authors.authors).toEqual(mockAuthors);
     });
 
     it("should not fetch authors when not ready", async () => {
@@ -404,9 +418,9 @@ describe("AuthorsSlice", () => {
       expect(store.getState().authors.ready).toBe(true);
     });
 
-    it("should set ready to false when API is not initialized", () => {
+    it("should stay ready when the DB is initialized without API credentials", () => {
       store.getState()._setAuthorsReady(false, true);
-      expect(store.getState().authors.ready).toBe(false);
+      expect(store.getState().authors.ready).toBe(true);
     });
 
     it("should set ready to false when DB is not initialized", () => {

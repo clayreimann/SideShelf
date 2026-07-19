@@ -7,9 +7,10 @@
  */
 
 import React from "react";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { act, render } from "@testing-library/react-native";
-import { describe, expect, it, jest } from "@jest/globals";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import type { UserRow } from "@/db/schema/users";
 
 // --- Mocks ---
 
@@ -92,7 +93,23 @@ import {
   upsertMediaProgress,
 } from "@/db/helpers/mediaProgress";
 import { login as doLogin } from "@/lib/api/endpoints";
-import { Text } from "react-native";
+function makeUserRow(id: string, username: string): UserRow {
+  return {
+    id,
+    username,
+    type: null,
+    createdAt: null,
+    lastSeen: null,
+    hideFromContinueListening: null,
+    canDownload: null,
+    canUpdate: null,
+    canDelete: null,
+    canUpload: null,
+    canAccessAllLibraries: null,
+    canAccessAllTags: null,
+    canAccessExplicitContent: null,
+  };
+}
 
 const mockInitialize = apiClientService.initialize as jest.MockedFunction<
   typeof apiClientService.initialize
@@ -120,21 +137,43 @@ const mockUpsertMediaProgress = upsertMediaProgress as jest.MockedFunction<
 const mockGetAccessToken = apiClientService.getAccessToken as jest.MockedFunction<
   typeof apiClientService.getAccessToken
 >;
+const mockGetBaseUrl = apiClientService.getBaseUrl as jest.MockedFunction<
+  typeof apiClientService.getBaseUrl
+>;
+const mockGetRefreshToken = apiClientService.getRefreshToken as jest.MockedFunction<
+  typeof apiClientService.getRefreshToken
+>;
+const mockClearTokens = apiClientService.clearTokens as jest.MockedFunction<
+  typeof apiClientService.clearTokens
+>;
 const mockSubscribe = apiClientService.subscribe as jest.MockedFunction<
   typeof apiClientService.subscribe
 >;
 
-// Consumer that exposes the auth context to the test via a callback ref,
-// and renders loginMessage so we can assert on it via getByText/queryByText.
+// Consumer that exposes the auth context to the test via a callback ref and
+// renders the public session state for behavior assertions.
 function AuthConsumer({ onReady }: { onReady: (ctx: ReturnType<typeof useAuth>) => void }) {
   const ctx = useAuth();
   onReady(ctx);
-  return <Text>{ctx.loginMessage ?? "no-message"}</Text>;
+  return <Text testID="auth-status">{ctx.authStatus}</Text>;
 }
 
 // --- Tests ---
 
 describe("AuthProvider", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockInitialize.mockResolvedValue(undefined);
+    mockGetStoredUsername.mockResolvedValue(null);
+    mockPersistUsername.mockResolvedValue(undefined);
+    mockGetUserByUsername.mockResolvedValue(null);
+    mockGetBaseUrl.mockReturnValue(null);
+    mockGetAccessToken.mockReturnValue(null);
+    mockGetRefreshToken.mockReturnValue(null);
+    mockClearTokens.mockResolvedValue(undefined);
+    mockSubscribe.mockImplementation(() => jest.fn());
+  });
+
   describe("PERF-06: concurrent auth reads", () => {
     it("calls apiClientService.initialize and getStoredUsername concurrently via Promise.all", async () => {
       // Make initialize() hang indefinitely — if getStoredUsername is called sequentially
@@ -171,13 +210,7 @@ describe("AuthProvider", () => {
       mockInitialize.mockResolvedValue(undefined);
       mockGetStoredUsername.mockResolvedValue("alice");
       mockPersistUsername.mockResolvedValue(undefined);
-      mockGetUserByUsername.mockResolvedValue({
-        id: "user-1",
-        username: "alice",
-        serverUrl: null,
-        createdAt: null,
-        updatedAt: null,
-      });
+      mockGetUserByUsername.mockResolvedValue(makeUserRow("user-1", "alice"));
 
       render(
         <AuthProvider>
@@ -205,13 +238,7 @@ describe("AuthProvider", () => {
       mockUpsertUser.mockResolvedValue(undefined);
       mockUpsertMediaProgress.mockResolvedValue(undefined);
       mockMarshalMediaProgress.mockReturnValue([]);
-      mockMarshalUser.mockReturnValue({
-        id: "user-1",
-        username: "carol",
-        serverUrl: "http://legacy.example.com",
-        createdAt: null,
-        updatedAt: null,
-      });
+      mockMarshalUser.mockReturnValue(makeUserRow("user-1", "carol"));
     });
 
     it("stores the access token with a null refreshToken when the server omits one (no throw)", async () => {
@@ -247,27 +274,18 @@ describe("AuthProvider", () => {
     });
   });
 
-  describe("session expired message accuracy", () => {
+  describe("explicit auth status", () => {
     beforeEach(() => {
-      mockInitialize.mockResolvedValue(undefined);
       mockGetStoredUsername.mockResolvedValue("dave");
-      mockPersistUsername.mockResolvedValue(undefined);
-      mockGetUserByUsername.mockResolvedValue({
-        id: "user-2",
-        username: "dave",
-        serverUrl: null,
-        createdAt: null,
-        updatedAt: null,
-      });
-      (apiClientService.getBaseUrl as jest.Mock).mockReturnValue("http://example.com");
-      (apiClientService.getRefreshToken as jest.Mock).mockReturnValue("refresh-1");
+      mockGetUserByUsername.mockResolvedValue(makeUserRow("user-2", "dave"));
+      mockGetBaseUrl.mockReturnValue("http://example.com");
+      mockGetRefreshToken.mockReturnValue("refresh-1");
     });
 
-    it('does NOT show "Session expired" when the subscription fires but tokens were not cleared (transient failure)', async () => {
-      // Authenticated from the start
+    it("reports authenticated when stored credentials are usable", async () => {
       mockGetAccessToken.mockReturnValue("access-1");
 
-      const { queryByText } = render(
+      const { getByTestId } = render(
         <AuthProvider>
           <AuthConsumer onReady={() => {}} />
         </AuthProvider>
@@ -277,43 +295,106 @@ describe("AuthProvider", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
-      // Grab the listener AuthProvider registered with the (mocked) service
-      const listener = mockSubscribe.mock.calls[mockSubscribe.mock.calls.length - 1][0];
-
-      // Simulate a notifyListeners() tick where the access token is unchanged
-      // (e.g. a network-level refresh failure that — per the fix — does NOT
-      // clear tokens). getAccessToken() still returns a value.
-      act(() => {
-        listener();
-      });
-
-      expect(queryByText("Session expired")).toBeNull();
+      expect(getByTestId("auth-status").props.children).toBe("authenticated");
     });
 
-    it('shows "Session expired" only when tokens actually transition from present to cleared', async () => {
-      mockGetAccessToken.mockReturnValue("access-1");
-
-      const { getByText } = render(
-        <AuthProvider>
-          <AuthConsumer onReady={() => {}} />
-        </AuthProvider>
-      );
-
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      const listener = mockSubscribe.mock.calls[mockSubscribe.mock.calls.length - 1][0];
-
-      // Now simulate a genuine rejection: ApiClientService cleared tokens,
-      // so getAccessToken() now returns null.
+    it("reconstructs reauthRequired after restart when the prior local user remains but tokens are gone", async () => {
       mockGetAccessToken.mockReturnValue(null);
+      mockGetRefreshToken.mockReturnValue(null);
+
+      const { getByTestId } = render(
+        <AuthProvider>
+          <AuthConsumer onReady={() => {}} />
+        </AuthProvider>
+      );
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(getByTestId("auth-status").props.children).toBe("reauthRequired");
+    });
+
+    it("remains authenticated when the subscription fires but tokens were preserved", async () => {
+      mockGetAccessToken.mockReturnValue("access-1");
+
+      const { getByTestId } = render(
+        <AuthProvider>
+          <AuthConsumer onReady={() => {}} />
+        </AuthProvider>
+      );
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      const listener = mockSubscribe.mock.calls[mockSubscribe.mock.calls.length - 1][0];
 
       act(() => {
         listener();
       });
 
-      expect(getByText("Session expired")).toBeTruthy();
+      expect(getByTestId("auth-status").props.children).toBe("authenticated");
     });
+
+    it("transitions from authenticated to reauthRequired when tokens are terminally cleared", async () => {
+      mockGetAccessToken.mockReturnValue("access-1");
+
+      const { getByTestId } = render(
+        <AuthProvider>
+          <AuthConsumer onReady={() => {}} />
+        </AuthProvider>
+      );
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      const listener = mockSubscribe.mock.calls[mockSubscribe.mock.calls.length - 1][0];
+
+      mockGetAccessToken.mockReturnValue(null);
+      mockGetRefreshToken.mockReturnValue(null);
+
+      act(() => {
+        listener();
+      });
+
+      expect(getByTestId("auth-status").props.children).toBe("reauthRequired");
+    });
+
+    it("transitions to signedOut on explicit logout instead of reauthRequired", async () => {
+      mockGetAccessToken.mockReturnValue("access-1");
+      let ctx: ReturnType<typeof useAuth> | undefined;
+
+      const { getByTestId } = render(
+        <AuthProvider>
+          <AuthConsumer onReady={(value) => (ctx = value)} />
+        </AuthProvider>
+      );
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      await act(async () => {
+        await ctx!.logout();
+      });
+
+      expect(getByTestId("auth-status").props.children).toBe("signedOut");
+    });
+  });
+
+  it("reports signedOut for a user with no established local session", async () => {
+    const { getByTestId } = render(
+      <AuthProvider>
+        <AuthConsumer onReady={() => {}} />
+      </AuthProvider>
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(getByTestId("auth-status").props.children).toBe("signedOut");
   });
 });

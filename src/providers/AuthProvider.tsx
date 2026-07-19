@@ -1,10 +1,9 @@
 import { extractTokensFromAuthResponse } from "@/db/helpers/tokens";
-import { marshalUserFromAuthResponse, upsertUser } from "@/db/helpers/users";
+import { getUserByUsername, marshalUserFromAuthResponse, upsertUser } from "@/db/helpers/users";
 import {
   marshalMediaProgressFromAuthResponse,
   upsertMediaProgress,
 } from "@/db/helpers/mediaProgress";
-import { getUserByUsername } from "@/db/helpers/users";
 import { wipeUserData } from "@/db/helpers/wipeUserData";
 import { useAppStore } from "@/stores/appStore";
 import { login as doLogin } from "@/lib/api/endpoints";
@@ -12,7 +11,16 @@ import { getStoredUsername, persistUsername } from "@/lib/secureStore";
 import { useDb } from "@/providers/DbProvider";
 import { progressService } from "@/services/ProgressService";
 import { apiClientService } from "@/services/ApiClientService";
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import type { AuthStatus } from "@/types/auth";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AppState, AppStateStatus } from "react-native";
 
 // Module-level promise that resolves when auth is initialized.
@@ -29,16 +37,17 @@ type AuthState = {
   refreshToken: string | null;
   username: string | null;
   userId: string | null;
-  loginMessage?: string;
 };
+
+export type { AuthStatus } from "@/types/auth";
 
 type AuthContextValue = {
   initialized: boolean;
+  authStatus: AuthStatus;
   isAuthenticated: boolean;
   serverUrl: string | null;
   username: string | null;
   userId: string | null;
-  loginMessage?: string;
   setServerUrl: (url: string) => Promise<void>;
   login: (params: { serverUrl: string; username: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
@@ -56,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userId: null,
   });
   const [initialized, setInitialized] = useState(false);
+  const explicitLogoutInProgress = useRef(false);
 
   // Initialize API client service and load credentials
   useEffect(() => {
@@ -91,27 +101,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = apiClientService.subscribe(() => {
       console.log("[AuthProvider] Auth state changed, syncing state");
-      const wasAuthenticated = state.accessToken !== null;
-      const isNowAuthenticated = apiClientService.getAccessToken() !== null;
 
       setState((prev: AuthState) => ({
         ...prev,
         serverUrl: apiClientService.getBaseUrl(),
         accessToken: apiClientService.getAccessToken(),
         refreshToken: apiClientService.getRefreshToken(),
-        // If we went from authenticated to not authenticated, show session expired
-        loginMessage:
-          wasAuthenticated && !isNowAuthenticated ? "Session expired" : prev.loginMessage,
+        username: explicitLogoutInProgress.current ? null : prev.username,
+        userId: explicitLogoutInProgress.current ? null : prev.userId,
       }));
     });
 
     return unsubscribe;
-  }, [state.accessToken]);
+  }, []);
 
-  const isAuthenticated = useMemo(
-    () => apiClientService.isAuthenticated(),
-    [state.accessToken, state.serverUrl]
-  );
+  const authStatus = useMemo<AuthStatus>(() => {
+    if (!initialized) return "initializing";
+    if (state.serverUrl && state.accessToken) return "authenticated";
+    if (state.serverUrl && state.username && state.userId) return "reauthRequired";
+    return "signedOut";
+  }, [initialized, state.accessToken, state.serverUrl, state.userId, state.username]);
+  const isAuthenticated = authStatus === "authenticated";
 
   // Handle app state changes for progress syncing
   useEffect(() => {
@@ -193,7 +203,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           username,
           userId: user?.id ?? null,
-          loginMessage: undefined,
         }));
         const mediaProgress = marshalMediaProgressFromAuthResponse(response.user);
 
@@ -213,9 +222,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     // Stop periodic progress sync and drop cached session state (idempotent)
     progressService.shutdown();
-    await apiClientService.clearTokens();
-    await persistUsername(null);
-    setState((s: AuthState) => ({ ...s, username: null, userId: null }));
+    explicitLogoutInProgress.current = true;
+    setState((s: AuthState) => ({
+      ...s,
+      accessToken: null,
+      refreshToken: null,
+      username: null,
+      userId: null,
+    }));
+    try {
+      await Promise.all([apiClientService.clearTokens(), persistUsername(null)]);
+    } finally {
+      explicitLogoutInProgress.current = false;
+    }
     // Token state will be updated via subscription
     // Clear all user-specific slice state and DB data in background (do not await)
     void (async () => {
@@ -232,22 +251,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       initialized,
+      authStatus,
       isAuthenticated,
       serverUrl: state.serverUrl,
       username: state.username,
       userId: state.userId,
-      loginMessage: state.loginMessage,
       setServerUrl,
       login,
       logout,
     }),
     [
       initialized,
+      authStatus,
       isAuthenticated,
       state.serverUrl,
       state.username,
       state.userId,
-      state.loginMessage,
       setServerUrl,
       login,
       logout,

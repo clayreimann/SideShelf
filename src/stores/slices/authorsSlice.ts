@@ -317,10 +317,12 @@ export const createAuthorsSlice: SliceCreator<AuthorsSlice> = (set, get) => ({
   },
 
   /**
-   * Set ready state based on API and DB initialization
+   * Set ready state based on DB initialization.
+   * Author records are cached locally; API credentials are only needed for
+   * optional image refreshes, not for browsing cached content.
    */
   _setAuthorsReady: (apiConfigured: boolean, dbInitialized: boolean) => {
-    const ready = apiConfigured && dbInitialized;
+    const ready = dbInitialized;
     console.log(
       `[AuthorsSlice] Setting ready state: ${ready} (api=${apiConfigured}, db=${dbInitialized})`
     );

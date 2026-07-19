@@ -1,8 +1,9 @@
 import { translate } from "@/i18n";
 import { doPing } from "@/lib/api/endpoints";
+import { getPostLoginNavigation } from "@/lib/authNavigation";
 import { isInsecureLoginUrl } from "@/lib/helpers/networkAddress";
 import { useThemedStyles } from "@/lib/theme";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,13 +20,14 @@ import { useAuth } from "../providers/AuthProvider";
 
 export default function LoginModal() {
   const router = useRouter();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
   const { colors } = useThemedStyles();
   const {
     initialized,
     isAuthenticated,
     serverUrl,
     username: usernameFromAuth,
-    loginMessage,
+    authStatus,
     login,
   } = useAuth();
   const [didPing, setDidPing] = useState(false);
@@ -78,10 +80,7 @@ export default function LoginModal() {
 
   useEffect(() => {
     if (initialized && isAuthenticated) {
-      // When presented as a formSheet modal (token expired flow), canGoBack() is true —
-      // dismiss the sheet and return to the previous screen without any navigation change.
-      // When presented as the initial login (no back stack), replace with tabs root.
-      if (router.canGoBack()) {
+      if (getPostLoginNavigation(mode) === "dismiss") {
         console.log("[login] Authenticated via modal, dismissing sheet");
         router.back();
       } else {
@@ -89,7 +88,7 @@ export default function LoginModal() {
         router.replace("/");
       }
     }
-  }, [initialized, isAuthenticated]);
+  }, [initialized, isAuthenticated, mode, router]);
 
   const canSubmit = useMemo(() => {
     return !!baseUrl && !!username && !!password && !submitting && didPing;
@@ -144,7 +143,9 @@ export default function LoginModal() {
       <Stack.Screen options={{ headerTitle: translate("auth.signIn") }} />
       <View style={styles.content}>
         <Text style={{ ...styles.title, color: colors.textPrimary }}>
-          {loginMessage ?? translate("auth.connectToAudiobookshelf")}
+          {authStatus === "reauthRequired"
+            ? translate("auth.sessionExpired")
+            : translate("auth.connectToAudiobookshelf")}
         </Text>
         <TextInput
           testID="login-server-url-input"

@@ -1,18 +1,19 @@
 import { ErrorBoundary } from "@/components/errors";
+import AppStatusIndicators from "@/components/ui/AppStatusIndicators";
 import FloatingPlayer from "@/components/ui/FloatingPlayer";
-import NetworkIndicator from "@/components/ui/NetworkIndicator";
 import { translate, type TranslationKey } from "@/i18n";
+import { shouldRedirectToLogin } from "@/lib/authNavigation";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { DownloadService } from "@/services/DownloadService";
 import { useAppStore } from "@/stores/appStore";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs, useRouter, Stack } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import type { ComponentProps } from "react";
 import { useEffect, useMemo } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Platform, View } from "react-native";
 import type { SFSymbol } from "sf-symbols-typescript";
 
 type IoniconsName = ComponentProps<typeof Ionicons>["name"];
@@ -122,17 +123,14 @@ const TabBarIcon = ({ config, focused, color, size }: TabBarIconProps) => {
 
 export default function TabLayout() {
   const router = useRouter();
-  const { initialized, isAuthenticated, loginMessage } = useAuth();
-  const { tabs, isDark, colors } = useThemedStyles();
+  const { authStatus } = useAuth();
+  const { tabs, isDark } = useThemedStyles();
   const errorCount = useAppStore((state) => state.logger.errorCount);
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
   const settingsInitialized = useAppStore((state) => state.settings.initialized);
   const tabOrder = useAppStore((state) => state.settings.tabOrder);
   const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
   const showErrorBadge = errorCount > 0 && diagnosticsEnabled;
-
-  // True when session has expired and user dismissed the modal without re-authenticating
-  const showTokenExpiredHeader = !!loginMessage && !isAuthenticated;
 
   // Get ordered and filtered tabs based on user preferences
   // Only filter tabs if settings are initialized to avoid flash of all tabs
@@ -147,52 +145,22 @@ export default function TabLayout() {
   }, [settingsInitialized, tabOrder, hiddenTabs]);
 
   useEffect(() => {
-    if (initialized && !isAuthenticated) {
+    if (shouldRedirectToLogin(authStatus)) {
       router.replace("/login");
     }
-  }, [initialized, isAuthenticated]);
+  }, [authStatus, router]);
 
   useEffect(() => {
     DownloadService.getInstance().initialize();
   }, []);
 
-  useEffect(() => {
-    if (loginMessage && !isAuthenticated) {
-      console.log(`[TabIndex] Presenting login modal due to loginMessage: ${loginMessage}`);
-      // Push as formSheet modal so user can dismiss and keep accessing downloaded content.
-      // router.replace("/login") was removed — it would destroy the back stack and the current screen.
-      router.push("/login");
-    }
-  }, [loginMessage, isAuthenticated]);
-
-  // Re-login header button shown on all tab screens after session expiry and modal dismissal.
-  // Disappears automatically when isAuthenticated becomes true again.
-  const tokenExpiredHeaderLeft = showTokenExpiredHeader
-    ? () => (
-        <Pressable
-          onPress={() => router.push("/login")}
-          style={{ flexDirection: "row", alignItems: "center", marginLeft: 12, gap: 4 }}
-          accessibilityRole="button"
-          accessibilityLabel="Sign in"
-        >
-          <Ionicons name="log-in-outline" size={20} color={colors.link} />
-          <Text style={{ color: colors.link, fontSize: 15 }}>Sign In</Text>
-        </Pressable>
-      )
-    : undefined;
-
   if (!tabs.useNativeTabs) {
     return (
       <View style={{ flex: 1 }}>
-        <NetworkIndicator />
+        <AppStatusIndicators />
         <Tabs
           screenOptions={{
-            // Show header only when session expired so the re-login button is accessible.
-            // Cleared (headerShown: false) once user re-authenticates.
-            headerShown: showTokenExpiredHeader,
-            headerStyle: { backgroundColor: isDark ? "#333" : "#fff" },
-            headerTintColor: isDark ? "#fff" : "#000",
-            headerLeft: tokenExpiredHeaderLeft,
+            headerShown: false,
             tabBarActiveTintColor: tabs.selectedIconColor,
             tabBarInactiveTintColor: tabs.iconColor,
             tabBarStyle: {
@@ -256,7 +224,7 @@ export default function TabLayout() {
   }
   return (
     <View style={{ flex: 1 }}>
-      <NetworkIndicator />
+      <AppStatusIndicators />
       <NativeTabs
         blurEffect={isDark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"}
         backgroundColor={tabs.backgroundColor}

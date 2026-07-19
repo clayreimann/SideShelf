@@ -1,6 +1,8 @@
 export const es = {
   // Authentication
   "auth.signIn": "Iniciar sesión",
+  "auth.sessionExpired": "La sesión ha caducado",
+  "auth.signInToStream": "Inicia sesión para transmitir",
   "auth.connectToAudiobookshelf": "Conectar a Audiobookshelf",
   "auth.serverUrlPlaceholder": "URL del servidor (ej. https://abs.example.com)",
   "auth.usernamePlaceholder": "Nombre de usuario",
