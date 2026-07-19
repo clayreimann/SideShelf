@@ -57,8 +57,10 @@ export default function SeriesScreen() {
             borderBottomColor: styles.text.color + "20",
             alignItems: "center",
           }}
+          accessible={true}
           accessibilityRole="button"
-          accessibilityHint={`View books in ${item.name}`}
+          accessibilityLabel={`${item.name}, ${bookCountLabel}`}
+          accessibilityHint={translate("accessibility.openSeries")}
         >
           {item.firstBookCoverUrl && (
             <View

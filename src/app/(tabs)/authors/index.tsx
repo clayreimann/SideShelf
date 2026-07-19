@@ -43,6 +43,10 @@ export default function AuthorsScreen() {
     ({ item }: { item: any }) => {
       const initials = getAuthorInitials(item.name);
       const hasImage = !!item.cachedImageUri;
+      const bookCountLabel =
+        item.numBooks === 1
+          ? translate("authors.bookCount", { count: item.numBooks })
+          : translate("authors.bookCountPlural", { count: item.numBooks });
 
       return (
         <TouchableOpacity
@@ -54,8 +58,10 @@ export default function AuthorsScreen() {
             borderBottomColor: styles.text.color + "20",
             alignItems: "center",
           }}
+          accessible={true}
           accessibilityRole="button"
-          accessibilityHint={`View books by ${item.name}`}
+          accessibilityLabel={`${item.name}, ${bookCountLabel}`}
+          accessibilityHint={translate("accessibility.openAuthor")}
         >
           <View
             style={{
@@ -82,9 +88,7 @@ export default function AuthorsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.text, { fontSize: 16, fontWeight: "600" }]}>{item.name}</Text>
             <Text style={[styles.text, { fontSize: 14, opacity: 0.7, marginTop: 4 }]}>
-              {item.numBooks === 1
-                ? translate("authors.bookCount", { count: item.numBooks })
-                : translate("authors.bookCountPlural", { count: item.numBooks })}
+              {bookCountLabel}
             </Text>
           </View>
         </TouchableOpacity>
