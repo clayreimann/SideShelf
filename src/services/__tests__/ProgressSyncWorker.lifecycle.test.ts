@@ -2,11 +2,14 @@
 import type { PendingProgressSync } from "@/db/helpers/progressSyncOutbox";
 
 const mockGetNextEligibleProgressSync = jest.fn();
+const mockGetEarliestProgressSyncRetryDeadline = jest.fn();
 const mockFetchNetInfo = jest.fn();
 const mockLogError = jest.fn();
 
 jest.mock("@/db/helpers/progressSyncOutbox", () => ({
   getNextEligibleProgressSync: (...args: unknown[]) => mockGetNextEligibleProgressSync(...args),
+  getEarliestProgressSyncRetryDeadline: (...args: unknown[]) =>
+    mockGetEarliestProgressSyncRetryDeadline(...args),
 }));
 
 jest.mock("@react-native-community/netinfo", () => ({
@@ -66,6 +69,8 @@ describe("ProgressSyncWorker lifecycle", () => {
     jest.setSystemTime(new Date("2026-07-20T12:00:00.000Z"));
     mockGetNextEligibleProgressSync.mockReset();
     mockGetNextEligibleProgressSync.mockResolvedValue(null);
+    mockGetEarliestProgressSyncRetryDeadline.mockReset();
+    mockGetEarliestProgressSyncRetryDeadline.mockResolvedValue(null);
     mockFetchNetInfo.mockReset();
     mockFetchNetInfo.mockResolvedValue({ isConnected: true, type: "wifi" });
     worker = new TestProgressSyncWorker();
@@ -155,6 +160,37 @@ describe("ProgressSyncWorker lifecycle", () => {
       expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
     }
   );
+
+  it("uses the conservative cadence when network inspection rejects", async () => {
+    mockFetchNetInfo.mockRejectedValue(new Error("NetInfo unavailable"));
+    worker.start("user-1");
+    await flushPromises();
+    mockGetNextEligibleProgressSync.mockClear();
+
+    worker.requestDrain("progress");
+    await flushPromises();
+    jest.advanceTimersByTime(59_999);
+    await flushPromises();
+    expect(mockGetNextEligibleProgressSync).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    await flushPromises();
+    expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores the earliest persisted retry wake when a fresh worker has no eligible row", async () => {
+    const deadline = new Date(Date.now() + 30_000);
+    mockGetEarliestProgressSyncRetryDeadline.mockResolvedValue(deadline);
+
+    worker.start("user-1");
+    await flushPromises();
+    mockGetNextEligibleProgressSync.mockClear();
+    jest.advanceTimersByTime(29_999);
+    await flushPromises();
+    expect(mockGetNextEligibleProgressSync).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    await flushPromises();
+    expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
+  });
 
   it("replaces a later live-progress wake with an immediate retry drain", async () => {
     worker.start("user-1");

@@ -81,11 +81,14 @@ async function apiFetchWithRetryGuard(
     await logDetailedResponse(res, method, url, duration);
     if (res.status === 401 && !isRetry) {
       log.info("access token expired, refreshing token...");
-      const success = await apiClientService.handleUnauthorized();
-      if (success) {
+      const refreshResult = await apiClientService.handleUnauthorized();
+      if (refreshResult.status === "refreshed") {
         // Retry once with fresh token. isRetry=true ensures a second 401 is
         // returned as-is rather than triggering another refresh cycle.
         return await apiFetchWithRetryGuard(pathOrUrl, init, /* isRetry */ true);
+      }
+      if (refreshResult.status === "transient") {
+        throw refreshResult.error;
       }
     }
     if (!res.ok) {

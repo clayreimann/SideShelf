@@ -3,6 +3,7 @@ import type { PendingProgressSync } from "@/db/helpers/progressSyncOutbox";
 import type { ApiMediaProgress } from "@/types/api";
 
 const mockGetNextEligibleProgressSync = jest.fn();
+const mockGetEarliestProgressSyncRetryDeadline = jest.fn();
 const mockAcknowledgeProgressSyncRevision = jest.fn();
 const mockRecordProgressSyncFailure = jest.fn();
 const mockTerminallyResolveProgressSyncRevision = jest.fn();
@@ -18,6 +19,8 @@ const mockClearTokens = jest.fn();
 
 jest.mock("@/db/helpers/progressSyncOutbox", () => ({
   getNextEligibleProgressSync: (...args: unknown[]) => mockGetNextEligibleProgressSync(...args),
+  getEarliestProgressSyncRetryDeadline: (...args: unknown[]) =>
+    mockGetEarliestProgressSyncRetryDeadline(...args),
   acknowledgeProgressSyncRevision: (...args: unknown[]) =>
     mockAcknowledgeProgressSyncRevision(...args),
   recordProgressSyncFailure: (...args: unknown[]) => mockRecordProgressSyncFailure(...args),
@@ -189,6 +192,7 @@ describe("ProgressSyncWorker delivery", () => {
       );
       return index === -1 ? null : pendingRows.splice(index, 1)[0];
     });
+    mockGetEarliestProgressSyncRetryDeadline.mockResolvedValue(null);
     mockAcknowledgeProgressSyncRevision.mockResolvedValue(undefined);
     mockRecordProgressSyncFailure.mockResolvedValue(undefined);
     mockTerminallyResolveProgressSyncRevision.mockResolvedValue(undefined);

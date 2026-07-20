@@ -18,6 +18,10 @@ jest.mock("@/db/helpers/localListeningSessions", () => ({
   reconcileSessionPositionFromServer: jest.fn(),
 }));
 
+jest.mock("@/services/ApiClientService", () => ({
+  apiClientService: { getAuthGeneration: jest.fn() },
+}));
+
 import {
   marshalMediaProgressFromApi,
   marshalMediaProgressFromAuthResponse,
@@ -29,6 +33,7 @@ import {
 } from "@/db/helpers/localListeningSessions";
 import { fetchMe, fetchMediaProgress } from "@/lib/api/endpoints";
 import { serverProgressRefreshService } from "@/services/ServerProgressRefreshService";
+import { apiClientService } from "@/services/ApiClientService";
 
 const mockFetchMe = fetchMe as jest.MockedFunction<typeof fetchMe>;
 const mockFetchMediaProgress = fetchMediaProgress as jest.MockedFunction<typeof fetchMediaProgress>;
@@ -43,12 +48,16 @@ const mockGetActiveSession = getActiveSession as jest.MockedFunction<typeof getA
 const mockReconcile = reconcileSessionPositionFromServer as jest.MockedFunction<
   typeof reconcileSessionPositionFromServer
 >;
+const mockGetAuthGeneration = apiClientService.getAuthGeneration as jest.MockedFunction<
+  typeof apiClientService.getAuthGeneration
+>;
 
 describe("ServerProgressRefreshService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUpsert.mockResolvedValue(undefined);
     mockReconcile.mockResolvedValue(undefined);
+    mockGetAuthGeneration.mockReturnValue(1);
   });
 
   it("refreshes all server progress into the local database", async () => {
@@ -79,6 +88,23 @@ describe("ServerProgressRefreshService", () => {
 
     const refresh = serverProgressRefreshService.refreshAll(() => current);
     current = false;
+    resolveFetch({ id: "user-1", mediaProgress: [] } as unknown as Awaited<
+      ReturnType<typeof fetchMe>
+    >);
+    await refresh;
+
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it("automatically discards a refresh response after logout, server switch, or same-user reauth", async () => {
+    let resolveFetch!: (value: Awaited<ReturnType<typeof fetchMe>>) => void;
+    mockFetchMe.mockReturnValue(new Promise((resolve) => (resolveFetch = resolve)));
+    mockMarshalAuth.mockReturnValue([{ id: "progress-1" }] as ReturnType<
+      typeof marshalMediaProgressFromAuthResponse
+    >);
+
+    const refresh = serverProgressRefreshService.refreshAll();
+    mockGetAuthGeneration.mockReturnValue(2);
     resolveFetch({ id: "user-1", mediaProgress: [] } as unknown as Awaited<
       ReturnType<typeof fetchMe>
     >);
@@ -118,6 +144,44 @@ describe("ServerProgressRefreshService", () => {
     await serverProgressRefreshService.forceResyncPosition("user-1", "item-1");
 
     expect(mockUpsert).toHaveBeenCalledTimes(1);
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it("does not repopulate progress when force-resync returns after auth generation changes", async () => {
+    let resolveFetch!: (value: Awaited<ReturnType<typeof fetchMediaProgress>>) => void;
+    mockFetchMediaProgress.mockReturnValue(new Promise((resolve) => (resolveFetch = resolve)));
+    mockMarshalItem.mockReturnValue({ id: "progress-1" } as ReturnType<
+      typeof marshalMediaProgressFromApi
+    >);
+
+    const refresh = serverProgressRefreshService.forceResyncPosition("user-1", "item-1");
+    mockGetAuthGeneration.mockReturnValue(2);
+    resolveFetch({ libraryItemId: "item-1", currentTime: 450 } as Awaited<
+      ReturnType<typeof fetchMediaProgress>
+    >);
+    await refresh;
+
+    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(mockGetActiveSession).not.toHaveBeenCalled();
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it("rechecks auth generation between force-resync mutation boundaries", async () => {
+    mockFetchMediaProgress.mockResolvedValue({
+      libraryItemId: "item-1",
+      currentTime: 450,
+    } as Awaited<ReturnType<typeof fetchMediaProgress>>);
+    mockMarshalItem.mockReturnValue({ id: "progress-1" } as ReturnType<
+      typeof marshalMediaProgressFromApi
+    >);
+    mockUpsert.mockImplementation(async () => {
+      mockGetAuthGeneration.mockReturnValue(2);
+    });
+
+    await serverProgressRefreshService.forceResyncPosition("user-1", "item-1");
+
+    expect(mockUpsert).toHaveBeenCalledTimes(1);
+    expect(mockGetActiveSession).not.toHaveBeenCalled();
     expect(mockReconcile).not.toHaveBeenCalled();
   });
 

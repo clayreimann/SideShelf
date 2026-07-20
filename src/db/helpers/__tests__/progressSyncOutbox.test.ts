@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from "uuid";
 import {
   acknowledgeProgressSyncRevision,
   getNextEligibleProgressSync,
+  getEarliestProgressSyncRetryDeadline,
   getProgressSyncOutbox,
   recordProgressSyncFailure,
   terminallyResolveProgressSyncRevision,
@@ -110,6 +111,8 @@ describe("progress sync outbox helpers", () => {
       attemptCount: 1,
       lastError: "server unavailable",
     });
+    expect(await getEarliestProgressSyncRetryDeadline("user-1", now)).toEqual(nextAttemptAt);
+    expect(await getEarliestProgressSyncRetryDeadline("user-2", now)).toBeNull();
   });
 
   it("acknowledges only the captured revision when newer local work exists", async () => {

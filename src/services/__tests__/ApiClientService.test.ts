@@ -30,9 +30,19 @@ jest.mock("@/db/helpers/tokens", () => ({
   extractTokensFromAuthResponse: jest.fn(),
 }));
 
+jest.mock("react-native-device-info", () => ({
+  getSystemName: jest.fn(() => "iOS"),
+  getSystemVersion: jest.fn(() => "17.0"),
+  getModel: jest.fn(() => "iPhone"),
+  getDeviceType: jest.fn(() => "Handset"),
+  getVersion: jest.fn(() => "1.0.0"),
+  getApplicationName: jest.fn(() => "SideShelf"),
+}));
+
 import { apiClientService } from "@/services/ApiClientService";
 import { getItem, saveItem } from "@/lib/secureStore";
 import { extractTokensFromAuthResponse } from "@/db/helpers/tokens";
+import { apiFetch } from "@/lib/api/api";
 
 const mockGetItem = getItem as jest.MockedFunction<typeof getItem>;
 const mockSaveItem = saveItem as jest.MockedFunction<typeof saveItem>;
@@ -46,6 +56,18 @@ function jsonResponse(status: number, body: unknown): Response {
     status,
     json: async () => body,
   } as Response;
+}
+
+function resourceResponse(status: number): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => null, forEach: () => undefined },
+    clone() {
+      return this;
+    },
+    text: async () => "",
+  } as unknown as Response;
 }
 
 describe("ApiClientService", () => {
@@ -102,7 +124,7 @@ describe("ApiClientService", () => {
 
       const result = await apiClientService.handleUnauthorized();
 
-      expect(result).toBe(false);
+      expect(result).toEqual({ status: "rejected" });
       expect(apiClientService.getAccessToken()).toBeNull();
       expect(apiClientService.getRefreshToken()).toBeNull();
       expect(mockSaveItem).toHaveBeenCalledWith("abs.accessToken", null);
@@ -114,7 +136,7 @@ describe("ApiClientService", () => {
 
       const result = await apiClientService.handleUnauthorized();
 
-      expect(result).toBe(false);
+      expect(result).toEqual({ status: "rejected" });
       expect(apiClientService.getAccessToken()).toBeNull();
       expect(apiClientService.getRefreshToken()).toBeNull();
     });
@@ -124,7 +146,7 @@ describe("ApiClientService", () => {
 
       const result = await apiClientService.handleUnauthorized();
 
-      expect(result).toBe(false);
+      expect(result).toMatchObject({ status: "transient" });
       // Session survives — tokens are untouched for a later retry
       expect(apiClientService.getAccessToken()).toBe("initial-access");
       expect(apiClientService.getRefreshToken()).toBe("initial-refresh");
@@ -137,7 +159,7 @@ describe("ApiClientService", () => {
 
       const result = await apiClientService.handleUnauthorized();
 
-      expect(result).toBe(false);
+      expect(result).toMatchObject({ status: "transient" });
       expect(apiClientService.getAccessToken()).toBe("initial-access");
       expect(apiClientService.getRefreshToken()).toBe("initial-refresh");
       expect(mockSaveItem).not.toHaveBeenCalledWith("abs.accessToken", null);
@@ -151,7 +173,7 @@ describe("ApiClientService", () => {
 
       const result = await apiClientService.handleUnauthorized();
 
-      expect(result).toBe(false);
+      expect(result).toMatchObject({ status: "transient" });
       expect(apiClientService.getAccessToken()).toBe("initial-access");
       expect(apiClientService.getRefreshToken()).toBe("initial-refresh");
     });
@@ -165,7 +187,7 @@ describe("ApiClientService", () => {
 
       const result = await apiClientService.handleUnauthorized();
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ status: "refreshed" });
       expect(apiClientService.getAccessToken()).toBe("new-access");
       expect(apiClientService.getRefreshToken()).toBe("new-refresh");
     });
@@ -177,10 +199,67 @@ describe("ApiClientService", () => {
 
       const result = await apiClientService.handleUnauthorized();
 
-      expect(result).toBe(false);
+      expect(result).toEqual({ status: "rejected" });
       expect(apiClientService.getAccessToken()).toBeNull();
       // No network call should be attempted — there is nothing to refresh with
       expect(global.fetch).not.toHaveBeenCalled();
     });
+
+    it("treats a malformed successful refresh response as a terminal rejection", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ...jsonResponse(200, {}),
+        json: async () => {
+          throw new SyntaxError("invalid JSON");
+        },
+      });
+
+      await expect(apiClientService.handleUnauthorized()).resolves.toEqual({
+        status: "rejected",
+      });
+      expect(apiClientService.getAccessToken()).toBeNull();
+      expect(apiClientService.getRefreshToken()).toBeNull();
+    });
+  });
+
+  it("advances the auth generation for explicit same-user reauthentication but not transient refresh failure", async () => {
+    const initialGeneration = apiClientService.getAuthGeneration();
+    await apiClientService.setTokens("same-access", "same-refresh", "alice");
+    expect(apiClientService.getAuthGeneration()).toBe(initialGeneration + 1);
+
+    (global.fetch as jest.Mock).mockRejectedValue(new TypeError("Network request failed"));
+    const beforeFailure = apiClientService.getAuthGeneration();
+    await expect(apiClientService.handleUnauthorized()).resolves.toMatchObject({
+      status: "transient",
+    });
+    expect(apiClientService.getAuthGeneration()).toBe(beforeFailure);
+  });
+
+  it.each([
+    ["refresh 5xx", () => Promise.resolve(jsonResponse(503, { secret: "not logged" }))],
+    ["refresh network rejection", () => Promise.reject(new TypeError("Network request failed"))],
+  ])(
+    "surfaces %s through apiFetch as transient while preserving authentication",
+    async (_name, refreshResult) => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(resourceResponse(401))
+        .mockImplementationOnce(refreshResult);
+
+      await expect(apiFetch("/api/session/local")).rejects.toMatchObject({
+        name: "TransientTokenRefreshError",
+      });
+      expect(apiClientService.getAccessToken()).toBe("initial-access");
+      expect(apiClientService.getRefreshToken()).toBe("initial-refresh");
+    }
+  );
+
+  it("returns the terminal resource 401 and clears auth when no refresh credential exists", async () => {
+    await apiClientService.setTokens("legacy-access", null, "alice");
+    (global.fetch as jest.Mock).mockResolvedValue(resourceResponse(401));
+
+    const response = await apiFetch("/api/session/local");
+
+    expect(response.status).toBe(401);
+    expect(apiClientService.getAccessToken()).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

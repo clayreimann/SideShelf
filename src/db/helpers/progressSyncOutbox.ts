@@ -5,7 +5,7 @@ import {
   type LocalListeningSessionRow,
   type ProgressSyncOutboxRow,
 } from "@/db/schema/localData";
-import { and, asc, desc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 export type ProgressSyncTerminalReason =
   | "media_missing"
@@ -208,6 +208,27 @@ export async function getNextEligibleProgressSync(
   };
 
   return { outbox, session: selectedSession, sentRevision: outbox.desiredRevision };
+}
+
+/** Find the durable retry wake a newly-started worker must restore. */
+export async function getEarliestProgressSyncRetryDeadline(
+  userId: string,
+  now: Date
+): Promise<Date | null> {
+  const rows = await db
+    .select({ deadline: progressSyncOutbox.nextAttemptAt })
+    .from(progressSyncOutbox)
+    .where(
+      and(
+        eq(progressSyncOutbox.userId, userId),
+        lt(progressSyncOutbox.acknowledgedRevision, progressSyncOutbox.desiredRevision),
+        isNull(progressSyncOutbox.terminalReason),
+        gt(progressSyncOutbox.nextAttemptAt, now)
+      )
+    )
+    .orderBy(asc(progressSyncOutbox.nextAttemptAt))
+    .limit(1);
+  return rows[0]?.deadline ?? null;
 }
 
 function fromDatabaseTimestamp(value: number): Date {

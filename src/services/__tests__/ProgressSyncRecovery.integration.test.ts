@@ -47,6 +47,7 @@ import { localListeningSessions, progressSyncOutbox } from "@/db/schema/localDat
 import { mediaMetadata } from "@/db/schema/mediaMetadata";
 import { users } from "@/db/schema/users";
 import { ProgressSyncWorker } from "@/services/ProgressSyncWorker";
+import { ApiResponseError } from "@/lib/api/endpoints";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -297,5 +298,45 @@ describe("stale-token progress sync recovery", () => {
     expect(diagnostics[1]).not.toHaveProperty("lastError");
     expect(JSON.stringify(diagnostics)).not.toContain("private raw failure");
     expect(JSON.stringify(diagnostics)).not.toContain("private raw terminal");
+  });
+
+  it("restores a persisted backoff deadline after the worker restarts", async () => {
+    const sessionId = await startListeningSession(USER_ID, ITEM_ID, MEDIA_ID, 100, 3600);
+    await applyLocalPlaybackTick(sessionId, {
+      currentTime: 115,
+      listeningTimeDelta: 15,
+      playbackRate: 1,
+      volume: 1,
+    });
+    mockCreateLocalSession.mockRejectedValueOnce(
+      new ApiResponseError({
+        message: "temporary server failure",
+        status: 503,
+        responseBody: "redacted",
+      })
+    );
+
+    const firstWorker = new ProgressSyncWorker(() => 0.5);
+    activeWorker = firstWorker;
+    firstWorker.start(USER_ID);
+    await firstWorker.drainNow();
+    expect(mockCreateLocalSession).toHaveBeenCalledTimes(1);
+    expect(await getProgressSyncOutbox(sessionId)).toMatchObject({
+      attemptCount: 1,
+      nextAttemptAt: new Date(NOW.getTime() + 15_000),
+    });
+
+    firstWorker.stop();
+    const restartedWorker = new ProgressSyncWorker(() => 0.5);
+    activeWorker = restartedWorker;
+    restartedWorker.start(USER_ID);
+    await restartedWorker.drainNow();
+
+    jest.advanceTimersByTime(14_999);
+    await Promise.resolve();
+    expect(mockCreateLocalSession).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(1);
+    await restartedWorker.drainNow();
+    expect(mockCreateLocalSession).toHaveBeenCalledTimes(2);
   });
 });

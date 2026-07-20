@@ -1,5 +1,6 @@
 import {
   acknowledgeProgressSyncRevision,
+  getEarliestProgressSyncRetryDeadline,
   getNextEligibleProgressSync,
   recordProgressSyncFailure,
   terminallyResolveProgressSyncRevision,
@@ -139,7 +140,9 @@ export class ProgressSyncWorker {
     }
 
     if (trigger === "progress") {
-      void this._requestProgressDrain();
+      void this._requestProgressDrain().catch((error: unknown) => {
+        log.error("Progress cadence scheduling failed", asError(error));
+      });
       return;
     }
 
@@ -402,12 +405,17 @@ export class ProgressSyncWorker {
       return;
     }
 
-    const network = await NetInfo.fetch();
+    let network: Awaited<ReturnType<typeof NetInfo.fetch>> | null = null;
+    try {
+      network = await NetInfo.fetch();
+    } catch (error) {
+      log.warn(`Network cadence inspection unavailable: ${getErrorMessage(error)}`);
+    }
     if (!this._isCurrentGeneration(generation, userId)) {
       return;
     }
 
-    const isUnmetered = network.type === "wifi" || network.type === "ethernet";
+    const isUnmetered = network?.type === "wifi" || network?.type === "ethernet";
     const interval = isUnmetered
       ? UNMETERED_PROGRESS_DRAIN_INTERVAL_MS
       : METERED_PROGRESS_DRAIN_INTERVAL_MS;
@@ -420,6 +428,12 @@ export class ProgressSyncWorker {
     while (this._isCurrentGeneration(generation, userId)) {
       const pending = await getNextEligibleProgressSync(userId, new Date());
       if (!pending || !this._isCurrentGeneration(generation, userId)) {
+        if (this._isCurrentGeneration(generation, userId)) {
+          const deadline = await getEarliestProgressSyncRetryDeadline(userId, new Date());
+          if (deadline && this._isCurrentGeneration(generation, userId)) {
+            this._scheduleWakeAt(deadline);
+          }
+        }
         return;
       }
 

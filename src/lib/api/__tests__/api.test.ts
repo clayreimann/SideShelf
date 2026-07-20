@@ -107,7 +107,7 @@ describe("apiFetch 401 handling", () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce(makeResponse(401))
       .mockResolvedValueOnce(makeResponse(200));
-    mockHandleUnauthorized.mockResolvedValue(true);
+    mockHandleUnauthorized.mockResolvedValue({ status: "refreshed" });
 
     const res = await apiFetch("/some/path");
 
@@ -120,7 +120,7 @@ describe("apiFetch 401 handling", () => {
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce(makeResponse(401))
       .mockResolvedValueOnce(makeResponse(401));
-    mockHandleUnauthorized.mockResolvedValue(true);
+    mockHandleUnauthorized.mockResolvedValue({ status: "refreshed" });
 
     const res = await apiFetch("/some/path");
 
@@ -134,7 +134,7 @@ describe("apiFetch 401 handling", () => {
 
   it("returns the original 401 response without retrying when refresh fails", async () => {
     (global.fetch as jest.Mock).mockResolvedValue(makeResponse(401));
-    mockHandleUnauthorized.mockResolvedValue(false);
+    mockHandleUnauthorized.mockResolvedValue({ status: "rejected" });
 
     const res = await apiFetch("/some/path");
 
@@ -145,7 +145,7 @@ describe("apiFetch 401 handling", () => {
 
   it("simulated server that always 401s does not loop indefinitely even across many calls", async () => {
     (global.fetch as jest.Mock).mockResolvedValue(makeResponse(401));
-    mockHandleUnauthorized.mockResolvedValue(true); // refresh keeps "succeeding"
+    mockHandleUnauthorized.mockResolvedValue({ status: "refreshed" }); // refresh keeps "succeeding"
 
     const res = await apiFetch("/permission-scoped-resource");
 
@@ -153,6 +153,14 @@ describe("apiFetch 401 handling", () => {
     // Bounded: original request + exactly one retry, never more
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(mockHandleUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws a transient refresh failure instead of returning the resource 401", async () => {
+    const refreshError = new Error("Token refresh temporarily unavailable");
+    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(401));
+    mockHandleUnauthorized.mockResolvedValue({ status: "transient", error: refreshError });
+
+    await expect(apiFetch("/some/path")).rejects.toBe(refreshError);
   });
 });
 
