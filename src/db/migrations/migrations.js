@@ -18,6 +18,7 @@ import m0011 from "./0011_natural_betty_ross.sql";
 import m0012 from "./0012_hot_stellaris.sql";
 import m0013 from "./0013_giant_lucky_pierre.sql";
 import m0014 from "./0014_milky_texas_twister.sql";
+import m0015 from "./0015_silent_next_avengers.sql";
 
 export default {
   journal,
@@ -37,5 +38,6 @@ export default {
     m0012,
     m0013,
     m0014,
+    m0015,
   },
 };

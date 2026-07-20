@@ -1,11 +1,11 @@
 /**
- * TDD RED stubs — Path Normalization SQL Migration (DEBT-01)
+ * Path normalization runs as part of the journaled progress-sync outbox migration.
  *
- * Tests the SQL migration 0014_normalize_paths.sql by running its UPDATE
+ * Tests the runtime-bundled 0015 migration by running its path-normalization UPDATE
  * statements against an in-memory SQLite test database.
  *
- * These tests FAIL in RED state because 0014_normalize_paths.sql does not
- * exist yet. Plans 03/04 will create the migration and make these tests GREEN.
+ * These tests initially fail in RED state because the journaled 0015 migration does
+ * not exist yet. They must never load the orphaned 0014_normalize_paths.sql file.
  *
  * Test strategy:
  *  - Use testDb helper (in-memory SQLite with full schema migrations run first)
@@ -21,34 +21,26 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { createTestDb, TestDatabase } from "@/__tests__/utils/testDb";
-import * as fs from "fs";
-import * as path from "path";
-
-// Path to the migration SQL file that will be created by Plan 03/04
-const MIGRATION_SQL_PATH = path.resolve(
-  __dirname,
-  "../../../db/migrations/0014_normalize_paths.sql"
-);
+import migrations from "@/db/migrations/migrations";
 
 /**
- * Load and return the migration SQL statements as an array.
- * Splits on semicolons, filters empty statements.
+ * Load the journaled runtime migration and split at Drizzle boundaries so SQL
+ * statements execute exactly as Expo's migration runner receives them.
  */
 function loadMigrationStatements(): string[] {
-  if (!fs.existsSync(MIGRATION_SQL_PATH)) {
+  const migration = migrations.migrations.m0015;
+  if (!migration) {
     throw new Error(
-      `Migration file not found: ${MIGRATION_SQL_PATH}\n` +
-        "This test is in RED state — 0014_normalize_paths.sql must be created in Plan 03/04."
+      "Journaled runtime migration m0015 is missing; path normalization must run from the bundled migration."
     );
   }
-  const sql = fs.readFileSync(MIGRATION_SQL_PATH, "utf-8");
-  return sql
-    .split(";")
+  return migration
+    .split("--> statement-breakpoint")
     .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !s.startsWith("--"));
+    .filter((statement) => statement.startsWith("UPDATE"));
 }
 
-describe("normalizePaths migration (0014_normalize_paths.sql)", () => {
+describe("normalizePaths migration (journaled runtime 0015)", () => {
   let testDb: TestDatabase;
 
   beforeEach(async () => {
