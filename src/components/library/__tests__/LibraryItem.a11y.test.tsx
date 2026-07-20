@@ -14,8 +14,15 @@ jest.mock("@/lib/theme", () => ({
   })),
 }));
 
+let mockHref: string | undefined;
+let mockPathname = "/library";
+
 jest.mock("expo-router", () => ({
-  Link: ({ children }: { children: React.ReactNode }) => children,
+  Link: ({ children, href }: { children: React.ReactNode; href: string }) => {
+    mockHref = href;
+    return children;
+  },
+  usePathname: () => mockPathname,
 }));
 
 const mockIsItemDownloaded = jest.fn();
@@ -46,6 +53,17 @@ describe("LibraryItem accessibility", () => {
   beforeEach(() => {
     mockIsItemDownloaded.mockReset();
     mockIsItemPartiallyDownloaded.mockReset();
+    mockHref = undefined;
+    mockPathname = "/library";
+  });
+
+  it.each([
+    ["/library", "/library/item-1"],
+    ["/more/library", "/more/library/item-1"],
+  ])("GridItem links to the item route for %s", (pathname, expected) => {
+    mockPathname = pathname;
+    render(<GridItem item={baseItem} />);
+    expect(mockHref).toBe(expected);
   });
 
   it("GridItem exposes a button-role element labeled with title and author", () => {

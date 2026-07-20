@@ -2,8 +2,9 @@ import CoverImage from "@/components/ui/CoverImage";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { type HomeScreenItem } from "@/db/helpers/homeScreen";
 import { translate } from "@/i18n";
+import { getHomeItemRoute } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
 interface HomeItemProps {
@@ -12,10 +13,11 @@ interface HomeItemProps {
 
 export default function HomeItem({ item }: HomeItemProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { styles, colors } = useThemedStyles();
   return (
     <Pressable
-      onPress={() => router.push(`/home/item/${item.id}`)}
+      onPress={() => router.push(getHomeItemRoute(pathname, item.id))}
       accessible={true}
       accessibilityRole="button"
       accessibilityLabel={[

@@ -1,10 +1,11 @@
 import CoverImage from "@/components/ui/CoverImage";
 import { translate } from "@/i18n";
 import { borderRadius, spacing } from "@/lib/styles";
+import { getLibraryItemRoute } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
 import { useDownloads } from "@/stores";
 import { LibraryItemDisplayRow } from "@/types/components";
-import { Link } from "expo-router";
+import { Link, usePathname } from "expo-router";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import AuthorIcon from "../icons/AuthorIcon";
@@ -15,6 +16,7 @@ interface LibraryItemProps {
 }
 
 export function GridItem({ item }: { item: LibraryItemDisplayRow }) {
+  const pathname = usePathname();
   const { colors } = useThemedStyles();
   const { isItemDownloaded, isItemPartiallyDownloaded } = useDownloads();
   const downloadState = isItemDownloaded(item.id)
@@ -24,7 +26,7 @@ export function GridItem({ item }: { item: LibraryItemDisplayRow }) {
       : undefined;
   const accessibilityLabel = [item.title, item.author, downloadState].filter(Boolean).join(", ");
   return (
-    <Link href={{ pathname: "/(tabs)/library/[item]", params: { item: item.id } }} asChild>
+    <Link href={getLibraryItemRoute(pathname, item.id)} asChild>
       <Pressable
         style={styles.gridItemContainer}
         testID="library-item"
@@ -47,6 +49,7 @@ export function GridItem({ item }: { item: LibraryItemDisplayRow }) {
 }
 
 export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
+  const pathname = usePathname();
   const { colors } = useThemedStyles();
   const { isItemDownloaded, isItemPartiallyDownloaded } = useDownloads();
   const downloadState = isItemDownloaded(item.id)
@@ -56,7 +59,7 @@ export function ListItem({ item }: { item: LibraryItemDisplayRow }) {
       : undefined;
   const accessibilityLabel = [item.title, item.author, downloadState].filter(Boolean).join(", ");
   return (
-    <Link href={{ pathname: "/(tabs)/library/[item]", params: { item: item.id } }} asChild>
+    <Link href={getLibraryItemRoute(pathname, item.id)} asChild>
       <Pressable
         style={[styles.listItemContainer, { backgroundColor: colors.background }]}
         testID="library-item"
