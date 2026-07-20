@@ -62,10 +62,13 @@ jest.mock("@/lib/api/endpoints", () => ({
 
 jest.mock("@/services/ProgressService", () => ({
   progressService: {
-    fetchServerProgress: jest.fn(),
     initialize: jest.fn(),
     shutdown: jest.fn(),
   },
+}));
+
+jest.mock("@/services/ServerProgressRefreshService", () => ({
+  serverProgressRefreshService: { refreshAll: jest.fn(async () => undefined) },
 }));
 
 jest.mock("@/stores/appStore", () => ({

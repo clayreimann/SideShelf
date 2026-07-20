@@ -1,0 +1,128 @@
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+jest.mock("@/lib/api/endpoints", () => ({
+  fetchMe: jest.fn(),
+  fetchMediaProgress: jest.fn(),
+}));
+
+jest.mock("@/db/helpers/mediaProgress", () => ({
+  marshalMediaProgressFromApi: jest.fn(),
+  marshalMediaProgressFromAuthResponse: jest.fn(),
+  upsertMediaProgress: jest.fn(),
+}));
+
+jest.mock("@/db/helpers/localListeningSessions", () => ({
+  getActiveSession: jest.fn(),
+  reconcileSessionPositionFromServer: jest.fn(),
+}));
+
+import {
+  marshalMediaProgressFromApi,
+  marshalMediaProgressFromAuthResponse,
+  upsertMediaProgress,
+} from "@/db/helpers/mediaProgress";
+import {
+  getActiveSession,
+  reconcileSessionPositionFromServer,
+} from "@/db/helpers/localListeningSessions";
+import { fetchMe, fetchMediaProgress } from "@/lib/api/endpoints";
+import { serverProgressRefreshService } from "@/services/ServerProgressRefreshService";
+
+const mockFetchMe = fetchMe as jest.MockedFunction<typeof fetchMe>;
+const mockFetchMediaProgress = fetchMediaProgress as jest.MockedFunction<typeof fetchMediaProgress>;
+const mockMarshalAuth = marshalMediaProgressFromAuthResponse as jest.MockedFunction<
+  typeof marshalMediaProgressFromAuthResponse
+>;
+const mockMarshalItem = marshalMediaProgressFromApi as jest.MockedFunction<
+  typeof marshalMediaProgressFromApi
+>;
+const mockUpsert = upsertMediaProgress as jest.MockedFunction<typeof upsertMediaProgress>;
+const mockGetActiveSession = getActiveSession as jest.MockedFunction<typeof getActiveSession>;
+const mockReconcile = reconcileSessionPositionFromServer as jest.MockedFunction<
+  typeof reconcileSessionPositionFromServer
+>;
+
+describe("ServerProgressRefreshService", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUpsert.mockResolvedValue(undefined);
+    mockReconcile.mockResolvedValue(undefined);
+  });
+
+  it("refreshes all server progress into the local database", async () => {
+    const response = { id: "user-1", mediaProgress: [] };
+    const marshaled = [{ id: "progress-1" }];
+    mockFetchMe.mockResolvedValue(response as unknown as Awaited<ReturnType<typeof fetchMe>>);
+    mockMarshalAuth.mockReturnValue(
+      marshaled as ReturnType<typeof marshalMediaProgressFromAuthResponse>
+    );
+
+    await serverProgressRefreshService.refreshAll();
+
+    expect(mockMarshalAuth).toHaveBeenCalledWith(response);
+    expect(mockUpsert).toHaveBeenCalledWith(marshaled);
+  });
+
+  it("force-resyncs one item through the non-dirty reconciliation helper", async () => {
+    const response = { libraryItemId: "item-1", currentTime: 450 };
+    const marshaled = { id: "progress-1" };
+    mockFetchMediaProgress.mockResolvedValue(
+      response as Awaited<ReturnType<typeof fetchMediaProgress>>
+    );
+    mockMarshalItem.mockReturnValue(marshaled as ReturnType<typeof marshalMediaProgressFromApi>);
+    mockGetActiveSession.mockResolvedValue({ id: "session-1" } as Awaited<
+      ReturnType<typeof getActiveSession>
+    >);
+
+    await serverProgressRefreshService.forceResyncPosition("user-1", "item-1");
+
+    expect(mockFetchMediaProgress).toHaveBeenCalledWith("item-1");
+    expect(mockMarshalItem).toHaveBeenCalledWith(response, "user-1");
+    expect(mockUpsert).toHaveBeenCalledWith([marshaled]);
+    expect(mockGetActiveSession).toHaveBeenCalledWith("user-1", "item-1");
+    expect(mockReconcile).toHaveBeenCalledWith("session-1", 450);
+  });
+
+  it("updates stored progress without reconciling when there is no active session", async () => {
+    const response = { libraryItemId: "item-1", currentTime: 450 };
+    mockFetchMediaProgress.mockResolvedValue(
+      response as Awaited<ReturnType<typeof fetchMediaProgress>>
+    );
+    mockMarshalItem.mockReturnValue({} as ReturnType<typeof marshalMediaProgressFromApi>);
+    mockGetActiveSession.mockResolvedValue(null);
+
+    await serverProgressRefreshService.forceResyncPosition("user-1", "item-1");
+
+    expect(mockUpsert).toHaveBeenCalledTimes(1);
+    expect(mockReconcile).not.toHaveBeenCalled();
+  });
+
+  it("permits only inbound progress endpoints", () => {
+    const source = readFileSync(
+      path.resolve(__dirname, "../ServerProgressRefreshService.ts"),
+      "utf8"
+    );
+
+    expect(source).toMatch(
+      /import\s+\{\s*fetchMe,\s*fetchMediaProgress\s*\}\s+from\s+"@\/lib\/api\/endpoints"/
+    );
+    expect(source).not.toMatch(/\b(?:createLocalSession|syncSession|closeSession)\b/);
+  });
+
+  it("migrates every previous production refresh caller to the inbound owner", () => {
+    const callerPaths = [
+      "../../providers/AuthProvider.tsx",
+      "../../app/_layout.tsx",
+      "../../app/(tabs)/home/index.tsx",
+      "../../components/library/LibraryItemDetail.tsx",
+    ];
+
+    for (const callerPath of callerPaths) {
+      const source = readFileSync(path.resolve(__dirname, callerPath), "utf8");
+      expect(source).not.toMatch(/progressService\.(?:fetchServerProgress|forceResyncPosition)/);
+      expect(source).toContain("serverProgressRefreshService");
+    }
+  });
+});

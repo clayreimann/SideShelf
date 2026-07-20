@@ -15,7 +15,7 @@ import { AuthProvider, authInitializedPromise } from "@/providers/AuthProvider";
 import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
-import { progressService } from "@/services/ProgressService";
+import { serverProgressRefreshService } from "@/services/ServerProgressRefreshService";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { useAppStore } from "@/stores/appStore";
 import { PlayerState } from "@/types/coordinator";
@@ -139,8 +139,8 @@ export default function RootLayout() {
 
           // Still fetch progress from server and sync position
           log.info("Triggering progress refetch on app foreground");
-          progressService
-            .fetchServerProgress()
+          serverProgressRefreshService
+            .refreshAll()
             .then(async () => {
               // Sync position from database after fetching server progress
               await playerService.syncPositionFromDatabase().catch((error) => {
@@ -190,8 +190,8 @@ export default function RootLayout() {
 
         log.info("Triggering progress refetch on app foreground");
         // Fetch latest progress from server when app becomes active
-        progressService
-          .fetchServerProgress()
+        serverProgressRefreshService
+          .refreshAll()
           .then(async () => {
             // Sync position from database after fetching server progress
             await playerService.syncPositionFromDatabase().catch((error) => {

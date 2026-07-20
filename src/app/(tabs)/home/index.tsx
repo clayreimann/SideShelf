@@ -7,7 +7,7 @@ import { translate } from "@/i18n";
 import { getLastHomeSectionCount, setLastHomeSectionCount } from "@/lib/appSettings";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
-import { progressService } from "@/services/ProgressService";
+import { serverProgressRefreshService } from "@/services/ServerProgressRefreshService";
 import { useHome, useNetwork } from "@/stores";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -174,7 +174,7 @@ export default function HomeScreen() {
             return;
           }
 
-          await progressService.fetchServerProgress();
+          await serverProgressRefreshService.refreshAll();
           await refreshHome(user.id);
         } catch (error) {
           console.error("[HomeScreen] Error refreshing home data:", error);
@@ -199,7 +199,7 @@ export default function HomeScreen() {
         return;
       }
 
-      await progressService.fetchServerProgress();
+      await serverProgressRefreshService.refreshAll();
       await refreshHome(user.id, true);
     } catch (error) {
       console.error("[HomeScreen] Error refreshing:", error);

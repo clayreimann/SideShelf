@@ -10,6 +10,7 @@ import { login as doLogin } from "@/lib/api/endpoints";
 import { getStoredUsername, persistUsername } from "@/lib/secureStore";
 import { useDb } from "@/providers/DbProvider";
 import { progressService } from "@/services/ProgressService";
+import { serverProgressRefreshService } from "@/services/ServerProgressRefreshService";
 import { apiClientService } from "@/services/ApiClientService";
 import type { AuthStatus } from "@/types/auth";
 import React, {
@@ -143,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (nextAppState === "active") {
         console.log("[AuthProvider] App became active");
         // Sync progress when app becomes active
-        progressService.fetchServerProgress().catch((error) => {
+        serverProgressRefreshService.refreshAll().catch((error) => {
           console.error("[AuthProvider] Failed to sync progress on app foreground:", error);
         });
       }

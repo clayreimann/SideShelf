@@ -838,16 +838,6 @@ export class ProgressService {
   async forceSyncSessions(): Promise<void> {
     progressSyncWorker.requestDrain("manual");
   }
-  /** Compatibility redirect until Task 7 installs the server-refresh owner. */
-  async fetchServerProgress(): Promise<void> {
-    progressSyncWorker.requestDrain("manual");
-  }
-
-  /** Compatibility redirect until Task 7 installs the server-refresh owner. */
-  async forceResyncPosition(_userId: string, _libraryItemId: string): Promise<void> {
-    progressSyncWorker.requestDrain("manual");
-  }
-
   /** Clear user-scoped hot-path state. Worker lifecycle is owned elsewhere. */
   shutdown(): void {
     this._invalidateActiveSessionCache();

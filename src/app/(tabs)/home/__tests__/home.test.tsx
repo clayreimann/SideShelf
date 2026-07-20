@@ -60,9 +60,9 @@ jest.mock("@/db/helpers/users", () => ({
   getUserByUsername: jest.fn(async () => ({ id: "user-1", username: "alice" })),
 }));
 
-jest.mock("@/services/ProgressService", () => ({
-  progressService: {
-    fetchServerProgress: jest.fn(async () => undefined),
+jest.mock("@/services/ServerProgressRefreshService", () => ({
+  serverProgressRefreshService: {
+    refreshAll: jest.fn(async () => undefined),
   },
 }));
 

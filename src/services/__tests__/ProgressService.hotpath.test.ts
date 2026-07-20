@@ -529,14 +529,6 @@ describe("ProgressService — local hot path, throttle, and staleness", () => {
       expect(mockRequestDrain.mock.calls).toEqual([["progress"], ["pause"]]);
     });
 
-    it("keeps legacy refresh methods network-free and delegates to a manual drain", async () => {
-      await progressService.fetchServerProgress();
-      await progressService.forceResyncPosition(USER_ID, ITEM_ID);
-
-      expect(mockRequestDrain.mock.calls).toEqual([["manual"], ["manual"]]);
-      expect(mockApplyLocalPlaybackTick).not.toHaveBeenCalled();
-    });
-
     it("has no endpoint dependency or endpoint delivery symbols", () => {
       const source = readFileSync(path.resolve(__dirname, "../ProgressService.ts"), "utf8");
 
@@ -544,6 +536,7 @@ describe("ProgressService — local hot path, throttle, and staleness", () => {
       expect(source).not.toMatch(
         /\b(?:fetchMe|fetchMediaProgress|createLocalSession|syncSession|closeSession)\s*\(/
       );
+      expect(source).not.toMatch(/\b(?:fetchServerProgress|forceResyncPosition)\s*\(/);
     });
   });
 });
