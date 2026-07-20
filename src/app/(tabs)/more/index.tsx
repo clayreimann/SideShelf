@@ -1,5 +1,6 @@
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate, type TranslationKey } from "@/i18n";
+import { getMoreTabIndexRoute, type MovableTabName } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAppStore } from "@/stores/appStore";
@@ -26,19 +27,24 @@ type ActionItem = {
   isNavItem?: boolean;
 };
 
-// Tab configuration with labels (matching tab-bar-settings.tsx)
-const ALL_TABS = [
-  { name: "home", titleKey: "tabs.home" as TranslationKey },
-  { name: "library", titleKey: "tabs.library" as TranslationKey },
+type MoreTabMenuConfig = {
+  name: MovableTabName;
+  titleKey: TranslationKey;
+  icon?: { sf: SFSymbol; ionicon: IoniconsName };
+};
+
+const ALL_TABS: MoreTabMenuConfig[] = [
+  { name: "home", titleKey: "tabs.home" },
+  { name: "library", titleKey: "tabs.library" },
   {
     name: "series",
-    titleKey: "tabs.series" as TranslationKey,
-    icon: { sf: "square.stack" as SFSymbol, ionicon: "layers-outline" as IoniconsName },
+    titleKey: "tabs.series",
+    icon: { sf: "square.stack", ionicon: "layers-outline" },
   },
   {
     name: "authors",
-    titleKey: "tabs.authors" as TranslationKey,
-    icon: { sf: "person.circle" as SFSymbol, ionicon: "people-circle-outline" as IoniconsName },
+    titleKey: "tabs.authors",
+    icon: { sf: "person.circle", ionicon: "people-circle-outline" },
   },
 ];
 
@@ -146,8 +152,7 @@ export default function MoreScreen() {
     hiddenTabsData.forEach((tab) => {
       items.push({
         label: translate(tab.titleKey),
-        onPress: () =>
-          tab.name === "series" ? router.push("/more/series") : router.push("/more/authors"),
+        onPress: () => router.push(getMoreTabIndexRoute(tab.name)),
         icon: tab.icon,
         isNavItem: true,
       });
