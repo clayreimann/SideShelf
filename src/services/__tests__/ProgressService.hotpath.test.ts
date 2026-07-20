@@ -15,6 +15,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { LocalListeningSessionRow } from "@/db/schema/localData";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 // --- DB helper mocks ---
 
@@ -24,7 +26,6 @@ jest.mock("@/db/helpers/localListeningSessions", () => ({
   endStaleListeningSession: jest.fn(),
   endListeningSession: jest.fn(),
   getActiveSession: jest.fn(),
-  reconcileSessionPositionFromServer: jest.fn(),
   startListeningSession: jest.fn(),
   updateServerSessionId: jest.fn(),
   updateSessionListeningTime: jest.fn(),
@@ -56,11 +57,6 @@ jest.mock("@/lib/secureStore", () => ({
   getStoredUsername: jest.fn(),
 }));
 
-jest.mock("@/lib/api/endpoints", () => ({
-  fetchMe: jest.fn(),
-  fetchMediaProgress: jest.fn(),
-}));
-
 jest.mock("@/services/ProgressSyncWorker", () => ({
   progressSyncWorker: { requestDrain: jest.fn() },
 }));
@@ -81,7 +77,6 @@ import {
   endStaleListeningSession,
   getActiveSession,
   getAllActiveSessionsForUser,
-  reconcileSessionPositionFromServer,
   startListeningSession,
   updateServerSessionId,
 } from "@/db/helpers/localListeningSessions";
@@ -89,7 +84,6 @@ import { getLibraryItemById } from "@/db/helpers/libraryItems";
 import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { getStoredUsername } from "@/lib/secureStore";
-import { fetchMediaProgress } from "@/lib/api/endpoints";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { progressService } from "@/services/ProgressService";
 import { progressSyncWorker } from "@/services/ProgressSyncWorker";
@@ -112,9 +106,6 @@ const mockStartListeningSession = startListeningSession as jest.MockedFunction<
 const mockUpdateServerSessionId = updateServerSessionId as jest.MockedFunction<
   typeof updateServerSessionId
 >;
-const mockReconcileSessionPosition = reconcileSessionPositionFromServer as jest.MockedFunction<
-  typeof reconcileSessionPositionFromServer
->;
 const mockApplyLocalPlaybackTick = applyLocalPlaybackTick as jest.MockedFunction<
   typeof applyLocalPlaybackTick
 >;
@@ -125,7 +116,6 @@ const mockGetMediaProgress = getMediaProgressForLibraryItem as jest.MockedFuncti
 >;
 const mockGetStoredUsername = getStoredUsername as jest.MockedFunction<typeof getStoredUsername>;
 const mockDispatch = dispatchPlayerEvent as jest.MockedFunction<typeof dispatchPlayerEvent>;
-const mockFetchMediaProgress = fetchMediaProgress as jest.MockedFunction<typeof fetchMediaProgress>;
 const mockRequestDrain = progressSyncWorker.requestDrain as jest.MockedFunction<
   typeof progressSyncWorker.requestDrain
 >;
@@ -185,7 +175,6 @@ describe("ProgressService — local hot path, throttle, and staleness", () => {
     } as ReturnType<typeof getUserByUsername> extends Promise<infer T> ? T : never);
     mockApplyLocalPlaybackTick.mockResolvedValue(undefined);
     mockUpdateServerSessionId.mockResolvedValue(undefined);
-    mockReconcileSessionPosition.mockResolvedValue(undefined);
     mockEndListeningSession.mockResolvedValue(undefined);
     mockEndStaleListeningSession.mockResolvedValue(undefined);
   });
@@ -397,6 +386,39 @@ describe("ProgressService — local hot path, throttle, and staleness", () => {
       expect(mockUpdateServerSessionId).toHaveBeenCalledWith("new-session-id", "server-session-1");
       expect(mockRequestDrain).toHaveBeenCalledWith("progress");
     });
+
+    it("wakes durable pending work even when server-session metadata persistence fails", async () => {
+      mockGetAllActiveSessions.mockResolvedValue([]);
+      mockUpdateServerSessionId.mockRejectedValue(new Error("metadata write failed"));
+
+      await expect(
+        progressService.startSession(
+          "alice",
+          ITEM_ID,
+          "media-1",
+          100,
+          3600,
+          1,
+          1,
+          "server-session-1"
+        )
+      ).rejects.toThrow("metadata write failed");
+
+      expect(mockStartListeningSession).toHaveBeenCalledTimes(1);
+      expect(mockRequestDrain).toHaveBeenCalledWith("progress");
+    });
+
+    it("does not request delivery when the atomic session create fails", async () => {
+      mockGetAllActiveSessions.mockResolvedValue([]);
+      mockStartListeningSession.mockRejectedValue(new Error("atomic create failed"));
+
+      await expect(
+        progressService.startSession("alice", ITEM_ID, "media-1", 100, 3600)
+      ).rejects.toThrow("atomic create failed");
+
+      expect(mockUpdateServerSessionId).not.toHaveBeenCalled();
+      expect(mockRequestDrain).not.toHaveBeenCalled();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -507,19 +529,21 @@ describe("ProgressService — local hot path, throttle, and staleness", () => {
       expect(mockRequestDrain.mock.calls).toEqual([["progress"], ["pause"]]);
     });
 
-    it("reconciles a forced server position without dirtying the outbox", async () => {
-      mockFetchMediaProgress.mockResolvedValue({
-        id: "progress-1",
-        libraryItemId: ITEM_ID,
-        currentTime: 450,
-      } as Awaited<ReturnType<typeof fetchMediaProgress>>);
-      mockGetActiveSession.mockResolvedValue(makeSession({}));
-
+    it("keeps legacy refresh methods network-free and delegates to a manual drain", async () => {
+      await progressService.fetchServerProgress();
       await progressService.forceResyncPosition(USER_ID, ITEM_ID);
 
-      expect(mockReconcileSessionPosition).toHaveBeenCalledWith("session-1", 450);
+      expect(mockRequestDrain.mock.calls).toEqual([["manual"], ["manual"]]);
       expect(mockApplyLocalPlaybackTick).not.toHaveBeenCalled();
-      expect(mockRequestDrain).not.toHaveBeenCalled();
+    });
+
+    it("has no endpoint dependency or endpoint delivery symbols", () => {
+      const source = readFileSync(path.resolve(__dirname, "../ProgressService.ts"), "utf8");
+
+      expect(source).not.toContain("@/lib/api/endpoints");
+      expect(source).not.toMatch(
+        /\b(?:fetchMe|fetchMediaProgress|createLocalSession|syncSession|closeSession)\s*\(/
+      );
     });
   });
 });

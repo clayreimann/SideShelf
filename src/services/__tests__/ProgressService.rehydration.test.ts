@@ -29,7 +29,6 @@ jest.mock("@/db/helpers/localListeningSessions", () => ({
   endStaleListeningSession: jest.fn(),
   endListeningSession: jest.fn(),
   getActiveSession: jest.fn(),
-  reconcileSessionPositionFromServer: jest.fn(),
   startListeningSession: jest.fn(),
   updateServerSessionId: jest.fn(),
   updateSessionListeningTime: jest.fn(),
@@ -59,11 +58,6 @@ jest.mock("@/db/helpers/mediaMetadata", () => ({
 
 jest.mock("@/lib/secureStore", () => ({
   getStoredUsername: jest.fn(),
-}));
-
-jest.mock("@/lib/api/endpoints", () => ({
-  fetchMe: jest.fn(),
-  fetchMediaProgress: jest.fn(),
 }));
 
 jest.mock("@/services/ProgressSyncWorker", () => ({

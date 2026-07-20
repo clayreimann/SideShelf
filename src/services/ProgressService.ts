@@ -13,20 +13,13 @@ import {
   endStaleListeningSession,
   getActiveSession,
   getAllActiveSessionsForUser,
-  reconcileSessionPositionFromServer,
   startListeningSession,
   updateServerSessionId,
 } from "@/db/helpers/localListeningSessions";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
-import {
-  getMediaProgressForLibraryItem,
-  marshalMediaProgressFromApi,
-  marshalMediaProgressFromAuthResponse,
-  upsertMediaProgress,
-} from "@/db/helpers/mediaProgress";
+import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { LocalListeningSessionRow } from "@/db/schema/localData";
-import { fetchMe, fetchMediaProgress } from "@/lib/api/endpoints";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
@@ -466,6 +459,7 @@ export class ProgressService {
         volume,
         episodeId ?? null
       );
+      progressSyncWorker.requestDrain("progress");
 
       // Session is now in DB - no need to store in instance
 
@@ -483,7 +477,6 @@ export class ProgressService {
         log.info(`Using existing server session ID: ${existingServerSessionId}`);
         await updateServerSessionId(sessionId, existingServerSessionId);
       }
-      progressSyncWorker.requestDrain("progress");
 
       log.info(
         `Started session ${sessionId} for ${libraryItemId} at position ${resumePosition} session=${sessionId} item=${libraryItemId}`
@@ -845,71 +838,14 @@ export class ProgressService {
   async forceSyncSessions(): Promise<void> {
     progressSyncWorker.requestDrain("manual");
   }
-  /**
-   * Fetch latest progress from server and update local database
-   * (Compatibility method from ProgressSyncService)
-   */
+  /** Compatibility redirect until Task 7 installs the server-refresh owner. */
   async fetchServerProgress(): Promise<void> {
-    try {
-      log.info("Fetching latest progress from server");
-
-      // Fetch latest user data including progress
-      const meResponse = await fetchMe();
-
-      // Marshal and upsert progress data
-      const progressData = marshalMediaProgressFromAuthResponse(meResponse);
-      if (progressData.length > 0) {
-        await upsertMediaProgress(progressData);
-        log.info(`Synced ${progressData.length} progress entries from server`);
-      } else {
-        log.info("No progress data to sync from server");
-      }
-    } catch (error) {
-      log.error("Failed to fetch server progress:", error as Error);
-      throw error;
-    }
+    progressSyncWorker.requestDrain("manual");
   }
 
-  /**
-   * Force resync current position from server
-   * Useful when local position gets out of sync with server
-   */
-  async forceResyncPosition(userId: string, libraryItemId: string): Promise<void> {
-    // Server position overwrites the session row — the cached copy is no longer valid
-    this._invalidateActiveSessionCache();
-    try {
-      log.info(
-        `Forcing position resync from server userId=${userId} libraryItemId=${libraryItemId}`
-      );
-
-      // Fetch the specific item's progress from the server
-      const progressData = await fetchMediaProgress(libraryItemId);
-      if (!progressData) {
-        log.warn(`No progress data found on server for ${libraryItemId}`);
-        return;
-      }
-
-      // Marshal and upsert to database
-      const marshaled = marshalMediaProgressFromApi(progressData, userId);
-      await upsertMediaProgress([marshaled]);
-
-      // Get the current active session for this item
-      const session = await getActiveSession(userId, libraryItemId);
-      if (!session) {
-        log.info(`No active session found for ${libraryItemId}, position updated in database`);
-        return;
-      }
-
-      // Update the session's currentTime to match the server
-      await reconcileSessionPositionFromServer(session.id, progressData.currentTime);
-
-      log.info(
-        `Position resynced from server: ${formatTime(progressData.currentTime)}s session=${session.id} item=${libraryItemId}`
-      );
-    } catch (error) {
-      log.error("Failed to force resync position:", error as Error);
-      throw error;
-    }
+  /** Compatibility redirect until Task 7 installs the server-refresh owner. */
+  async forceResyncPosition(_userId: string, _libraryItemId: string): Promise<void> {
+    progressSyncWorker.requestDrain("manual");
   }
 
   /** Clear user-scoped hot-path state. Worker lifecycle is owned elsewhere. */
