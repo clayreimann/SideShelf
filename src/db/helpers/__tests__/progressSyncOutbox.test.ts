@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { createTestDb, TestDatabase } from "@/__tests__/utils/testDb";
+import { localListeningSessions } from "@/db/schema/localData";
 import { libraries } from "@/db/schema/libraries";
 import { libraryItems } from "@/db/schema/libraryItems";
 import { mediaMetadata } from "@/db/schema/mediaMetadata";
 import { users } from "@/db/schema/users";
+import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import {
   acknowledgeProgressSyncRevision,
@@ -62,16 +64,31 @@ describe("progress sync outbox helpers", () => {
     const first = await startSession("user-1", 1);
     const second = await startSession("user-1", 2);
     await startSession("user-2", 3);
+    const firstCreatedAt = new Date("2026-07-20T11:59:58.000Z");
+    const secondCreatedAt = new Date("2026-07-20T11:59:59.000Z");
+    await testDb.db
+      .update(localListeningSessions)
+      .set({ createdAt: firstCreatedAt })
+      .where(eq(localListeningSessions.id, first));
+    await testDb.db
+      .update(localListeningSessions)
+      .set({ createdAt: secondCreatedAt })
+      .where(eq(localListeningSessions.id, second));
 
-    expect(await getNextEligibleProgressSync("user-1", now)).toMatchObject({
+    const selectSpy = jest.spyOn(testDb.db, "select");
+    const pending = await getNextEligibleProgressSync("user-1", now);
+    expect(selectSpy).toHaveBeenCalledTimes(1);
+    selectSpy.mockRestore();
+
+    expect(pending).toMatchObject({
       sentRevision: 1,
-      session: { id: first, userId: "user-1" },
+      session: { id: first, userId: "user-1", createdAt: firstCreatedAt },
       outbox: { sessionId: first, userId: "user-1" },
     });
 
     await acknowledgeProgressSyncRevision(first, 1, now);
     expect(await getNextEligibleProgressSync("user-1", now)).toMatchObject({
-      session: { id: second },
+      session: { id: second, createdAt: secondCreatedAt },
     });
     expect(await getNextEligibleProgressSync("user-2", now)).toMatchObject({
       session: { userId: "user-2" },

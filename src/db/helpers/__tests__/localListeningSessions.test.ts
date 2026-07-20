@@ -85,7 +85,16 @@ describe("local listening session mutations", () => {
     expect(await getProgressSyncOutbox(explicitId)).toMatchObject({ desiredRevision: 2 });
 
     const staleId = await startSession();
+    const staleUpdatedAt = new Date("2026-07-20T10:30:00.000Z");
+    await testDb.db
+      .update(localListeningSessions)
+      .set({ updatedAt: staleUpdatedAt })
+      .where(eq(localListeningSessions.id, staleId));
     await endStaleListeningSession(staleId, 200);
+    expect(await getListeningSession(staleId)).toMatchObject({
+      sessionEnd: staleUpdatedAt,
+      updatedAt: staleUpdatedAt,
+    });
     expect(await getProgressSyncOutbox(staleId)).toMatchObject({ desiredRevision: 2 });
   });
 
