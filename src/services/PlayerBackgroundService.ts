@@ -430,6 +430,7 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
 
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
+    const currentChapter = store.player.currentChapter;
     const ids = await getUserIdAndLibraryItemId();
 
     // Detect sleep timer cancel mid-fade: restore volume if timer was cleared while fade was active
@@ -537,16 +538,6 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
         log.debug(`No session found after updateProgress, position=${formatTime(event.position)}s`);
       }
 
-      // Check if we should sync to server (uses adaptive intervals based on network type)
-      const syncCheck = await progressService.shouldSyncToServer(ids.userId, ids.libraryItemId);
-      if (syncCheck.shouldSync) {
-        const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
-        log.info(
-          `Syncing to server: ${syncCheck.reason} appState=${AppState.currentState} session=${session?.sessionId || "none"} item=${ids.libraryItemId}`
-        );
-        await progressService.syncSessionToServer(ids.userId, ids.libraryItemId);
-      }
-
       // Track meaningful listening time (≥2 minutes) for file lifecycle management
       if (isPlaying) {
         const tracker = meaningfulListenTracker.get(ids.libraryItemId);
@@ -650,7 +641,8 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
                 currentTrack.duration,
                 playbackRate,
                 volume,
-                sessionId || undefined
+                sessionId || undefined,
+                currentTrack.episodeId
               );
 
               // Now update progress with the new session
@@ -813,7 +805,8 @@ async function handleActiveTrackChanged(
         currentTrack.duration,
         playbackRate,
         volume,
-        sessionId || undefined
+        sessionId || undefined,
+        currentTrack.episodeId
       );
     }
 
@@ -1038,11 +1031,14 @@ const serviceExports = trackPlayerBackgroundService as unknown as {
   isBackgroundServiceInitialized?: typeof isBackgroundServiceInitialized;
   /** Test shim: exposes internal handlePlaybackProgressUpdated for unit tests. Not for production use. */
   _testHandlePlaybackProgressUpdated?: typeof handlePlaybackProgressUpdated;
+  /** Test shim: exposes session-start handling without registering native listeners. */
+  _testHandleActiveTrackChanged?: typeof handleActiveTrackChanged;
 };
 
 serviceExports.reconnectBackgroundService = reconnectBackgroundService;
 serviceExports.shutdownBackgroundService = shutdownBackgroundService;
 serviceExports.isBackgroundServiceInitialized = isBackgroundServiceInitialized;
 serviceExports._testHandlePlaybackProgressUpdated = handlePlaybackProgressUpdated;
+serviceExports._testHandleActiveTrackChanged = handleActiveTrackChanged;
 
 module.exports = trackPlayerBackgroundService;

@@ -15,7 +15,6 @@ import { AuthProvider, authInitializedPromise } from "@/providers/AuthProvider";
 import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
-import { serverProgressRefreshService } from "@/services/ServerProgressRefreshService";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { useAppStore } from "@/stores/appStore";
 import { PlayerState } from "@/types/coordinator";
@@ -98,7 +97,7 @@ export default function RootLayout() {
         logger.manualTrim();
       } else if (nextAppState === "active") {
         // Prune old trace dumps on foreground (mirrors logger.manualTrim pattern)
-        pruneTraceDumps().catch((e) => log.warn("Trace dump prune failed", e));
+        pruneTraceDumps().catch((e) => log.warn(`Trace dump prune failed: ${String(e)}`));
 
         const timeInBackground = Date.now() - lastBackgroundTime.current;
         const wasLongBackground = timeInBackground > 30000; // 30 seconds
@@ -137,20 +136,6 @@ export default function RootLayout() {
             playerInitTimestamp.current = currentPlayerInitTimestamp;
           }
 
-          // Still fetch progress from server and sync position
-          log.info("Triggering progress refetch on app foreground");
-          serverProgressRefreshService
-            .refreshAll()
-            .then(async () => {
-              // Sync position from database after fetching server progress
-              await playerService.syncPositionFromDatabase().catch((error) => {
-                log.error("Failed to sync position from database", error as Error);
-              });
-            })
-            .catch((error) => {
-              log.error("Failed to fetch server progress on app foreground", error as Error);
-            });
-
           // Fire-and-forget download reconciliation scan (mirrors iCloud exclusion pattern)
           // Clears stale DB records for missing files, detects zombies — non-blocking
           runDownloadReconciliationScan().catch((error) => {
@@ -187,20 +172,6 @@ export default function RootLayout() {
             );
           }
         }
-
-        log.info("Triggering progress refetch on app foreground");
-        // Fetch latest progress from server when app becomes active
-        serverProgressRefreshService
-          .refreshAll()
-          .then(async () => {
-            // Sync position from database after fetching server progress
-            await playerService.syncPositionFromDatabase().catch((error) => {
-              log.error("Failed to sync position from database", error as Error);
-            });
-          })
-          .catch((error) => {
-            log.error("Failed to fetch server progress on app foreground", error as Error);
-          });
 
         // Fire-and-forget download reconciliation scan (mirrors iCloud exclusion pattern)
         // Clears stale DB records for missing files, detects zombies — non-blocking

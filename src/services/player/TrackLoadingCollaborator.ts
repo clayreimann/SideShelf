@@ -111,6 +111,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       // Build PlayerTrack object
       const track: PlayerTrack = {
         libraryItemId: libraryItem.id,
+        episodeId,
         mediaId: metadata.id,
         title: metadata.title || "Unknown Title",
         author: metadata.authorName || metadata.author || "Unknown Author",

@@ -113,8 +113,7 @@ describe("ServerProgressRefreshService", () => {
 
   it("migrates every previous production refresh caller to the inbound owner", () => {
     const callerPaths = [
-      "../../providers/AuthProvider.tsx",
-      "../../app/_layout.tsx",
+      "../../providers/ProgressSyncProvider.tsx",
       "../../app/(tabs)/home/index.tsx",
       "../../components/library/LibraryItemDetail.tsx",
     ];
@@ -123,6 +122,15 @@ describe("ServerProgressRefreshService", () => {
       const source = readFileSync(path.resolve(__dirname, callerPath), "utf8");
       expect(source).not.toMatch(/progressService\.(?:fetchServerProgress|forceResyncPosition)/);
       expect(source).toContain("serverProgressRefreshService");
+    }
+
+    for (const formerLifecycleOwner of [
+      "../../providers/AuthProvider.tsx",
+      "../../app/_layout.tsx",
+    ]) {
+      const source = readFileSync(path.resolve(__dirname, formerLifecycleOwner), "utf8");
+      expect(source).not.toMatch(/progressService\.(?:fetchServerProgress|forceResyncPosition)/);
+      expect(source).not.toContain("serverProgressRefreshService");
     }
   });
 });

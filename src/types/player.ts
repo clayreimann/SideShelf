@@ -4,8 +4,8 @@
  * This file contains all types related to the audio player functionality.
  */
 
-import type { AudioFileWithDownloadInfo } from '@/db/helpers/combinedQueries';
-import type { ChapterRow } from '@/db/schema/chapters';
+import type { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
+import type { ChapterRow } from "@/db/schema/chapters";
 
 /**
  * Track information for the player
@@ -13,6 +13,8 @@ import type { ChapterRow } from '@/db/schema/chapters';
 export interface PlayerTrack {
   /** Library item ID */
   libraryItemId: string;
+  /** Podcast episode ID, when this track represents an episode */
+  episodeId?: string;
   /** Media metadata ID */
   mediaId: string;
   /** Track title */

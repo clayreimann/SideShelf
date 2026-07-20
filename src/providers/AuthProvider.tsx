@@ -8,9 +8,8 @@ import { wipeUserData } from "@/db/helpers/wipeUserData";
 import { useAppStore } from "@/stores/appStore";
 import { login as doLogin } from "@/lib/api/endpoints";
 import { getStoredUsername, persistUsername } from "@/lib/secureStore";
+import { logger } from "@/lib/logger";
 import { useDb } from "@/providers/DbProvider";
-import { progressService } from "@/services/ProgressService";
-import { serverProgressRefreshService } from "@/services/ServerProgressRefreshService";
 import { apiClientService } from "@/services/ApiClientService";
 import type { AuthStatus } from "@/types/auth";
 import React, {
@@ -22,7 +21,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, AppStateStatus } from "react-native";
+
+const log = logger.forTag("AuthProvider");
 
 // Module-level promise that resolves when auth is initialized.
 // Used by RootLayout to hold the splash screen until auth state is known,
@@ -38,6 +38,7 @@ type AuthState = {
   refreshToken: string | null;
   username: string | null;
   userId: string | null;
+  identityConfirmed: boolean;
 };
 
 export type { AuthStatus } from "@/types/auth";
@@ -64,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshToken: null,
     username: null,
     userId: null,
+    identityConfirmed: false,
   });
   const [initialized, setInitialized] = useState(false);
   const explicitLogoutInProgress = useRef(false);
@@ -91,6 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshToken: apiClientService.getRefreshToken(),
         username,
         userId,
+        identityConfirmed: Boolean(
+          apiClientService.getBaseUrl() && apiClientService.getAccessToken() && username && userId
+        ),
       });
 
       setInitialized(true);
@@ -101,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Subscribe to auth state changes from ApiClientService
   useEffect(() => {
     const unsubscribe = apiClientService.subscribe(() => {
-      console.log("[AuthProvider] Auth state changed, syncing state");
+      log.debug("[subscription] Auth state changed, syncing credentials");
 
       setState((prev: AuthState) => ({
         ...prev,
@@ -110,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshToken: apiClientService.getRefreshToken(),
         username: explicitLogoutInProgress.current ? null : prev.username,
         userId: explicitLogoutInProgress.current ? null : prev.userId,
+        identityConfirmed: explicitLogoutInProgress.current ? false : prev.identityConfirmed,
       }));
     });
 
@@ -118,59 +124,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const authStatus = useMemo<AuthStatus>(() => {
     if (!initialized) return "initializing";
-    if (state.serverUrl && state.accessToken) return "authenticated";
+    if (
+      state.identityConfirmed &&
+      state.serverUrl &&
+      state.accessToken &&
+      state.username &&
+      state.userId
+    ) {
+      return "authenticated";
+    }
     if (state.serverUrl && state.username && state.userId) return "reauthRequired";
     return "signedOut";
-  }, [initialized, state.accessToken, state.serverUrl, state.userId, state.username]);
+  }, [
+    initialized,
+    state.accessToken,
+    state.identityConfirmed,
+    state.serverUrl,
+    state.userId,
+    state.username,
+  ]);
   const isAuthenticated = authStatus === "authenticated";
 
-  // AuthProvider is the single owner of the authenticated progress-sync lifecycle.
-  // Local identity is deliberately insufficient: terminal token expiry preserves the
-  // user for offline access but must stop all periodic server work until reauthentication.
-  useEffect(() => {
-    if (authStatus === "authenticated") {
-      progressService.initialize();
-      return () => progressService.shutdown();
-    }
-
-    progressService.shutdown();
-  }, [authStatus]);
-
-  // Handle app state changes for progress syncing
-  useEffect(() => {
-    if (!isAuthenticated || !state.username) return;
-
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (nextAppState === "active") {
-        console.log("[AuthProvider] App became active");
-        // Sync progress when app becomes active
-        serverProgressRefreshService.refreshAll().catch((error) => {
-          console.error("[AuthProvider] Failed to sync progress on app foreground:", error);
-        });
-      }
-    };
-
-    const subscription = AppState.addEventListener("change", handleAppStateChange);
-
-    return () => {
-      subscription?.remove();
-    };
-  }, [isAuthenticated, state.username]);
-
-  const setServerUrl = useCallback(async (url: string) => {
-    await apiClientService.setBaseUrl(url);
-    // State will be updated via subscription
-    // Clear all user-specific slice state and DB data when switching servers
-    void (async () => {
-      useAppStore.getState().resetLibrary();
-      useAppStore.getState().resetSeries();
-      useAppStore.getState().resetAuthors();
-      useAppStore.getState().resetItemDetails();
-      useAppStore.getState().resetUserProfile();
-      useAppStore.getState().resetHome();
-      await wipeUserData();
-    })();
+  const clearUserData = useCallback(async () => {
+    const store = useAppStore.getState();
+    store.resetLibrary();
+    store.resetSeries();
+    store.resetAuthors();
+    store.resetItemDetails();
+    store.resetUserProfile();
+    store.resetHome();
+    await wipeUserData();
   }, []);
+
+  const clearCredentials = useCallback(async () => {
+    const results = await Promise.allSettled([
+      apiClientService.clearTokens(),
+      persistUsername(null),
+    ]);
+    for (const result of results) {
+      if (result.status === "rejected") {
+        const message =
+          result.reason instanceof Error ? result.reason.message : String(result.reason);
+        log.warn(
+          `[clearCredentials] Secure persistence failed after in-memory sign-out: ${message}`
+        );
+      }
+    }
+  }, []);
+
+  const setServerUrl = useCallback(
+    async (url: string) => {
+      const normalized = url.trim().replace(/\/$/, "");
+      const changingServer = Boolean(state.serverUrl && state.serverUrl !== normalized);
+      if (changingServer) {
+        setState((prev) => ({
+          ...prev,
+          accessToken: null,
+          refreshToken: null,
+          username: null,
+          userId: null,
+          identityConfirmed: false,
+        }));
+        explicitLogoutInProgress.current = true;
+        try {
+          await clearCredentials();
+          await clearUserData();
+        } finally {
+          explicitLogoutInProgress.current = false;
+        }
+      }
+      await apiClientService.setBaseUrl(normalized);
+    },
+    [clearCredentials, clearUserData, state.serverUrl]
+  );
 
   const login = useCallback(
     async ({
@@ -184,8 +210,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }) => {
       const base = serverUrl.trim().replace(/\/$/, "");
 
-      // Set server URL
-      await apiClientService.setBaseUrl(base);
+      // A token callback must never combine fresh credentials with a retained old identity.
+      setState((prev) => ({
+        ...prev,
+        accessToken: null,
+        refreshToken: null,
+        identityConfirmed: false,
+      }));
+
+      let userDataCleared = Boolean(state.serverUrl && state.serverUrl !== base);
+      await setServerUrl(base);
+
+      if (!userDataCleared && state.username && state.username !== username) {
+        explicitLogoutInProgress.current = true;
+        try {
+          await clearCredentials();
+          await clearUserData();
+          userDataCleared = true;
+        } finally {
+          explicitLogoutInProgress.current = false;
+        }
+      }
 
       try {
         let response = await doLogin(base, username, password);
@@ -194,38 +239,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error("Missing token in response");
         }
 
-        // Update tokens in ApiClientService.
-        // Servers older than Audiobookshelf v2.26 return only an access
-        // token from /login with no refresh token (see
-        // extractTokensFromAuthResponse in src/db/helpers/tokens.ts, which
-        // models this by returning refreshToken: null). Rather than reject
-        // the login, we support token-only auth (option b): store the
-        // access token with no refresh token. A later 401 will find no
-        // refresh token in ApiClientService.performTokenRefresh and
-        // terminate the session (clearTokens) instead of attempting to
-        // refresh — the user sees "Session expired" and must log in again.
-        await apiClientService.setTokens(accessToken, refreshToken, username);
-
-        // Persist username separately
-        await persistUsername(username);
-
         const user = marshalUserFromAuthResponse(response);
-
-        // Update local state — include userId from the login response
-        setState((prev: AuthState) => ({
-          ...prev,
-          username,
-          userId: user?.id ?? null,
-        }));
+        if (!user?.id) throw new Error("Missing user identity in response");
         const mediaProgress = marshalMediaProgressFromAuthResponse(response.user);
 
-        await Promise.all([upsertUser(user), upsertMediaProgress(mediaProgress)]);
+        if (!userDataCleared && state.userId && state.userId !== user.id) {
+          explicitLogoutInProgress.current = true;
+          try {
+            await clearCredentials();
+            await clearUserData();
+          } finally {
+            explicitLogoutInProgress.current = false;
+          }
+        }
+
+        // Durable identity precedes token publication, so subscriptions cannot expose a
+        // fresh token paired with null or stale user state.
+        await Promise.all([
+          persistUsername(username),
+          upsertUser(user),
+          upsertMediaProgress(mediaProgress),
+        ]);
+        await apiClientService.setTokens(accessToken, refreshToken, username);
+
+        setState({
+          serverUrl: base,
+          accessToken,
+          refreshToken,
+          username,
+          userId: user.id,
+          identityConfirmed: true,
+        });
       } catch (e) {
-        console.error("[AuthProvider] Login error", e);
+        log.error("[login] Login failed", e as Error);
         throw new Error(e instanceof Error ? e.message : "Login failed");
       }
     },
-    []
+    [clearCredentials, clearUserData, setServerUrl, state.serverUrl, state.userId, state.username]
   );
 
   const logout = useCallback(async () => {
@@ -236,24 +286,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshToken: null,
       username: null,
       userId: null,
+      identityConfirmed: false,
     }));
     try {
-      await Promise.all([apiClientService.clearTokens(), persistUsername(null)]);
+      await clearCredentials();
     } finally {
       explicitLogoutInProgress.current = false;
     }
-    // Token state will be updated via subscription
-    // Clear all user-specific slice state and DB data in background (do not await)
-    void (async () => {
-      useAppStore.getState().resetLibrary();
-      useAppStore.getState().resetSeries();
-      useAppStore.getState().resetAuthors();
-      useAppStore.getState().resetItemDetails();
-      useAppStore.getState().resetUserProfile();
-      useAppStore.getState().resetHome();
-      await wipeUserData();
-    })();
-  }, []);
+    await clearUserData();
+  }, [clearCredentials, clearUserData]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

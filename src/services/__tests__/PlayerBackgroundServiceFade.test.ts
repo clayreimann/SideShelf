@@ -40,7 +40,9 @@ jest.mock("@/services/ProgressService", () => ({
   progressService: {
     getCurrentSession: jest.fn().mockResolvedValue(null),
     updateProgress: jest.fn().mockResolvedValue(undefined),
+    startSession: jest.fn().mockResolvedValue(undefined),
     shouldSyncToServer: jest.fn().mockResolvedValue({ shouldSync: false }),
+    syncSessionToServer: jest.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -110,6 +112,10 @@ describe("sleep timer volume fade", () => {
     duration: number;
     buffered: number;
   }) => Promise<void>;
+  let handleActiveTrackChanged: (
+    event: { track?: { title?: string; id?: string } },
+    lastActiveTrackId: { value: string | null }
+  ) => Promise<void>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -139,6 +145,74 @@ describe("sleep timer volume fade", () => {
     // Plan 03 will export a testable handlePlaybackProgressUpdated function.
     // For now, access via the module's internal export shim:
     handlePlaybackProgressUpdated = bgService._testHandlePlaybackProgressUpdated;
+    handleActiveTrackChanged = bgService._testHandleActiveTrackChanged;
+  });
+
+  it("keeps playback ticks local and never invokes adaptive server delivery", async () => {
+    const storeState = buildStoreState({
+      currentTrack: { libraryItemId: "item-1", mediaId: "media-1", episodeId: "episode-7" },
+      sleepTimerType: null,
+    });
+    mockUseAppStore.mockReturnValue(storeState);
+    require("@/utils/userHelpers").getCurrentUser.mockResolvedValue({
+      id: "user-1",
+      username: "alice",
+    });
+    require("@/services/ProgressService").progressService.getCurrentSession.mockResolvedValue({
+      sessionId: "session-1",
+    });
+
+    await handlePlaybackProgressUpdated({ position: 100, duration: 3600, buffered: 200 });
+
+    expect(require("@/services/ProgressService").progressService.updateProgress).toHaveBeenCalled();
+    expect(
+      require("@/services/ProgressService").progressService.shouldSyncToServer
+    ).not.toHaveBeenCalled();
+    expect(
+      require("@/services/ProgressService").progressService.syncSessionToServer
+    ).not.toHaveBeenCalled();
+  });
+
+  it("passes the real podcast episode ID when an active track starts a session", async () => {
+    const currentTrack = {
+      libraryItemId: "item-1",
+      mediaId: "media-1",
+      episodeId: "episode-7",
+      title: "Episode",
+      duration: 3600,
+    };
+    mockUseAppStore.mockReturnValue({
+      ...buildStoreState({ currentTrack, sleepTimerType: null }),
+      player: {
+        ...buildStoreState({ currentTrack }).player,
+        position: 120,
+      },
+    });
+    require("@/utils/userHelpers").getCurrentUser.mockResolvedValue({
+      id: "user-1",
+      username: "alice",
+    });
+    require("@/services/ProgressService").progressService.getCurrentSession.mockResolvedValue(null);
+    const backgroundTrackPlayer = require("react-native-track-player");
+    backgroundTrackPlayer.getActiveTrack.mockResolvedValue({ id: "native-1" });
+    backgroundTrackPlayer.getProgress.mockResolvedValue({ position: 120 });
+    backgroundTrackPlayer.getRate.mockResolvedValue(1);
+    backgroundTrackPlayer.getVolume.mockResolvedValue(1);
+
+    expect(handleActiveTrackChanged).toBeDefined();
+    await handleActiveTrackChanged({ track: { title: "Episode" } }, { value: null });
+
+    expect(require("@/services/ProgressService").progressService.startSession).toHaveBeenCalledWith(
+      "alice",
+      "item-1",
+      "media-1",
+      120,
+      3600,
+      1,
+      1,
+      undefined,
+      "episode-7"
+    );
   });
 
   afterEach(() => {

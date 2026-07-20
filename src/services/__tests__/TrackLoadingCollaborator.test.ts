@@ -216,6 +216,18 @@ describe("TrackLoadingCollaborator", () => {
   });
 
   describe("executeLoadTrack", () => {
+    it("preserves the podcast episode ID on the PlayerTrack", async () => {
+      await collaborator.executeLoadTrack("item-1", "episode-7");
+
+      expect(mockStore._setCurrentTrack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          libraryItemId: "item-1",
+          mediaId: "media-1",
+          episodeId: "episode-7",
+        })
+      );
+    });
+
     it("loads a track, builds queue, and does NOT dispatch PLAY (coordinator handles it)", async () => {
       await collaborator.executeLoadTrack("item-1");
 
