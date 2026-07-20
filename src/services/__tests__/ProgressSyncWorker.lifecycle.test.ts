@@ -101,6 +101,86 @@ describe("ProgressSyncWorker lifecycle", () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
+  it.each(["wifi", "ethernet"])(
+    "uses a 15-second live-progress cadence on %s",
+    async (networkType) => {
+      mockFetchNetInfo.mockResolvedValue({ isConnected: true, type: networkType });
+      worker.start("user-1");
+      await flushPromises();
+      mockGetNextEligibleProgressSync.mockClear();
+
+      worker.requestDrain("progress");
+      await flushPromises();
+      jest.advanceTimersByTime(14_999);
+      await flushPromises();
+      expect(mockGetNextEligibleProgressSync).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(1);
+      await flushPromises();
+      expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each(["cellular", "unknown"])(
+    "uses a 60-second live-progress cadence on %s networks",
+    async (networkType) => {
+      mockFetchNetInfo.mockResolvedValue({ isConnected: true, type: networkType });
+      worker.start("user-1");
+      await flushPromises();
+      mockGetNextEligibleProgressSync.mockClear();
+
+      worker.requestDrain("progress");
+      await flushPromises();
+      jest.advanceTimersByTime(59_999);
+      await flushPromises();
+      expect(mockGetNextEligibleProgressSync).not.toHaveBeenCalled();
+
+      jest.advanceTimersByTime(1);
+      await flushPromises();
+      expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("replaces a later live-progress wake with an immediate retry drain", async () => {
+    worker.start("user-1");
+    await flushPromises();
+    mockGetNextEligibleProgressSync.mockClear();
+
+    worker.requestDrain("progress");
+    await flushPromises();
+    worker.scheduleWakeAt(new Date(Date.now()));
+    await flushPromises();
+
+    expect(jest.getTimerCount()).toBe(1);
+    expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
+
+    jest.advanceTimersByTime(15_000);
+    await flushPromises();
+    expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
+  });
+
+  it("replaces a later live-progress wake with an earlier retry wake", async () => {
+    worker.start("user-1");
+    await flushPromises();
+    mockGetNextEligibleProgressSync.mockClear();
+
+    worker.requestDrain("progress");
+    await flushPromises();
+    worker.scheduleWakeAt(new Date(Date.now() + 5_000));
+
+    jest.advanceTimersByTime(4_999);
+    await flushPromises();
+    expect(mockGetNextEligibleProgressSync).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(1);
+    await flushPromises();
+    expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
+
+    jest.advanceTimersByTime(10_000);
+    await flushPromises();
+    expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
+  });
+
   it("does not select work when drainNow is called while disabled", async () => {
     await worker.drainNow();
 
@@ -123,6 +203,25 @@ describe("ProgressSyncWorker lifecycle", () => {
     await flushPromises();
     await flushPromises();
 
+    expect(worker.deliver).toHaveBeenCalledTimes(1);
+    expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns immediately from requestDrain and shares the in-flight drainNow promise", async () => {
+    const delivery = deferred<"stop" | "continue">();
+    mockGetNextEligibleProgressSync.mockResolvedValueOnce(PENDING).mockResolvedValue(null);
+    worker.deliver.mockReturnValueOnce(delivery.promise);
+
+    worker.start("user-1");
+    await flushPromises();
+    const firstDrain = worker.drainNow();
+
+    expect(worker.requestDrain("manual")).toBeUndefined();
+    expect(worker.drainNow()).toBe(firstDrain);
+
+    delivery.resolve("stop");
+    await firstDrain;
+    await flushPromises();
     expect(worker.deliver).toHaveBeenCalledTimes(1);
     expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(2);
   });

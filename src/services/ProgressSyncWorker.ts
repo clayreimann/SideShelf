@@ -120,6 +120,7 @@ export class ProgressSyncWorker {
 
     const deadline = when.getTime();
     if (deadline <= Date.now()) {
+      this._clearWakeTimer();
       this.requestDrain("periodic");
       return;
     }
@@ -128,9 +129,7 @@ export class ProgressSyncWorker {
       return;
     }
 
-    if (this.wakeTimer) {
-      clearTimeout(this.wakeTimer);
-    }
+    this._clearWakeTimer();
 
     const generation = this.generation;
     this.wakeDeadline = deadline;
@@ -186,6 +185,10 @@ export class ProgressSyncWorker {
       clearInterval(this.periodicTimer);
       this.periodicTimer = null;
     }
+    this._clearWakeTimer();
+  }
+
+  private _clearWakeTimer(): void {
     if (this.wakeTimer) {
       clearTimeout(this.wakeTimer);
       this.wakeTimer = null;
