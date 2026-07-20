@@ -3,6 +3,7 @@ import type { PendingProgressSync } from "@/db/helpers/progressSyncOutbox";
 
 const mockGetNextEligibleProgressSync = jest.fn();
 const mockFetchNetInfo = jest.fn();
+const mockLogError = jest.fn();
 
 jest.mock("@/db/helpers/progressSyncOutbox", () => ({
   getNextEligibleProgressSync: (...args: unknown[]) => mockGetNextEligibleProgressSync(...args),
@@ -13,16 +14,29 @@ jest.mock("@react-native-community/netinfo", () => ({
   default: { fetch: (...args: unknown[]) => mockFetchNetInfo(...args) },
 }));
 
+jest.mock("@/lib/logger", () => ({
+  logger: {
+    forTag: () => ({
+      error: (...args: unknown[]) => mockLogError(...args),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+    }),
+  },
+}));
+
 import { ProgressSyncWorker } from "@/services/ProgressSyncWorker";
 
 const PENDING = {} as PendingProgressSync;
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 async function flushPromises(): Promise<void> {
@@ -55,6 +69,7 @@ describe("ProgressSyncWorker lifecycle", () => {
     mockFetchNetInfo.mockReset();
     mockFetchNetInfo.mockResolvedValue({ isConnected: true, type: "wifi" });
     worker = new TestProgressSyncWorker();
+    mockLogError.mockReset();
   });
 
   afterEach(() => {
@@ -226,6 +241,24 @@ describe("ProgressSyncWorker lifecycle", () => {
     expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(2);
   });
 
+  it("preserves drainNow rejection while the fire-and-forget owner logs it", async () => {
+    const selection = deferred<PendingProgressSync | null>();
+    const failure = new Error("direct drain failed");
+    mockGetNextEligibleProgressSync.mockReturnValueOnce(selection.promise);
+    worker.start("user-1");
+    await flushPromises();
+
+    const directDrain = worker.drainNow();
+    const rejection = expect(directDrain).rejects.toBe(failure);
+    selection.reject(failure);
+
+    await rejection;
+    expect(mockLogError).toHaveBeenCalledWith(
+      expect.stringContaining("Progress drain failed"),
+      failure
+    );
+  });
+
   it("awaits the follow-up pass requested behind an active drain", async () => {
     const firstDelivery = deferred<"stop" | "continue">();
     const followUpSelection = deferred<PendingProgressSync | null>();
@@ -251,6 +284,38 @@ describe("ProgressSyncWorker lifecycle", () => {
     followUpSelection.resolve(null);
     await recovery;
     expect(settled).toBe(true);
+  });
+
+  it("rejects an awaitable request when its active drain fails and logs the background rejection", async () => {
+    const selection = deferred<PendingProgressSync | null>();
+    const failure = new Error("selection failed");
+    mockGetNextEligibleProgressSync.mockReturnValueOnce(selection.promise).mockResolvedValue(null);
+    worker.start("user-1");
+    await flushPromises();
+
+    const recovery = worker.requestDrainAndWait("foreground");
+    const rejection = expect(recovery).rejects.toBe(failure);
+    selection.reject(failure);
+
+    await rejection;
+    expect(mockLogError).toHaveBeenCalledWith(
+      expect.stringContaining("Progress drain failed"),
+      failure
+    );
+  });
+
+  it("rejects an awaitable request when its queued follow-up pass fails", async () => {
+    const firstDelivery = deferred<"stop" | "continue">();
+    const failure = new Error("follow-up failed");
+    mockGetNextEligibleProgressSync.mockResolvedValueOnce(PENDING).mockRejectedValueOnce(failure);
+    worker.deliver.mockReturnValueOnce(firstDelivery.promise);
+    worker.start("user-1");
+    await flushPromises();
+
+    const recovery = worker.requestDrainAndWait("network");
+    firstDelivery.resolve("stop");
+
+    await expect(recovery).rejects.toBe(failure);
   });
 
   it("releases an old-generation waiter without waiting for replacement-user work", async () => {

@@ -54,6 +54,14 @@ type PendingReconciliation = {
   episodeId?: string;
 };
 
+type DrainIdleWaiter = {
+  generation: number;
+  resolve: () => void;
+  reject: (reason?: unknown) => void;
+  failed: boolean;
+  error?: unknown;
+};
+
 /** Return the durable retry delay for the row's current consecutive failure count. */
 export function calculateProgressRetryDelay(
   attemptCount: number,
@@ -91,7 +99,7 @@ export class ProgressSyncWorker {
   private wakeTimer: ReturnType<typeof setTimeout> | null = null;
   private wakeDeadline: number | null = null;
   private pendingReconciliations = new Map<string, PendingReconciliation>();
-  private drainIdleWaiters = new Set<{ generation: number; resolve: () => void }>();
+  private drainIdleWaiters = new Set<DrainIdleWaiter>();
 
   constructor(private readonly random: () => number = Math.random) {}
 
@@ -136,7 +144,7 @@ export class ProgressSyncWorker {
     }
 
     this.drainRequested = true;
-    void this.drainNow();
+    this._drainInBackground();
   }
 
   /**
@@ -152,8 +160,8 @@ export class ProgressSyncWorker {
       return Promise.resolve();
     }
 
-    return new Promise<void>((resolve) => {
-      this.drainIdleWaiters.add({ generation, resolve });
+    return new Promise<void>((resolve, reject) => {
+      this.drainIdleWaiters.add({ generation, resolve, reject, failed: false });
     });
   }
 
@@ -171,18 +179,23 @@ export class ProgressSyncWorker {
     this.drainRequested = false;
 
     let drain: Promise<void>;
-    drain = this._drain(generation, userId).finally(() => {
-      if (this.drainPromise !== drain) {
-        return;
-      }
+    drain = this._drain(generation, userId)
+      .catch((error: unknown) => {
+        this._recordDrainFailure(generation, error);
+        throw error;
+      })
+      .finally(() => {
+        if (this.drainPromise !== drain) {
+          return;
+        }
 
-      this.drainPromise = null;
-      if (this.enabledUserId && this.drainRequested) {
-        void this.drainNow();
-        return;
-      }
-      this._resolveDrainWaiters(generation);
-    });
+        this.drainPromise = null;
+        if (this.enabledUserId && this.drainRequested) {
+          this._drainInBackground();
+          return;
+        }
+        this._settleDrainWaiters(generation);
+      });
     this.drainPromise = drain;
     return drain;
   }
@@ -421,12 +434,27 @@ export class ProgressSyncWorker {
     return this.generation === generation && this.enabledUserId === userId;
   }
 
-  private _resolveDrainWaiters(generation: number): void {
+  private _drainInBackground(): void {
+    void this.drainNow().catch((error: unknown) => {
+      log.error("Progress drain failed", asError(error));
+    });
+  }
+
+  private _recordDrainFailure(generation: number, error: unknown): void {
     for (const waiter of this.drainIdleWaiters) {
-      if (waiter.generation === generation) {
-        this.drainIdleWaiters.delete(waiter);
-        waiter.resolve();
+      if (waiter.generation === generation && !waiter.failed) {
+        waiter.failed = true;
+        waiter.error = error;
       }
+    }
+  }
+
+  private _settleDrainWaiters(generation: number): void {
+    for (const waiter of this.drainIdleWaiters) {
+      if (waiter.generation !== generation) continue;
+      this.drainIdleWaiters.delete(waiter);
+      if (waiter.failed) waiter.reject(waiter.error);
+      else waiter.resolve();
     }
   }
 
@@ -434,7 +462,8 @@ export class ProgressSyncWorker {
     for (const waiter of this.drainIdleWaiters) {
       if (waiter.generation !== this.generation) {
         this.drainIdleWaiters.delete(waiter);
-        waiter.resolve();
+        if (waiter.failed) waiter.reject(waiter.error);
+        else waiter.resolve();
       }
     }
   }

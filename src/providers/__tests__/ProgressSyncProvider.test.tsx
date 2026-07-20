@@ -186,6 +186,19 @@ describe("ProgressSyncProvider", () => {
     expect(mockRefreshAll).toHaveBeenCalledTimes(1);
   });
 
+  it("skips inbound refresh when the requested recovery drain rejects", async () => {
+    auth = { authStatus: "authenticated", userId: "user-1" };
+    render(<ProgressSyncProvider />);
+    await act(async () => Promise.resolve());
+    mockRefreshAll.mockClear();
+    mockRequestDrainAndWait.mockRejectedValueOnce(new Error("outbound failed"));
+
+    act(() => appStateListener?.("active"));
+    await act(async () => Promise.resolve());
+
+    expect(mockRefreshAll).not.toHaveBeenCalled();
+  });
+
   it("recovers only on disconnected-to-connected transitions", async () => {
     auth = { authStatus: "authenticated", userId: "user-1" };
     network = { isConnected: false, initialized: true };
