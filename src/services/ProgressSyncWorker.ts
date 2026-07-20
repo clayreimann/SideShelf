@@ -39,6 +39,8 @@ export type ProgressSyncTrigger =
   | "manual"
   | "progress";
 
+export type AwaitableProgressSyncTrigger = Exclude<ProgressSyncTrigger, "progress">;
+
 type PendingDeliveryResult = "continue" | "stop";
 
 type DeliveryContext = {
@@ -89,6 +91,7 @@ export class ProgressSyncWorker {
   private wakeTimer: ReturnType<typeof setTimeout> | null = null;
   private wakeDeadline: number | null = null;
   private pendingReconciliations = new Map<string, PendingReconciliation>();
+  private drainIdleWaiters = new Set<{ generation: number; resolve: () => void }>();
 
   constructor(private readonly random: () => number = Math.random) {}
 
@@ -105,6 +108,7 @@ export class ProgressSyncWorker {
     }
     this.enabledUserId = userId;
     this.generation += 1;
+    this._resolveObsoleteDrainWaiters();
 
     this.periodicTimer = setInterval(() => {
       this.requestDrain("periodic");
@@ -118,6 +122,7 @@ export class ProgressSyncWorker {
     this.generation += 1;
     this.drainRequested = false;
     this._clearTimers();
+    this._resolveObsoleteDrainWaiters();
   }
 
   requestDrain(trigger: ProgressSyncTrigger): void {
@@ -132,6 +137,24 @@ export class ProgressSyncWorker {
 
     this.drainRequested = true;
     void this.drainNow();
+  }
+
+  /**
+   * Request an immediate drain and resolve only once that generation is idle.
+   * If another pass is queued behind an active drain, the promise spans both passes.
+   */
+  requestDrainAndWait(trigger: AwaitableProgressSyncTrigger): Promise<void> {
+    const generation = this.generation;
+    if (!this.enabledUserId) return Promise.resolve();
+
+    this.requestDrain(trigger);
+    if (generation !== this.generation || (!this.drainPromise && !this.drainRequested)) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve) => {
+      this.drainIdleWaiters.add({ generation, resolve });
+    });
   }
 
   drainNow(): Promise<void> {
@@ -156,7 +179,9 @@ export class ProgressSyncWorker {
       this.drainPromise = null;
       if (this.enabledUserId && this.drainRequested) {
         void this.drainNow();
+        return;
       }
+      this._resolveDrainWaiters(generation);
     });
     this.drainPromise = drain;
     return drain;
@@ -394,6 +419,24 @@ export class ProgressSyncWorker {
 
   private _isCurrentGeneration(generation: number, userId: string): boolean {
     return this.generation === generation && this.enabledUserId === userId;
+  }
+
+  private _resolveDrainWaiters(generation: number): void {
+    for (const waiter of this.drainIdleWaiters) {
+      if (waiter.generation === generation) {
+        this.drainIdleWaiters.delete(waiter);
+        waiter.resolve();
+      }
+    }
+  }
+
+  private _resolveObsoleteDrainWaiters(): void {
+    for (const waiter of this.drainIdleWaiters) {
+      if (waiter.generation !== this.generation) {
+        this.drainIdleWaiters.delete(waiter);
+        waiter.resolve();
+      }
+    }
   }
 
   private _canDeliverPending(pending: PendingProgressSync, context: DeliveryContext): boolean {

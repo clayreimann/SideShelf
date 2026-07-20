@@ -41,6 +41,7 @@ jest.mock("@/services/ProgressService", () => ({
     getCurrentSession: jest.fn().mockResolvedValue(null),
     updateProgress: jest.fn().mockResolvedValue(undefined),
     startSession: jest.fn().mockResolvedValue(undefined),
+    forceRehydrateSession: jest.fn().mockResolvedValue(undefined),
     shouldSyncToServer: jest.fn().mockResolvedValue({ shouldSync: false }),
     syncSessionToServer: jest.fn().mockResolvedValue(undefined),
   },
@@ -207,6 +208,39 @@ describe("sleep timer volume fade", () => {
       "item-1",
       "media-1",
       120,
+      3600,
+      1,
+      1,
+      undefined,
+      "episode-7"
+    );
+  });
+
+  it("passes episodeId when rehydration fails and active playback starts a session", async () => {
+    const currentTrack = {
+      libraryItemId: "item-1",
+      mediaId: "media-1",
+      episodeId: "episode-7",
+      title: "Episode",
+      duration: 3600,
+    };
+    mockUseAppStore.mockReturnValue(buildStoreState({ currentTrack, sleepTimerType: null }));
+    require("@/utils/userHelpers")
+      .getCurrentUser.mockResolvedValueOnce(null)
+      .mockResolvedValue({ id: "user-1", username: "alice" });
+    require("@/services/ProgressService").progressService.getCurrentSession.mockResolvedValue(null);
+    const backgroundTrackPlayer = require("react-native-track-player");
+    backgroundTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Playing });
+    backgroundTrackPlayer.getRate.mockResolvedValue(1);
+    backgroundTrackPlayer.getVolume.mockResolvedValue(1);
+
+    await handlePlaybackProgressUpdated({ position: 240, duration: 3600, buffered: 300 });
+
+    expect(require("@/services/ProgressService").progressService.startSession).toHaveBeenCalledWith(
+      "alice",
+      "item-1",
+      "media-1",
+      240,
       3600,
       1,
       1,

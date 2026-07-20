@@ -15,13 +15,20 @@ const log = logger.forTag("ServerProgressRefreshService");
 
 /** Owns authenticated server-to-local progress reconciliation. */
 export class ServerProgressRefreshService {
-  async refreshAll(): Promise<void> {
+  async refreshAll(canCommit: () => boolean = () => true): Promise<void> {
     log.info("[refreshAll] Fetching latest progress from server");
     const response = await fetchMe();
     const progress = marshalMediaProgressFromAuthResponse(response);
 
     if (progress.length === 0) {
       log.info("[refreshAll] No progress data to refresh");
+      return;
+    }
+
+    // Authentication can change while fetchMe is in flight. Guard the mutation boundary
+    // so a late response cannot repopulate data after logout or an account/server switch.
+    if (!canCommit()) {
+      log.info("[refreshAll] Discarding response for stale authenticated identity");
       return;
     }
 

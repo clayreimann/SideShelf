@@ -226,6 +226,50 @@ describe("ProgressSyncWorker lifecycle", () => {
     expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(2);
   });
 
+  it("awaits the follow-up pass requested behind an active drain", async () => {
+    const firstDelivery = deferred<"stop" | "continue">();
+    const followUpSelection = deferred<PendingProgressSync | null>();
+    mockGetNextEligibleProgressSync
+      .mockResolvedValueOnce(PENDING)
+      .mockReturnValueOnce(followUpSelection.promise);
+    worker.deliver.mockReturnValueOnce(firstDelivery.promise);
+
+    worker.start("user-1");
+    await flushPromises();
+
+    let settled = false;
+    const recovery = worker.requestDrainAndWait("foreground").then(() => {
+      settled = true;
+    });
+    firstDelivery.resolve("stop");
+    await flushPromises();
+    await flushPromises();
+
+    expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(2);
+    expect(settled).toBe(false);
+
+    followUpSelection.resolve(null);
+    await recovery;
+    expect(settled).toBe(true);
+  });
+
+  it("releases an old-generation waiter without waiting for replacement-user work", async () => {
+    const oldDelivery = deferred<"stop" | "continue">();
+    mockGetNextEligibleProgressSync.mockResolvedValueOnce(PENDING);
+    worker.deliver.mockReturnValueOnce(oldDelivery.promise);
+    worker.start("user-1");
+    await flushPromises();
+
+    const oldRecovery = worker.requestDrainAndWait("network");
+    worker.start("user-2");
+
+    await expect(oldRecovery).resolves.toBeUndefined();
+    expect(worker.deliver).toHaveBeenCalledTimes(1);
+
+    oldDelivery.resolve("stop");
+    await flushPromises();
+  });
+
   it("stops the old generation and drains only the replacement user after identity changes", async () => {
     const oldDelivery = deferred<"stop" | "continue">();
     mockGetNextEligibleProgressSync.mockResolvedValueOnce(PENDING).mockResolvedValueOnce(null);

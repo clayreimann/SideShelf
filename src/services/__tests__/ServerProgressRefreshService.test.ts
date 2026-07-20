@@ -65,6 +65,28 @@ describe("ServerProgressRefreshService", () => {
     expect(mockUpsert).toHaveBeenCalledWith(marshaled);
   });
 
+  it("does not write a fetched response after its authenticated identity becomes stale", async () => {
+    let resolveFetch!: (value: Awaited<ReturnType<typeof fetchMe>>) => void;
+    mockFetchMe.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+    mockMarshalAuth.mockReturnValue([{ id: "progress-1" }] as ReturnType<
+      typeof marshalMediaProgressFromAuthResponse
+    >);
+    let current = true;
+
+    const refresh = serverProgressRefreshService.refreshAll(() => current);
+    current = false;
+    resolveFetch({ id: "user-1", mediaProgress: [] } as unknown as Awaited<
+      ReturnType<typeof fetchMe>
+    >);
+    await refresh;
+
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
   it("force-resyncs one item through the non-dirty reconciliation helper", async () => {
     const response = { libraryItemId: "item-1", currentTime: 450 };
     const marshaled = { id: "progress-1" };

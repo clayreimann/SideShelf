@@ -6,8 +6,7 @@ const mockUseAuth = jest.fn();
 const mockUseNetwork = jest.fn();
 const mockStart = jest.fn();
 const mockStop = jest.fn();
-const mockRequestDrain = jest.fn();
-const mockDrainNow = jest.fn();
+const mockRequestDrainAndWait = jest.fn();
 const mockRefreshAll = jest.fn();
 
 jest.mock("@/providers/AuthProvider", () => ({
@@ -22,8 +21,7 @@ jest.mock("@/services/ProgressSyncWorker", () => ({
   progressSyncWorker: {
     start: (...args: unknown[]) => mockStart(...args),
     stop: (...args: unknown[]) => mockStop(...args),
-    requestDrain: (...args: unknown[]) => mockRequestDrain(...args),
-    drainNow: (...args: unknown[]) => mockDrainNow(...args),
+    requestDrainAndWait: (...args: unknown[]) => mockRequestDrainAndWait(...args),
   },
 }));
 
@@ -49,7 +47,7 @@ describe("ProgressSyncProvider", () => {
     network = { isConnected: true, initialized: true };
     mockUseAuth.mockImplementation(() => auth);
     mockUseNetwork.mockImplementation(() => network);
-    mockDrainNow.mockResolvedValue(undefined);
+    mockRequestDrainAndWait.mockResolvedValue(undefined);
     mockRefreshAll.mockResolvedValue(undefined);
     jest.spyOn(AppState, "addEventListener").mockImplementation((_event, listener) => {
       appStateListener = listener as (state: string) => void;
@@ -65,7 +63,7 @@ describe("ProgressSyncProvider", () => {
     const order: string[] = [];
     auth = { authStatus: "authenticated", userId: "user-1" };
     mockStart.mockImplementation(() => order.push("start"));
-    mockDrainNow.mockImplementation(async () => {
+    mockRequestDrainAndWait.mockImplementation(async () => {
       order.push("drain");
     });
     mockRefreshAll.mockImplementation(async () => {
@@ -122,10 +120,36 @@ describe("ProgressSyncProvider", () => {
     );
   });
 
+  it("invalidates an in-flight refresh across logout and same-user reauthentication", async () => {
+    let releaseResponse!: () => void;
+    const response = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    let staleWrites = 0;
+    mockRefreshAll.mockImplementationOnce(async (canCommit: () => boolean) => {
+      await response;
+      if (canCommit()) staleWrites += 1;
+    });
+    auth = { authStatus: "authenticated", userId: "user-1" };
+    const view = render(<ProgressSyncProvider />);
+    await act(async () => Promise.resolve());
+
+    auth = { authStatus: "reauthRequired", userId: "user-1" };
+    view.rerender(<ProgressSyncProvider />);
+    await act(async () => Promise.resolve());
+    auth = { authStatus: "authenticated", userId: "user-1" };
+    view.rerender(<ProgressSyncProvider />);
+    await act(async () => Promise.resolve());
+
+    releaseResponse();
+    await act(async () => response);
+    expect(staleWrites).toBe(0);
+  });
+
   it("orders foreground outbound drain before inbound refresh only while authenticated", async () => {
     const order: string[] = [];
     auth = { authStatus: "authenticated", userId: "user-1" };
-    mockDrainNow.mockImplementation(async () => {
+    mockRequestDrainAndWait.mockImplementation(async () => {
       order.push("drain");
     });
     mockRefreshAll.mockImplementation(async () => {
@@ -134,13 +158,32 @@ describe("ProgressSyncProvider", () => {
     render(<ProgressSyncProvider />);
     await act(async () => Promise.resolve());
     order.length = 0;
-    mockRequestDrain.mockClear();
 
     act(() => appStateListener?.("active"));
     await act(async () => Promise.resolve());
 
-    expect(mockRequestDrain).toHaveBeenCalledWith("foreground");
+    expect(mockRequestDrainAndWait).toHaveBeenCalledWith("foreground");
     expect(order).toEqual(["drain", "refresh"]);
+  });
+
+  it("blocks foreground refresh until an overlapping requested drain is fully idle", async () => {
+    let releaseDrain!: () => void;
+    const queuedDrain = new Promise<void>((resolve) => {
+      releaseDrain = resolve;
+    });
+    auth = { authStatus: "authenticated", userId: "user-1" };
+    render(<ProgressSyncProvider />);
+    await act(async () => Promise.resolve());
+    mockRefreshAll.mockClear();
+    mockRequestDrainAndWait.mockReturnValueOnce(queuedDrain);
+
+    act(() => appStateListener?.("active"));
+    await act(async () => Promise.resolve());
+    expect(mockRefreshAll).not.toHaveBeenCalled();
+
+    releaseDrain();
+    await act(async () => queuedDrain);
+    expect(mockRefreshAll).toHaveBeenCalledTimes(1);
   });
 
   it("recovers only on disconnected-to-connected transitions", async () => {
@@ -148,14 +191,35 @@ describe("ProgressSyncProvider", () => {
     network = { isConnected: false, initialized: true };
     const view = render(<ProgressSyncProvider />);
     await act(async () => Promise.resolve());
-    mockRequestDrain.mockClear();
     mockRefreshAll.mockClear();
 
     network = { isConnected: true, initialized: true };
     view.rerender(<ProgressSyncProvider />);
     await act(async () => Promise.resolve());
 
-    expect(mockRequestDrain).toHaveBeenCalledWith("network");
+    expect(mockRequestDrainAndWait).toHaveBeenCalledWith("network");
+    expect(mockRefreshAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks network refresh until the recovery drain is fully idle", async () => {
+    let releaseDrain!: () => void;
+    const queuedDrain = new Promise<void>((resolve) => {
+      releaseDrain = resolve;
+    });
+    auth = { authStatus: "authenticated", userId: "user-1" };
+    network = { isConnected: false, initialized: true };
+    const view = render(<ProgressSyncProvider />);
+    await act(async () => Promise.resolve());
+    mockRefreshAll.mockClear();
+    mockRequestDrainAndWait.mockReturnValueOnce(queuedDrain);
+
+    network = { isConnected: true, initialized: true };
+    view.rerender(<ProgressSyncProvider />);
+    await act(async () => Promise.resolve());
+    expect(mockRefreshAll).not.toHaveBeenCalled();
+
+    releaseDrain();
+    await act(async () => queuedDrain);
     expect(mockRefreshAll).toHaveBeenCalledTimes(1);
   });
 });
