@@ -8,6 +8,7 @@ const mockRecordProgressSyncFailure = jest.fn();
 const mockTerminallyResolveProgressSyncRevision = jest.fn();
 const mockGetLibraryItemById = jest.fn();
 const mockCreateLocalSession = jest.fn();
+const mockGetDeviceInfo = jest.fn();
 const mockFetchMediaProgress = jest.fn();
 const mockSyncSession = jest.fn();
 const mockMarshalMediaProgressFromApi = jest.fn();
@@ -38,6 +39,7 @@ jest.mock("@/lib/api/endpoints", () => {
   return {
     ...actual,
     createLocalSession: (...args: unknown[]) => mockCreateLocalSession(...args),
+    getDeviceInfo: (...args: unknown[]) => mockGetDeviceInfo(...args),
     fetchMediaProgress: (...args: unknown[]) => mockFetchMediaProgress(...args),
     syncSession: (...args: unknown[]) => mockSyncSession(...args),
   };
@@ -72,6 +74,7 @@ import {
 const NOW = new Date("2026-07-20T12:00:00.000Z");
 const SESSION_ID_1 = "11111111-1111-4111-8111-111111111111";
 const SESSION_ID_2 = "22222222-2222-4222-8222-222222222222";
+const DEVICE_INFO = { deviceId: "device-1", clientName: "SideShelf" };
 
 const SERVER_PROGRESS: ApiMediaProgress = {
   id: "progress-1",
@@ -98,6 +101,7 @@ function makePending(
     userId: "user-1",
     libraryItemId: "item-1",
     mediaId: "media-1",
+    episodeId: null,
     sessionStart: new Date("2026-07-20T11:59:00.000Z"),
     sessionEnd: null,
     startTime: 100,
@@ -155,6 +159,12 @@ async function flushPromises(): Promise<void> {
   await Promise.resolve();
 }
 
+async function waitForMockCall(mock: jest.Mock): Promise<void> {
+  for (let attempt = 0; attempt < 20 && mock.mock.calls.length === 0; attempt += 1) {
+    await Promise.resolve();
+  }
+}
+
 function apiError(status: number, retryAfter?: number): ApiResponseError {
   return new ApiResponseError({
     message: `HTTP ${status}`,
@@ -188,6 +198,7 @@ describe("ProgressSyncWorker delivery", () => {
       mediaType: "book",
     });
     mockCreateLocalSession.mockResolvedValue({ id: SESSION_ID_1, duplicate: false });
+    mockGetDeviceInfo.mockResolvedValue(DEVICE_INFO);
     mockFetchMediaProgress.mockResolvedValue(SERVER_PROGRESS);
     mockMarshalMediaProgressFromApi.mockReturnValue({ id: "progress-1", userId: "user-1" });
     mockUpsertMediaProgress.mockResolvedValue(undefined);
@@ -244,6 +255,7 @@ describe("ProgressSyncWorker delivery", () => {
       episodeId: undefined,
       startedAt: new Date("2026-07-20T11:59:00.000Z").getTime(),
       updatedAt: NOW.getTime(),
+      deviceInfo: DEVICE_INFO,
     });
     expect(mockSyncSession).not.toHaveBeenCalled();
   });
@@ -282,7 +294,7 @@ describe("ProgressSyncWorker delivery", () => {
 
     worker.start("user-1");
     const drain = worker.drainNow();
-    await flushPromises();
+    await waitForMockCall(mockCreateLocalSession);
     pendingRows.push(second);
     upload.resolve({ id: SESSION_ID_1, duplicate: false });
     await drain;
@@ -362,7 +374,7 @@ describe("ProgressSyncWorker delivery", () => {
   });
 
   it("retries failed reconciliation on a later drain without replaying the accepted upload", async () => {
-    const pending = makePending({ session: { mediaId: "episode-1" } });
+    const pending = makePending({ session: { episodeId: "episode-1" } });
     let acknowledged = false;
     mockGetLibraryItemById.mockResolvedValue({
       id: "item-1",
@@ -428,7 +440,7 @@ describe("ProgressSyncWorker delivery", () => {
 
     worker.start("user-1");
     const drain = worker.drainNow();
-    await flushPromises();
+    await waitForMockCall(mockCreateLocalSession);
     expect(mockCreateLocalSession).toHaveBeenCalledTimes(1);
 
     worker.stop();
@@ -442,6 +454,81 @@ describe("ProgressSyncWorker delivery", () => {
     );
     expect(mockFetchMediaProgress).not.toHaveBeenCalled();
     expect(mockGetNextEligibleProgressSync).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start an upload when stopped during device enrichment", async () => {
+    const deviceInfo = deferred<typeof DEVICE_INFO>();
+    pendingRows.push(makePending());
+    mockGetDeviceInfo.mockReturnValueOnce(deviceInfo.promise);
+
+    worker.start("user-1");
+    const drain = worker.drainNow();
+    await waitForMockCall(mockGetDeviceInfo);
+    expect(mockGetDeviceInfo).toHaveBeenCalledTimes(1);
+
+    worker.stop();
+    deviceInfo.resolve(DEVICE_INFO);
+    await drain;
+
+    expect(mockCreateLocalSession).not.toHaveBeenCalled();
+    expect(mockRecordProgressSyncFailure).not.toHaveBeenCalled();
+  });
+
+  it("retains the row and schedules a later wake when device enrichment fails", async () => {
+    pendingRows.push(makePending());
+    mockGetDeviceInfo.mockRejectedValueOnce(new Error("device unavailable"));
+
+    await startAndDrain();
+
+    expect(mockCreateLocalSession).not.toHaveBeenCalled();
+    expect(mockRecordProgressSyncFailure).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(2);
+  });
+
+  it("queues initial reconciliation without upserting when stopped during fetch", async () => {
+    const refresh = deferred<ApiMediaProgress>();
+    pendingRows.push(makePending());
+    mockFetchMediaProgress.mockReturnValueOnce(refresh.promise);
+
+    worker.start("user-1");
+    const drain = worker.drainNow();
+    await waitForMockCall(mockFetchMediaProgress);
+    expect(mockAcknowledgeProgressSyncRevision).toHaveBeenCalledTimes(1);
+    expect(mockFetchMediaProgress).toHaveBeenCalledTimes(1);
+
+    worker.stop();
+    refresh.resolve(SERVER_PROGRESS);
+    await drain;
+
+    expect(mockUpsertMediaProgress).not.toHaveBeenCalled();
+    worker.start("user-1");
+    await worker.drainNow();
+    expect(mockFetchMediaProgress).toHaveBeenCalledTimes(2);
+    expect(mockUpsertMediaProgress).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps queued reconciliation without upserting when stopped during retry fetch", async () => {
+    const retryRefresh = deferred<ApiMediaProgress>();
+    pendingRows.push(makePending());
+    mockFetchMediaProgress
+      .mockRejectedValueOnce(new Error("refresh failed"))
+      .mockReturnValueOnce(retryRefresh.promise);
+
+    await startAndDrain();
+    worker.requestDrain("manual");
+    const retryDrain = worker.drainNow();
+    await flushPromises();
+    expect(mockFetchMediaProgress).toHaveBeenCalledTimes(2);
+
+    worker.stop();
+    retryRefresh.resolve(SERVER_PROGRESS);
+    await retryDrain;
+    expect(mockUpsertMediaProgress).not.toHaveBeenCalled();
+
+    worker.start("user-1");
+    await worker.drainNow();
+    expect(mockFetchMediaProgress).toHaveBeenCalledTimes(3);
+    expect(mockUpsertMediaProgress).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -485,6 +572,19 @@ describe("ProgressSyncWorker delivery", () => {
       expect(jest.getTimerCount()).toBe(0);
     }
   );
+
+  it("stops after auth rejection even when token persistence fails", async () => {
+    pendingRows.push(makePending(), makePending({ session: { id: SESSION_ID_2 } }));
+    mockCreateLocalSession.mockRejectedValueOnce(apiError(401));
+    mockClearTokens.mockRejectedValueOnce(new Error("secure store failed"));
+
+    await startAndDrain();
+
+    expect(mockClearTokens).toHaveBeenCalledTimes(1);
+    expect(mockCreateLocalSession).toHaveBeenCalledTimes(1);
+    expect(mockRecordProgressSyncFailure).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+  });
 
   it("honors Retry-After for HTTP 429 and schedules the durable wake", async () => {
     pendingRows.push(makePending({ outbox: { attemptCount: 3 } }));

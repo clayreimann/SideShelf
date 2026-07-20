@@ -80,6 +80,22 @@ describe("ApiClientService", () => {
     });
   });
 
+  describe("clearTokens", () => {
+    it("clears memory and notifies once even when secure-store persistence fails", async () => {
+      const listener = jest.fn();
+      const unsubscribe = apiClientService.subscribe(listener);
+      mockSaveItem.mockRejectedValueOnce(new Error("secure store failed"));
+
+      await expect(apiClientService.clearTokens()).rejects.toThrow("secure store failed");
+
+      expect(apiClientService.getAccessToken()).toBeNull();
+      expect(apiClientService.getRefreshToken()).toBeNull();
+      expect(apiClientService.getUsername()).toBeNull();
+      expect(listener).toHaveBeenCalledTimes(1);
+      unsubscribe();
+    });
+  });
+
   describe("performTokenRefresh (via handleUnauthorized)", () => {
     it("clears tokens and returns false when refresh is rejected with 401", async () => {
       (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(401, {}));

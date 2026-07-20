@@ -134,6 +134,7 @@ function makeSession(overrides: Partial<LocalListeningSessionRow>): LocalListeni
     userId: USER_ID,
     libraryItemId: ITEM_ID,
     mediaId: "media-1",
+    episodeId: null,
     sessionStart: new Date(NOW.getTime() - 3600_000),
     sessionEnd: null,
     startTime: 0,

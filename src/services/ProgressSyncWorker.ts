@@ -8,7 +8,12 @@ import {
 } from "@/db/helpers/progressSyncOutbox";
 import { getLibraryItemById } from "@/db/helpers/libraryItems";
 import { marshalMediaProgressFromApi, upsertMediaProgress } from "@/db/helpers/mediaProgress";
-import { ApiResponseError, createLocalSession, fetchMediaProgress } from "@/lib/api/endpoints";
+import {
+  ApiResponseError,
+  createLocalSession,
+  fetchMediaProgress,
+  getDeviceInfo,
+} from "@/lib/api/endpoints";
 import { logger } from "@/lib/logger";
 import { apiClientService } from "@/services/ApiClientService";
 import NetInfo from "@react-native-community/netinfo";
@@ -235,10 +240,24 @@ export class ProgressSyncWorker {
       return "stop";
     }
 
-    const episodeId =
-      libraryItem.mediaType === "podcast" && pending.session.mediaId !== libraryItem.id
-        ? pending.session.mediaId
-        : undefined;
+    const episodeId = pending.session.episodeId ?? undefined;
+    let deviceInfo: Awaited<ReturnType<typeof getDeviceInfo>>;
+    try {
+      deviceInfo = await getDeviceInfo();
+    } catch (error) {
+      const wakeAt = new Date(
+        Date.now() + calculateProgressRetryDelay(pending.outbox.attemptCount, this.random)
+      );
+      log.warn(
+        `Device enrichment unavailable; retaining session=${pending.session.id} item=${pending.session.libraryItemId}: ${getErrorMessage(error)}`
+      );
+      this._scheduleWakeAt(wakeAt);
+      return "stop";
+    }
+
+    if (!this._canDeliverPending(pending, context)) {
+      return "stop";
+    }
 
     try {
       await createLocalSession({
@@ -253,6 +272,7 @@ export class ProgressSyncWorker {
         episodeId,
         startedAt: pending.session.sessionStart.getTime(),
         updatedAt: pending.session.updatedAt.getTime(),
+        deviceInfo,
       });
     } catch (error) {
       return this._classifyUploadFailure(pending, error, context);
@@ -281,7 +301,10 @@ export class ProgressSyncWorker {
       const serverProgress = episodeId
         ? await fetchMediaProgress(pending.session.libraryItemId, episodeId)
         : await fetchMediaProgress(pending.session.libraryItemId);
-      // A refresh already in flight may finish after stop; only the next request is blocked.
+      if (!this._canDeliverPending(pending, context)) {
+        this._queueReconciliation(pending.session.libraryItemId, pending.session.userId, episodeId);
+        return "stop";
+      }
       await upsertMediaProgress([
         marshalMediaProgressFromApi(serverProgress, pending.session.userId),
       ]);
@@ -412,7 +435,9 @@ export class ProgressSyncWorker {
         const serverProgress = pending.episodeId
           ? await fetchMediaProgress(pending.libraryItemId, pending.episodeId)
           : await fetchMediaProgress(pending.libraryItemId);
-        // A refresh already in flight may finish after stop; only the next request is blocked.
+        if (!this._isCurrentGeneration(context.generation, context.userId)) {
+          return;
+        }
         await upsertMediaProgress([marshalMediaProgressFromApi(serverProgress, context.userId)]);
         this._completeReconciliation(pending.libraryItemId, context.userId, pending.episodeId);
       } catch (error) {

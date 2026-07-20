@@ -126,14 +126,14 @@ describe("progress sync outbox migration (0015)", () => {
   it("migrates an empty pre-0015 database and exposes the journaled runtime bundle", () => {
     const migration = migrations.migrations.m0015;
     expect(migration).toBeDefined();
-    expect(migrations.journal.entries.at(-1)).toEqual(
+    expect(migrations.journal.entries.find((entry) => entry.idx === 15)).toEqual(
       expect.objectContaining({ tag: expect.stringMatching(/^0015_/) })
     );
     const statements = migration!
       .split("--> statement-breakpoint")
-      .map((statement) => statement.trim());
+      .map((statement: string) => statement.trim());
     expect(statements).toHaveLength(9);
-    expect(statements.slice(2).every((statement) => statement.endsWith(";"))).toBe(true);
+    expect(statements.slice(2).every((statement: string) => statement.endsWith(";"))).toBe(true);
 
     expect(() => applyStatements(testDb.sqlite, migration!)).not.toThrow();
     expect(testDb.sqlite.getAllSync("SELECT * FROM progress_sync_outbox")).toEqual([]);

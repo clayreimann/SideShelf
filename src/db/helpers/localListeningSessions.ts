@@ -29,7 +29,8 @@ export async function startListeningSession(
   startTime: number,
   duration: number,
   playbackRate: number = 1.0,
-  volume: number = 1.0
+  volume: number = 1.0,
+  episodeId: string | null = null
 ): Promise<string> {
   const sessionId = uuidv4();
   const now = new Date();
@@ -39,6 +40,7 @@ export async function startListeningSession(
     userId,
     libraryItemId,
     mediaId,
+    episodeId,
     sessionStart: now,
     sessionEnd: null,
     startTime,

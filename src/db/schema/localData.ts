@@ -71,6 +71,7 @@ export const localListeningSessions = sqliteTable(
     mediaId: text("media_id")
       .notNull()
       .references(() => mediaMetadata.id, { onDelete: "cascade" }),
+    episodeId: text("episode_id"),
 
     // Session timing
     sessionStart: integer("session_start", { mode: "timestamp" }).notNull(),

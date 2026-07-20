@@ -60,6 +60,21 @@ describe("local listening session mutations", () => {
     });
   });
 
+  it("persists an optional podcast episode identity on the durable session", async () => {
+    const sessionId = await startListeningSession(
+      "user-1",
+      "item-1",
+      "media-1",
+      12,
+      3600,
+      1,
+      1,
+      "episode-1"
+    );
+
+    expect(await getListeningSession(sessionId)).toMatchObject({ episodeId: "episode-1" });
+  });
+
   it("updates playback state, accumulated listening time, and one revision atomically", async () => {
     const sessionId = await startSession();
 

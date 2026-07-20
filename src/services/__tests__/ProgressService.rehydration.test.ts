@@ -115,6 +115,7 @@ function makeSession(overrides: Partial<LocalListeningSessionRow>): LocalListeni
     userId: "user-1",
     libraryItemId: "item-1",
     mediaId: "media-1",
+    episodeId: null,
     sessionStart: new Date("2026-01-01T10:00:00Z"),
     sessionEnd: null,
     startTime: 0,

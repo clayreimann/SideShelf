@@ -146,13 +146,14 @@ class ApiClientService {
     this.accessToken = null;
     this.refreshToken = null;
     this.username = null;
+    // Auth state is an in-memory safety boundary. Notify before best-effort
+    // persistence so a secure-store failure cannot leave subscribers authenticated.
+    this.notifyListeners();
 
     await Promise.all([
       saveItem(SECURE_KEYS.accessToken, null),
       saveItem(SECURE_KEYS.refreshToken, null),
     ]);
-
-    this.notifyListeners();
   }
 
   /**
