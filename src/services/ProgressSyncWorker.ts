@@ -609,6 +609,13 @@ function getMalformedPendingReason(pending: PendingProgressSync): string | null 
   ) {
     return `Invalid local identifiers session=${session.id} item=${session.libraryItemId}`;
   }
+  if (
+    session.episodeId !== null &&
+    session.episodeId !== undefined &&
+    !isNonEmptyId(session.episodeId)
+  ) {
+    return `Invalid local episode ID session=${session.id}`;
+  }
   if (!Number.isInteger(sentRevision) || sentRevision <= 0) {
     return `Invalid sent revision session=${session.id}`;
   }

@@ -200,7 +200,14 @@ class ApiClientService {
   private async performTokenRefresh(): Promise<boolean> {
     if (!this.baseUrl || !this.refreshToken) {
       log.error("Missing base URL or refresh token");
-      await this.clearTokens();
+      try {
+        await this.clearTokens();
+      } catch (error) {
+        log.error(
+          "Failed to persist cleared tokens after missing refresh credentials",
+          error as Error
+        );
+      }
       return false;
     }
 

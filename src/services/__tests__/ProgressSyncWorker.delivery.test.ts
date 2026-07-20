@@ -669,6 +669,7 @@ describe("ProgressSyncWorker delivery", () => {
   it.each([
     ["invalid session ID", { session: { id: "not-a-uuid" } }],
     ["invalid user ID", { session: { userId: " " }, outbox: { userId: " " } }],
+    ["blank episode ID", { session: { episodeId: " \t" } }],
     ["invalid position", { session: { currentTime: Number.NaN } }],
     ["invalid duration", { session: { duration: Number.POSITIVE_INFINITY } }],
     ["invalid listening time", { session: { timeListening: -1 } }],
