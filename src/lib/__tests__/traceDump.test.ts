@@ -12,7 +12,7 @@ type MockProgressSyncDiagnostic = {
   lastAttemptAt: Date | null;
   nextAttemptAt: Date | null;
   lastSuccessAt: Date | null;
-  lastError: string | null;
+  hasError: boolean;
   terminalReason: string | null;
   updatedAt: Date;
 };
@@ -59,7 +59,7 @@ describe("writeDumpToDisk", () => {
         lastAttemptAt: null,
         nextAttemptAt: null,
         lastSuccessAt: null,
-        lastError: "network unavailable",
+        hasError: true,
         terminalReason: null,
         updatedAt: new Date("2026-07-20T12:00:00.000Z"),
       },
@@ -119,15 +119,35 @@ describe("writeDumpToDisk", () => {
     const writeArg: string = mockInstance.write.mock.calls[0][0] as string;
     const parsed = JSON.parse(writeArg) as Record<string, unknown>;
 
+    expect(parsed.progressSyncOutboxAvailable).toBe(true);
     expect(parsed.progressSyncOutbox).toEqual([
       expect.objectContaining({
         sessionId: "session-1",
         desiredRevision: 3,
         acknowledgedRevision: 2,
         attemptCount: 1,
-        lastError: "network unavailable",
+        hasError: true,
       }),
     ]);
+    expect(writeArg).not.toContain("network unavailable");
+  });
+
+  it("writes an unavailable marker without exposing diagnostic query errors", async () => {
+    mockGetProgressSyncDiagnostics.mockRejectedValueOnce(
+      new Error("sensitive database path /private/user.sqlite")
+    );
+
+    await expect(writeDumpToDisk("manual")).resolves.toMatch(/^file:\/\//);
+
+    const MockFile = ExpoFileSystem.File as unknown as jest.Mock;
+    const mockInstance = MockFile.mock.results[0].value as { write: jest.Mock };
+    expect(mockInstance.write).toHaveBeenCalledTimes(1);
+    const writeArg: string = mockInstance.write.mock.calls[0][0] as string;
+    const parsed = JSON.parse(writeArg) as Record<string, unknown>;
+
+    expect(parsed.progressSyncOutboxAvailable).toBe(false);
+    expect(parsed.progressSyncOutbox).toEqual([]);
+    expect(writeArg).not.toContain("sensitive database path");
   });
 });
 

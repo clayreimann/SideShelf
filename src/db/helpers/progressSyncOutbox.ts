@@ -19,6 +19,8 @@ export type PendingProgressSync = {
   sentRevision: number;
 };
 
+export const PROGRESS_SYNC_DIAGNOSTIC_LIMIT = 100;
+
 export type ProgressSyncDiagnostic = Pick<
   ProgressSyncOutboxRow,
   | "sessionId"
@@ -28,14 +30,15 @@ export type ProgressSyncDiagnostic = Pick<
   | "lastAttemptAt"
   | "nextAttemptAt"
   | "lastSuccessAt"
-  | "lastError"
-  | "terminalReason"
   | "updatedAt"
->;
+> & {
+  hasError: boolean;
+  terminalReason: ProgressSyncTerminalReason | "unknown" | null;
+};
 
-/** Read delivery metadata for support exports without including progress payload or account IDs. */
+/** Read the newest bounded delivery metadata without payloads, account IDs, or raw error text. */
 export async function getProgressSyncDiagnostics(): Promise<ProgressSyncDiagnostic[]> {
-  return db
+  const rows = await db
     .select({
       sessionId: progressSyncOutbox.sessionId,
       desiredRevision: progressSyncOutbox.desiredRevision,
@@ -44,12 +47,36 @@ export async function getProgressSyncDiagnostics(): Promise<ProgressSyncDiagnost
       lastAttemptAt: progressSyncOutbox.lastAttemptAt,
       nextAttemptAt: progressSyncOutbox.nextAttemptAt,
       lastSuccessAt: progressSyncOutbox.lastSuccessAt,
-      lastError: progressSyncOutbox.lastError,
+      hasError: sql<number>`CASE WHEN ${progressSyncOutbox.lastError} IS NULL THEN 0 ELSE 1 END`.as(
+        "has_error"
+      ),
       terminalReason: progressSyncOutbox.terminalReason,
       updatedAt: progressSyncOutbox.updatedAt,
     })
     .from(progressSyncOutbox)
-    .orderBy(desc(progressSyncOutbox.updatedAt));
+    .orderBy(desc(progressSyncOutbox.updatedAt), asc(progressSyncOutbox.sessionId))
+    .limit(PROGRESS_SYNC_DIAGNOSTIC_LIMIT);
+
+  return rows.map((row) => ({
+    ...row,
+    hasError: Boolean(row.hasError),
+    terminalReason: normalizeDiagnosticTerminalReason(row.terminalReason),
+  }));
+}
+
+function normalizeDiagnosticTerminalReason(
+  reason: string | null
+): ProgressSyncDiagnostic["terminalReason"] {
+  if (reason === null) return null;
+  if (
+    reason === "media_missing" ||
+    reason === "local_media_missing" ||
+    reason === "malformed_local_data" ||
+    reason === "too_short"
+  ) {
+    return reason;
+  }
+  return "unknown";
 }
 
 export async function getProgressSyncOutbox(

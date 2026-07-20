@@ -34,7 +34,12 @@ import {
   endListeningSession,
   startListeningSession,
 } from "@/db/helpers/localListeningSessions";
-import { getProgressSyncDiagnostics, getProgressSyncOutbox } from "@/db/helpers/progressSyncOutbox";
+import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
+import {
+  PROGRESS_SYNC_DIAGNOSTIC_LIMIT,
+  getProgressSyncDiagnostics,
+  getProgressSyncOutbox,
+} from "@/db/helpers/progressSyncOutbox";
 import { wipeUserData } from "@/db/helpers/wipeUserData";
 import { libraries } from "@/db/schema/libraries";
 import { libraryItems } from "@/db/schema/libraryItems";
@@ -42,6 +47,7 @@ import { localListeningSessions, progressSyncOutbox } from "@/db/schema/localDat
 import { mediaMetadata } from "@/db/schema/mediaMetadata";
 import { users } from "@/db/schema/users";
 import { ProgressSyncWorker } from "@/services/ProgressSyncWorker";
+import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 const NOW = new Date("2026-07-20T12:00:00.000Z");
@@ -238,11 +244,58 @@ describe("stale-token progress sync recovery", () => {
       }),
     ]);
     expect(diagnostics[0]).not.toHaveProperty("userId");
+    expect(diagnostics[0]).not.toHaveProperty("lastError");
+
+    expect(await getMediaProgressForLibraryItem(ITEM_ID, USER_ID)).toMatchObject({
+      id: "progress-1",
+      userId: USER_ID,
+      libraryItemId: ITEM_ID,
+      episodeId: EPISODE_ID,
+      currentTime: 180,
+      duration: 3600,
+      progress: 0.05,
+    });
 
     restartedWorker.stop();
     activeWorker = null;
     await wipeUserData();
     expect(await testDb.db.select().from(progressSyncOutbox)).toEqual([]);
     expect(await testDb.db.select().from(localListeningSessions)).toEqual([]);
+  });
+
+  it("bounds diagnostics to the newest rows with deterministic ordering and no raw errors", async () => {
+    let sequence = 0;
+    (uuidv4 as jest.Mock).mockImplementation(
+      () => `session-${String(++sequence).padStart(3, "0")}`
+    );
+
+    for (let index = 0; index < PROGRESS_SYNC_DIAGNOSTIC_LIMIT + 2; index += 1) {
+      const sessionId = await startListeningSession(USER_ID, ITEM_ID, MEDIA_ID, index, 3600);
+      await testDb.db
+        .update(progressSyncOutbox)
+        .set({
+          updatedAt: new Date(
+            NOW.getTime() + Math.min(index, PROGRESS_SYNC_DIAGNOSTIC_LIMIT) * 1000
+          ),
+          lastError: index === PROGRESS_SYNC_DIAGNOSTIC_LIMIT + 1 ? "private raw failure" : null,
+          terminalReason:
+            index === PROGRESS_SYNC_DIAGNOSTIC_LIMIT + 1 ? "private raw terminal" : null,
+        })
+        .where(eq(progressSyncOutbox.sessionId, sessionId));
+    }
+
+    const diagnostics = await getProgressSyncDiagnostics();
+
+    expect(diagnostics).toHaveLength(PROGRESS_SYNC_DIAGNOSTIC_LIMIT);
+    expect(diagnostics.slice(0, 3).map((row) => row.sessionId)).toEqual([
+      "session-101",
+      "session-102",
+      "session-100",
+    ]);
+    expect(diagnostics[0]).toMatchObject({ hasError: false });
+    expect(diagnostics[1]).toMatchObject({ hasError: true, terminalReason: "unknown" });
+    expect(diagnostics[1]).not.toHaveProperty("lastError");
+    expect(JSON.stringify(diagnostics)).not.toContain("private raw failure");
+    expect(JSON.stringify(diagnostics)).not.toContain("private raw terminal");
   });
 });

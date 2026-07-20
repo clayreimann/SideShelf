@@ -17,11 +17,12 @@ export async function writeDumpToDisk(
   const file = new File(Paths.document, filename);
 
   const exported = trace.exportTrace();
-  const progressSyncOutbox = await getProgressSyncDiagnostics().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    log.warn(`[writeDumpToDisk] Progress sync diagnostics unavailable: ${message}`);
-    return [];
-  });
+  const progressSyncDiagnostics = await getProgressSyncDiagnostics()
+    .then((rows) => ({ available: true, rows }))
+    .catch(() => {
+      log.warn("[writeDumpToDisk] Progress sync diagnostics unavailable");
+      return { available: false, rows: [] };
+    });
 
   // Flatten meta fields to the root of the payload for easier reading
   const payload = {
@@ -31,7 +32,8 @@ export async function writeDumpToDisk(
     platform: Platform.OS,
     dumpReason: reason,
     rejectionEvent: rejectionEvent ?? null,
-    progressSyncOutbox,
+    progressSyncOutboxAvailable: progressSyncDiagnostics.available,
+    progressSyncOutbox: progressSyncDiagnostics.rows,
     records: exported.records,
   };
 
