@@ -98,7 +98,7 @@ function getErrorMessage(responseBody: string, defaultMessage: string): string {
     const error: ApiError = JSON.parse(responseBody);
     return error.message || error.error || defaultMessage;
   } catch {
-    return defaultMessage;
+    return responseBody.trim() || defaultMessage;
   }
 }
 
@@ -428,7 +428,15 @@ export async function createLocalSession(
 
   const responseText = await response.text();
   const responseSessionId = getSessionIdFromResponse(responseText);
-  return { id: responseSessionId ?? sessionId, duplicate: false };
+  if (responseSessionId && responseSessionId !== sessionId) {
+    throw new ApiResponseError({
+      message: "Failed to create local session: response ID did not match submitted session",
+      status: response.status,
+      responseBody: redactBody(responseText),
+    });
+  }
+
+  return { id: sessionId, duplicate: false };
 }
 
 function getSessionIdFromResponse(responseBody: string): string | undefined {

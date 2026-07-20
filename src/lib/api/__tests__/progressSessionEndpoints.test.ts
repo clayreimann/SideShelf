@@ -38,12 +38,28 @@ const sessionParams = {
   deviceInfo: { deviceId: "test-device" },
 };
 
+type BodyConsumption = {
+  original: number;
+  clones: number[];
+};
+
 function makeResponse(
   status: number,
   body: string = "",
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
+  consumption?: BodyConsumption
 ): Response {
-  return {
+  const makeText = (recordRead: () => void) => {
+    let consumed = false;
+
+    return async () => {
+      if (consumed) throw new Error("Response body was already consumed");
+      consumed = true;
+      recordRead();
+      return body;
+    };
+  };
+  const response = {
     ok: status >= 200 && status < 300,
     status,
     headers: {
@@ -55,10 +71,20 @@ function makeResponse(
       },
     },
     clone() {
-      return this;
+      const cloneIndex = consumption?.clones.push(0) ?? 0;
+      return {
+        ...response,
+        text: makeText(() => {
+          if (consumption) consumption.clones[cloneIndex - 1]++;
+        }),
+      } as unknown as Response;
     },
-    text: async () => body,
-  } as unknown as Response;
+    text: makeText(() => {
+      if (consumption) consumption.original++;
+    }),
+  };
+
+  return response as unknown as Response;
 }
 
 describe("progress session endpoints", () => {
@@ -67,8 +93,9 @@ describe("progress session endpoints", () => {
   });
 
   it("sends a stable snapshot and returns an identified local session", async () => {
+    const consumption = { original: 0, clones: [] };
     (apiFetch as jest.Mock).mockResolvedValue(
-      makeResponse(200, JSON.stringify({ id: SESSION_ID }))
+      makeResponse(200, JSON.stringify({ id: SESSION_ID }), {}, consumption)
     );
 
     await expect(createLocalSession(sessionParams)).resolves.toEqual({
@@ -84,6 +111,7 @@ describe("progress session endpoints", () => {
       currentTime: 480,
       timeListening: 360,
     });
+    expect(consumption).toEqual({ original: 1, clones: [] });
   });
 
   it("accepts an empty successful response as the submitted local session", async () => {
@@ -103,6 +131,17 @@ describe("progress session endpoints", () => {
     await expect(createLocalSession(sessionParams)).resolves.toEqual({
       id: SESSION_ID,
       duplicate: true,
+    });
+  });
+
+  it("rejects a successful response that identifies another session", async () => {
+    (apiFetch as jest.Mock).mockResolvedValue(
+      makeResponse(200, JSON.stringify({ id: "a627e2e0-a6b1-42f5-bc17-21a98f44d373" }))
+    );
+
+    await expect(createLocalSession(sessionParams)).rejects.toMatchObject({
+      name: "ApiResponseError",
+      status: 200,
     });
   });
 
@@ -157,5 +196,21 @@ describe("progress session endpoints", () => {
 
     await expect(fetchMe()).rejects.toMatchObject({ status: 429, retryAfter: 90_000 });
     jest.useRealTimers();
+  });
+
+  it.each([
+    [JSON.stringify({ message: "Explicit JSON message" }), "Explicit JSON message"],
+    [JSON.stringify({ error: "JSON error field" }), "JSON error field"],
+    [JSON.stringify({}), "Failed to fetch user data"],
+    ["password=leaked-password", "password=<redacted>"],
+    ["", "Failed to fetch user data"],
+  ])("uses the compatible error message for response body %p", async (body, message) => {
+    (apiFetch as jest.Mock).mockResolvedValue(makeResponse(500, body));
+
+    await expect(fetchMe()).rejects.toMatchObject({
+      name: "ApiResponseError",
+      message,
+      responseBody: body ? expect.any(String) : "",
+    });
   });
 });
