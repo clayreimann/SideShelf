@@ -19,15 +19,12 @@ import type { LocalListeningSessionRow } from "@/db/schema/localData";
 // --- DB helper mocks ---
 
 jest.mock("@/db/helpers/localListeningSessions", () => ({
+  applyLocalPlaybackTick: jest.fn(),
   getAllActiveSessionsForUser: jest.fn(),
   endStaleListeningSession: jest.fn(),
   endListeningSession: jest.fn(),
   getActiveSession: jest.fn(),
-  getListeningSession: jest.fn(),
-  getUnsyncedSessions: jest.fn(),
-  markSessionAsSynced: jest.fn(),
-  recordSyncFailure: jest.fn(),
-  resetSessionListeningTime: jest.fn(),
+  reconcileSessionPositionFromServer: jest.fn(),
   startListeningSession: jest.fn(),
   updateServerSessionId: jest.fn(),
   updateSessionListeningTime: jest.fn(),
@@ -60,11 +57,12 @@ jest.mock("@/lib/secureStore", () => ({
 }));
 
 jest.mock("@/lib/api/endpoints", () => ({
-  closeSession: jest.fn(),
-  createLocalSession: jest.fn(),
   fetchMe: jest.fn(),
   fetchMediaProgress: jest.fn(),
-  syncSession: jest.fn(),
+}));
+
+jest.mock("@/services/ProgressSyncWorker", () => ({
+  progressSyncWorker: { requestDrain: jest.fn() },
 }));
 
 jest.mock("@/services/coordinator/eventBus", () => ({
@@ -78,20 +76,23 @@ jest.mock("@react-native-community/netinfo", () => ({
 // --- Imports (after mocks) ---
 
 import {
+  applyLocalPlaybackTick,
   endListeningSession,
   endStaleListeningSession,
   getActiveSession,
   getAllActiveSessionsForUser,
+  reconcileSessionPositionFromServer,
   startListeningSession,
-  updateSessionListeningTime,
-  updateSessionProgress,
+  updateServerSessionId,
 } from "@/db/helpers/localListeningSessions";
 import { getLibraryItemById } from "@/db/helpers/libraryItems";
 import { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
 import { getUserByUsername } from "@/db/helpers/users";
 import { getStoredUsername } from "@/lib/secureStore";
+import { fetchMediaProgress } from "@/lib/api/endpoints";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { progressService } from "@/services/ProgressService";
+import { progressSyncWorker } from "@/services/ProgressSyncWorker";
 
 // --- Typed mock helpers ---
 
@@ -108,11 +109,14 @@ const mockEndStaleListeningSession = endStaleListeningSession as jest.MockedFunc
 const mockStartListeningSession = startListeningSession as jest.MockedFunction<
   typeof startListeningSession
 >;
-const mockUpdateSessionProgress = updateSessionProgress as jest.MockedFunction<
-  typeof updateSessionProgress
+const mockUpdateServerSessionId = updateServerSessionId as jest.MockedFunction<
+  typeof updateServerSessionId
 >;
-const mockUpdateSessionListeningTime = updateSessionListeningTime as jest.MockedFunction<
-  typeof updateSessionListeningTime
+const mockReconcileSessionPosition = reconcileSessionPositionFromServer as jest.MockedFunction<
+  typeof reconcileSessionPositionFromServer
+>;
+const mockApplyLocalPlaybackTick = applyLocalPlaybackTick as jest.MockedFunction<
+  typeof applyLocalPlaybackTick
 >;
 const mockGetLibraryItemById = getLibraryItemById as jest.MockedFunction<typeof getLibraryItemById>;
 const mockGetUserByUsername = getUserByUsername as jest.MockedFunction<typeof getUserByUsername>;
@@ -121,6 +125,10 @@ const mockGetMediaProgress = getMediaProgressForLibraryItem as jest.MockedFuncti
 >;
 const mockGetStoredUsername = getStoredUsername as jest.MockedFunction<typeof getStoredUsername>;
 const mockDispatch = dispatchPlayerEvent as jest.MockedFunction<typeof dispatchPlayerEvent>;
+const mockFetchMediaProgress = fetchMediaProgress as jest.MockedFunction<typeof fetchMediaProgress>;
+const mockRequestDrain = progressSyncWorker.requestDrain as jest.MockedFunction<
+  typeof progressSyncWorker.requestDrain
+>;
 
 // --- Fixtures ---
 
@@ -162,9 +170,7 @@ function sessionUpdatedDispatches() {
 
 // --- Setup ---
 
-describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
-  let syncSpy: jest.SpiedFunction<typeof progressService.syncSessionToServer>;
-
+describe("ProgressService — local hot path, throttle, and staleness", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(NOW);
@@ -177,23 +183,17 @@ describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
       id: USER_ID,
       username: "alice",
     } as ReturnType<typeof getUserByUsername> extends Promise<infer T> ? T : never);
-    mockUpdateSessionProgress.mockResolvedValue(undefined);
-    mockUpdateSessionListeningTime.mockResolvedValue(undefined);
+    mockApplyLocalPlaybackTick.mockResolvedValue(undefined);
+    mockUpdateServerSessionId.mockResolvedValue(undefined);
+    mockReconcileSessionPosition.mockResolvedValue(undefined);
     mockEndListeningSession.mockResolvedValue(undefined);
     mockEndStaleListeningSession.mockResolvedValue(undefined);
-
-    syncSpy = jest
-      .spyOn(progressService, "syncSessionToServer")
-      .mockResolvedValue(undefined) as jest.SpiedFunction<
-      typeof progressService.syncSessionToServer
-    >;
   });
 
   afterEach(() => {
     progressService.shutdown();
     jest.useRealTimers();
     jest.resetAllMocks();
-    syncSpy.mockRestore();
   });
 
   // ---------------------------------------------------------------------------
@@ -229,7 +229,9 @@ describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
       });
 
       // Per-tick DB write frequency must be unchanged: every tick writes
-      expect(mockUpdateSessionProgress).toHaveBeenCalledTimes(3);
+      expect(mockApplyLocalPlaybackTick).toHaveBeenCalledTimes(3);
+      expect(mockRequestDrain).toHaveBeenCalledTimes(3);
+      expect(mockRequestDrain).toHaveBeenLastCalledWith("progress");
     });
 
     it("tags SESSION_UPDATED dispatches with source progress_service", async () => {
@@ -253,7 +255,12 @@ describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
 
       await progressService.updateProgress(USER_ID, ITEM_ID, 310);
 
-      expect(mockUpdateSessionProgress).toHaveBeenCalledWith(session.id, 310, undefined, undefined);
+      expect(mockApplyLocalPlaybackTick).toHaveBeenCalledWith(session.id, {
+        currentTime: 310,
+        listeningTimeDelta: 0,
+        playbackRate: 1,
+        volume: 1,
+      });
       expect(mockEndStaleListeningSession).not.toHaveBeenCalled();
     });
 
@@ -269,7 +276,7 @@ describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
 
       // Stale session ends at ITS last position (300), not the incoming one (310)
       expect(mockEndStaleListeningSession).toHaveBeenCalledWith(session.id, 300);
-      expect(mockUpdateSessionProgress).not.toHaveBeenCalled();
+      expect(mockApplyLocalPlaybackTick).not.toHaveBeenCalled();
     });
   });
 
@@ -307,7 +314,8 @@ describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
         300, // resume from active session, not the 100 startTime argument
         3600,
         1.0,
-        1.0
+        1.0,
+        null
       );
     });
 
@@ -329,7 +337,8 @@ describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
         100, // no saved progress → falls back to the startTime argument
         3600,
         1.0,
-        1.0
+        1.0,
+        null
       );
     });
 
@@ -341,6 +350,52 @@ describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
       const created = mockDispatch.mock.calls.find(([event]) => event.type === "SESSION_CREATED");
       expect(created).toBeDefined();
       expect(created![1]).toEqual({ source: "progress_service" });
+      expect(mockRequestDrain).toHaveBeenCalledWith("progress");
+    });
+
+    it("persists the supplied episode ID without guessing from mediaId", async () => {
+      mockGetAllActiveSessions.mockResolvedValue([]);
+
+      await progressService.startSession(
+        "alice",
+        ITEM_ID,
+        "media-1",
+        100,
+        3600,
+        1,
+        1,
+        undefined,
+        "episode-1"
+      );
+
+      expect(mockStartListeningSession).toHaveBeenCalledWith(
+        USER_ID,
+        ITEM_ID,
+        "media-1",
+        100,
+        3600,
+        1,
+        1,
+        "episode-1"
+      );
+    });
+
+    it("keeps an existing server session locally pending and requests worker delivery", async () => {
+      mockGetAllActiveSessions.mockResolvedValue([]);
+
+      await progressService.startSession(
+        "alice",
+        ITEM_ID,
+        "media-1",
+        100,
+        3600,
+        1,
+        1,
+        "server-session-1"
+      );
+
+      expect(mockUpdateServerSessionId).toHaveBeenCalledWith("new-session-id", "server-session-1");
+      expect(mockRequestDrain).toHaveBeenCalledWith("progress");
     });
   });
 
@@ -359,7 +414,7 @@ describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
 
       expect(mockGetActiveSession).toHaveBeenCalledTimes(1);
       // Every tick still writes (crash-recovery guarantee)
-      expect(mockUpdateSessionProgress).toHaveBeenCalledTimes(3);
+      expect(mockApplyLocalPlaybackTick).toHaveBeenCalledTimes(3);
     });
 
     it("re-queries after endCurrentSession invalidates the cache", async () => {
@@ -408,74 +463,63 @@ describe("ProgressService — hot path, throttle, staleness, lifecycle", () => {
       // not the original row's — this write must go through, not stale-out.
       await progressService.updateProgress(USER_ID, ITEM_ID, 302);
 
-      expect(mockUpdateSessionProgress).toHaveBeenLastCalledWith(
-        "session-1",
-        302,
-        undefined,
-        undefined
-      );
+      expect(mockApplyLocalPlaybackTick).toHaveBeenLastCalledWith("session-1", {
+        currentTime: 302,
+        listeningTimeDelta: 1,
+        playbackRate: 1,
+        volume: 1,
+      });
       expect(mockEndStaleListeningSession).not.toHaveBeenCalled();
     });
   });
 
   // ---------------------------------------------------------------------------
-  // 5. initialize()/shutdown() lifecycle
+  // 5. Worker-owned delivery compatibility
   // ---------------------------------------------------------------------------
-  describe("periodic sync lifecycle", () => {
-    it("does not run periodic sync before initialize() is called", async () => {
-      const syncUnsyncedSpy = jest
-        .spyOn(progressService, "syncUnsyncedSessions")
-        .mockResolvedValue(undefined);
-
+  describe("worker-owned delivery compatibility", () => {
+    it("does not create a ProgressService timer", () => {
+      progressService.initialize();
       jest.advanceTimersByTime(10 * 60 * 1000);
-      expect(syncUnsyncedSpy).not.toHaveBeenCalled();
-
-      syncUnsyncedSpy.mockRestore();
+      expect(mockRequestDrain).not.toHaveBeenCalled();
     });
 
-    it("initialize() is idempotent — double init yields a single interval", async () => {
-      const syncUnsyncedSpy = jest
-        .spyOn(progressService, "syncUnsyncedSessions")
-        .mockResolvedValue(undefined);
+    it("routes compatibility and manual sync calls to the worker", async () => {
+      await progressService.syncSessionToServer(USER_ID, ITEM_ID, "session-1");
+      await progressService.forceSyncSessions();
 
-      progressService.initialize();
-      progressService.initialize(); // second call must be a no-op
-
-      jest.advanceTimersByTime(120_000);
-      expect(syncUnsyncedSpy).toHaveBeenCalledTimes(1);
-
-      syncUnsyncedSpy.mockRestore();
+      expect(mockRequestDrain).toHaveBeenNthCalledWith(1, "progress");
+      expect(mockRequestDrain).toHaveBeenNthCalledWith(2, "manual");
     });
 
-    it("shutdown() stops periodic sync and is idempotent", async () => {
-      const syncUnsyncedSpy = jest
-        .spyOn(progressService, "syncUnsyncedSessions")
-        .mockResolvedValue(undefined);
+    it("requests pause delivery only after the atomic tick commits", async () => {
+      let resolveTick!: () => void;
+      mockApplyLocalPlaybackTick.mockImplementation(
+        () => new Promise<void>((resolve) => (resolveTick = resolve))
+      );
+      mockGetActiveSession.mockResolvedValue(makeSession({}));
 
-      progressService.initialize();
-      jest.advanceTimersByTime(120_000);
-      expect(syncUnsyncedSpy).toHaveBeenCalledTimes(1);
+      const update = progressService.updateProgress(USER_ID, ITEM_ID, 301, 1, 1, undefined, false);
+      await Promise.resolve();
+      expect(mockRequestDrain).not.toHaveBeenCalled();
 
-      progressService.shutdown();
-      progressService.shutdown(); // second call must not throw
-      jest.advanceTimersByTime(240_000);
-      expect(syncUnsyncedSpy).toHaveBeenCalledTimes(1);
-
-      syncUnsyncedSpy.mockRestore();
+      resolveTick();
+      await update;
+      expect(mockRequestDrain.mock.calls).toEqual([["progress"], ["pause"]]);
     });
 
-    it("initialize() after shutdown() restarts periodic sync", async () => {
-      const syncUnsyncedSpy = jest
-        .spyOn(progressService, "syncUnsyncedSessions")
-        .mockResolvedValue(undefined);
+    it("reconciles a forced server position without dirtying the outbox", async () => {
+      mockFetchMediaProgress.mockResolvedValue({
+        id: "progress-1",
+        libraryItemId: ITEM_ID,
+        currentTime: 450,
+      } as Awaited<ReturnType<typeof fetchMediaProgress>>);
+      mockGetActiveSession.mockResolvedValue(makeSession({}));
 
-      progressService.initialize();
-      progressService.shutdown();
-      progressService.initialize();
-      jest.advanceTimersByTime(120_000);
-      expect(syncUnsyncedSpy).toHaveBeenCalledTimes(1);
+      await progressService.forceResyncPosition(USER_ID, ITEM_ID);
 
-      syncUnsyncedSpy.mockRestore();
+      expect(mockReconcileSessionPosition).toHaveBeenCalledWith("session-1", 450);
+      expect(mockApplyLocalPlaybackTick).not.toHaveBeenCalled();
+      expect(mockRequestDrain).not.toHaveBeenCalled();
     });
   });
 });

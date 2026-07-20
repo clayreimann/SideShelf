@@ -24,15 +24,12 @@ import type { LocalListeningSessionRow } from "@/db/schema/localData";
 // --- DB helper mocks ---
 
 jest.mock("@/db/helpers/localListeningSessions", () => ({
+  applyLocalPlaybackTick: jest.fn(),
   getAllActiveSessionsForUser: jest.fn(),
   endStaleListeningSession: jest.fn(),
   endListeningSession: jest.fn(),
   getActiveSession: jest.fn(),
-  getListeningSession: jest.fn(),
-  getUnsyncedSessions: jest.fn(),
-  markSessionAsSynced: jest.fn(),
-  recordSyncFailure: jest.fn(),
-  resetSessionListeningTime: jest.fn(),
+  reconcileSessionPositionFromServer: jest.fn(),
   startListeningSession: jest.fn(),
   updateServerSessionId: jest.fn(),
   updateSessionListeningTime: jest.fn(),
@@ -65,11 +62,12 @@ jest.mock("@/lib/secureStore", () => ({
 }));
 
 jest.mock("@/lib/api/endpoints", () => ({
-  closeSession: jest.fn(),
-  createLocalSession: jest.fn(),
   fetchMe: jest.fn(),
   fetchMediaProgress: jest.fn(),
-  syncSession: jest.fn(),
+}));
+
+jest.mock("@/services/ProgressSyncWorker", () => ({
+  progressSyncWorker: { requestDrain: jest.fn() },
 }));
 
 jest.mock("@/services/coordinator/eventBus", () => ({
@@ -90,6 +88,7 @@ import { getLibraryItemById } from "@/db/helpers/libraryItems";
 import { getUserByUsername } from "@/db/helpers/users";
 import { getStoredUsername } from "@/lib/secureStore";
 import { progressService } from "@/services/ProgressService";
+import { progressSyncWorker } from "@/services/ProgressSyncWorker";
 
 // --- Typed mock helpers ---
 
@@ -102,6 +101,9 @@ const mockEndStaleSession = endStaleListeningSession as jest.MockedFunction<
 const mockGetLibraryItemById = getLibraryItemById as jest.MockedFunction<typeof getLibraryItemById>;
 const mockGetUserByUsername = getUserByUsername as jest.MockedFunction<typeof getUserByUsername>;
 const mockGetStoredUsername = getStoredUsername as jest.MockedFunction<typeof getStoredUsername>;
+const mockRequestDrain = progressSyncWorker.requestDrain as jest.MockedFunction<
+  typeof progressSyncWorker.requestDrain
+>;
 
 // --- Fixtures ---
 
@@ -139,9 +141,7 @@ function makeSession(overrides: Partial<LocalListeningSessionRow>): LocalListeni
 
 // --- Setup ---
 
-describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
-  let syncSpy: jest.SpiedFunction<typeof progressService.syncSessionToServer>;
-
+describe("ProgressService.rehydrateActiveSession — local-only zombie cleanup", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(NOW);
@@ -155,14 +155,7 @@ describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
       token: "tok",
       createdAt: NOW,
       updatedAt: NOW,
-    } as ReturnType<typeof getUserByUsername> extends Promise<infer T> ? T : never);
-
-    // Spy on syncSessionToServer so tests don't hit real network code
-    syncSpy = jest
-      .spyOn(progressService, "syncSessionToServer")
-      .mockResolvedValue(undefined) as jest.SpiedFunction<
-      typeof progressService.syncSessionToServer
-    >;
+    } as unknown as ReturnType<typeof getUserByUsername> extends Promise<infer T> ? T : never);
 
     mockEndStaleSession.mockResolvedValue(undefined);
   });
@@ -175,7 +168,7 @@ describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
   // ---------------------------------------------------------------------------
   // 1. Zombie cleanup — winner is stale, loser is brandNew (primary regression)
   // ---------------------------------------------------------------------------
-  it("closes zombie loser silently and syncs+closes stale winner", async () => {
+  it("closes zombie loser and stale winner locally, then requests end drains", async () => {
     const winner = makeSession({
       id: "winner-session",
       currentTime: 300,
@@ -197,13 +190,11 @@ describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
 
     await progressService.rehydrateActiveSession();
 
-    // Zombie must be closed without sync
-    expect(syncSpy).not.toHaveBeenCalledWith("user-1", "item-1", "zombie-session");
     expect(mockEndStaleSession).toHaveBeenCalledWith("zombie-session", 0);
-
-    // Winner is stale → synced then closed
-    expect(syncSpy).toHaveBeenCalledWith("user-1", "item-1", "winner-session");
     expect(mockEndStaleSession).toHaveBeenCalledWith("winner-session", 300);
+    expect(mockRequestDrain).toHaveBeenCalledTimes(2);
+    expect(mockRequestDrain).toHaveBeenNthCalledWith(1, "end");
+    expect(mockRequestDrain).toHaveBeenNthCalledWith(2, "end");
   });
 
   // ---------------------------------------------------------------------------
@@ -231,7 +222,6 @@ describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
     await progressService.rehydrateActiveSession();
 
     // Zombie closed without sync
-    expect(syncSpy).not.toHaveBeenCalledWith("user-1", "item-1", "zombie-session");
     expect(mockEndStaleSession).toHaveBeenCalledWith("zombie-session", 0);
 
     // Winner NOT closed — it's fresh and should stay active
@@ -241,7 +231,7 @@ describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
   // ---------------------------------------------------------------------------
   // 3. Real-progress loser — should be synced before closing
   // ---------------------------------------------------------------------------
-  it("syncs loser with real progress before closing", async () => {
+  it("closes a loser with real progress locally before requesting delivery", async () => {
     const winner = makeSession({
       id: "winner-session",
       currentTime: 500,
@@ -262,9 +252,8 @@ describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
 
     await progressService.rehydrateActiveSession();
 
-    // Loser with real progress must be synced first
-    expect(syncSpy).toHaveBeenCalledWith("user-1", "item-1", "loser-with-progress");
     expect(mockEndStaleSession).toHaveBeenCalledWith("loser-with-progress", 200);
+    expect(mockRequestDrain).toHaveBeenCalledWith("end");
   });
 
   // ---------------------------------------------------------------------------
@@ -287,7 +276,7 @@ describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
 
     // No loser cleanup
     expect(mockEndStaleSession).not.toHaveBeenCalled();
-    expect(syncSpy).not.toHaveBeenCalled();
+    expect(mockRequestDrain).not.toHaveBeenCalled();
   });
 
   // ---------------------------------------------------------------------------
@@ -321,12 +310,10 @@ describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
 
     await progressService.rehydrateActiveSession();
 
-    // Zombie: no sync, just end
-    expect(syncSpy).not.toHaveBeenCalledWith("user-1", "item-1", "zombie-session");
+    // Zombie: local end
     expect(mockEndStaleSession).toHaveBeenCalledWith("zombie-session", 0);
 
-    // Real-progress loser: synced then ended
-    expect(syncSpy).toHaveBeenCalledWith("user-1", "item-1", "real-progress-loser");
+    // Real-progress loser: local end
     expect(mockEndStaleSession).toHaveBeenCalledWith("real-progress-loser", 150);
 
     // Winner: fresh, not ended
@@ -334,5 +321,6 @@ describe("ProgressService.rehydrateActiveSession — zombie cleanup", () => {
 
     // Total endStaleSession calls: exactly the 2 losers
     expect(mockEndStaleSession).toHaveBeenCalledTimes(2);
+    expect(mockRequestDrain).toHaveBeenCalledTimes(2);
   });
 });
