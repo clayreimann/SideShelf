@@ -8,14 +8,16 @@ import { db } from "@/db/client";
 import {
   localListeningSessions,
   localProgressSnapshots,
+  progressSyncOutbox,
   type LocalListeningSessionRow,
   type LocalProgressSnapshotRow,
   type NewLocalListeningSessionRow,
   type NewLocalProgressSnapshotRow,
 } from "@/db/schema/localData";
-import { formatTime } from "@/lib/helpers/formatters";
-import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
+
+type ProgressSyncTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Start a new listening session
@@ -54,9 +56,29 @@ export async function startListeningSession(
     updatedAt: now,
   };
 
-  await db.insert(localListeningSessions).values(newSession);
+  db.transaction((tx) => {
+    const sessionResult = tx.insert(localListeningSessions).values(newSession).run();
+    if (sessionResult.changes !== 1) {
+      throw new Error(`Session ${sessionId} could not be created`);
+    }
 
-  console.log(`[LocalListeningSessions] Started session ${sessionId} for ${libraryItemId}`);
+    const outboxResult = tx
+      .insert(progressSyncOutbox)
+      .values({
+        sessionId,
+        userId,
+        desiredRevision: 1,
+        acknowledgedRevision: 0,
+        attemptCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    if (outboxResult.changes !== 1) {
+      throw new Error(`Outbox ${sessionId} could not be created`);
+    }
+  });
+
   return sessionId;
 }
 
@@ -80,16 +102,15 @@ export async function getListeningSession(
 export async function endListeningSession(sessionId: string, endTime: number): Promise<void> {
   const now = new Date();
 
-  await db
-    .update(localListeningSessions)
-    .set({
-      sessionEnd: now,
-      endTime,
-      updatedAt: now,
-    })
-    .where(eq(localListeningSessions.id, sessionId));
-
-  console.log(`[LocalListeningSessions] Ended session ${sessionId} at ${endTime}s`);
+  db.transaction((tx) => {
+    const sessionResult = tx
+      .update(localListeningSessions)
+      .set({ sessionEnd: now, endTime, updatedAt: now })
+      .where(eq(localListeningSessions.id, sessionId))
+      .run();
+    ensureSessionUpdated(sessionId, sessionResult.changes);
+    markOutboxDirty(tx, sessionId, now);
+  });
 }
 
 /**
@@ -98,26 +119,54 @@ export async function endListeningSession(sessionId: string, endTime: number): P
  * actually ended at its last update time, not at the current time
  */
 export async function endStaleListeningSession(sessionId: string, endTime: number): Promise<void> {
-  // Get the session to retrieve its last updated timestamp
-  const session = await getListeningSession(sessionId);
-  if (!session) {
-    throw new Error(`Session ${sessionId} not found`);
-  }
+  db.transaction((tx) => {
+    const session = tx
+      .select()
+      .from(localListeningSessions)
+      .where(eq(localListeningSessions.id, sessionId))
+      .get();
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
 
-  // Use the session's updatedAt as the sessionEnd timestamp
-  // This represents when the session was actually last active
-  await db
-    .update(localListeningSessions)
-    .set({
-      sessionEnd: session.updatedAt,
-      endTime,
-      updatedAt: session.updatedAt, // Keep the original updatedAt
-    })
-    .where(eq(localListeningSessions.id, sessionId));
+    const sessionResult = tx
+      .update(localListeningSessions)
+      .set({ sessionEnd: session.updatedAt, endTime, updatedAt: session.updatedAt })
+      .where(eq(localListeningSessions.id, sessionId))
+      .run();
+    ensureSessionUpdated(sessionId, sessionResult.changes);
+    markOutboxDirty(tx, sessionId, session.updatedAt);
+  });
+}
 
-  console.log(
-    `[LocalListeningSessions] Ended stale session ${sessionId} at ${formatTime(endTime)}s (session ended at ${session.updatedAt.toISOString()})`
-  );
+export type LocalPlaybackTick = {
+  currentTime: number;
+  listeningTimeDelta: number;
+  playbackRate: number;
+  volume: number;
+};
+
+/** Atomically persist a playback tick and queue its resulting progress snapshot. */
+export async function applyLocalPlaybackTick(
+  sessionId: string,
+  tick: LocalPlaybackTick
+): Promise<void> {
+  const now = new Date();
+  db.transaction((tx) => {
+    const sessionResult = tx
+      .update(localListeningSessions)
+      .set({
+        currentTime: tick.currentTime,
+        timeListening: sql`${localListeningSessions.timeListening} + ${tick.listeningTimeDelta}`,
+        playbackRate: tick.playbackRate,
+        volume: tick.volume,
+        updatedAt: now,
+      })
+      .where(eq(localListeningSessions.id, sessionId))
+      .run();
+    ensureSessionUpdated(sessionId, sessionResult.changes);
+    markOutboxDirty(tx, sessionId, now);
+  });
 }
 
 /**
@@ -144,10 +193,15 @@ export async function updateSessionProgress(
     updateData.volume = volume;
   }
 
-  await db
-    .update(localListeningSessions)
-    .set(updateData)
-    .where(eq(localListeningSessions.id, sessionId));
+  db.transaction((tx) => {
+    const sessionResult = tx
+      .update(localListeningSessions)
+      .set(updateData)
+      .where(eq(localListeningSessions.id, sessionId))
+      .run();
+    ensureSessionUpdated(sessionId, sessionResult.changes);
+    markOutboxDirty(tx, sessionId, now);
+  });
 }
 
 /**
@@ -157,34 +211,70 @@ export async function updateSessionListeningTime(
   sessionId: string,
   additionalTime: number
 ): Promise<void> {
-  // Get current session to add to existing timeListening
-  const session = await getListeningSession(sessionId);
-  if (!session) {
-    throw new Error(`Session ${sessionId} not found`);
-  }
-
-  const newTimeListening = (session.timeListening || 0) + additionalTime;
-
-  await db
-    .update(localListeningSessions)
-    .set({
-      timeListening: newTimeListening,
-      updatedAt: new Date(),
-    })
-    .where(eq(localListeningSessions.id, sessionId));
+  const now = new Date();
+  db.transaction((tx) => {
+    const sessionResult = tx
+      .update(localListeningSessions)
+      .set({
+        timeListening: sql`${localListeningSessions.timeListening} + ${additionalTime}`,
+        updatedAt: now,
+      })
+      .where(eq(localListeningSessions.id, sessionId))
+      .run();
+    ensureSessionUpdated(sessionId, sessionResult.changes);
+    markOutboxDirty(tx, sessionId, now);
+  });
 }
 
 /**
  * Reset session listening time (used after successful sync)
  */
 export async function resetSessionListeningTime(sessionId: string): Promise<void> {
-  await db
+  const result = await db
     .update(localListeningSessions)
     .set({
       timeListening: 0,
       updatedAt: new Date(),
     })
     .where(eq(localListeningSessions.id, sessionId));
+  ensureSessionUpdated(sessionId, result.changes);
+}
+
+/** Update local resume position from server reconciliation without queueing an upload. */
+export async function reconcileSessionPositionFromServer(
+  sessionId: string,
+  currentTime: number
+): Promise<void> {
+  const now = new Date();
+  const result = await db
+    .update(localListeningSessions)
+    .set({ currentTime, updatedAt: now })
+    .where(eq(localListeningSessions.id, sessionId));
+  ensureSessionUpdated(sessionId, result.changes);
+}
+
+function ensureSessionUpdated(sessionId: string, changes: number): void {
+  if (changes !== 1) {
+    throw new Error(`Session ${sessionId} not found`);
+  }
+}
+
+function markOutboxDirty(tx: ProgressSyncTransaction, sessionId: string, updatedAt: Date): void {
+  const outboxResult = tx
+    .update(progressSyncOutbox)
+    .set({
+      desiredRevision: sql`${progressSyncOutbox.desiredRevision} + 1`,
+      attemptCount: 0,
+      nextAttemptAt: null,
+      lastError: null,
+      terminalReason: null,
+      updatedAt,
+    })
+    .where(eq(progressSyncOutbox.sessionId, sessionId))
+    .run();
+  if (outboxResult.changes !== 1) {
+    throw new Error(`Outbox ${sessionId} not found`);
+  }
 }
 
 /**
@@ -276,17 +366,14 @@ export async function updateServerSessionId(
 ): Promise<void> {
   const now = new Date();
 
-  await db
+  const result = await db
     .update(localListeningSessions)
     .set({
       serverSessionId,
       updatedAt: now,
     })
     .where(eq(localListeningSessions.id, sessionId));
-
-  console.log(
-    `[LocalListeningSessions] Updated server session ID for ${sessionId}: ${serverSessionId}`
-  );
+  ensureSessionUpdated(sessionId, result.changes);
 }
 
 /**
