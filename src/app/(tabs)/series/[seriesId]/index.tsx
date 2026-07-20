@@ -4,12 +4,13 @@ import { MediaProgressRow } from "@/db/helpers/mediaProgress";
 import { SeriesBookRow } from "@/db/helpers/series";
 import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
+import { getSeriesItemRoute } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAppStore, useDownloads, useNetwork, useSeries } from "@/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from "react-native";
 
@@ -17,6 +18,7 @@ export default function SeriesDetailScreen() {
   const { styles, colors } = useThemedStyles();
   const { series: seriesList, ready, isInitializing, refetchSeries } = useSeries();
   const router = useRouter();
+  const pathname = usePathname();
   const params = useLocalSearchParams<{ seriesId?: string | string[] }>();
   const seriesId = Array.isArray(params.seriesId) ? params.seriesId[0] : params.seriesId;
   const { userId, isAuthenticated } = useAuth();
@@ -146,7 +148,9 @@ export default function SeriesDetailScreen() {
 
       return (
         <TouchableOpacity
-          onPress={() => seriesId && router.push(`/series/${seriesId}/item/${item.libraryItemId}`)}
+          onPress={() =>
+            seriesId && router.push(getSeriesItemRoute(pathname, seriesId, item.libraryItemId))
+          }
           style={{
             flexDirection: "row",
             paddingVertical: 12,
@@ -228,7 +232,15 @@ export default function SeriesDetailScreen() {
         </TouchableOpacity>
       );
     },
-    [colors.coverBackground, router, seriesId, styles.text.color, progressMap, isItemDownloaded]
+    [
+      colors.coverBackground,
+      router,
+      seriesId,
+      styles.text.color,
+      progressMap,
+      isItemDownloaded,
+      pathname,
+    ]
   );
 
   if (!seriesId) {

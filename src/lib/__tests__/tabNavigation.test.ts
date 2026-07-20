@@ -1,3 +1,6 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 import {
   getAuthorItemRoute,
   getHomeItemRoute,
@@ -49,5 +52,13 @@ describe("tabNavigation", () => {
     expect(getSeriesItemRoute("/more/authors/author-1", "series-1", "book-1")).toBe(
       "/series/series-1/item/book-1"
     );
+  });
+
+  it.each([
+    ["src/app/(tabs)/series/[seriesId]/index.tsx", "getSeriesItemRoute"],
+    ["src/app/(tabs)/authors/[authorId]/index.tsx", "getAuthorItemRoute"],
+  ])("wires %s through %s", (file, builderName) => {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+    expect(source).toContain(builderName);
   });
 });
