@@ -5,7 +5,7 @@ import {
   type LocalListeningSessionRow,
   type ProgressSyncOutboxRow,
 } from "@/db/schema/localData";
-import { and, asc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 
 export type ProgressSyncTerminalReason =
   | "media_missing"
@@ -18,6 +18,39 @@ export type PendingProgressSync = {
   session: LocalListeningSessionRow;
   sentRevision: number;
 };
+
+export type ProgressSyncDiagnostic = Pick<
+  ProgressSyncOutboxRow,
+  | "sessionId"
+  | "desiredRevision"
+  | "acknowledgedRevision"
+  | "attemptCount"
+  | "lastAttemptAt"
+  | "nextAttemptAt"
+  | "lastSuccessAt"
+  | "lastError"
+  | "terminalReason"
+  | "updatedAt"
+>;
+
+/** Read delivery metadata for support exports without including progress payload or account IDs. */
+export async function getProgressSyncDiagnostics(): Promise<ProgressSyncDiagnostic[]> {
+  return db
+    .select({
+      sessionId: progressSyncOutbox.sessionId,
+      desiredRevision: progressSyncOutbox.desiredRevision,
+      acknowledgedRevision: progressSyncOutbox.acknowledgedRevision,
+      attemptCount: progressSyncOutbox.attemptCount,
+      lastAttemptAt: progressSyncOutbox.lastAttemptAt,
+      nextAttemptAt: progressSyncOutbox.nextAttemptAt,
+      lastSuccessAt: progressSyncOutbox.lastSuccessAt,
+      lastError: progressSyncOutbox.lastError,
+      terminalReason: progressSyncOutbox.terminalReason,
+      updatedAt: progressSyncOutbox.updatedAt,
+    })
+    .from(progressSyncOutbox)
+    .orderBy(desc(progressSyncOutbox.updatedAt));
+}
 
 export async function getProgressSyncOutbox(
   sessionId: string
