@@ -432,6 +432,7 @@ export async function createLocalSession(
     throw new ApiResponseError({
       message: "Failed to create local session: response ID did not match submitted session",
       status: response.status,
+      retryAfter: parseRetryAfter(response.headers?.get("Retry-After") ?? null),
       responseBody: redactBody(responseText),
     });
   }

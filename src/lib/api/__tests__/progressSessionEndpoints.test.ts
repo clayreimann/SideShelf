@@ -136,12 +136,15 @@ describe("progress session endpoints", () => {
 
   it("rejects a successful response that identifies another session", async () => {
     (apiFetch as jest.Mock).mockResolvedValue(
-      makeResponse(200, JSON.stringify({ id: "a627e2e0-a6b1-42f5-bc17-21a98f44d373" }))
+      makeResponse(200, JSON.stringify({ id: "a627e2e0-a6b1-42f5-bc17-21a98f44d373" }), {
+        "Retry-After": "60",
+      })
     );
 
     await expect(createLocalSession(sessionParams)).rejects.toMatchObject({
       name: "ApiResponseError",
       status: 200,
+      retryAfter: 60_000,
     });
   });
 
