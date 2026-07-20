@@ -21,12 +21,20 @@ type AuthStateListener = () => void;
 export type UnauthorizedResult =
   | { status: "refreshed" }
   | { status: "rejected" }
+  | { status: "stale"; error: Error }
   | { status: "transient"; error: Error };
 
 export class TransientTokenRefreshError extends Error {
   constructor(message = "Token refresh temporarily unavailable") {
     super(message);
     this.name = "TransientTokenRefreshError";
+  }
+}
+
+export class StaleTokenRefreshError extends Error {
+  constructor() {
+    super("Request cancelled after authentication changed");
+    this.name = "StaleTokenRefreshError";
   }
 }
 
@@ -37,6 +45,7 @@ class ApiClientService {
   private username: string | null = null;
   private refreshPromise: Promise<UnauthorizedResult> | null = null;
   private authGeneration = 0;
+  private credentialPersistenceTail: Promise<void> = Promise.resolve();
   private listeners: Set<AuthStateListener> = new Set();
   private timeout: number = 30000; // default 30 seconds
 
@@ -124,7 +133,15 @@ class ApiClientService {
     const normalized = url.trim().replace(/\/$/, "");
     this.baseUrl = normalized;
     this.authGeneration += 1;
-    await saveItem(SECURE_KEYS.serverUrl, normalized);
+    const currentAccessToken = this.accessToken;
+    const currentRefreshToken = this.refreshToken;
+    await this.enqueueCredentialPersistence(() =>
+      Promise.all([
+        saveItem(SECURE_KEYS.serverUrl, normalized),
+        saveItem(SECURE_KEYS.accessToken, currentAccessToken),
+        saveItem(SECURE_KEYS.refreshToken, currentRefreshToken),
+      ]).then(() => undefined)
+    );
     this.notifyListeners();
   }
 
@@ -151,10 +168,12 @@ class ApiClientService {
       this.username = username;
     }
 
-    await Promise.all([
-      saveItem(SECURE_KEYS.accessToken, accessToken),
-      saveItem(SECURE_KEYS.refreshToken, refreshToken),
-    ]);
+    await this.enqueueCredentialPersistence(() =>
+      Promise.all([
+        saveItem(SECURE_KEYS.accessToken, accessToken),
+        saveItem(SECURE_KEYS.refreshToken, refreshToken),
+      ]).then(() => undefined)
+    );
 
     this.notifyListeners();
   }
@@ -172,10 +191,12 @@ class ApiClientService {
     // persistence so a secure-store failure cannot leave subscribers authenticated.
     this.notifyListeners();
 
-    await Promise.all([
-      saveItem(SECURE_KEYS.accessToken, null),
-      saveItem(SECURE_KEYS.refreshToken, null),
-    ]);
+    await this.enqueueCredentialPersistence(() =>
+      Promise.all([
+        saveItem(SECURE_KEYS.accessToken, null),
+        saveItem(SECURE_KEYS.refreshToken, null),
+      ]).then(() => undefined)
+    );
   }
 
   /**
@@ -220,11 +241,11 @@ class ApiClientService {
    *   survives for a later retry.
    */
   private async performTokenRefresh(): Promise<UnauthorizedResult> {
+    const refreshGeneration = this.authGeneration;
     if (!this.baseUrl || !this.refreshToken) {
       log.error("Missing base URL or refresh token");
-      return this.clearRejectedTokens("missing refresh credentials");
+      return this.clearRejectedTokens("missing refresh credentials", refreshGeneration);
     }
-    const refreshGeneration = this.authGeneration;
     const refreshBaseUrl = this.baseUrl;
     const refreshCredential = this.refreshToken;
 
@@ -243,6 +264,10 @@ class ApiClientService {
         signal: controller.signal,
       });
     } catch (error) {
+      if (this.authGeneration !== refreshGeneration) {
+        log.info("Discarding token refresh failure for stale auth generation");
+        return this.staleRefreshResult();
+      }
       // Network-level failure (offline, timeout/abort, DNS, etc.) — not a
       // rejection of the refresh token. Do not clear tokens.
       log.error("Token refresh network error (session preserved):", error as Error);
@@ -254,10 +279,14 @@ class ApiClientService {
       clearTimeout(timeoutId);
     }
 
+    if (this.authGeneration !== refreshGeneration) {
+      log.info("Discarding token refresh response for stale auth generation");
+      return this.staleRefreshResult();
+    }
     log.info(`Token refresh response: ${response.status}`);
     if (response.status === 401 || response.status === 403) {
       log.error(`Token refresh rejected by server with status ${response.status}`);
-      return this.clearRejectedTokens(`server rejection ${response.status}`);
+      return this.clearRejectedTokens(`server rejection ${response.status}`, refreshGeneration);
     }
     if (!response.ok) {
       log.error(`Token refresh failed with status ${response.status} (session preserved)`);
@@ -274,25 +303,37 @@ class ApiClientService {
       tokens = extractTokensFromAuthResponse(await response.json());
     } catch (error) {
       log.error("Token refresh response was invalid", error as Error);
-      return this.clearRejectedTokens("invalid refresh response");
+      return this.clearRejectedTokens("invalid refresh response", refreshGeneration);
     }
     if (!tokens.accessToken || !tokens.refreshToken) {
       log.error("Token refresh response missing tokens");
-      return this.clearRejectedTokens("invalid refresh response");
+      return this.clearRejectedTokens("invalid refresh response", refreshGeneration);
     }
     if (this.authGeneration !== refreshGeneration) {
       log.info("Discarding token refresh response for stale auth generation");
-      return { status: "rejected" };
+      return this.staleRefreshResult();
     }
 
+    let staleDuringPersistence = false;
     try {
-      await Promise.all([
-        saveItem(SECURE_KEYS.accessToken, tokens.accessToken),
-        saveItem(SECURE_KEYS.refreshToken, tokens.refreshToken),
-      ]);
+      await this.enqueueCredentialPersistence(async () => {
+        if (this.authGeneration !== refreshGeneration) {
+          staleDuringPersistence = true;
+          return;
+        }
+        await Promise.all([
+          saveItem(SECURE_KEYS.accessToken, tokens.accessToken),
+          saveItem(SECURE_KEYS.refreshToken, tokens.refreshToken),
+        ]);
+        staleDuringPersistence = this.authGeneration !== refreshGeneration;
+      });
     } catch (error) {
       log.error("Failed to persist refreshed tokens", error as Error);
       return { status: "transient", error: new TransientTokenRefreshError() };
+    }
+    if (staleDuringPersistence || this.authGeneration !== refreshGeneration) {
+      log.info("Discarding persisted token refresh for stale auth generation");
+      return this.staleRefreshResult();
     }
     // Access-token rotation continues the same authenticated identity.
     this.accessToken = tokens.accessToken;
@@ -302,13 +343,31 @@ class ApiClientService {
     return { status: "refreshed" };
   }
 
-  private async clearRejectedTokens(reason: string): Promise<UnauthorizedResult> {
+  private async clearRejectedTokens(
+    reason: string,
+    expectedGeneration: number
+  ): Promise<UnauthorizedResult> {
+    if (this.authGeneration !== expectedGeneration) {
+      log.info(`Discarding ${reason} for stale auth generation`);
+      return this.staleRefreshResult();
+    }
     try {
       await this.clearTokens();
     } catch (error) {
       log.error(`Failed to persist cleared tokens after ${reason}`, error as Error);
     }
     return { status: "rejected" };
+  }
+
+  private staleRefreshResult(): UnauthorizedResult {
+    return { status: "stale", error: new StaleTokenRefreshError() };
+  }
+
+  /** Serialize secure-store writes so later credential mutations always win on disk. */
+  private enqueueCredentialPersistence(operation: () => Promise<void>): Promise<void> {
+    const result = this.credentialPersistenceTail.then(operation);
+    this.credentialPersistenceTail = result.catch(() => undefined);
+    return result;
   }
 
   /**

@@ -24,9 +24,15 @@ jest.mock("@react-native-community/netinfo", () => ({
   default: { fetch: (...args: unknown[]) => mockFetchNetInfo(...args) },
 }));
 
-jest.mock("@/services/ApiClientService", () => ({
-  apiClientService: { clearTokens: (...args: unknown[]) => mockClearTokens(...args) },
-}));
+jest.mock("@/services/ApiClientService", () => {
+  const actual = jest.requireActual<typeof import("@/services/ApiClientService")>(
+    "@/services/ApiClientService"
+  );
+  return {
+    ...actual,
+    apiClientService: { clearTokens: (...args: unknown[]) => mockClearTokens(...args) },
+  };
+});
 
 import { createTestDb, type TestDatabase } from "@/__tests__/utils/testDb";
 import {

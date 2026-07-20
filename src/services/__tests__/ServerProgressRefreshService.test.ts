@@ -19,7 +19,7 @@ jest.mock("@/db/helpers/localListeningSessions", () => ({
 }));
 
 jest.mock("@/services/ApiClientService", () => ({
-  apiClientService: { getAuthGeneration: jest.fn() },
+  apiClientService: { getAuthGeneration: jest.fn(), isAuthenticated: jest.fn() },
 }));
 
 import {
@@ -51,6 +51,9 @@ const mockReconcile = reconcileSessionPositionFromServer as jest.MockedFunction<
 const mockGetAuthGeneration = apiClientService.getAuthGeneration as jest.MockedFunction<
   typeof apiClientService.getAuthGeneration
 >;
+const mockIsAuthenticated = apiClientService.isAuthenticated as jest.MockedFunction<
+  typeof apiClientService.isAuthenticated
+>;
 
 describe("ServerProgressRefreshService", () => {
   beforeEach(() => {
@@ -58,6 +61,7 @@ describe("ServerProgressRefreshService", () => {
     mockUpsert.mockResolvedValue(undefined);
     mockReconcile.mockResolvedValue(undefined);
     mockGetAuthGeneration.mockReturnValue(1);
+    mockIsAuthenticated.mockReturnValue(true);
   });
 
   it("refreshes all server progress into the local database", async () => {
@@ -72,6 +76,18 @@ describe("ServerProgressRefreshService", () => {
 
     expect(mockMarshalAuth).toHaveBeenCalledWith(response);
     expect(mockUpsert).toHaveBeenCalledWith(marshaled);
+  });
+
+  it("does not fetch or mutate when retained identity is not authenticated", async () => {
+    mockIsAuthenticated.mockReturnValue(false);
+
+    await serverProgressRefreshService.refreshAll();
+    await serverProgressRefreshService.forceResyncPosition("user-1", "item-1");
+
+    expect(mockFetchMe).not.toHaveBeenCalled();
+    expect(mockFetchMediaProgress).not.toHaveBeenCalled();
+    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(mockReconcile).not.toHaveBeenCalled();
   });
 
   it("does not write a fetched response after its authenticated identity becomes stale", async () => {

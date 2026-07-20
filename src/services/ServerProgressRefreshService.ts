@@ -17,6 +17,10 @@ const log = logger.forTag("ServerProgressRefreshService");
 /** Owns authenticated server-to-local progress reconciliation. */
 export class ServerProgressRefreshService {
   async refreshAll(canCommit: () => boolean = () => true): Promise<void> {
+    if (!apiClientService.isAuthenticated()) {
+      log.info("[refreshAll] Skipping refresh without active authentication");
+      return;
+    }
     const authGeneration = apiClientService.getAuthGeneration();
     log.info("[refreshAll] Fetching latest progress from server");
     const response = await fetchMe();
@@ -40,6 +44,10 @@ export class ServerProgressRefreshService {
 
   /** Reconcile one server position without marking the outbound outbox dirty. */
   async forceResyncPosition(userId: string, libraryItemId: string): Promise<void> {
+    if (!apiClientService.isAuthenticated()) {
+      log.info("[forceResyncPosition] Skipping refresh without active authentication");
+      return;
+    }
     const authGeneration = apiClientService.getAuthGeneration();
     log.info(
       `[forceResyncPosition] Fetching server position userId=${userId} libraryItemId=${libraryItemId}`

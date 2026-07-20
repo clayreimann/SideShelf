@@ -63,11 +63,18 @@ jest.mock("@react-native-community/netinfo", () => ({
   default: { fetch: (...args: unknown[]) => mockFetchNetInfo(...args) },
 }));
 
-jest.mock("@/services/ApiClientService", () => ({
-  apiClientService: { clearTokens: (...args: unknown[]) => mockClearTokens(...args) },
-}));
+jest.mock("@/services/ApiClientService", () => {
+  const actual = jest.requireActual<typeof import("@/services/ApiClientService")>(
+    "@/services/ApiClientService"
+  );
+  return {
+    ...actual,
+    apiClientService: { clearTokens: (...args: unknown[]) => mockClearTokens(...args) },
+  };
+});
 
 import { ApiResponseError } from "@/lib/api/endpoints";
+import { StaleTokenRefreshError } from "@/services/ApiClientService";
 import {
   calculateProgressRetryDelay,
   ProgressSyncWorker,
@@ -636,6 +643,17 @@ describe("ProgressSyncWorker delivery", () => {
       error instanceof Error ? error.message : String(error)
     );
     expect(mockAcknowledgeProgressSyncRevision).not.toHaveBeenCalled();
+  });
+
+  it("stops obsolete work without recording an attempt when auth changes during refresh", async () => {
+    pendingRows.push(makePending({ outbox: { attemptCount: 0 } }));
+    mockCreateLocalSession.mockRejectedValueOnce(new StaleTokenRefreshError());
+
+    await startAndDrain();
+
+    expect(mockRecordProgressSyncFailure).not.toHaveBeenCalled();
+    expect(mockAcknowledgeProgressSyncRevision).not.toHaveBeenCalled();
+    expect(mockClearTokens).not.toHaveBeenCalled();
   });
 
   it("terminally resolves a remote 404 as media_missing", async () => {

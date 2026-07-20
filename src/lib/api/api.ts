@@ -90,6 +90,9 @@ async function apiFetchWithRetryGuard(
       if (refreshResult.status === "transient") {
         throw refreshResult.error;
       }
+      if (refreshResult.status === "stale") {
+        throw refreshResult.error;
+      }
     }
     if (!res.ok) {
       try {

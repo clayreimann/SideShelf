@@ -16,7 +16,7 @@ import {
   getDeviceInfo,
 } from "@/lib/api/endpoints";
 import { logger } from "@/lib/logger";
-import { apiClientService } from "@/services/ApiClientService";
+import { apiClientService, StaleTokenRefreshError } from "@/services/ApiClientService";
 import NetInfo from "@react-native-community/netinfo";
 
 const PERIODIC_DRAIN_INTERVAL_MS = 2 * 60 * 1000;
@@ -597,6 +597,10 @@ export class ProgressSyncWorker {
     context: DeliveryContext
   ): Promise<PendingDeliveryResult> {
     if (!this._canDeliverPending(pending, context)) {
+      return "stop";
+    }
+
+    if (error instanceof StaleTokenRefreshError) {
       return "stop";
     }
 

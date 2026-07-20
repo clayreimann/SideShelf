@@ -162,6 +162,14 @@ describe("apiFetch 401 handling", () => {
 
     await expect(apiFetch("/some/path")).rejects.toBe(refreshError);
   });
+
+  it("throws a stale refresh cancellation instead of returning a terminal 401", async () => {
+    const staleError = new Error("Request cancelled after authentication changed");
+    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(401));
+    mockHandleUnauthorized.mockResolvedValue({ status: "stale", error: staleError });
+
+    await expect(apiFetch("/some/path")).rejects.toBe(staleError);
+  });
 });
 
 /**
