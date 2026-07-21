@@ -4,6 +4,7 @@ import * as Application from "expo-application";
 import { Platform } from "react-native";
 import { trace } from "@/lib/trace";
 import { logger } from "@/lib/logger";
+import { getProgressSyncDiagnostics } from "@/db/helpers/progressSyncOutbox";
 
 const log = logger.forTag("traceDump");
 
@@ -16,6 +17,12 @@ export async function writeDumpToDisk(
   const file = new File(Paths.document, filename);
 
   const exported = trace.exportTrace();
+  const progressSyncDiagnostics = await getProgressSyncDiagnostics()
+    .then((rows) => ({ available: true, rows }))
+    .catch(() => {
+      log.warn("[writeDumpToDisk] Progress sync diagnostics unavailable");
+      return { available: false, rows: [] };
+    });
 
   // Flatten meta fields to the root of the payload for easier reading
   const payload = {
@@ -25,12 +32,17 @@ export async function writeDumpToDisk(
     platform: Platform.OS,
     dumpReason: reason,
     rejectionEvent: rejectionEvent ?? null,
+    progressSyncOutboxAvailable: progressSyncDiagnostics.available,
+    progressSyncOutbox: progressSyncDiagnostics.rows,
     records: exported.records,
   };
 
   await file.write(JSON.stringify(payload, null, 2));
   log.info(`[writeDumpToDisk] Wrote trace dump: ${filename}`);
-  pruneTraceDumps().catch((e) => log.warn("[writeDumpToDisk] prune failed", e));
+  pruneTraceDumps().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    log.warn(`[writeDumpToDisk] prune failed: ${message}`);
+  });
   return file.uri;
 }
 

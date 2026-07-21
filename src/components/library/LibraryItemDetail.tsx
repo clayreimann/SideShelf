@@ -20,7 +20,7 @@ import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { downloadService } from "@/services/DownloadService";
 import { playerService } from "@/services/PlayerService";
-import { progressService } from "@/services/ProgressService";
+import { serverProgressRefreshService } from "@/services/ServerProgressRefreshService";
 import {
   useDownloads,
   useLibraryItemDetails,
@@ -228,7 +228,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
       }
 
       // Refresh server progress to sync
-      await progressService.fetchServerProgress();
+      await serverProgressRefreshService.refreshAll();
     } catch (error) {
       log.error("[handleToggleFinished] Failed to toggle finished status", error as Error);
       Alert.alert(translate("common.error"), translate("libraryItem.alerts.finishedStatusFailed"));
@@ -372,7 +372,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
 
     try {
       // Force resync position from server
-      await progressService.forceResyncPosition(userId, item.id);
+      await serverProgressRefreshService.forceResyncPosition(userId, item.id);
 
       // Refresh item details to show updated progress
       await fetchItemDetails(item.id);
@@ -598,7 +598,7 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
                 // Fall back to persisted mediaProgress.currentTime so the correct
                 // chapter is highlighted immediately (display-only, no playback impact).
                 position || (progress?.currentTime ?? 0)
-              : progress?.currentTime ?? 0
+              : (progress?.currentTime ?? 0)
           }
           libraryItemId={itemId}
           isCurrentlyPlaying={currentTrack?.libraryItemId === itemId}

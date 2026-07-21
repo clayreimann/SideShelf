@@ -4,6 +4,21 @@
 
 import { describe, expect, it, jest, beforeEach } from "@jest/globals";
 
+type MockProgressSyncDiagnostic = {
+  sessionId: string;
+  desiredRevision: number;
+  acknowledgedRevision: number;
+  attemptCount: number;
+  lastAttemptAt: Date | null;
+  nextAttemptAt: Date | null;
+  lastSuccessAt: Date | null;
+  hasError: boolean;
+  terminalReason: string | null;
+  updatedAt: Date;
+};
+
+const mockGetProgressSyncDiagnostics = jest.fn<() => Promise<MockProgressSyncDiagnostic[]>>();
+
 // expo-file-system IS installed — mock its File API
 jest.mock("expo-file-system", () => {
   const { jest } = require("@jest/globals");
@@ -25,19 +40,40 @@ jest.mock("expo-application", () => ({
   nativeBuildVersion: "42",
 }));
 
+jest.mock("@/db/helpers/progressSyncOutbox", () => ({
+  getProgressSyncDiagnostics: () => mockGetProgressSyncDiagnostics(),
+}));
+
 import { writeDumpToDisk, pruneTraceDumps } from "@/lib/traceDump";
 import * as ExpoFileSystem from "expo-file-system";
 
 describe("writeDumpToDisk", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetProgressSyncDiagnostics.mockResolvedValue([
+      {
+        sessionId: "session-1",
+        desiredRevision: 3,
+        acknowledgedRevision: 2,
+        attemptCount: 1,
+        lastAttemptAt: null,
+        nextAttemptAt: null,
+        lastSuccessAt: null,
+        hasError: true,
+        terminalReason: null,
+        updatedAt: new Date("2026-07-20T12:00:00.000Z"),
+      },
+    ]);
   });
 
   it("calls new File() with a filename matching /^trace-dump-.*\\.json$/", async () => {
     await writeDumpToDisk("manual");
 
     expect(ExpoFileSystem.File).toHaveBeenCalledTimes(1);
-    const callArgs = (ExpoFileSystem.File as jest.Mock).mock.calls[0] as [unknown, string];
+    const callArgs = (ExpoFileSystem.File as unknown as jest.Mock).mock.calls[0] as [
+      unknown,
+      string,
+    ];
     const filename: string = callArgs[1];
     expect(filename).toMatch(/^trace-dump-.*\.json$/);
   });
@@ -45,7 +81,7 @@ describe("writeDumpToDisk", () => {
   it("calls file.write() with a JSON string containing dumpReason: 'rejection'", async () => {
     await writeDumpToDisk("rejection");
 
-    const MockFile = ExpoFileSystem.File as jest.Mock;
+    const MockFile = ExpoFileSystem.File as unknown as jest.Mock;
     const mockInstance = MockFile.mock.results[0].value as { write: jest.Mock };
     expect(mockInstance.write).toHaveBeenCalledTimes(1);
 
@@ -64,7 +100,7 @@ describe("writeDumpToDisk", () => {
   it("exported payload includes meta fields: appVersion, platform, dumpReason", async () => {
     await writeDumpToDisk("manual");
 
-    const MockFile = ExpoFileSystem.File as jest.Mock;
+    const MockFile = ExpoFileSystem.File as unknown as jest.Mock;
     const mockInstance = MockFile.mock.results[0].value as { write: jest.Mock };
     const writeArg: string = mockInstance.write.mock.calls[0][0] as string;
     const parsed = JSON.parse(writeArg) as Record<string, unknown>;
@@ -73,6 +109,45 @@ describe("writeDumpToDisk", () => {
     expect(parsed).toHaveProperty("buildVersion");
     expect(parsed).toHaveProperty("platform");
     expect(parsed).toHaveProperty("dumpReason");
+  });
+
+  it("includes persisted progress outbox diagnostics", async () => {
+    await writeDumpToDisk("manual");
+
+    const MockFile = ExpoFileSystem.File as unknown as jest.Mock;
+    const mockInstance = MockFile.mock.results[0].value as { write: jest.Mock };
+    const writeArg: string = mockInstance.write.mock.calls[0][0] as string;
+    const parsed = JSON.parse(writeArg) as Record<string, unknown>;
+
+    expect(parsed.progressSyncOutboxAvailable).toBe(true);
+    expect(parsed.progressSyncOutbox).toEqual([
+      expect.objectContaining({
+        sessionId: "session-1",
+        desiredRevision: 3,
+        acknowledgedRevision: 2,
+        attemptCount: 1,
+        hasError: true,
+      }),
+    ]);
+    expect(writeArg).not.toContain("network unavailable");
+  });
+
+  it("writes an unavailable marker without exposing diagnostic query errors", async () => {
+    mockGetProgressSyncDiagnostics.mockRejectedValueOnce(
+      new Error("sensitive database path /private/user.sqlite")
+    );
+
+    await expect(writeDumpToDisk("manual")).resolves.toMatch(/^file:\/\//);
+
+    const MockFile = ExpoFileSystem.File as unknown as jest.Mock;
+    const mockInstance = MockFile.mock.results[0].value as { write: jest.Mock };
+    expect(mockInstance.write).toHaveBeenCalledTimes(1);
+    const writeArg: string = mockInstance.write.mock.calls[0][0] as string;
+    const parsed = JSON.parse(writeArg) as Record<string, unknown>;
+
+    expect(parsed.progressSyncOutboxAvailable).toBe(false);
+    expect(parsed.progressSyncOutbox).toEqual([]);
+    expect(writeArg).not.toContain("sensitive database path");
   });
 });
 
@@ -97,16 +172,22 @@ function makeDumpFile(name: string) {
   return { name, delete: jest.fn() };
 }
 
+type MockDumpFile = ReturnType<typeof makeDumpFile>;
+
+function mockList(files: MockDumpFile[]): jest.Mock<() => Promise<MockDumpFile[]>> {
+  return jest.fn<() => Promise<MockDumpFile[]>>().mockResolvedValue(files);
+}
+
 describe("pruneTraceDumps", () => {
   let MockDirectory: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    MockDirectory = ExpoFileSystem.Directory as jest.Mock;
+    MockDirectory = ExpoFileSystem.Directory as unknown as jest.Mock;
   });
 
   it("handles an empty directory gracefully", async () => {
-    MockDirectory.mockImplementation(() => ({ list: jest.fn().mockResolvedValue([]) }));
+    MockDirectory.mockImplementation(() => ({ list: mockList([]) }));
 
     await expect(pruneTraceDumps()).resolves.not.toThrow();
   });
@@ -115,7 +196,7 @@ describe("pruneTraceDumps", () => {
     // 5 files all within the last 5 hours (well within 7-day window)
     const files = Array.from({ length: 5 }, (_, i) => makeDumpFile(makeDumpFileName(i)));
     MockDirectory.mockImplementation(() => ({
-      list: jest.fn().mockResolvedValue(files),
+      list: mockList(files),
     }));
 
     await pruneTraceDumps();
@@ -127,7 +208,7 @@ describe("pruneTraceDumps", () => {
     // 35 files spread over the last 35 hours (all within 7-day window)
     const files = Array.from({ length: 35 }, (_, i) => makeDumpFile(makeDumpFileName(i)));
     MockDirectory.mockImplementation(() => ({
-      list: jest.fn().mockResolvedValue(files),
+      list: mockList(files),
     }));
 
     await pruneTraceDumps();
@@ -143,7 +224,7 @@ describe("pruneTraceDumps", () => {
     const oldFile = makeDumpFile(makeDumpFileNameDays(10)); // 10 days ago — outside 7-day window
 
     MockDirectory.mockImplementation(() => ({
-      list: jest.fn().mockResolvedValue([recentFile, oldFile]),
+      list: mockList([recentFile, oldFile]),
     }));
 
     await pruneTraceDumps();
@@ -158,7 +239,7 @@ describe("pruneTraceDumps", () => {
     const otherFile = makeDumpFile("abs-logs-2026-03-25.txt");
 
     MockDirectory.mockImplementation(() => ({
-      list: jest.fn().mockResolvedValue([dumpFile, otherFile]),
+      list: mockList([dumpFile, otherFile]),
     }));
 
     await pruneTraceDumps();

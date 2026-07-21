@@ -71,6 +71,7 @@ export const localListeningSessions = sqliteTable(
     mediaId: text("media_id")
       .notNull()
       .references(() => mediaMetadata.id, { onDelete: "cascade" }),
+    episodeId: text("episode_id"),
 
     // Session timing
     sessionStart: integer("session_start", { mode: "timestamp" }).notNull(),
@@ -106,6 +107,33 @@ export const localListeningSessions = sqliteTable(
     // media_progress_user_library_idx in mediaProgress.ts).
     index("local_listening_sessions_user_library_idx").on(table.userId, table.libraryItemId),
   ]
+);
+
+/**
+ * Delivery state for local listening-session progress. One row coalesces all
+ * outbound-relevant local changes for a session through monotonically increasing revisions.
+ */
+export const progressSyncOutbox = sqliteTable(
+  "progress_sync_outbox",
+  {
+    sessionId: text("session_id")
+      .primaryKey()
+      .references(() => localListeningSessions.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    desiredRevision: integer("desired_revision").notNull().default(1),
+    acknowledgedRevision: integer("acknowledged_revision").notNull().default(0),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastAttemptAt: integer("last_attempt_at", { mode: "timestamp" }),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp" }),
+    lastSuccessAt: integer("last_success_at", { mode: "timestamp" }),
+    lastError: text("last_error"),
+    terminalReason: text("terminal_reason"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [index("progress_sync_outbox_user_retry_idx").on(table.userId, table.nextAttemptAt)]
 );
 
 /**
@@ -145,6 +173,9 @@ export type NewLocalLibraryFileDownloadRow = typeof localLibraryFileDownloads.$i
 
 export type LocalListeningSessionRow = typeof localListeningSessions.$inferSelect;
 export type NewLocalListeningSessionRow = typeof localListeningSessions.$inferInsert;
+
+export type ProgressSyncOutboxRow = typeof progressSyncOutbox.$inferSelect;
+export type NewProgressSyncOutboxRow = typeof progressSyncOutbox.$inferInsert;
 
 export type LocalProgressSnapshotRow = typeof localProgressSnapshots.$inferSelect;
 export type NewLocalProgressSnapshotRow = typeof localProgressSnapshots.$inferInsert;

@@ -1,0 +1,1 @@
+ALTER TABLE `local_listening_sessions` ADD `episode_id` text;

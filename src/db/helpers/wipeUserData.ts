@@ -34,6 +34,7 @@ import { mediaProgress } from "../schema/mediaProgress";
 import { narrators } from "../schema/narrators";
 import { series } from "../schema/series";
 import { tags } from "../schema/tags";
+import { localListeningSessions, progressSyncOutbox } from "../schema/localData";
 
 /**
  * Delete all user-specific rows from every content table.
@@ -46,6 +47,11 @@ export async function wipeUserData(): Promise<void> {
   // Bookmark sync queue first (references users only, no FK to content tables)
   await db.delete(pendingBookmarkOps);
   await db.delete(bookmarks);
+
+  // Explicit logout must remove durable playback work before content parents.
+  // Do not rely on FK cascades: embedded SQLite configurations can disable them.
+  await db.delete(progressSyncOutbox);
+  await db.delete(localListeningSessions);
 
   // Join tables first (reference mediaMetadata, authors, series, etc.)
   await db.delete(mediaAuthors);

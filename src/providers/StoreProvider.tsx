@@ -19,6 +19,7 @@ import {
 import React from "react";
 import { useAuth } from "./AuthProvider";
 import { useDb } from "./DbProvider";
+import { ProgressSyncProvider } from "./ProgressSyncProvider";
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, username } = useAuth();
@@ -36,5 +37,5 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useUserProfileStoreInitializer(username); // User profile needs username
   useHomeStoreInitializer(username ? username : null); // Home needs userId (username)
 
-  return <>{children}</>;
+  return <ProgressSyncProvider>{children}</ProgressSyncProvider>;
 }

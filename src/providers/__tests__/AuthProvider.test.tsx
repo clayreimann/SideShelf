@@ -60,14 +60,6 @@ jest.mock("@/lib/api/endpoints", () => ({
   login: jest.fn(),
 }));
 
-jest.mock("@/services/ProgressService", () => ({
-  progressService: {
-    fetchServerProgress: jest.fn(),
-    initialize: jest.fn(),
-    shutdown: jest.fn(),
-  },
-}));
-
 jest.mock("@/stores/appStore", () => ({
   useAppStore: {
     getState: jest.fn(() => ({
@@ -93,7 +85,7 @@ import {
   upsertMediaProgress,
 } from "@/db/helpers/mediaProgress";
 import { login as doLogin } from "@/lib/api/endpoints";
-import { progressService } from "@/services/ProgressService";
+import { wipeUserData } from "@/db/helpers/wipeUserData";
 function makeUserRow(id: string, username: string): UserRow {
   return {
     id,
@@ -121,6 +113,9 @@ const mockGetUserByUsername = getUserByUsername as jest.MockedFunction<typeof ge
 const mockSetTokens = apiClientService.setTokens as jest.MockedFunction<
   typeof apiClientService.setTokens
 >;
+const mockSetBaseUrl = apiClientService.setBaseUrl as jest.MockedFunction<
+  typeof apiClientService.setBaseUrl
+>;
 const mockDoLogin = doLogin as jest.MockedFunction<typeof doLogin>;
 const mockExtractTokens = extractTokensFromAuthResponse as jest.MockedFunction<
   typeof extractTokensFromAuthResponse
@@ -147,14 +142,9 @@ const mockGetRefreshToken = apiClientService.getRefreshToken as jest.MockedFunct
 const mockClearTokens = apiClientService.clearTokens as jest.MockedFunction<
   typeof apiClientService.clearTokens
 >;
+const mockWipeUserData = wipeUserData as jest.MockedFunction<typeof wipeUserData>;
 const mockSubscribe = apiClientService.subscribe as jest.MockedFunction<
   typeof apiClientService.subscribe
->;
-const mockProgressInitialize = progressService.initialize as jest.MockedFunction<
-  typeof progressService.initialize
->;
-const mockProgressShutdown = progressService.shutdown as jest.MockedFunction<
-  typeof progressService.shutdown
 >;
 
 // Consumer that exposes the auth context to the test via a callback ref and
@@ -178,6 +168,8 @@ describe("AuthProvider", () => {
     mockGetAccessToken.mockReturnValue(null);
     mockGetRefreshToken.mockReturnValue(null);
     mockClearTokens.mockResolvedValue(undefined);
+    mockSetBaseUrl.mockResolvedValue(undefined);
+    mockWipeUserData.mockResolvedValue(undefined);
     mockSubscribe.mockImplementation(() => jest.fn());
   });
 
@@ -281,6 +273,152 @@ describe("AuthProvider", () => {
     });
   });
 
+  describe("confirmed login identity", () => {
+    beforeEach(() => {
+      mockSetTokens.mockResolvedValue(undefined);
+      mockDoLogin.mockResolvedValue({ user: { token: "access-1" } } as any);
+      mockExtractTokens.mockReturnValue({ accessToken: "access-1", refreshToken: "refresh-1" });
+      mockMarshalUser.mockReturnValue(makeUserRow("user-new", "new-user"));
+      mockMarshalMediaProgress.mockReturnValue([]);
+      mockUpsertMediaProgress.mockResolvedValue(undefined);
+    });
+
+    it("does not expose authenticated until the login response user is durable", async () => {
+      let ctx: ReturnType<typeof useAuth> | undefined;
+      let authListener: (() => void) | undefined;
+      mockSubscribe.mockImplementation((listener) => {
+        authListener = listener;
+        return jest.fn();
+      });
+      const view = render(
+        <AuthProvider>
+          <AuthConsumer onReady={(value) => (ctx = value)} />
+        </AuthProvider>
+      );
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      let resolveUser!: () => void;
+      mockUpsertUser.mockReturnValue(
+        new Promise<void>((resolve) => {
+          resolveUser = resolve;
+        })
+      );
+      mockSetTokens.mockImplementation(async () => {
+        mockGetAccessToken.mockReturnValue("access-1");
+        authListener?.();
+      });
+
+      let loginPromise!: Promise<void>;
+      await act(async () => {
+        loginPromise = ctx!.login({
+          serverUrl: "http://example.com",
+          username: "new-user",
+          password: "pw",
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(view.getByTestId("auth-status").props.children).toBe("signedOut");
+
+      resolveUser();
+      await act(async () => loginPromise);
+      expect(view.getByTestId("auth-status").props.children).toBe("authenticated");
+    });
+
+    it("awaits old-account wipe before persisting a different login user", async () => {
+      mockGetStoredUsername.mockResolvedValue("old-user");
+      mockGetUserByUsername.mockResolvedValue(makeUserRow("user-old", "old-user"));
+      mockGetBaseUrl.mockReturnValue("http://example.com");
+      mockGetAccessToken.mockReturnValue("old-access");
+
+      let ctx: ReturnType<typeof useAuth> | undefined;
+      render(
+        <AuthProvider>
+          <AuthConsumer onReady={(value) => (ctx = value)} />
+        </AuthProvider>
+      );
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+      let resolveWipe!: () => void;
+      mockWipeUserData.mockReturnValue(
+        new Promise<void>((resolve) => {
+          resolveWipe = resolve;
+        })
+      );
+      let loginPromise!: Promise<void>;
+      await act(async () => {
+        loginPromise = ctx!.login({
+          serverUrl: "http://example.com",
+          username: "new-user",
+          password: "pw",
+        });
+        await Promise.resolve();
+      });
+
+      expect(mockWipeUserData).toHaveBeenCalled();
+      expect(mockUpsertUser).not.toHaveBeenCalled();
+
+      resolveWipe();
+      await act(async () => loginPromise);
+      expect(mockUpsertUser).toHaveBeenCalled();
+    });
+
+    it("does not wipe retained data for a same-user reauthentication", async () => {
+      mockGetStoredUsername.mockResolvedValue("new-user");
+      mockGetUserByUsername.mockResolvedValue(makeUserRow("user-new", "new-user"));
+      mockGetBaseUrl.mockReturnValue("http://example.com");
+
+      let ctx: ReturnType<typeof useAuth> | undefined;
+      render(
+        <AuthProvider>
+          <AuthConsumer onReady={(value) => (ctx = value)} />
+        </AuthProvider>
+      );
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+      mockWipeUserData.mockClear();
+
+      await act(async () =>
+        ctx!.login({
+          serverUrl: "http://example.com",
+          username: "new-user",
+          password: "pw",
+        })
+      );
+
+      expect(mockWipeUserData).not.toHaveBeenCalled();
+    });
+
+    it("wipes a different response user ID even when the username is unchanged", async () => {
+      mockGetStoredUsername.mockResolvedValue("new-user");
+      mockGetUserByUsername.mockResolvedValue(makeUserRow("user-old", "new-user"));
+      mockGetBaseUrl.mockReturnValue("http://example.com");
+
+      let ctx: ReturnType<typeof useAuth> | undefined;
+      render(
+        <AuthProvider>
+          <AuthConsumer onReady={(value) => (ctx = value)} />
+        </AuthProvider>
+      );
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+      mockWipeUserData.mockClear();
+      mockUpsertUser.mockClear();
+
+      await act(async () =>
+        ctx!.login({
+          serverUrl: "http://example.com",
+          username: "new-user",
+          password: "pw",
+        })
+      );
+
+      expect(mockWipeUserData).toHaveBeenCalledTimes(1);
+      expect(mockWipeUserData.mock.invocationCallOrder[0]).toBeLessThan(
+        mockUpsertUser.mock.invocationCallOrder[0]
+      );
+    });
+  });
+
   describe("explicit auth status", () => {
     beforeEach(() => {
       mockGetStoredUsername.mockResolvedValue("dave");
@@ -303,7 +441,6 @@ describe("AuthProvider", () => {
       });
 
       expect(getByTestId("auth-status").props.children).toBe("authenticated");
-      expect(mockProgressInitialize).toHaveBeenCalled();
     });
 
     it("reconstructs reauthRequired after restart when the prior local user remains but tokens are gone", async () => {
@@ -359,8 +496,6 @@ describe("AuthProvider", () => {
       });
 
       const listener = mockSubscribe.mock.calls[mockSubscribe.mock.calls.length - 1][0];
-      mockProgressShutdown.mockClear();
-
       mockGetAccessToken.mockReturnValue(null);
       mockGetRefreshToken.mockReturnValue(null);
 
@@ -369,7 +504,6 @@ describe("AuthProvider", () => {
       });
 
       expect(getByTestId("auth-status").props.children).toBe("reauthRequired");
-      expect(mockProgressShutdown).toHaveBeenCalled();
     });
 
     it("restarts progress sync after successful reauthentication", async () => {
@@ -398,7 +532,6 @@ describe("AuthProvider", () => {
       });
 
       expect(getByTestId("auth-status").props.children).toBe("reauthRequired");
-      expect(mockProgressInitialize).not.toHaveBeenCalled();
 
       await act(async () => {
         await ctx!.login({
@@ -417,7 +550,6 @@ describe("AuthProvider", () => {
       });
 
       expect(getByTestId("auth-status").props.children).toBe("authenticated");
-      expect(mockProgressInitialize).toHaveBeenCalledTimes(1);
     });
 
     it("transitions to signedOut on explicit logout instead of reauthRequired", async () => {
@@ -434,14 +566,11 @@ describe("AuthProvider", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
-      mockProgressShutdown.mockClear();
-
       await act(async () => {
         await ctx!.logout();
       });
 
       expect(getByTestId("auth-status").props.children).toBe("signedOut");
-      expect(mockProgressShutdown).toHaveBeenCalled();
     });
   });
 
@@ -457,5 +586,61 @@ describe("AuthProvider", () => {
     });
 
     expect(getByTestId("auth-status").props.children).toBe("signedOut");
+  });
+
+  it("awaits user-data wipe before completing a server switch", async () => {
+    mockGetStoredUsername.mockResolvedValue("alice");
+    mockGetUserByUsername.mockResolvedValue(makeUserRow("user-1", "alice"));
+    mockGetBaseUrl.mockReturnValue("http://old.example.com");
+    mockGetAccessToken.mockReturnValue("access-1");
+
+    let ctx: ReturnType<typeof useAuth> | undefined;
+    const view = render(
+      <AuthProvider>
+        <AuthConsumer onReady={(value) => (ctx = value)} />
+      </AuthProvider>
+    );
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    let resolveWipe!: () => void;
+    mockWipeUserData.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveWipe = resolve;
+      })
+    );
+    let switchPromise!: Promise<void>;
+    await act(async () => {
+      switchPromise = ctx!.setServerUrl("http://new.example.com");
+      await Promise.resolve();
+    });
+
+    expect(view.getByTestId("auth-status").props.children).toBe("signedOut");
+    expect(mockWipeUserData).toHaveBeenCalled();
+    expect(mockSetBaseUrl).not.toHaveBeenCalledWith("http://new.example.com");
+
+    resolveWipe();
+    await act(async () => switchPromise);
+    expect(mockSetBaseUrl).toHaveBeenCalledWith("http://new.example.com");
+  });
+
+  it("still wipes local data when secure credential deletion fails during logout", async () => {
+    mockGetStoredUsername.mockResolvedValue("alice");
+    mockGetUserByUsername.mockResolvedValue(makeUserRow("user-1", "alice"));
+    mockGetBaseUrl.mockReturnValue("http://example.com");
+    mockGetAccessToken.mockReturnValue("access-1");
+
+    let ctx: ReturnType<typeof useAuth> | undefined;
+    const view = render(
+      <AuthProvider>
+        <AuthConsumer onReady={(value) => (ctx = value)} />
+      </AuthProvider>
+    );
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    mockClearTokens.mockRejectedValueOnce(new Error("secure store unavailable"));
+
+    await act(async () => ctx!.logout());
+
+    expect(view.getByTestId("auth-status").props.children).toBe("signedOut");
+    expect(mockWipeUserData).toHaveBeenCalled();
   });
 });

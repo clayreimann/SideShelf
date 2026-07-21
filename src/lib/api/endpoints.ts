@@ -21,6 +21,29 @@ const log = logger.forTag("api:endpoints");
 
 type BookmarkCreateResponse = { bookmark?: ApiAudioBookmark | null } | ApiAudioBookmark | null;
 
+/**
+ * An API response error with the HTTP data the progress sync worker needs to
+ * classify the failure. `retryAfter` is a delay in milliseconds when supplied.
+ */
+export class ApiResponseError extends Error {
+  readonly status: number;
+  readonly retryAfter: number | undefined;
+  readonly responseBody: string;
+
+  constructor(params: {
+    message: string;
+    status: number;
+    retryAfter?: number;
+    responseBody: string;
+  }) {
+    super(params.message);
+    this.name = "ApiResponseError";
+    this.status = params.status;
+    this.retryAfter = params.retryAfter;
+    this.responseBody = params.responseBody;
+  }
+}
+
 function fallbackBookmarkId(bookmark: Pick<ApiAudioBookmark, "libraryItemId" | "time" | "title">) {
   return `${bookmark.libraryItemId}:${bookmark.time}:${bookmark.title}`;
 }
@@ -57,25 +80,50 @@ export function normalizeBookmarkResponse(
   };
 }
 
-async function handleResponseError(response: Response, defaultMessage: string) {
-  if (!response.ok) {
-    const text = await response.clone().text();
-    // This log runs on every failed request across the app (not gated behind a
-    // detailed-logging tag), including a failed /login — redact before it ever
-    // hits the persisted log store in case a server echoes request/session data
-    // back in an error body.
-    log.error(`${defaultMessage}: ${redactBody(text)}`);
-    try {
-      const error: ApiError = JSON.parse(text);
-      throw new Error(error.message || error.error || defaultMessage);
-    } catch (parseError) {
-      // If JSON parsing fails, the server returned plain text (e.g., "OK", "Offline")
-      // Use the raw text as the error message instead of exposing the parse error
-      const errorMessage = text?.trim() || defaultMessage;
-      log.warn(`Server returned non-JSON error response: ${redactBody(errorMessage)}`);
-      throw new Error(errorMessage);
-    }
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined;
+
+  const seconds = Number(value);
+  if (Number.isInteger(seconds) && seconds >= 0) {
+    return seconds * 1000;
   }
+
+  const retryAt = Date.parse(value);
+  if (Number.isNaN(retryAt)) return undefined;
+  return Math.max(0, retryAt - Date.now());
+}
+
+function getErrorMessage(responseBody: string, defaultMessage: string): string {
+  try {
+    const error: ApiError = JSON.parse(responseBody);
+    return error.message || error.error || defaultMessage;
+  } catch {
+    return responseBody.trim() || defaultMessage;
+  }
+}
+
+async function handleResponseError(response: Response, defaultMessage: string): Promise<void> {
+  if (response.ok) return;
+
+  const text = await response.clone().text();
+  const responseBody = redactBody(text);
+  // This log runs on every failed request across the app (not gated behind a
+  // detailed-logging tag), including a failed /login — redact before it ever
+  // hits the persisted log store in case a server echoes request/session data
+  // back in an error body.
+  log.error(`${defaultMessage}: ${responseBody}`);
+
+  const message = getErrorMessage(responseBody, defaultMessage);
+  if (message === defaultMessage && text?.trim()) {
+    log.warn(`Server returned non-JSON error response: ${responseBody}`);
+  }
+
+  throw new ApiResponseError({
+    message,
+    status: response.status,
+    retryAfter: parseRetryAfter(response.headers?.get("Retry-After") ?? null),
+    responseBody,
+  });
 }
 
 export async function fetchMe(): Promise<ApiMeResponse> {
@@ -304,7 +352,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
  */
 export async function createLocalSession(
   params: CreateLocalSessionParams
-): Promise<{ id: string }> {
+): Promise<{ id: string; duplicate: boolean }> {
   const {
     sessionId,
     userId,
@@ -365,9 +413,45 @@ export async function createLocalSession(
     body: bodyText,
   });
 
-  await handleResponseError(response, "Failed to create local session");
+  try {
+    await handleResponseError(response, "Failed to create local session");
+  } catch (error) {
+    if (
+      error instanceof ApiResponseError &&
+      error.status === 409 &&
+      getSessionIdFromResponse(error.responseBody) === sessionId
+    ) {
+      return { id: sessionId, duplicate: true };
+    }
+    throw error;
+  }
 
-  return { id: sessionId };
+  const responseText = await response.text();
+  const responseSessionId = getSessionIdFromResponse(responseText);
+  if (responseSessionId && responseSessionId !== sessionId) {
+    throw new ApiResponseError({
+      message: "Failed to create local session: response ID did not match submitted session",
+      status: response.status,
+      retryAfter: parseRetryAfter(response.headers?.get("Retry-After") ?? null),
+      responseBody: redactBody(responseText),
+    });
+  }
+
+  return { id: sessionId, duplicate: false };
+}
+
+function getSessionIdFromResponse(responseBody: string): string | undefined {
+  if (!responseBody.trim()) return undefined;
+
+  try {
+    const response = JSON.parse(responseBody) as { id?: unknown; session?: { id?: unknown } };
+    if (typeof response.id === "string") return response.id;
+    if (typeof response.session?.id === "string") return response.session.id;
+  } catch {
+    // A successful empty or non-JSON response still acknowledges the submitted stable ID.
+  }
+
+  return undefined;
 }
 
 function sanitizeSeconds(value: number): number {
