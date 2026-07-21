@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Treat `.planning/todos/pending/2026-07-20-stale-token-progress-sync-recovery.md` as the source design; do not change the expired-session UI, login-sheet UX, or streaming playback gate.
+- Treat `docs/plans/stale-token-progress-sync.md` as the maintained architecture record; do not change the expired-session UI, login-sheet UX, or streaming playback gate.
 - Delivery is at least once. Always reuse the local session UUID and always upload through `/api/session/local`; worker code must never call `/api/session/:id/sync`.
 - A local outbound mutation and its `desired_revision` increment must commit in the same SQLite transaction.
 - Expo Drizzle transactions are synchronous: transaction callbacks must not be `async`; every statement inside uses `.run()`, and failures throw before commit.
@@ -488,14 +488,14 @@ git commit -m "feat: bind progress worker to authenticated lifecycle"
 **Files:**
 
 - Create: `src/services/__tests__/ProgressSyncRecovery.integration.test.ts`
-- Create: `.planning/todos/pending/2026-07-20-audit-and-enable-sqlite-foreign-keys.md`
-- Modify: `.planning/todos/pending/2026-07-20-stale-token-progress-sync-recovery.md` only when moving it to done under the repo's todo workflow
+- Modify: `docs/BACKLOG.md` with the SQLite foreign-key audit follow-up
+- Modify: `docs/plans/stale-token-progress-sync.md` only when implementation changes alter the maintained architecture
 - Modify: diagnostic export code only if existing trace export does not already include the new table
 
 **Interfaces:**
 
 - Consumes: the complete feature.
-- Produces: a deterministic integration proof and a follow-up audit todo covering all declared cascades, especially `local_progress_snapshots`.
+- Produces: a deterministic integration proof and a backlog entry covering all declared cascades, especially `local_progress_snapshots`.
 
 - [ ] **Step 1: Write the end-to-end recovery test**
 
@@ -512,9 +512,9 @@ With real database helpers and a fake endpoint, execute:
 
 Assert no request is made while stopped, no additive endpoint is used, and the final desired/acknowledged revisions match.
 
-- [ ] **Step 2: Add the foreign-key audit follow-up**
+- [ ] **Step 2: Add the foreign-key audit backlog entry**
 
-The todo must inventory declared constraints, detect accumulated violations before enabling the pragma, cover production and test DB parity, and explicitly include the inert `local_progress_snapshots.session_id` cascade. Do not enable the pragma here.
+The backlog entry must inventory declared constraints, detect accumulated violations before enabling the pragma, cover production and test DB parity, and explicitly include the inert `local_progress_snapshots.session_id` cascade. Do not enable the pragma here.
 
 - [ ] **Step 3: Run focused feature verification**
 
@@ -563,7 +563,7 @@ Expected: worker has no additive sync path; obsolete queue/direct-sync calls hav
 - [ ] **Step 6: Commit integration proof and follow-up**
 
 ```bash
-git add src/services/__tests__/ProgressSyncRecovery.integration.test.ts .planning/todos/pending/2026-07-20-audit-and-enable-sqlite-foreign-keys.md
+git add src/services/__tests__/ProgressSyncRecovery.integration.test.ts docs/BACKLOG.md
 git commit -m "test: prove stale-token progress recovery"
 ```
 
@@ -572,4 +572,4 @@ git commit -m "test: prove stale-token progress recovery"
 - Baseline in the isolated worktree: 68/68 suites passed, 1,127 tests passed, 3 skipped on 2026-07-20. Existing console warnings and Jest's force-exit/open-handle warning are baseline noise, but new worker tests must prove their own timers are cleaned up.
 - Task dependencies are intentionally sequential: migration → helpers → endpoint contract → worker lifecycle → worker delivery → service integration → app integration → end-to-end verification.
 - Each implementer must use TDD, commit only its owned task files, and write a task report. Each task receives a fresh spec-and-quality review before the next task starts.
-- The source todo has newer uncommitted edits in the original checkout. Do not overwrite or stage them from this worktree.
+- Durable design changes discovered during implementation are reflected in `docs/plans/stale-token-progress-sync.md`.
