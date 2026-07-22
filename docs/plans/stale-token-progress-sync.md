@@ -202,6 +202,8 @@ The implementation is covered by helper, migration, worker-delivery, worker-life
 - acknowledgement before best-effort reconciliation;
 - bounded retry scheduling and terminal error classification.
 
+The device and server-side scenarios are maintained in the [stale-token progress-sync test plan](stale-token-progress-sync-test-plan.md).
+
 ## Follow-Up
 
 - Complete the foreign-key audit described above before enabling enforcement.

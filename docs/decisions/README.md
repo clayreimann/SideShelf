@@ -36,6 +36,14 @@ This register preserves decisions that future contributors should not have to re
 - **Consequence:** Do not model Cast as another output picker or as a side effect of the Audio Browser migration.
 - **Source:** [Google Cast investigation](../investigation/google-cast-support.md)
 
+### Use stable server identity for multi-server support
+
+- **Status:** Active design direction
+- **Decision:** Model each Audiobookshelf instance with a SideShelf-owned `server_id`, keep aliases as trusted routes, and namespace remote entities explicitly within one shared database.
+- **Why:** URLs change and raw remote IDs can collide; neither is safe as global identity. One database supports unified queries and shared migrations without hiding source ownership.
+- **Consequence:** Identity inventory and single-server migration land before alias routing, independent synchronization, or management UI. Requests capture immutable server/account/route generations, and outbound data always returns to its owning source.
+- **Source:** [Multi-server sync and server aliases](../plans/multi-server-sync-and-aliases.md)
+
 ## Playback Architecture
 
 ### The coordinator owns player state and transitions

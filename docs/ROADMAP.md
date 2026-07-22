@@ -41,9 +41,14 @@ The migration is an adapter change around the existing coordinator and progress 
 - **ProgressService decomposition:** Further facade/collaborator decomposition is worthwhile only when it improves isolation and testability; file size alone is not a reason to split it.
 - **Native progress-event lock bypass:** Bypassing serialized coordinator processing for high-frequency progress events requires an explicit safety analysis before implementation.
 
+## Future Architecture Programs
+
+- **Multi-server sync and aliases:** Approved direction, not yet scheduled. SideShelf will use stable local server identity, one server-scoped shared database, trusted ordered aliases, independent bounded synchronization, and a unified library that retains source provenance. Identity inventory and migration safety must precede request routing or UI work. See the [multi-server and alias design](plans/multi-server-sync-and-aliases.md).
+
 ## Supporting Specifications
 
 - [Durable progress synchronization](plans/stale-token-progress-sync.md)
+- [Multi-server sync and server aliases](plans/multi-server-sync-and-aliases.md)
 - [Dependency upgrade program](superpowers/specs/2026-07-20-dependency-upgrade-program-design.md)
 - [Expired-token Home shelves](superpowers/specs/2026-07-18-expired-token-home-shelves-design.md)
 - [More-scoped nested navigation](superpowers/specs/2026-07-19-more-scoped-nested-navigation-design.md)
