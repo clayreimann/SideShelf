@@ -151,6 +151,7 @@ Full decision log is in PROJECT.md Key Decisions table.
 6. **Internationalize hardcoded FullScreenPlayer strings** — "Speed"/"Bookmark"/"Sleep Timer" captions and bookmark prompt title bypass translate(); visual-text gap only (a11y labels are translated)
 7. **Add missing progressToast translations to es locale** — player.progressToast.\* keys missing from es.ts; causes standing tsc error at src/i18n/index.ts:87
 8. **Internationalize hardcoded strings in More screens and diagnostics** — button texts/headers/placeholders across More-tab utility screens bypass translate(); a11y labels reuse the same literals, so sweep both together
+9. **Support concurrent multi-server sync and multiple aliases per ABS server** — unify visible libraries across independently syncing servers, scope all remote data by durable server identity, and support trusted local/public routes with automatic failover and healthy failback
 
 ### Blockers/Concerns
 
