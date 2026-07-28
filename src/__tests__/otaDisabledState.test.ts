@@ -41,4 +41,46 @@ describe("OTA Phase 0 disabled state", () => {
       /Export JavaScript bundle|Upload bundle artifacts|JavaScript Bundle Available|Bundle Loader/
     );
   });
+
+  it("keeps expo-updates dormant and preserves recovery in preview builds", () => {
+    type ResolvedConfig = {
+      updates: Record<string, unknown>;
+      runtimeVersion: { policy: string };
+    };
+
+    const previousVariant = process.env.APP_VARIANT;
+    let resolvedConfig: ResolvedConfig | undefined;
+
+    try {
+      process.env.APP_VARIANT = "preview";
+      jest.resetModules();
+      const createConfig = require("../../app.config.js") as (input: {
+        config: Record<string, unknown>;
+      }) => ResolvedConfig;
+
+      resolvedConfig = createConfig({ config: {} });
+    } finally {
+      if (previousVariant === undefined) {
+        delete process.env.APP_VARIANT;
+      } else {
+        process.env.APP_VARIANT = previousVariant;
+      }
+      jest.resetModules();
+    }
+
+    expect(resolvedConfig?.updates).toEqual({
+      enabled: true,
+      checkAutomatically: "NEVER",
+      fallbackToCacheTimeout: 0,
+    });
+    expect(resolvedConfig?.runtimeVersion).toEqual({ policy: "appVersion" });
+  });
+
+  it("contains no build-time custom update URL switch", () => {
+    const source = fs.readFileSync(repoPath("app.config.js"), "utf8");
+
+    expect(source).not.toMatch(
+      /EXPO_PUBLIC_UPDATE_URL|CUSTOM_UPDATE_URL|disableAntiBrickingMeasures/
+    );
+  });
 });
