@@ -16,6 +16,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import TrackPlayer, { State } from "react-native-track-player";
+import type { PlayerService } from "@/services/PlayerService";
+import type { ProgressService } from "@/services/ProgressService";
+import type { getCurrentUser } from "@/utils/userHelpers";
 
 // --- Mocks ---
 
@@ -27,8 +30,8 @@ jest.mock("@/stores/appStore", () => ({
 
 jest.mock("@/services/PlayerService", () => ({
   playerService: {
-    executeSetVolume: jest.fn(),
-    executeSeek: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    executeSetVolume: jest.fn<PlayerService["executeSetVolume"]>(),
+    executeSeek: jest.fn<PlayerService["executeSeek"]>().mockResolvedValue(undefined),
   },
 }));
 
@@ -38,14 +41,18 @@ jest.mock("@/services/coordinator/eventBus", () => ({
 
 jest.mock("@/services/ProgressService", () => ({
   progressService: {
-    getCurrentSession: jest.fn<() => Promise<null>>().mockResolvedValue(null),
-    updateProgress: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    startSession: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    forceRehydrateSession: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    getCurrentSession: jest.fn<ProgressService["getCurrentSession"]>().mockResolvedValue(null),
+    updateProgress: jest.fn<ProgressService["updateProgress"]>().mockResolvedValue(undefined),
+    startSession: jest.fn<ProgressService["startSession"]>().mockResolvedValue(undefined),
+    forceRehydrateSession: jest
+      .fn<ProgressService["forceRehydrateSession"]>()
+      .mockResolvedValue(undefined),
     shouldSyncToServer: jest
-      .fn<() => Promise<{ shouldSync: boolean }>>()
-      .mockResolvedValue({ shouldSync: false }),
-    syncSessionToServer: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      .fn<ProgressService["shouldSyncToServer"]>()
+      .mockResolvedValue({ shouldSync: false, reason: "test" }),
+    syncSessionToServer: jest
+      .fn<ProgressService["syncSessionToServer"]>()
+      .mockResolvedValue(undefined),
   },
 }));
 
@@ -54,7 +61,7 @@ jest.mock("@/db/helpers/localData", () => ({
 }));
 
 jest.mock("@/utils/userHelpers", () => ({
-  getCurrentUser: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+  getCurrentUser: jest.fn<typeof getCurrentUser>().mockResolvedValue(null),
 }));
 
 jest.mock("@/services/coordinator/PlayerStateCoordinator", () => ({

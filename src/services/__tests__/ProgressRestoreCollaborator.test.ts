@@ -22,6 +22,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import TrackPlayer, { State } from "react-native-track-player";
 import type { IPlayerServiceFacade } from "@/services/player/types";
+import type { verifyFileExists } from "@/lib/fileSystem";
 import { ProgressRestoreCollaborator } from "@/services/player/ProgressRestoreCollaborator";
 
 // --- Mocks ---
@@ -99,7 +100,7 @@ jest.mock("@/lib/api/endpoints", () => ({
 
 jest.mock("@/lib/fileSystem", () => ({
   resolveAppPath: jest.fn().mockReturnValue("/full/path/test.m4b"),
-  verifyFileExists: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
+  verifyFileExists: jest.fn<typeof verifyFileExists>().mockResolvedValue(true),
 }));
 
 describe("ProgressRestoreCollaborator", () => {
