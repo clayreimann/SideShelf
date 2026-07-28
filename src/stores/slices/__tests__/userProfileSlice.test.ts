@@ -542,6 +542,89 @@ describe("Task 2 — drainPendingBookmarkOps", () => {
     // clearPendingOps should NOT be called (nothing succeeded)
     expect(bookmarkHelpers.clearPendingOps).not.toHaveBeenCalled();
   });
+
+  it("does not commit, clear, or refresh a remote result after the active identity is reset", async () => {
+    const store = makeStore({ isConnected: true, isInternetReachable: true });
+    await store.getState().initializeUserProfile("testuser");
+    jest.clearAllMocks();
+
+    bookmarkHelpers.dequeuePendingOps.mockResolvedValue([
+      {
+        id: "op-1",
+        userId: "user-1",
+        libraryItemId: "item-1",
+        operationType: "create",
+        time: 60,
+        title: "Pending Create",
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
+    ]);
+    let releaseRemote!: (value: { bookmark: ReturnType<typeof makeBookmark> }) => void;
+    const remoteResult = new Promise<{ bookmark: ReturnType<typeof makeBookmark> }>((resolve) => {
+      releaseRemote = resolve;
+    });
+    endpoints.createBookmark.mockReturnValue(remoteResult);
+
+    const drain = store.getState().drainPendingBookmarkOps();
+    await Promise.resolve();
+    expect(endpoints.createBookmark).toHaveBeenCalledTimes(1);
+
+    store.getState().resetUserProfile();
+    const bookmarksAfterInvalidation = store.getState().userProfile.bookmarks;
+    releaseRemote({ bookmark: makeBookmark() });
+    await drain;
+
+    expect(bookmarkHelpers.upsertBookmark).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.clearPendingOps).not.toHaveBeenCalled();
+    expect(endpoints.fetchMe).not.toHaveBeenCalled();
+    expect(store.getState().userProfile.bookmarks).toBe(bookmarksAfterInvalidation);
+  });
+
+  it("coalesces an overlapping drain into one follow-up pass without replaying the same op", async () => {
+    const store = makeStore({ isConnected: true, isInternetReachable: true });
+    await store.getState().initializeUserProfile("testuser");
+    jest.clearAllMocks();
+
+    const pendingOp = {
+      id: "op-1",
+      userId: "user-1",
+      libraryItemId: "item-1",
+      operationType: "create",
+      time: 60,
+      title: "Pending Create",
+      createdAt: new Date("2024-01-01T00:00:00Z"),
+    };
+    let pendingOps = [pendingOp];
+    bookmarkHelpers.dequeuePendingOps.mockImplementation(async () => pendingOps);
+    bookmarkHelpers.clearPendingOps.mockImplementation(async () => {
+      pendingOps = [];
+    });
+
+    let releaseRemote!: (value: { bookmark: ReturnType<typeof makeBookmark> }) => void;
+    const remoteResult = new Promise<{ bookmark: ReturnType<typeof makeBookmark> }>((resolve) => {
+      releaseRemote = resolve;
+    });
+    endpoints.createBookmark.mockReturnValue(remoteResult);
+    endpoints.fetchMe.mockResolvedValue({
+      id: "user-1",
+      username: "testuser",
+      bookmarks: [],
+    });
+
+    const firstDrain = store.getState().drainPendingBookmarkOps();
+    await Promise.resolve();
+    const eligibilityTriggeredDrain = store.getState().drainPendingBookmarkOps();
+    await Promise.resolve();
+
+    expect(endpoints.createBookmark).toHaveBeenCalledTimes(1);
+
+    releaseRemote({ bookmark: makeBookmark() });
+    await Promise.all([firstDrain, eligibilityTriggeredDrain]);
+
+    expect(endpoints.createBookmark).toHaveBeenCalledTimes(1);
+    expect(bookmarkHelpers.clearPendingOps).toHaveBeenCalledTimes(1);
+    expect(bookmarkHelpers.dequeuePendingOps).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("Task 2 — initializeUserProfile", () => {

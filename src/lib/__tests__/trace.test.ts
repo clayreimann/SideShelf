@@ -134,6 +134,39 @@ describe("LocalTrace", () => {
         itemId: "[REDACTED]",
       });
     });
+
+    it("sanitizes download item path segments in arbitrary strings and serialized errors", () => {
+      const sensitiveLibraryItemId = "library-item-private-7f3d9";
+      const path = `/documents/downloads/${sensitiveLibraryItemId}/chapter-01.m4b`;
+      const span = t.startSpan("download-verification", {
+        detail: `Checking ${path}`,
+        storedPath: path,
+      });
+      const error = new Error(`Missing ${path}`);
+      error.stack = `Error: Missing ${path}\n    at verifyDownload (DownloadService.ts:10:2)`;
+      t.recordError(error, span);
+      t.endSpan(span, "error");
+
+      const [record] = t.exportTrace().records;
+      const spanRecord = record as {
+        traceId: string;
+        spanId: string;
+        attributes?: Record<string, unknown>;
+        error?: { message: string; stack?: string };
+      };
+
+      expect(JSON.stringify(spanRecord)).not.toContain(sensitiveLibraryItemId);
+      expect(spanRecord.traceId).not.toBe("[REDACTED]");
+      expect(spanRecord.spanId).not.toBe("[REDACTED]");
+      expect(spanRecord.attributes).toEqual({
+        detail: "Checking /documents/downloads/[REDACTED]/chapter-01.m4b",
+        storedPath: "[REDACTED]",
+      });
+      expect(spanRecord.error?.message).toBe(
+        "Missing /documents/downloads/[REDACTED]/chapter-01.m4b"
+      );
+      expect(spanRecord.error?.stack).toContain("verifyDownload");
+    });
   });
 
   describe("startSpan()", () => {

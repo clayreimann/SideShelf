@@ -178,6 +178,58 @@ describe("writeDumpToDisk", () => {
     expect(writeArg).not.toContain("session-1");
   });
 
+  it("redacts library-item IDs embedded in path attributes and serialized errors", async () => {
+    const sensitiveLibraryItemId = "library-item-private-7f3d9";
+    const downloadPath =
+      `/var/mobile/Containers/Data/Application/APP/Documents/downloads/` +
+      `${sensitiveLibraryItemId}/chapter-01.m4b`;
+    const span = trace.startSpan("player.load.track", {
+      storedPath: `D:downloads/${sensitiveLibraryItemId}/chapter-01.m4b`,
+      resolvedPath: downloadPath,
+      expectedPath: `documents/downloads/${sensitiveLibraryItemId}/chapter-01.m4b`,
+      state: "VERIFYING_DOWNLOAD",
+    });
+    const pathError = new Error(`Downloaded file missing at ${downloadPath}`);
+    pathError.stack =
+      `Error: Downloaded file missing at ${downloadPath}\n` +
+      "    at verifyDownloadedFile (TrackLoadingCollaborator.ts:406:17)";
+    trace.recordError(pathError, span);
+    trace.endSpan(span, "error");
+
+    await writeDumpToDisk("manual");
+
+    const MockFile = ExpoFileSystem.File as unknown as jest.Mock;
+    const mockInstance = MockFile.mock.results[0].value as { write: jest.Mock };
+    const writeArg = mockInstance.write.mock.calls[0][0] as string;
+    const parsed = JSON.parse(writeArg) as {
+      records: {
+        traceId: string;
+        spanId: string;
+        name: string;
+        attributes?: Record<string, unknown>;
+        error?: { message: string; stack?: string };
+      }[];
+    };
+    const [record] = parsed.records;
+
+    expect(writeArg).not.toContain(sensitiveLibraryItemId);
+    expect(record).toMatchObject({
+      traceId: expect.any(String),
+      spanId: expect.any(String),
+      name: "player.load.track",
+      attributes: {
+        storedPath: "[REDACTED]",
+        resolvedPath: "[REDACTED]",
+        expectedPath: "[REDACTED]",
+        state: "VERIFYING_DOWNLOAD",
+      },
+    });
+    expect(record.error?.message).toContain("Downloaded file missing");
+    expect(record.error?.message).toContain("downloads/[REDACTED]/chapter-01.m4b");
+    expect(record.error?.stack).toContain("verifyDownloadedFile");
+    expect(record.error?.stack).toContain("downloads/[REDACTED]/chapter-01.m4b");
+  });
+
   it("writes an unavailable marker without exposing diagnostic query errors", async () => {
     mockGetProgressSyncDiagnostics.mockRejectedValueOnce(
       new Error("sensitive database path /private/user.sqlite")
