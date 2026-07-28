@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 
 /* eslint-disable import/first -- Jest module mocks must be installed before imports. */
 
@@ -31,7 +31,7 @@ import { saveItem } from "@/lib/secureStore";
 import { apiClientService } from "@/services/ApiClientService";
 
 const mockSaveItem = saveItem as jest.MockedFunction<typeof saveItem>;
-const mockFetch = jest.fn<typeof fetch>();
+let mockFetch: jest.SpiedFunction<typeof fetch>;
 
 function unauthorizedResponse(): Response {
   return {
@@ -51,11 +51,15 @@ function unauthorizedResponse(): Response {
 describe("ApiClientService and apiFetch auth composition", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
-    global.fetch = mockFetch;
+    mockFetch = jest.spyOn(global, "fetch");
     mockSaveItem.mockResolvedValue(undefined);
     await apiClientService.setBaseUrl("http://test.example.com");
     await apiClientService.setTokens("legacy-access", null, "alice");
     mockSaveItem.mockClear();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it("preserves the original 401 without retrying when token cleanup persistence fails", async () => {

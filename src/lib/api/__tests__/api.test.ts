@@ -40,7 +40,7 @@ import { apiFetch } from "@/lib/api/api";
 import { logger, type SubLogger } from "@/lib/logger";
 import { apiClientService } from "@/services/ApiClientService";
 
-const mockFetch = jest.fn<typeof fetch>();
+let mockFetch: jest.SpiedFunction<typeof fetch>;
 
 const mockHandleUnauthorized = apiClientService.handleUnauthorized as jest.MockedFunction<
   typeof apiClientService.handleUnauthorized
@@ -103,8 +103,8 @@ const detailedSubLogger = getSubLoggerFor("api:fetch:detailed");
 describe("apiFetch 401 handling", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFetch = jest.spyOn(global, "fetch");
     mockFetch.mockReset();
-    global.fetch = mockFetch;
   });
 
   afterEach(() => {
@@ -202,8 +202,8 @@ describe("apiFetch 401 handling", () => {
 describe("apiFetch detailed logging (api:fetch:detailed)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFetch = jest.spyOn(global, "fetch");
     mockFetch.mockReset();
-    global.fetch = mockFetch;
     // Explicit default per test — clearAllMocks() clears call history but not a
     // previously-set mockReturnValue, so don't rely on cross-test carryover.
     (logger.isTagEnabled as jest.Mock).mockReturnValue(true);

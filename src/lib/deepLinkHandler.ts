@@ -10,7 +10,7 @@
  * Player state is read from the Zustand store at call time.
  */
 
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { apiClientService } from "@/services/ApiClientService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { useAppStore } from "@/stores/appStore";
@@ -28,9 +28,9 @@ const log = logger.forTag("deepLinkHandler");
 function resolveTabPath(
   tabName: "series" | "authors",
   hiddenTabs: string[],
-  ownPath: string,
-  morePath: string
-): string {
+  ownPath: Href,
+  morePath: Href
+): Href {
   const isHidden = hiddenTabs.includes(tabName);
   const resolved = isHidden ? morePath : ownPath;
   log.info(`[resolveTabPath] tab="${tabName}" hidden=${String(isHidden)} → "${resolved}"`);

@@ -44,7 +44,7 @@ import { getItem, saveItem } from "@/lib/secureStore";
 import { extractTokensFromAuthResponse } from "@/db/helpers/tokens";
 import { apiFetch } from "@/lib/api/api";
 
-const mockFetch = jest.fn<typeof fetch>();
+let mockFetch: jest.SpiedFunction<typeof fetch>;
 
 const mockGetItem = getItem as jest.MockedFunction<typeof getItem>;
 const mockSaveItem = saveItem as jest.MockedFunction<typeof saveItem>;
@@ -89,8 +89,8 @@ describe("ApiClientService", () => {
     await apiClientService.setBaseUrl("http://test.example.com");
     await apiClientService.setTokens("initial-access", "initial-refresh", "alice");
     mockSaveItem.mockClear();
+    mockFetch = jest.spyOn(global, "fetch");
     mockFetch.mockReset();
-    global.fetch = mockFetch;
   });
 
   afterEach(() => {
