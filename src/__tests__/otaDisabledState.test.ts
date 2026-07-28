@@ -54,6 +54,8 @@ describe("OTA Phase 0 disabled state", () => {
     try {
       process.env.APP_VARIANT = "preview";
       jest.resetModules();
+      // app.config.js is a CommonJS Expo config module.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const createConfig = require("../../app.config.js") as (input: {
         config: Record<string, unknown>;
       }) => ResolvedConfig;

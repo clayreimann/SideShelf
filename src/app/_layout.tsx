@@ -198,8 +198,6 @@ export default function RootLayout() {
     const handleDeepLink = async (url: string) => {
       log.info(`[handleDeepLink] received url="${url}"`);
       try {
-        const urlObj = new URL(url);
-
         // Handle logger configuration deep links
         if (url.includes("://logger")) {
           log.info(`Processing logger deep link: ${url}`);
