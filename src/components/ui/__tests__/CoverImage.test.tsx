@@ -106,7 +106,7 @@ describe("CoverImage", () => {
           libraryItemId="lib-item-123"
         />
       );
-      expect(queryByTestId("dim-overlay")).toBeNull();
+      expect(queryByTestId("dim-overlay", { includeHiddenElements: true })).toBeNull();
     });
 
     it("shows title fallback text when uri is null", () => {
