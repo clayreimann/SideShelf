@@ -499,38 +499,6 @@ export default function SettingsScreen() {
               accessibilityLabel={translate("settings.diagnostics")}
             />
           </View>
-
-          {/* Bundle Loader Link */}
-          <Pressable
-            onPress={() => router.push("/(tabs)/more/bundle-loader")}
-            accessibilityRole="button"
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-              backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
-              borderRadius: 10,
-            }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  fontSize: 15,
-                  color: colors.textPrimary,
-                  fontWeight: "500",
-                  marginBottom: 4,
-                }}
-              >
-                Bundle Loader
-              </Text>
-              <Text style={{ fontSize: 13, color: textSecondary, lineHeight: 18 }}>
-                Load custom bundles from PR builds
-              </Text>
-            </View>
-            <Text style={{ color: primaryColor, fontSize: 16 }}>›</Text>
-          </Pressable>
         </View>
       </ScrollView>
     </>

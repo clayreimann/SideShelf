@@ -10,7 +10,6 @@
 import {
   getBookmarkTitleMode,
   getChapterBarShowRemaining,
-  getCustomUpdateUrl,
   getDiagnosticsEnabled,
   getHiddenTabs,
   getHomeLayout,
@@ -23,7 +22,6 @@ import {
   getViewMode,
   setBookmarkTitleMode,
   setChapterBarShowRemaining,
-  setCustomUpdateUrl,
   setDiagnosticsEnabled,
   setHiddenTabs,
   setHomeLayout,
@@ -62,8 +60,6 @@ export interface SettingsSliceState {
     tabOrder: string[];
     /** Hidden tabs preference */
     hiddenTabs: string[];
-    /** Custom update URL for loading test bundles */
-    customUpdateUrl: string | null;
     /** Library view mode preference */
     viewMode: "list" | "grid";
     /** Progress display format preference */
@@ -102,8 +98,6 @@ export interface SettingsSliceActions {
   updateTabOrder: (order: string[]) => Promise<void>;
   /** Update hidden tabs */
   updateHiddenTabs: (hiddenTabs: string[]) => Promise<void>;
-  /** Update custom update URL */
-  updateCustomUpdateUrl: (url: string | null) => Promise<void>;
   /** Update library view mode preference */
   updateViewMode: (mode: "list" | "grid") => Promise<void>;
   /** Update progress display format preference */
@@ -134,7 +128,6 @@ const DEFAULT_SETTINGS = {
   diagnosticsEnabled: false,
   tabOrder: ["home", "library", "series", "authors", "more"],
   hiddenTabs: [] as string[],
-  customUpdateUrl: null,
   viewMode: "list" as const,
   progressFormat: "remaining" as const satisfies ProgressFormat,
   chapterBarShowRemaining: false,
@@ -191,7 +184,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         diagnosticsEnabled,
         tabOrder,
         hiddenTabs,
-        customUpdateUrl,
         viewMode,
         progressFormat,
         chapterBarShowRemaining,
@@ -205,7 +197,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         getDiagnosticsEnabled(),
         getTabOrder(),
         getHiddenTabs(),
-        getCustomUpdateUrl(),
         getViewMode(),
         getProgressFormat(),
         getChapterBarShowRemaining(),
@@ -223,7 +214,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
           diagnosticsEnabled: diagnosticsEnabled,
           tabOrder: tabOrder,
           hiddenTabs: hiddenTabs,
-          customUpdateUrl: customUpdateUrl,
           viewMode: viewMode,
           progressFormat: progressFormat,
           chapterBarShowRemaining: chapterBarShowRemaining,
@@ -524,45 +514,6 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
         settings: {
           ...state.settings,
           hiddenTabs: previousValue,
-        },
-      }));
-
-      throw error;
-    }
-  },
-
-  /**
-   * Update custom update URL for loading test bundles
-   */
-  updateCustomUpdateUrl: async (url: string | null) => {
-    log.info(`Updating custom update URL to: ${url || "(cleared)"}`);
-
-    // Capture previous value BEFORE optimistic update
-    const previousValue = get().settings.customUpdateUrl;
-
-    // Optimistic update
-    set((state: SettingsSlice) => ({
-      ...state,
-      settings: {
-        ...state.settings,
-        customUpdateUrl: url,
-      },
-    }));
-
-    try {
-      // Persist to storage
-      await setCustomUpdateUrl(url);
-
-      log.info(`Custom update URL updated`);
-    } catch (error) {
-      log.error("Failed to update custom update URL", error as Error);
-
-      // Revert on error
-      set((state: SettingsSlice) => ({
-        ...state,
-        settings: {
-          ...state.settings,
-          customUpdateUrl: previousValue,
         },
       }));
 
