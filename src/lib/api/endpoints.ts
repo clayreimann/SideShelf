@@ -402,9 +402,7 @@ export async function createLocalSession(
   }
 
   const bodyText = JSON.stringify(body);
-  log.info(
-    `Creating local session localId=${sessionId} libraryItem=${libraryItemId} body=${bodyText}`
-  );
+  log.info("Creating local listening session");
   const response = await apiFetch("/api/session/local", {
     method: "POST",
     headers: {

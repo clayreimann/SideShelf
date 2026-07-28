@@ -159,6 +159,8 @@ export interface UserProfileSliceState {
   };
 }
 
+export type BookmarkDrainFence = () => boolean;
+
 /**
  * UserProfile slice actions interface
  */
@@ -173,7 +175,7 @@ export interface UserProfileSliceActions {
   /** Update user record */
   updateUser: (username: string) => Promise<void>;
   /** Fetch and update bookmarks from server */
-  refreshBookmarks: () => Promise<void>;
+  refreshBookmarks: (canContinue?: BookmarkDrainFence) => Promise<void>;
   /** Create a new bookmark (offline-aware) */
   createBookmark: (
     libraryItemId: string,
@@ -187,7 +189,7 @@ export interface UserProfileSliceActions {
   /** Get bookmarks for a specific library item */
   getItemBookmarks: (libraryItemId: string) => ApiAudioBookmark[];
   /** Drain pending bookmark ops queue, replaying ops in FIFO order */
-  drainPendingBookmarkOps: () => Promise<void>;
+  drainPendingBookmarkOps: (canContinue?: BookmarkDrainFence) => Promise<void>;
   /** Reset the slice to initial state */
   resetUserProfile: () => void;
 }
@@ -196,6 +198,14 @@ export interface UserProfileSliceActions {
  * Combined UserProfile slice interface
  */
 export interface UserProfileSlice extends UserProfileSliceState, UserProfileSliceActions {}
+
+function requireActiveUserId(state: UserProfileSlice, operation: string): string {
+  const userId = state.userProfile.activeUserId?.trim();
+  if (!userId) {
+    throw new Error(`[${operation}] Cannot persist bookmark without an active user`);
+  }
+  return userId;
+}
 
 /**
  * Initial state
@@ -211,6 +221,142 @@ const initialState: UserProfileSliceState = {
     isLoading: false,
   },
 };
+
+type UserProfileGetter = () => UserProfileSlice;
+
+type BookmarkDrainWorkerState = {
+  inFlight: Promise<void> | null;
+  followUpRequested: boolean;
+  followUpFence?: BookmarkDrainFence;
+};
+
+const bookmarkDrainWorkers = new WeakMap<UserProfileGetter, BookmarkDrainWorkerState>();
+
+function getBookmarkDrainWorker(get: UserProfileGetter): BookmarkDrainWorkerState {
+  const existing = bookmarkDrainWorkers.get(get);
+  if (existing) return existing;
+
+  const worker = {
+    inFlight: null,
+    followUpRequested: false,
+  };
+  bookmarkDrainWorkers.set(get, worker);
+  return worker;
+}
+
+// Explicit identity checks at every awaited side-effect boundary drive this branch count.
+// eslint-disable-next-line complexity
+async function runPendingBookmarkDrainPass(
+  get: UserProfileGetter,
+  canContinue: BookmarkDrainFence
+): Promise<void> {
+  const userId = get().userProfile.activeUserId?.trim();
+  if (!userId) {
+    log.debug("[drainPendingBookmarkOps] no userId, skipping");
+    return;
+  }
+
+  const isCurrentIdentity = () =>
+    canContinue() && get().userProfile.activeUserId?.trim() === userId;
+  if (!isCurrentIdentity()) return;
+
+  log.info("[drainPendingBookmarkOps] starting");
+  const ops = await dequeuePendingOps(userId);
+  if (!isCurrentIdentity()) return;
+
+  if (!ops.length) {
+    log.debug("[drainPendingBookmarkOps] no pending ops");
+    return;
+  }
+
+  const succeededIds: string[] = [];
+
+  for (const op of ops) {
+    if (!isCurrentIdentity()) return;
+
+    try {
+      if (op.operationType === "create") {
+        if (!isCurrentIdentity()) return;
+        const bm = await apiCreateBookmark(op.libraryItemId, op.time, op.title ?? undefined);
+        if (!isCurrentIdentity()) return;
+        await upsertBookmark({
+          id: bm.bookmark.id,
+          userId,
+          libraryItemId: bm.bookmark.libraryItemId,
+          title: bm.bookmark.title,
+          time: bm.bookmark.time,
+          createdAt: new Date(bm.bookmark.createdAt),
+          syncedAt: new Date(),
+        });
+        if (!isCurrentIdentity()) return;
+      } else if (op.operationType === "delete") {
+        if (!isCurrentIdentity()) return;
+        await apiDeleteBookmark(op.libraryItemId, op.time);
+        if (!isCurrentIdentity()) return;
+      } else if (op.operationType === "rename" && op.title) {
+        if (!isCurrentIdentity()) return;
+        await apiRenameBookmark(op.libraryItemId, op.time, op.title);
+        if (!isCurrentIdentity()) return;
+      }
+      succeededIds.push(op.id);
+    } catch (error) {
+      if (!isCurrentIdentity()) return;
+      log.warn(`[drainPendingBookmarkOps] op failed, leaving in queue: ${error}`);
+      // Stop draining on first failure to preserve order
+      break;
+    }
+  }
+
+  if (succeededIds.length > 0) {
+    if (!isCurrentIdentity()) return;
+    await clearPendingOps(userId, succeededIds);
+    if (!isCurrentIdentity()) return;
+    await get().refreshBookmarks(isCurrentIdentity);
+  }
+
+  log.info(`[drainPendingBookmarkOps] done: ${succeededIds.length}/${ops.length} ops succeeded`);
+}
+
+function requestPendingBookmarkDrain(
+  get: UserProfileGetter,
+  canContinue: BookmarkDrainFence = () => true
+): Promise<void> {
+  const worker = getBookmarkDrainWorker(get);
+  if (worker.inFlight) {
+    worker.followUpRequested = true;
+    worker.followUpFence = canContinue;
+    return worker.inFlight;
+  }
+
+  const runWorker = async () => {
+    let passFence = canContinue;
+    let firstFailure: unknown;
+    let hasFailure = false;
+
+    do {
+      worker.followUpRequested = false;
+      worker.followUpFence = undefined;
+      try {
+        await runPendingBookmarkDrainPass(get, passFence);
+      } catch (error) {
+        if (!hasFailure) {
+          firstFailure = error;
+          hasFailure = true;
+        }
+      }
+
+      if (!worker.followUpRequested) break;
+      passFence = worker.followUpFence ?? (() => true);
+    } while (true);
+
+    if (hasFailure) throw firstFailure;
+  };
+
+  worker.inFlight = runWorker().finally(() => {
+    worker.inFlight = null;
+  });
+  return worker.inFlight;
+}
 
 /**
  * Create the UserProfile slice
@@ -242,18 +388,52 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
     }));
 
     try {
-      // Fetch device info, user, and bookmarks in parallel
-      const [deviceInfo, user, meResponse] = await Promise.all([
-        getDeviceInfo(),
-        getUserByUsername(username),
-        fetchMe(),
-      ]);
+      const [deviceInfo, user] = await Promise.all([getDeviceInfo(), getUserByUsername(username)]);
+      const localUserId = user?.id?.trim();
 
-      const userId = user?.id ?? meResponse.id;
+      if (localUserId) {
+        set((state: UserProfileSlice) => ({
+          ...state,
+          userProfile: {
+            ...state.userProfile,
+            deviceInfo,
+            user,
+            activeUserId: localUserId,
+            initialized: true,
+            isLoading: false,
+          },
+        }));
+
+        try {
+          const meResponse = await fetchMe();
+          const bookmarksFromServer = normalizeBookmarks(meResponse.bookmarks || []);
+          await upsertAllBookmarks(localUserId, bookmarksFromServer);
+
+          set((state: UserProfileSlice) => ({
+            ...state,
+            userProfile: {
+              ...state.userProfile,
+              bookmarks: bookmarksFromServer,
+            },
+          }));
+
+          log.info(
+            `User profile initialized successfully: username=${username}, deviceId=${deviceInfo.deviceId}, bookmarks=${bookmarksFromServer.length}`
+          );
+        } catch (error) {
+          log.warn(`[initializeUserProfile] remote bookmark refresh unavailable: ${error}`);
+        }
+        return;
+      }
+
+      const meResponse = await fetchMe();
+      const remoteUserId = meResponse.id?.trim();
+      if (!remoteUserId) {
+        throw new Error("Cannot initialize user profile without an active user");
+      }
+
       const bookmarksFromServer = normalizeBookmarks(meResponse.bookmarks || []);
-
-      // Populate SQLite with server bookmarks
-      await upsertAllBookmarks(userId, bookmarksFromServer);
+      await upsertAllBookmarks(remoteUserId, bookmarksFromServer);
 
       set((state: UserProfileSlice) => ({
         ...state,
@@ -261,7 +441,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
           ...state.userProfile,
           deviceInfo,
           user,
-          activeUserId: userId,
+          activeUserId: remoteUserId,
           bookmarks: bookmarksFromServer,
           initialized: true,
           isLoading: false,
@@ -364,11 +544,14 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
   /**
    * Fetch and update bookmarks from server
    */
-  refreshBookmarks: async () => {
+  refreshBookmarks: async (canContinue = () => true) => {
+    if (!canContinue()) return;
     log.info("Refreshing bookmarks...");
 
     try {
+      if (!canContinue()) return;
       const meResponse = await fetchMe();
+      if (!canContinue()) return;
 
       set((state: UserProfileSlice) => ({
         ...state,
@@ -391,6 +574,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
    * Offline: creates optimistic bookmark in state + SQLite, enqueues pending op.
    */
   createBookmark: async (libraryItemId: string, time: number, title?: string) => {
+    const userId = requireActiveUserId(get(), "createBookmark");
     log.info(`[createBookmark] libraryItemId=${libraryItemId} time=${time}`);
 
     const isOnline = get().network.isConnected && get().network.isInternetReachable !== false;
@@ -406,7 +590,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
       // Upsert to SQLite with syncedAt = now
       await upsertBookmark({
         id: newBookmark.id,
-        userId: get().userProfile.activeUserId ?? "",
+        userId,
         libraryItemId: newBookmark.libraryItemId,
         title: newBookmark.title,
         time: newBookmark.time,
@@ -427,7 +611,6 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
     } else {
       // Offline: create optimistic bookmark
       const tempId = uuidv4();
-      const userId = get().userProfile.activeUserId ?? "";
       const optimisticBookmark: ApiAudioBookmark = {
         id: tempId,
         libraryItemId,
@@ -479,9 +662,8 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
    * Always removes from state (optimistic).
    */
   deleteBookmark: async (libraryItemId: string, time: number) => {
+    const userId = requireActiveUserId(get(), "deleteBookmark");
     log.info(`[deleteBookmark] libraryItemId=${libraryItemId} time=${time}`);
-
-    const userId = get().userProfile.activeUserId ?? "";
 
     // Optimistic state update (filter by libraryItemId + time)
     set((state: UserProfileSlice) => ({
@@ -522,9 +704,8 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
    * Offline: updates SQLite optimistically, enqueues pending rename op.
    */
   renameBookmark: async (libraryItemId: string, time: number, newTitle: string) => {
+    const userId = requireActiveUserId(get(), "renameBookmark");
     log.info(`[renameBookmark] libraryItemId=${libraryItemId} time=${time} newTitle=${newTitle}`);
-
-    const userId = get().userProfile.activeUserId ?? "";
     const isOnline = get().network.isConnected && get().network.isInternetReachable !== false;
 
     // Optimistic state update
@@ -600,61 +781,10 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
   },
 
   /**
-   * Drain the pending bookmark ops queue.
-   * Replays ops in FIFO order (createdAt ascending).
-   * Stops on first failure to preserve ordering.
-   * Calls refreshBookmarks after any successful ops to reconcile state.
+   * Request a serialized pending-op drain.
+   * Overlapping requests coalesce into one follow-up FIFO pass.
    */
-  drainPendingBookmarkOps: async () => {
-    const userId = get().userProfile.activeUserId;
-    if (!userId) {
-      log.debug("[drainPendingBookmarkOps] no userId, skipping");
-      return;
-    }
-
-    log.info("[drainPendingBookmarkOps] starting");
-    const ops = await dequeuePendingOps(userId);
-
-    if (!ops.length) {
-      log.debug("[drainPendingBookmarkOps] no pending ops");
-      return;
-    }
-
-    const succeededIds: string[] = [];
-
-    for (const op of ops) {
-      try {
-        if (op.operationType === "create") {
-          const bm = await apiCreateBookmark(op.libraryItemId, op.time, op.title ?? undefined);
-          await upsertBookmark({
-            id: bm.bookmark.id,
-            userId,
-            libraryItemId: bm.bookmark.libraryItemId,
-            title: bm.bookmark.title,
-            time: bm.bookmark.time,
-            createdAt: new Date(bm.bookmark.createdAt),
-            syncedAt: new Date(),
-          });
-        } else if (op.operationType === "delete") {
-          await apiDeleteBookmark(op.libraryItemId, op.time);
-        } else if (op.operationType === "rename" && op.title) {
-          await apiRenameBookmark(op.libraryItemId, op.time, op.title);
-        }
-        succeededIds.push(op.id);
-      } catch (error) {
-        log.warn(`[drainPendingBookmarkOps] op failed, leaving in queue: ${error}`);
-        // Stop draining on first failure to preserve order
-        break;
-      }
-    }
-
-    if (succeededIds.length > 0) {
-      await clearPendingOps(userId, succeededIds);
-      await get().refreshBookmarks();
-    }
-
-    log.info(`[drainPendingBookmarkOps] done: ${succeededIds.length}/${ops.length} ops succeeded`);
-  },
+  drainPendingBookmarkOps: (canContinue) => requestPendingBookmarkDrain(get, canContinue),
 
   /**
    * Reset the slice to initial state

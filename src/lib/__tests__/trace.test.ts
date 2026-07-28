@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it, beforeEach } from "@jest/globals";
-import { LocalTrace } from "@/lib/trace";
+import { LocalTrace, sanitizeTracePayload } from "@/lib/trace";
 
 describe("LocalTrace", () => {
   let t: LocalTrace;
@@ -71,6 +71,101 @@ describe("LocalTrace", () => {
       const desc = spanRecord.attributes?.description as string;
       expect(typeof desc).toBe("string");
       expect(desc.length).toBeLessThanOrEqual(11); // 10 chars + ellipsis char
+    });
+
+    it("redacts nested identity attributes while preserving trace context and diagnostic fields", () => {
+      const span = t.startSpan("sync-session", {
+        userId: "user-1",
+        libraryId: "library-1",
+        libraryItemId: "library-item-1",
+        itemId: "item-1",
+        mediaId: "media-1",
+        episodeId: "episode-1",
+        sessionId: "session-1",
+        restoreSessionId: "restore-session-1",
+        deviceId: "device-1",
+        state: "SYNCING_SESSION",
+        retryCount: 3,
+        timingMs: 250,
+        nested: { userId: "nested-user-1", deviceId: "nested-device-1" },
+      });
+      t.addSpanEvent(span, "progress-sync.attempted", { sessionId: "session-1", attempt: 2 });
+      t.endSpan(span);
+
+      const [record] = t.exportTrace().records;
+      const spanRecord = record as {
+        traceId: string;
+        spanId: string;
+        name: string;
+        attributes?: Record<string, unknown>;
+        events?: { name: string; attributes?: Record<string, unknown> }[];
+      };
+
+      expect(spanRecord.traceId).not.toBe("[REDACTED]");
+      expect(spanRecord.spanId).not.toBe("[REDACTED]");
+      expect(spanRecord.name).toBe("sync-session");
+      expect(spanRecord.attributes).toMatchObject({
+        userId: "[REDACTED]",
+        libraryId: "[REDACTED]",
+        libraryItemId: "[REDACTED]",
+        itemId: "[REDACTED]",
+        mediaId: "[REDACTED]",
+        episodeId: "[REDACTED]",
+        sessionId: "[REDACTED]",
+        restoreSessionId: "[REDACTED]",
+        deviceId: "[REDACTED]",
+        state: "SYNCING_SESSION",
+        retryCount: 3,
+        timingMs: 250,
+        nested: { userId: "[REDACTED]", deviceId: "[REDACTED]" },
+      });
+      expect(spanRecord.events).toEqual([
+        expect.objectContaining({
+          name: "progress-sync.attempted",
+          attributes: { sessionId: "[REDACTED]", attempt: 2 },
+        }),
+      ]);
+
+      expect(
+        sanitizeTracePayload({ traceId: "trace-1", spanId: "span-1", itemId: "item-1" })
+      ).toEqual({
+        traceId: "trace-1",
+        spanId: "span-1",
+        itemId: "[REDACTED]",
+      });
+    });
+
+    it("sanitizes download item path segments in arbitrary strings and serialized errors", () => {
+      const sensitiveLibraryItemId = "library-item-private-7f3d9";
+      const path = `/documents/downloads/${sensitiveLibraryItemId}/chapter-01.m4b`;
+      const span = t.startSpan("download-verification", {
+        detail: `Checking ${path}`,
+        storedPath: path,
+      });
+      const error = new Error(`Missing ${path}`);
+      error.stack = `Error: Missing ${path}\n    at verifyDownload (DownloadService.ts:10:2)`;
+      t.recordError(error, span);
+      t.endSpan(span, "error");
+
+      const [record] = t.exportTrace().records;
+      const spanRecord = record as {
+        traceId: string;
+        spanId: string;
+        attributes?: Record<string, unknown>;
+        error?: { message: string; stack?: string };
+      };
+
+      expect(JSON.stringify(spanRecord)).not.toContain(sensitiveLibraryItemId);
+      expect(spanRecord.traceId).not.toBe("[REDACTED]");
+      expect(spanRecord.spanId).not.toBe("[REDACTED]");
+      expect(spanRecord.attributes).toEqual({
+        detail: "Checking /documents/downloads/[REDACTED]/chapter-01.m4b",
+        storedPath: "[REDACTED]",
+      });
+      expect(spanRecord.error?.message).toBe(
+        "Missing /documents/downloads/[REDACTED]/chapter-01.m4b"
+      );
+      expect(spanRecord.error?.stack).toContain("verifyDownload");
     });
   });
 

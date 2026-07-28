@@ -33,6 +33,15 @@ export default function FloatingPlayer() {
   const pathname = usePathname();
   const params = useGlobalSearchParams();
 
+  const handlePlayPauseLongPress = useCallback(async () => {
+    try {
+      await writeDumpToDisk("manual");
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (err) {
+      log.error("[handlePlayPauseLongPress] Trace dump failed", err as Error);
+    }
+  }, []);
+
   // Don't show if no track is loaded
   if (!currentTrack) {
     return null;
@@ -57,15 +66,6 @@ export default function FloatingPlayer() {
       console.error("[FloatingPlayer] Failed to toggle play/pause:", error);
     }
   };
-
-  const handlePlayPauseLongPress = useCallback(async () => {
-    try {
-      await writeDumpToDisk("manual");
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (err) {
-      log.error("[handlePlayPauseLongPress] Trace dump failed", err as Error);
-    }
-  }, []);
 
   const handlePlayerPress = () => {
     router.push("/FullScreenPlayer");

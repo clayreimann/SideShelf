@@ -11,6 +11,7 @@ import { State } from "react-native-track-player";
 import { PlayerStateCoordinator } from "../PlayerStateCoordinator";
 import { playerEventBus } from "../eventBus";
 import { updateNowPlayingMetadata } from "@/lib/nowPlayingMetadata";
+import { writeDumpToDisk } from "@/lib/traceDump";
 
 // Mock PlayerService
 jest.mock("../../PlayerService", () => {
@@ -252,6 +253,16 @@ describe("PlayerStateCoordinator", () => {
 
       const afterRejected = coordinator.getMetrics().rejectedTransitionCount;
       expect(afterRejected).toBe(beforeRejected + 1);
+    });
+
+    it("retains rejected transitions in diagnostics without automatically writing a dump", async () => {
+      const beforeRejected = coordinator.getMetrics().rejectedTransitionCount;
+
+      await coordinator.dispatch({ type: "PAUSE" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(coordinator.getMetrics().rejectedTransitionCount).toBe(beforeRejected + 1);
+      expect(writeDumpToDisk).not.toHaveBeenCalled();
     });
 
     it("should handle no-op events", async () => {

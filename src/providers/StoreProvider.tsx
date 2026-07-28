@@ -18,6 +18,7 @@ import {
 } from "@/stores";
 import React from "react";
 import { useAuth } from "./AuthProvider";
+import { BookmarkSyncProvider } from "./BookmarkSyncProvider";
 import { useDb } from "./DbProvider";
 import { ProgressSyncProvider } from "./ProgressSyncProvider";
 
@@ -37,5 +38,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useUserProfileStoreInitializer(username); // User profile needs username
   useHomeStoreInitializer(username ? username : null); // Home needs userId (username)
 
-  return <ProgressSyncProvider>{children}</ProgressSyncProvider>;
+  return (
+    <ProgressSyncProvider>
+      <BookmarkSyncProvider>{children}</BookmarkSyncProvider>
+    </ProgressSyncProvider>
+  );
 }

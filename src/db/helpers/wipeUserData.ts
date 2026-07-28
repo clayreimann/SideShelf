@@ -6,7 +6,8 @@
  *
  * Tables wiped (all rows deleted, no WHERE clause):
  *   pending_bookmark_ops, bookmarks,
- *   media_progress, library_items, media_metadata, audio_files, chapters,
+ *   media_progress, local_progress_snapshots, local_listening_sessions,
+ *   progress_sync_outbox, library_items, media_metadata, audio_files, chapters,
  *   authors, series, media_genres, media_tags, media_authors, media_series,
  *   media_narrators
  *
@@ -34,7 +35,11 @@ import { mediaProgress } from "../schema/mediaProgress";
 import { narrators } from "../schema/narrators";
 import { series } from "../schema/series";
 import { tags } from "../schema/tags";
-import { localListeningSessions, progressSyncOutbox } from "../schema/localData";
+import {
+  localListeningSessions,
+  localProgressSnapshots,
+  progressSyncOutbox,
+} from "../schema/localData";
 
 /**
  * Delete all user-specific rows from every content table.
@@ -51,6 +56,7 @@ export async function wipeUserData(): Promise<void> {
   // Explicit logout must remove durable playback work before content parents.
   // Do not rely on FK cascades: embedded SQLite configurations can disable them.
   await db.delete(progressSyncOutbox);
+  await db.delete(localProgressSnapshots);
   await db.delete(localListeningSessions);
 
   // Join tables first (reference mediaMetadata, authors, series, etc.)

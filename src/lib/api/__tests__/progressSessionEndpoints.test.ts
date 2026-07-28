@@ -21,6 +21,10 @@ jest.mock("react-native-device-info", () => ({
 import { apiFetch } from "@/lib/api/api";
 // eslint-disable-next-line import/first
 import { ApiResponseError, createLocalSession, fetchMe } from "@/lib/api/endpoints";
+// eslint-disable-next-line import/first
+import { logger, type SubLogger } from "@/lib/logger";
+
+const mockApiFetch = jest.mocked(apiFetch);
 
 const SESSION_ID = "dc2e6ee5-58e9-4494-a8ef-3c6a1f232b13";
 
@@ -37,6 +41,20 @@ const sessionParams = {
   updatedAt: 1_700_000_360_000,
   deviceInfo: { deviceId: "test-device" },
 };
+
+function getSubLoggerFor(tag: string): SubLogger {
+  const mockForTag = jest.mocked(logger.forTag);
+  const calls = mockForTag.mock.calls;
+  const idx = calls.findIndex((call) => call[0] === tag);
+  if (idx === -1) throw new Error(`logger.forTag was never called with tag "${tag}"`);
+  const result = mockForTag.mock.results[idx];
+  if (result.type !== "return") {
+    throw new Error(`logger.forTag did not return a logger for tag "${tag}"`);
+  }
+  return result.value;
+}
+
+const endpointsSubLogger = getSubLoggerFor("api:endpoints");
 
 type BodyConsumption = {
   original: number;
@@ -94,7 +112,7 @@ describe("progress session endpoints", () => {
 
   it("sends a stable snapshot and returns an identified local session", async () => {
     const consumption = { original: 0, clones: [] };
-    (apiFetch as jest.Mock).mockResolvedValue(
+    mockApiFetch.mockResolvedValue(
       makeResponse(200, JSON.stringify({ id: SESSION_ID }), {}, consumption)
     );
 
@@ -103,9 +121,12 @@ describe("progress session endpoints", () => {
       duplicate: false,
     });
 
-    const [path, options] = (apiFetch as jest.Mock).mock.calls[0];
+    const [path, options] = mockApiFetch.mock.calls[0];
     expect(path).toBe("/api/session/local");
-    const body = JSON.parse(options.body);
+    if (!options || typeof options.body !== "string") {
+      throw new Error("Expected createLocalSession to send a string request body");
+    }
+    const body = JSON.parse(options.body) as Record<string, unknown>;
     expect(body).toMatchObject({
       id: SESSION_ID,
       currentTime: 480,
@@ -114,8 +135,25 @@ describe("progress session endpoints", () => {
     expect(consumption).toEqual({ original: 1, clones: [] });
   });
 
+  it("does not include local session identities or request body in info logs", async () => {
+    mockApiFetch.mockResolvedValue(makeResponse(204));
+
+    await createLocalSession(sessionParams);
+
+    expect(endpointsSubLogger.info).toHaveBeenCalledTimes(1);
+    expect(endpointsSubLogger.info).toHaveBeenCalledWith("Creating local listening session");
+
+    const messages = jest.mocked(endpointsSubLogger.info).mock.calls.map(([message]) => message);
+    const combined = messages.join("\n");
+    expect(combined).not.toContain(SESSION_ID);
+    expect(combined).not.toContain(sessionParams.userId);
+    expect(combined).not.toContain(sessionParams.libraryId);
+    expect(combined).not.toContain(sessionParams.libraryItemId);
+    expect(combined).not.toContain(sessionParams.deviceInfo.deviceId);
+  });
+
   it("accepts an empty successful response as the submitted local session", async () => {
-    (apiFetch as jest.Mock).mockResolvedValue(makeResponse(204));
+    mockApiFetch.mockResolvedValue(makeResponse(204));
 
     await expect(createLocalSession(sessionParams)).resolves.toEqual({
       id: SESSION_ID,
@@ -124,9 +162,7 @@ describe("progress session endpoints", () => {
   });
 
   it("accepts a duplicate response only when it identifies the submitted session", async () => {
-    (apiFetch as jest.Mock).mockResolvedValue(
-      makeResponse(409, JSON.stringify({ id: SESSION_ID }))
-    );
+    mockApiFetch.mockResolvedValue(makeResponse(409, JSON.stringify({ id: SESSION_ID })));
 
     await expect(createLocalSession(sessionParams)).resolves.toEqual({
       id: SESSION_ID,
@@ -135,7 +171,7 @@ describe("progress session endpoints", () => {
   });
 
   it("rejects a successful response that identifies another session", async () => {
-    (apiFetch as jest.Mock).mockResolvedValue(
+    mockApiFetch.mockResolvedValue(
       makeResponse(200, JSON.stringify({ id: "a627e2e0-a6b1-42f5-bc17-21a98f44d373" }), {
         "Retry-After": "60",
       })
@@ -149,7 +185,7 @@ describe("progress session endpoints", () => {
   });
 
   it("rejects a duplicate response that identifies another session", async () => {
-    (apiFetch as jest.Mock).mockResolvedValue(
+    mockApiFetch.mockResolvedValue(
       makeResponse(409, JSON.stringify({ id: "a627e2e0-a6b1-42f5-bc17-21a98f44d373" }))
     );
 
@@ -168,7 +204,7 @@ describe("progress session endpoints", () => {
     "preserves HTTP status %i without retaining unredacted response data",
     async (status, retryAfter) => {
       const secret = "leaked-access-token";
-      (apiFetch as jest.Mock).mockResolvedValue(
+      mockApiFetch.mockResolvedValue(
         makeResponse(
           status,
           JSON.stringify({ error: "Request failed", accessToken: secret }),
@@ -191,7 +227,7 @@ describe("progress session endpoints", () => {
   it("parses an HTTP-date Retry-After as a delay in milliseconds", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-07-20T12:00:00.000Z"));
-    (apiFetch as jest.Mock).mockResolvedValue(
+    mockApiFetch.mockResolvedValue(
       makeResponse(429, JSON.stringify({ error: "Slow down" }), {
         "Retry-After": "Mon, 20 Jul 2026 12:01:30 GMT",
       })
@@ -208,7 +244,7 @@ describe("progress session endpoints", () => {
     ["password=leaked-password", "password=<redacted>"],
     ["", "Failed to fetch user data"],
   ])("uses the compatible error message for response body %p", async (body, message) => {
-    (apiFetch as jest.Mock).mockResolvedValue(makeResponse(500, body));
+    mockApiFetch.mockResolvedValue(makeResponse(500, body));
 
     await expect(fetchMe()).rejects.toMatchObject({
       name: "ApiResponseError",

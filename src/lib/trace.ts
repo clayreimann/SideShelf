@@ -89,10 +89,28 @@ const DEFAULT_CONFIG: TraceConfig = {
   maxEventsPerSpan: 20,
   maxAttributeDepth: 4,
   maxStringLength: 500,
-  redactKeys: ["password", "token", "authorization", "cookie", "secret"],
+  redactKeys: [
+    "password",
+    "token",
+    "authorization",
+    "cookie",
+    "secret",
+    "userId",
+    "libraryId",
+    "itemId",
+    "mediaId",
+    "episodeId",
+    "sessionId",
+    "deviceId",
+    "path",
+  ],
   now: () => Date.now(),
   wallNow: () => Date.now(),
 };
+
+// A persisted dump wraps trace attributes in payload → records → span → events → event.
+// Retain the configured attribute nesting budget after traversing those fixed wrappers.
+const PERSISTED_PAYLOAD_WRAPPER_DEPTH = 5;
 
 function createId(): string {
   return Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
@@ -154,21 +172,28 @@ function serializeError(error: unknown, cfg: TraceConfig): SerializedError {
     const anyErr = error as Error & { cause?: unknown };
     return {
       name: error.name,
-      message: truncateString(error.message, cfg.maxStringLength),
-      stack: error.stack ? truncateString(error.stack, cfg.maxStringLength * 4) : undefined,
+      message: sanitizeString(error.message, cfg.maxStringLength),
+      stack: error.stack ? sanitizeString(error.stack, cfg.maxStringLength * 4) : undefined,
       cause: sanitizeValue(anyErr.cause, cfg, 1),
     };
   }
 
   return {
     name: "NonErrorThrown",
-    message: truncateString(String(error), cfg.maxStringLength),
+    message: sanitizeString(String(error), cfg.maxStringLength),
   };
 }
+
+const DOWNLOAD_ITEM_PATH_SEGMENT = /(\bdownloads[\\/])([^\\/\s"'`?#[\]{}()]+)(?=[\\/])/gi;
 
 function truncateString(value: string, max: number): string {
   if (value.length <= max) return value;
   return `${value.slice(0, Math.max(0, max - 1))}…`;
+}
+
+function sanitizeString(value: string, max: number): string {
+  const redacted = value.replace(DOWNLOAD_ITEM_PATH_SEGMENT, "$1[REDACTED]");
+  return truncateString(redacted, max);
 }
 
 function sanitizeValue(value: unknown, cfg: TraceConfig, depth = 0): unknown {
@@ -179,7 +204,7 @@ function sanitizeValue(value: unknown, cfg: TraceConfig, depth = 0): unknown {
   }
 
   if (typeof value === "string") {
-    return truncateString(value, cfg.maxStringLength);
+    return sanitizeString(value, cfg.maxStringLength);
   }
 
   if (typeof value === "bigint") {
@@ -211,10 +236,21 @@ function sanitizeValue(value: unknown, cfg: TraceConfig, depth = 0): unknown {
   }
 
   try {
-    return truncateString(JSON.stringify(value), cfg.maxStringLength);
+    return sanitizeString(JSON.stringify(value), cfg.maxStringLength);
   } catch {
     return `[Unserializable ${Object.prototype.toString.call(value)}]`;
   }
+}
+
+export function sanitizeTracePayload(value: unknown): unknown {
+  return sanitizeValue(
+    value,
+    {
+      ...DEFAULT_CONFIG,
+      maxAttributeDepth: DEFAULT_CONFIG.maxAttributeDepth + PERSISTED_PAYLOAD_WRAPPER_DEPTH,
+    },
+    0
+  );
 }
 
 function sanitizeAttributes(
