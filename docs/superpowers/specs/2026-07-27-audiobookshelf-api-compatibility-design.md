@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-27
 
-**Status:** Proposed for review
+**Status:** Approved
 
 **Scope:** Reusable compatibility testing between SideShelf releases and versioned Audiobookshelf server releases
 
