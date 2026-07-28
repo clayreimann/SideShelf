@@ -571,4 +571,56 @@ describe("Task 2 — initializeUserProfile", () => {
 
     expect(bookmarkHelpers.upsertAllBookmarks).toHaveBeenCalledWith("user-1", []);
   });
+
+  it("retains the durable local identity when the remote bookmark refresh is unavailable", async () => {
+    endpoints.fetchMe.mockRejectedValueOnce(new Error("offline"));
+    const store = makeStore({ isConnected: false, isInternetReachable: false });
+
+    await expect(store.getState().initializeUserProfile("testuser")).resolves.toBeUndefined();
+
+    expect(store.getState().userProfile).toMatchObject({
+      activeUserId: "user-1",
+      initialized: true,
+      isLoading: false,
+    });
+  });
+});
+
+describe("bookmark mutations without an active user", () => {
+  it("rejects createBookmark before API or SQLite work", async () => {
+    const store = makeStore({ isConnected: true, isInternetReachable: true });
+
+    await expect(store.getState().createBookmark("item-1", 60, "Bookmark")).rejects.toThrow(
+      /active user/
+    );
+
+    expect(endpoints.createBookmark).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.upsertBookmark).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.deleteBookmarkLocal).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.enqueuePendingOp).not.toHaveBeenCalled();
+  });
+
+  it("rejects deleteBookmark before API or SQLite work", async () => {
+    const store = makeStore({ isConnected: true, isInternetReachable: true });
+
+    await expect(store.getState().deleteBookmark("item-1", 60)).rejects.toThrow(/active user/);
+
+    expect(endpoints.deleteBookmark).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.upsertBookmark).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.deleteBookmarkLocal).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.enqueuePendingOp).not.toHaveBeenCalled();
+  });
+
+  it("rejects renameBookmark before API or SQLite work", async () => {
+    const store = makeStore({ isConnected: true, isInternetReachable: true });
+
+    await expect(store.getState().renameBookmark("item-1", 60, "Renamed")).rejects.toThrow(
+      /active user/
+    );
+
+    expect(endpoints.renameBookmark).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.upsertBookmark).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.deleteBookmarkLocal).not.toHaveBeenCalled();
+    expect(bookmarkHelpers.enqueuePendingOp).not.toHaveBeenCalled();
+  });
 });

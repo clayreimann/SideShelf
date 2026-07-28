@@ -197,6 +197,14 @@ export interface UserProfileSliceActions {
  */
 export interface UserProfileSlice extends UserProfileSliceState, UserProfileSliceActions {}
 
+function requireActiveUserId(state: UserProfileSlice, operation: string): string {
+  const userId = state.userProfile.activeUserId?.trim();
+  if (!userId) {
+    throw new Error(`[${operation}] Cannot persist bookmark without an active user`);
+  }
+  return userId;
+}
+
 /**
  * Initial state
  */
@@ -242,18 +250,52 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
     }));
 
     try {
-      // Fetch device info, user, and bookmarks in parallel
-      const [deviceInfo, user, meResponse] = await Promise.all([
-        getDeviceInfo(),
-        getUserByUsername(username),
-        fetchMe(),
-      ]);
+      const [deviceInfo, user] = await Promise.all([getDeviceInfo(), getUserByUsername(username)]);
+      const localUserId = user?.id?.trim();
 
-      const userId = user?.id ?? meResponse.id;
+      if (localUserId) {
+        set((state: UserProfileSlice) => ({
+          ...state,
+          userProfile: {
+            ...state.userProfile,
+            deviceInfo,
+            user,
+            activeUserId: localUserId,
+            initialized: true,
+            isLoading: false,
+          },
+        }));
+
+        try {
+          const meResponse = await fetchMe();
+          const bookmarksFromServer = normalizeBookmarks(meResponse.bookmarks || []);
+          await upsertAllBookmarks(localUserId, bookmarksFromServer);
+
+          set((state: UserProfileSlice) => ({
+            ...state,
+            userProfile: {
+              ...state.userProfile,
+              bookmarks: bookmarksFromServer,
+            },
+          }));
+
+          log.info(
+            `User profile initialized successfully: username=${username}, deviceId=${deviceInfo.deviceId}, bookmarks=${bookmarksFromServer.length}`
+          );
+        } catch (error) {
+          log.warn(`[initializeUserProfile] remote bookmark refresh unavailable: ${error}`);
+        }
+        return;
+      }
+
+      const meResponse = await fetchMe();
+      const remoteUserId = meResponse.id?.trim();
+      if (!remoteUserId) {
+        throw new Error("Cannot initialize user profile without an active user");
+      }
+
       const bookmarksFromServer = normalizeBookmarks(meResponse.bookmarks || []);
-
-      // Populate SQLite with server bookmarks
-      await upsertAllBookmarks(userId, bookmarksFromServer);
+      await upsertAllBookmarks(remoteUserId, bookmarksFromServer);
 
       set((state: UserProfileSlice) => ({
         ...state,
@@ -261,7 +303,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
           ...state.userProfile,
           deviceInfo,
           user,
-          activeUserId: userId,
+          activeUserId: remoteUserId,
           bookmarks: bookmarksFromServer,
           initialized: true,
           isLoading: false,
@@ -391,6 +433,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
    * Offline: creates optimistic bookmark in state + SQLite, enqueues pending op.
    */
   createBookmark: async (libraryItemId: string, time: number, title?: string) => {
+    const userId = requireActiveUserId(get(), "createBookmark");
     log.info(`[createBookmark] libraryItemId=${libraryItemId} time=${time}`);
 
     const isOnline = get().network.isConnected && get().network.isInternetReachable !== false;
@@ -406,7 +449,7 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
       // Upsert to SQLite with syncedAt = now
       await upsertBookmark({
         id: newBookmark.id,
-        userId: get().userProfile.activeUserId ?? "",
+        userId,
         libraryItemId: newBookmark.libraryItemId,
         title: newBookmark.title,
         time: newBookmark.time,
@@ -427,7 +470,6 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
     } else {
       // Offline: create optimistic bookmark
       const tempId = uuidv4();
-      const userId = get().userProfile.activeUserId ?? "";
       const optimisticBookmark: ApiAudioBookmark = {
         id: tempId,
         libraryItemId,
@@ -479,9 +521,8 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
    * Always removes from state (optimistic).
    */
   deleteBookmark: async (libraryItemId: string, time: number) => {
+    const userId = requireActiveUserId(get(), "deleteBookmark");
     log.info(`[deleteBookmark] libraryItemId=${libraryItemId} time=${time}`);
-
-    const userId = get().userProfile.activeUserId ?? "";
 
     // Optimistic state update (filter by libraryItemId + time)
     set((state: UserProfileSlice) => ({
@@ -522,9 +563,8 @@ export const createUserProfileSlice: SliceCreator<UserProfileSlice> = (set, get)
    * Offline: updates SQLite optimistically, enqueues pending rename op.
    */
   renameBookmark: async (libraryItemId: string, time: number, newTitle: string) => {
+    const userId = requireActiveUserId(get(), "renameBookmark");
     log.info(`[renameBookmark] libraryItemId=${libraryItemId} time=${time} newTitle=${newTitle}`);
-
-    const userId = get().userProfile.activeUserId ?? "";
     const isOnline = get().network.isConnected && get().network.isInternetReachable !== false;
 
     // Optimistic state update
