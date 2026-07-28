@@ -405,6 +405,87 @@
 
 ---
 
+### Task 5: Commit the verified Home downloaded-shelf filter
+
+**Files:**
+
+- Modify: `src/stores/slices/homeSlice.ts`
+- Create: `src/stores/slices/__tests__/homeSlice.test.ts`
+
+**Interfaces:**
+
+- Consumes: `downloadService.isLibraryItemDownloaded(libraryItemId)` as the canonical full-download predicate and the existing `HomeScreenItem[]` candidate lists from `src/db/helpers/homeScreen.ts`.
+- Produces: Home `downloaded` shelves that retain candidate ordering but exclude partial, missing, or otherwise incomplete local downloads during initialization, whole-home refresh, and downloaded-section refresh.
+
+- [ ] **Step 1: Migrate the source-checkout regression test before production code**
+
+  Copy only the approved Home-shelf test intent from `/Users/clay/Code/github/SideShelf/src/stores/slices/__tests__/homeSlice.test.ts`. Mock the four home-screen DB helpers and the singleton `downloadService.isLibraryItemDownloaded`.
+
+  Cover all three changed entry points:
+
+  ```typescript
+  initializeHome("user-1");
+  refreshHome("user-1");
+  refreshSection("downloaded", "user-1");
+  ```
+
+  For each path, return candidates in the order `complete-book`, `partial-book`, make the canonical predicate resolve `true` only for `complete-book`, and assert the final downloaded shelf is exactly:
+
+  ```typescript
+  [{ id: "complete-book", title: "Complete" }];
+  ```
+
+- [ ] **Step 2: Run the test and verify the shelf still includes the partial candidate**
+
+  Run:
+
+  ```bash
+  npm test -- --runInBand src/stores/slices/__tests__/homeSlice.test.ts
+  ```
+
+  Expected: the new assertions fail because the baseline slice assigns database candidates directly without consulting the canonical download predicate.
+
+- [ ] **Step 3: Migrate the approved Home-shelf implementation**
+
+  Import `downloadService` directly from `@/services/DownloadService` and add:
+
+  ```typescript
+  async function getFullyDownloadedItems(items: HomeScreenItem[]): Promise<HomeScreenItem[]> {
+    const verifiedItems = await Promise.all(
+      items.map(async (item) =>
+        (await downloadService.isLibraryItemDownloaded(item.id)) ? item : null
+      )
+    );
+    return verifiedItems.filter((item): item is HomeScreenItem => item !== null);
+  }
+  ```
+
+  Apply it to `data.downloaded` in both `initializeHome` and `refreshHome`, and to `await getDownloadedItems()` in the `"downloaded"` `refreshSection` branch. Use the verified count in the initialization log. Keep candidate order stable and leave the continue-listening and listen-again shelves unchanged.
+
+- [ ] **Step 4: Verify Home-shelf behavior and dependency safety**
+
+  Run:
+
+  ```bash
+  npm test -- --runInBand src/stores/slices/__tests__/homeSlice.test.ts
+  npx eslint src/stores/slices/homeSlice.ts src/stores/slices/__tests__/homeSlice.test.ts
+  npx dpdm --circular src/stores/slices/homeSlice.ts
+  git diff --check
+  ```
+
+  Expected: all Home tests pass, ESLint has zero errors, no circular dependency is found, and the diff is whitespace-clean.
+
+- [ ] **Step 5: Commit only the Home-shelf files**
+
+  ```bash
+  git add src/stores/slices/homeSlice.ts src/stores/slices/__tests__/homeSlice.test.ts
+  git commit -m "fix: verify complete downloads on home shelf"
+  ```
+
+  Do not stage or alter `/Users/clay/Code/github/SideShelf/CLAUDE.md` or `/Users/clay/Code/github/SideShelf/src/components/ui/__tests__/CoverImage.test.tsx`; those remain user-owned source-checkout changes.
+
+---
+
 ## Final Integration Verification
 
 - [ ] Run the complete Jest suite:
