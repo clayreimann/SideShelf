@@ -14,7 +14,7 @@ This is a debt-removal and enforcement project. It must not intentionally change
 
 The 2026-07-28 inventory established:
 
-- `npx tsc --noEmit --pretty false` reports 139 diagnostics across 27 files.
+- `npx tsc --noEmit --pretty false` reports 137 diagnostics across 26 files after a clean `npm ci`.
 - Most TypeScript diagnostics are test-typing failures: 92 are `TS2345`, and the largest clusters are Jest mocks and fixtures in download, API, coordinator, and collaborator tests.
 - Production diagnostics remain in components, database helpers, i18n, API and deep-link utilities, file lifecycle code, download/player services, and Zustand slices.
 - ESLint reports 12 errors in tracked JavaScript and TypeScript files.
