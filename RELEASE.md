@@ -4,20 +4,21 @@ This document describes the different build types and how to create them.
 
 ## Build Types
 
-### Preview Builds (TestFlight with OTA Updates)
+### Preview Builds (Internal Distribution)
 
-Preview builds enable **dynamic bundle loading** for faster PR testing. These builds:
+Preview builds are internal binaries for testing proposed changes before production. OTA updates
+are currently disabled, so every JavaScript or native change requires a new preview binary.
 
-- Include `disableAntiBrickingMeasures: true` (allows runtime URL switching)
-- Can load different PR bundles without rebuilding
-- Are for TestFlight testing only (not App Store submission)
+- Use the `preview` EAS channel as a dormant future-routing value
+- Preserve the embedded bundle and normal Expo recovery behavior
+- Are for internal/TestFlight testing only, not App Store submission
 
 **When to use:** Testing PRs, QA validation, internal testing
 
 #### Build Preview for iOS
 
 ```shell
-# Build with preview profile (enables OTA bundle loading)
+# Build with preview profile
 APP_VARIANT=preview npx eas-cli build --platform ios --profile preview
 
 # Or build locally
@@ -37,24 +38,24 @@ APP_VARIANT=preview npx eas-cli build --platform android --profile preview
 APP_VARIANT=preview npx eas-cli build --platform android --profile preview --local
 ```
 
-**Testing PRs with Preview Builds:**
+**Testing changes with preview builds:**
 
-1. Open any PR → Get deep link from PR comment
-2. Tap "Open in SideShelf" on your device
-3. Confirm URL → Check for updates → Reload
-4. To test a different PR, switch to its URL (requires app relaunch)
+1. Build the exact commit being reviewed.
+2. Install or distribute the resulting internal build.
+3. Record the commit, build number, device, and test result.
+4. Build again when JavaScript or native code changes.
 
-See `docs/architecture/OTA_UPDATES.md` for details.
+See `docs/architecture/OTA_UPDATES.md` for the current OTA status.
 
 ---
 
 ### Production Builds (App Store Distribution)
 
-Production builds are for App Store submission and **do not include OTA bundle loading**. These builds:
+Production builds are for App Store submission. OTA updates are currently disabled, so these builds:
 
-- Have `disableAntiBrickingMeasures: false` (safe rollback enabled)
-- Use fixed update URLs or no updates
-- Are optimized for production stability
+- Launch the embedded JavaScript bundle
+- Do not contain an update-server URL
+- Preserve the normal embedded-bundle recovery behavior
 
 **When to use:** App Store releases, production deployments
 
@@ -119,9 +120,9 @@ npx eas-cli submit --platform android --path=./build-XXX.aab
 
    **Note:** All release tags include the iOS build number after the hyphen. This is NOT a pre-release indicator—all tagged releases on `main` are production releases.
 
-2. **GitHub Actions automatically**:
-   - Exports OTA bundle to GitHub Pages at `/updates/releases/v1.0.0-123/`
-   - Creates GitHub Release with deep link and bundle page
+2. **Treat the tag as a release identifier only**:
+   - Tagging does not publish an OTA update or create an installable JavaScript bundle
+   - Building and submitting the production binary remain explicit steps
 
 3. **Build production binary**:
 
@@ -139,17 +140,22 @@ npx eas-cli submit --platform android --path=./build-XXX.aab
 
 ### For TestFlight Testing
 
-1. **Build once with preview profile**:
+1. **Build a preview candidate**:
 
    ```shell
    APP_VARIANT=preview npx eas-cli build --platform ios --profile preview
    npx eas-cli submit --platform ios --path=./build-XXX.ipa
    ```
 
-2. **Test any PR** using the same build:
-   - PRs auto-deploy bundles to GitHub Pages
-   - Use deep links to switch between PRs
-   - No rebuild required for JS-only changes
+2. **Rebuild for each tested commit**:
+   - PRs do not publish installable OTA bundles
+   - JavaScript-only changes still require a new preview binary
+   - Record the tested commit and generated build number
+
+The approved Worker + R2 design must pass its production gates before these instructions describe
+OTA publication:
+
+- `docs/superpowers/specs/2026-07-28-self-hosted-ota-worker-r2-design.md`
 
 ---
 
