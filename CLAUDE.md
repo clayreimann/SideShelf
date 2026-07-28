@@ -105,6 +105,13 @@ Circular imports cause uninitialized values at runtime. Never allow them:
 - Private service methods: underscore prefix (`_setCurrentTrack`)
 - Constants: `UPPER_SNAKE_CASE`
 
+### Accessibility
+
+- **Icon-only buttons: use `IconButton`** (`@/components/ui/IconButton`) — never a raw `Pressable`. Its required `accessibilityLabel` prop makes unlabeled buttons a compile error; pass platform icons as children
+- **Selection/option rows: use `OptionRow`** (`@/components/ui/OptionRow`) — its `selected` prop drives the checkmark and `accessibilityState.selected` together
+- ESLint enforces a11y props on all touchables (`eslint-plugin-react-native-a11y`); label strings live in the `accessibility.*` i18n namespace (en + es key sets must match or tsc fails)
+- Collapsing a row with `accessible={true}` swallows interactive descendants — never collapse a container that has buttons inside it
+
 ### Logging
 
 Always use tagged logger — never `console.log`:
