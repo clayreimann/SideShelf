@@ -27,7 +27,7 @@
     "ios": "expo prebuild --clean && expo run:ios",
     "ios:device": "bash scripts/build-device.sh",
     "web": "expo start --web",
-    "lint": "expo lint",
+    "lint": "eslint .",
     "lint:complexity": "npx eslint . --ext .ts,.tsx,.js,.jsx --format json --output-file eslint-report.json || true",
     "test": "jest --watchAll=false",
     "test:watch": "jest --watch",
@@ -35,6 +35,8 @@
     "test:report": "jest --coverage --json --outputFile=test-results.json && echo 'open test-report.html coverage/lcov-report/index.html'",
     "drizzle:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "check:circular": "node scripts/check-circular.mjs",
+    "typecheck": "tsc --noEmit --pretty false",
+    "static-analysis": "npm run typecheck && npm run lint && npm run check:circular",
     "screenshots": "bash scripts/run-screenshots.sh",
     "maestro:test": "bash scripts/run-maestro-tests.sh"
   },
