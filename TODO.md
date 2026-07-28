@@ -160,7 +160,8 @@
   - [ ] Test production Android build
   - [ ] Verify app signing is configured
   - [ ] Set up automated versioning
-  - [ ] Configure OTA updates (if using)
+  - [ ] Implement the approved Worker + R2 OTA phases
+    - `docs/superpowers/specs/2026-07-28-self-hosted-ota-worker-r2-design.md`
 - [ ] **App Store Submission Prep**
   - [ ] Review Apple App Store guidelines
   - [ ] Review Google Play Store guidelines

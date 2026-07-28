@@ -812,7 +812,6 @@ export function useSettings() {
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
   const tabOrder = useAppStore((state) => state.settings.tabOrder);
   const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
-  const customUpdateUrl = useAppStore((state) => state.settings.customUpdateUrl);
   const viewMode = useAppStore((state) => state.settings.viewMode);
   const progressFormat = useAppStore((state) => state.settings.progressFormat);
   const chapterBarShowRemaining = useAppStore((state) => state.settings.chapterBarShowRemaining);
@@ -830,7 +829,6 @@ export function useSettings() {
   const updateDiagnosticsEnabled = useAppStore((state) => state.updateDiagnosticsEnabled);
   const updateTabOrder = useAppStore((state) => state.updateTabOrder);
   const updateHiddenTabs = useAppStore((state) => state.updateHiddenTabs);
-  const updateCustomUpdateUrl = useAppStore((state) => state.updateCustomUpdateUrl);
   const updateViewMode = useAppStore((state) => state.updateViewMode);
   const updateProgressFormat = useAppStore((state) => state.updateProgressFormat);
   const updateChapterBarShowRemaining = useAppStore((state) => state.updateChapterBarShowRemaining);
@@ -847,7 +845,6 @@ export function useSettings() {
       diagnosticsEnabled,
       tabOrder,
       hiddenTabs,
-      customUpdateUrl,
       viewMode,
       progressFormat,
       chapterBarShowRemaining,
@@ -863,7 +860,6 @@ export function useSettings() {
       updateDiagnosticsEnabled,
       updateTabOrder,
       updateHiddenTabs,
-      updateCustomUpdateUrl,
       updateViewMode,
       updateProgressFormat,
       updateChapterBarShowRemaining,
@@ -879,7 +875,6 @@ export function useSettings() {
       diagnosticsEnabled,
       tabOrder,
       hiddenTabs,
-      customUpdateUrl,
       viewMode,
       progressFormat,
       chapterBarShowRemaining,
@@ -895,7 +890,6 @@ export function useSettings() {
       updateDiagnosticsEnabled,
       updateTabOrder,
       updateHiddenTabs,
-      updateCustomUpdateUrl,
       updateViewMode,
       updateProgressFormat,
       updateChapterBarShowRemaining,

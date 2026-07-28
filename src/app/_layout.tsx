@@ -188,41 +188,16 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Handle deep links for logger configuration and bundle loader
+  // Handle deep links for logger configuration
   useEffect(() => {
     /**
-     * Parse deep link URLs and handle different link types
+     * Parse deep link URLs and handle logger configuration
      * Supported formats:
      * - side-shelf://logger?level[TAG_NAME]=warn&level[TAG_NAME_3]=debug&enabled[TAG_NAME_2]=false
-     * - side-shelf://bundle-loader?url=https://example.com/bundle
      */
     const handleDeepLink = async (url: string) => {
       log.info(`[handleDeepLink] received url="${url}"`);
       try {
-        const urlObj = new URL(url);
-
-        // Handle bundle-loader deep links
-        if (url.includes("://bundle-loader")) {
-          log.info(`Processing bundle-loader deep link: ${url}`);
-
-          const bundleUrl = urlObj.searchParams.get("url");
-
-          if (bundleUrl) {
-            // Navigate to bundle-loader with URL pre-filled
-            router.push({
-              pathname: "/more/bundle-loader",
-              params: { url: bundleUrl },
-            });
-            log.info(`Navigating to bundle-loader with URL: ${bundleUrl}`);
-          } else {
-            log.warn("No URL parameter found in bundle-loader deep link");
-            // Still navigate to bundle-loader screen
-            router.push("/more/bundle-loader");
-          }
-
-          return;
-        }
-
         // Handle logger configuration deep links
         if (url.includes("://logger")) {
           log.info(`Processing logger deep link: ${url}`);
