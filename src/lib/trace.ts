@@ -89,7 +89,20 @@ const DEFAULT_CONFIG: TraceConfig = {
   maxEventsPerSpan: 20,
   maxAttributeDepth: 4,
   maxStringLength: 500,
-  redactKeys: ["password", "token", "authorization", "cookie", "secret"],
+  redactKeys: [
+    "password",
+    "token",
+    "authorization",
+    "cookie",
+    "secret",
+    "userId",
+    "libraryId",
+    "itemId",
+    "mediaId",
+    "episodeId",
+    "sessionId",
+    "deviceId",
+  ],
   now: () => Date.now(),
   wallNow: () => Date.now(),
 };
@@ -215,6 +228,10 @@ function sanitizeValue(value: unknown, cfg: TraceConfig, depth = 0): unknown {
   } catch {
     return `[Unserializable ${Object.prototype.toString.call(value)}]`;
   }
+}
+
+export function sanitizeTracePayload(value: unknown): unknown {
+  return sanitizeValue(value, DEFAULT_CONFIG, 0);
 }
 
 function sanitizeAttributes(

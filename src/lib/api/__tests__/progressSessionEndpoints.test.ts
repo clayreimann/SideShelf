@@ -21,6 +21,8 @@ jest.mock("react-native-device-info", () => ({
 import { apiFetch } from "@/lib/api/api";
 // eslint-disable-next-line import/first
 import { ApiResponseError, createLocalSession, fetchMe } from "@/lib/api/endpoints";
+// eslint-disable-next-line import/first
+import { logger } from "@/lib/logger";
 
 const SESSION_ID = "dc2e6ee5-58e9-4494-a8ef-3c6a1f232b13";
 
@@ -37,6 +39,15 @@ const sessionParams = {
   updatedAt: 1_700_000_360_000,
   deviceInfo: { deviceId: "test-device" },
 };
+
+function getSubLoggerFor(tag: string) {
+  const calls = (logger.forTag as jest.Mock).mock.calls;
+  const idx = calls.findIndex((call) => call[0] === tag);
+  if (idx === -1) throw new Error(`logger.forTag was never called with tag "${tag}"`);
+  return (logger.forTag as jest.Mock).mock.results[idx].value;
+}
+
+const endpointsSubLogger = getSubLoggerFor("api:endpoints");
 
 type BodyConsumption = {
   original: number;
@@ -112,6 +123,21 @@ describe("progress session endpoints", () => {
       timeListening: 360,
     });
     expect(consumption).toEqual({ original: 1, clones: [] });
+  });
+
+  it("does not include local session identities or request body in info logs", async () => {
+    (apiFetch as jest.Mock).mockResolvedValue(makeResponse(204));
+
+    await createLocalSession(sessionParams);
+
+    const messages = (endpointsSubLogger.info as jest.Mock).mock.calls.map(([message]) => message);
+    const combined = messages.join("\n");
+    expect(combined).not.toContain(SESSION_ID);
+    expect(combined).not.toContain(sessionParams.userId);
+    expect(combined).not.toContain(sessionParams.libraryId);
+    expect(combined).not.toContain(sessionParams.libraryItemId);
+    expect(combined).not.toContain(sessionParams.deviceInfo.deviceId);
+    expect(combined).not.toContain(JSON.stringify({ id: SESSION_ID }));
   });
 
   it("accepts an empty successful response as the submitted local session", async () => {

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it, beforeEach } from "@jest/globals";
-import { LocalTrace } from "@/lib/trace";
+import { LocalTrace, sanitizeTracePayload } from "@/lib/trace";
 
 describe("LocalTrace", () => {
   let t: LocalTrace;
@@ -71,6 +71,68 @@ describe("LocalTrace", () => {
       const desc = spanRecord.attributes?.description as string;
       expect(typeof desc).toBe("string");
       expect(desc.length).toBeLessThanOrEqual(11); // 10 chars + ellipsis char
+    });
+
+    it("redacts nested identity attributes while preserving trace context and diagnostic fields", () => {
+      const span = t.startSpan("sync-session", {
+        userId: "user-1",
+        libraryId: "library-1",
+        libraryItemId: "library-item-1",
+        itemId: "item-1",
+        mediaId: "media-1",
+        episodeId: "episode-1",
+        sessionId: "session-1",
+        restoreSessionId: "restore-session-1",
+        deviceId: "device-1",
+        state: "SYNCING_SESSION",
+        retryCount: 3,
+        timingMs: 250,
+        nested: { userId: "nested-user-1", deviceId: "nested-device-1" },
+      });
+      t.addSpanEvent(span, "progress-sync.attempted", { sessionId: "session-1", attempt: 2 });
+      t.endSpan(span);
+
+      const [record] = t.exportTrace().records;
+      const spanRecord = record as {
+        traceId: string;
+        spanId: string;
+        name: string;
+        attributes?: Record<string, unknown>;
+        events?: { name: string; attributes?: Record<string, unknown> }[];
+      };
+
+      expect(spanRecord.traceId).not.toBe("[REDACTED]");
+      expect(spanRecord.spanId).not.toBe("[REDACTED]");
+      expect(spanRecord.name).toBe("sync-session");
+      expect(spanRecord.attributes).toMatchObject({
+        userId: "[REDACTED]",
+        libraryId: "[REDACTED]",
+        libraryItemId: "[REDACTED]",
+        itemId: "[REDACTED]",
+        mediaId: "[REDACTED]",
+        episodeId: "[REDACTED]",
+        sessionId: "[REDACTED]",
+        restoreSessionId: "[REDACTED]",
+        deviceId: "[REDACTED]",
+        state: "SYNCING_SESSION",
+        retryCount: 3,
+        timingMs: 250,
+        nested: { userId: "[REDACTED]", deviceId: "[REDACTED]" },
+      });
+      expect(spanRecord.events).toEqual([
+        expect.objectContaining({
+          name: "progress-sync.attempted",
+          attributes: { sessionId: "[REDACTED]", attempt: 2 },
+        }),
+      ]);
+
+      expect(
+        sanitizeTracePayload({ traceId: "trace-1", spanId: "span-1", itemId: "item-1" })
+      ).toEqual({
+        traceId: "trace-1",
+        spanId: "span-1",
+        itemId: "[REDACTED]",
+      });
     });
   });
 

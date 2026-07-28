@@ -51,7 +51,6 @@ import { State } from "react-native-track-player";
 // PlayerService is dynamically imported in executeTransition to avoid a circular dependency:
 // PlayerStateCoordinator → PlayerService → PlayerStateCoordinator
 import { trace, type SpanHandle } from "@/lib/trace";
-import { writeDumpToDisk } from "@/lib/traceDump";
 import { dispatchPlayerEvent, playerEventBus } from "./eventBus";
 import { validateTransition } from "./transitions";
 
@@ -393,16 +392,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         },
         traceCtx
       );
-      // End the dispatch span before dumping so it is committed to the ring buffer
-      // when exportTrace reads it. writeDumpToDisk is fire-and-forget async so it
-      // always runs after this synchronous endSpan call.
       if (eventSpan) trace.endSpan(eventSpan, "error", { reason: validation.reason });
-      // Auto-dump: fire-and-forget — NEVER await inside the lock (Pitfall 5)
-      writeDumpToDisk("rejection", {
-        type: event.type,
-        fromState: currentState,
-        reason: validation.reason,
-      }).catch((err) => log.warn("[Coordinator] Auto trace dump failed", err as Error));
       log.warn(
         `[Coordinator] Rejected: ${currentState} --[${event.type}]--> Reason: ${validation.reason || "unknown"}`
       );

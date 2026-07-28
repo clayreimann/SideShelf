@@ -2,7 +2,7 @@ import { Directory, File, Paths } from "expo-file-system";
 import Constants from "expo-constants";
 import * as Application from "expo-application";
 import { Platform } from "react-native";
-import { trace } from "@/lib/trace";
+import { sanitizeTracePayload, trace } from "@/lib/trace";
 import { logger } from "@/lib/logger";
 import { getProgressSyncDiagnostics } from "@/db/helpers/progressSyncOutbox";
 
@@ -37,7 +37,7 @@ export async function writeDumpToDisk(
     records: exported.records,
   };
 
-  await file.write(JSON.stringify(payload, null, 2));
+  await file.write(JSON.stringify(sanitizeTracePayload(payload), null, 2));
   log.info(`[writeDumpToDisk] Wrote trace dump: ${filename}`);
   pruneTraceDumps().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -65,7 +65,6 @@ function parseDumpTimestamp(name: string): number | null {
 
 /**
  * Prune trace dumps to the most recent 30 files within the last 7 days.
- * Files older than 7 days are not managed by this function.
  * Called fire-and-forget after writeDumpToDisk and on app foreground.
  */
 export async function pruneTraceDumps(): Promise<void> {
@@ -78,13 +77,16 @@ export async function pruneTraceDumps(): Promise<void> {
     .map((f) => ({ file: f, ts: parseDumpTimestamp(f.name) }))
     .filter(
       (entry): entry is { file: { name: string; delete: () => void }; ts: number } =>
-        entry.ts !== null && entry.ts >= cutoff
-    )
-    .sort((a, b) => b.ts - a.ts);
+        entry.ts !== null
+    );
 
-  const toDelete = dumps.slice(30);
+  const expired = dumps.filter((entry) => entry.ts < cutoff);
+  const recent = dumps.filter((entry) => entry.ts >= cutoff).sort((a, b) => b.ts - a.ts);
+  const overflow = recent.slice(30);
+  const toDelete = [...expired, ...overflow];
+
   for (const { file } of toDelete) {
     file.delete();
   }
-  log.info(`[pruneTraceDumps] kept=${Math.min(dumps.length, 30)} deleted=${toDelete.length}`);
+  log.info(`[pruneTraceDumps] kept=${recent.length - overflow.length} deleted=${toDelete.length}`);
 }

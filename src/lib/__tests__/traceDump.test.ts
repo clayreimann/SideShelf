@@ -111,8 +111,8 @@ describe("writeDumpToDisk", () => {
     expect(parsed).toHaveProperty("dumpReason");
   });
 
-  it("includes persisted progress outbox diagnostics", async () => {
-    await writeDumpToDisk("manual");
+  it("redacts identity fields from persisted progress outbox diagnostics and rejection metadata", async () => {
+    await writeDumpToDisk("rejection", { sessionId: "session-1", deviceId: "device-1" });
 
     const MockFile = ExpoFileSystem.File as unknown as jest.Mock;
     const mockInstance = MockFile.mock.results[0].value as { write: jest.Mock };
@@ -122,13 +122,16 @@ describe("writeDumpToDisk", () => {
     expect(parsed.progressSyncOutboxAvailable).toBe(true);
     expect(parsed.progressSyncOutbox).toEqual([
       expect.objectContaining({
-        sessionId: "session-1",
+        sessionId: "[REDACTED]",
         desiredRevision: 3,
         acknowledgedRevision: 2,
         attemptCount: 1,
         hasError: true,
       }),
     ]);
+    expect(parsed.rejectionEvent).toEqual({ sessionId: "[REDACTED]", deviceId: "[REDACTED]" });
+    expect(writeArg).not.toContain("session-1");
+    expect(writeArg).not.toContain("device-1");
     expect(writeArg).not.toContain("network unavailable");
   });
 
@@ -219,7 +222,7 @@ describe("pruneTraceDumps", () => {
     files.slice(30).forEach((f) => expect(f.delete).toHaveBeenCalledTimes(1));
   });
 
-  it("does not delete files older than 7 days (they are excluded from management)", async () => {
+  it("deletes trace dumps older than 7 days", async () => {
     const recentFile = makeDumpFile(makeDumpFileName(1)); // 1 hour ago
     const oldFile = makeDumpFile(makeDumpFileNameDays(10)); // 10 days ago — outside 7-day window
 
@@ -229,9 +232,9 @@ describe("pruneTraceDumps", () => {
 
     await pruneTraceDumps();
 
-    // Neither file is deleted: recent is within limit, old is excluded from management
+    // The recent dump remains while the expired dump is removed.
     expect(recentFile.delete).not.toHaveBeenCalled();
-    expect(oldFile.delete).not.toHaveBeenCalled();
+    expect(oldFile.delete).toHaveBeenCalledTimes(1);
   });
 
   it("ignores non-dump files in the directory", async () => {
