@@ -7,6 +7,8 @@ import { logger } from "@/lib/logger";
 import { getProgressSyncDiagnostics } from "@/db/helpers/progressSyncOutbox";
 
 const log = logger.forTag("traceDump");
+const DUMP_FILENAME_PATTERN =
+  /^trace-dump-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z\.json$/;
 
 export async function writeDumpToDisk(
   reason: "rejection" | "manual",
@@ -52,15 +54,22 @@ export async function writeDumpToDisk(
  * (ISO 8601 with ':' and '.' replaced by '-')
  */
 function parseDumpTimestamp(name: string): number | null {
-  const inner = name.replace(/^trace-dump-/, "").replace(/\.json$/, "");
-  const tIdx = inner.indexOf("T");
-  if (tIdx === -1) return null;
-  const datePart = inner.slice(0, tIdx);
-  const timeParts = inner.slice(tIdx + 1).split("-"); // ["hh", "mm", "ss", "mssZ"]
-  if (timeParts.length < 4) return null;
-  const fullIso = `${datePart}T${timeParts[0]}:${timeParts[1]}:${timeParts[2]}.${timeParts[3]}`;
-  const ts = Date.parse(fullIso);
-  return isNaN(ts) ? null : ts;
+  const match = name.match(DUMP_FILENAME_PATTERN);
+  if (!match) return null;
+
+  const [year, month, day, hour, minute, second, millisecond] = match.slice(1).map(Number);
+  const timestamp = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
+  const date = new Date(timestamp);
+
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day &&
+    date.getUTCHours() === hour &&
+    date.getUTCMinutes() === minute &&
+    date.getUTCSeconds() === second &&
+    date.getUTCMilliseconds() === millisecond
+    ? timestamp
+    : null;
 }
 
 /**

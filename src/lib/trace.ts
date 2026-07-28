@@ -107,6 +107,10 @@ const DEFAULT_CONFIG: TraceConfig = {
   wallNow: () => Date.now(),
 };
 
+// A persisted dump wraps trace attributes in payload → records → span → events → event.
+// Retain the configured attribute nesting budget after traversing those fixed wrappers.
+const PERSISTED_PAYLOAD_WRAPPER_DEPTH = 5;
+
 function createId(): string {
   return Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
 }
@@ -231,7 +235,14 @@ function sanitizeValue(value: unknown, cfg: TraceConfig, depth = 0): unknown {
 }
 
 export function sanitizeTracePayload(value: unknown): unknown {
-  return sanitizeValue(value, DEFAULT_CONFIG, 0);
+  return sanitizeValue(
+    value,
+    {
+      ...DEFAULT_CONFIG,
+      maxAttributeDepth: DEFAULT_CONFIG.maxAttributeDepth + PERSISTED_PAYLOAD_WRAPPER_DEPTH,
+    },
+    0
+  );
 }
 
 function sanitizeAttributes(

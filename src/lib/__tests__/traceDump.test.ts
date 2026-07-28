@@ -46,10 +46,13 @@ jest.mock("@/db/helpers/progressSyncOutbox", () => ({
 
 import { writeDumpToDisk, pruneTraceDumps } from "@/lib/traceDump";
 import * as ExpoFileSystem from "expo-file-system";
+// eslint-disable-next-line import/first
+import { trace } from "@/lib/trace";
 
 describe("writeDumpToDisk", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    trace.clear();
     mockGetProgressSyncDiagnostics.mockResolvedValue([
       {
         sessionId: "session-1",
@@ -133,6 +136,46 @@ describe("writeDumpToDisk", () => {
     expect(writeArg).not.toContain("session-1");
     expect(writeArg).not.toContain("device-1");
     expect(writeArg).not.toContain("network unavailable");
+  });
+
+  it("preserves span-event diagnostics in persisted dumps while redacting their identities", async () => {
+    const span = trace.startSpan("progress-sync");
+    trace.addSpanEvent(span, "progress-sync.attempted", {
+      state: "SYNCING_SESSION",
+      attemptCount: 2,
+      sessionId: "session-1",
+    });
+    trace.endSpan(span);
+
+    await writeDumpToDisk("manual");
+
+    const MockFile = ExpoFileSystem.File as unknown as jest.Mock;
+    const mockInstance = MockFile.mock.results[0].value as { write: jest.Mock };
+    const writeArg: string = mockInstance.write.mock.calls[0][0] as string;
+    const parsed = JSON.parse(writeArg) as {
+      records: {
+        name: string;
+        events?: {
+          name: string;
+          timestamp: number;
+          attributes?: Record<string, unknown>;
+        }[];
+      }[];
+    };
+
+    expect(parsed.records[0]).toMatchObject({ name: "progress-sync" });
+    expect(parsed.records[0].events).toEqual([
+      expect.objectContaining({
+        name: "progress-sync.attempted",
+        timestamp: expect.any(Number),
+        attributes: {
+          state: "SYNCING_SESSION",
+          attemptCount: 2,
+          sessionId: "[REDACTED]",
+        },
+      }),
+    ]);
+    expect(writeArg).not.toContain("session-1");
   });
 
   it("writes an unavailable marker without exposing diagnostic query errors", async () => {
@@ -235,6 +278,24 @@ describe("pruneTraceDumps", () => {
     // The recent dump remains while the expired dump is removed.
     expect(recentFile.delete).not.toHaveBeenCalled();
     expect(oldFile.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves malformed trace-dump filename prefixes untouched", async () => {
+    const canonicalExpired = makeDumpFile(makeDumpFileNameDays(10));
+    const malformedFiles = [
+      makeDumpFile("trace-dump-2020-01-01T00-00-00-000.json"),
+      makeDumpFile("trace-dump-2020-01-01T00-00-00-000Z-extra.json"),
+      makeDumpFile("trace-dump-2020-02-30T00-00-00-000Z.json"),
+    ];
+
+    MockDirectory.mockImplementation(() => ({
+      list: mockList([canonicalExpired, ...malformedFiles]),
+    }));
+
+    await pruneTraceDumps();
+
+    expect(canonicalExpired.delete).toHaveBeenCalledTimes(1);
+    malformedFiles.forEach((file) => expect(file.delete).not.toHaveBeenCalled());
   });
 
   it("ignores non-dump files in the directory", async () => {
