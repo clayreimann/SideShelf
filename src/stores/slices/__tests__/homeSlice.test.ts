@@ -26,6 +26,12 @@ const downloadedCandidates = [
   { id: "partial-book", title: "Partial" },
 ];
 
+const mockGetContinueListeningItems = jest.mocked(homeScreenHelpers.getContinueListeningItems);
+const mockGetDownloadedItems = jest.mocked(homeScreenHelpers.getDownloadedItems);
+const mockGetListenAgainItems = jest.mocked(homeScreenHelpers.getListenAgainItems);
+const mockGetHomeScreenData = jest.mocked(homeScreenHelpers.getHomeScreenData);
+const mockIsLibraryItemDownloaded = jest.mocked(downloadService.isLibraryItemDownloaded);
+
 describe("HomeSlice downloaded shelf", () => {
   let store: UseBoundStore<StoreApi<HomeSlice>>;
 
@@ -33,15 +39,15 @@ describe("HomeSlice downloaded shelf", () => {
     jest.clearAllMocks();
     store = create<HomeSlice>()((set, get) => ({ ...createHomeSlice(set, get) }));
 
-    homeScreenHelpers.getContinueListeningItems.mockResolvedValue([]);
-    homeScreenHelpers.getDownloadedItems.mockResolvedValue(downloadedCandidates);
-    homeScreenHelpers.getListenAgainItems.mockResolvedValue([]);
-    homeScreenHelpers.getHomeScreenData.mockResolvedValue({
+    mockGetContinueListeningItems.mockResolvedValue([]);
+    mockGetDownloadedItems.mockResolvedValue(downloadedCandidates);
+    mockGetListenAgainItems.mockResolvedValue([]);
+    mockGetHomeScreenData.mockResolvedValue({
       continueListening: [],
       downloaded: downloadedCandidates,
       listenAgain: [],
     });
-    downloadService.isLibraryItemDownloaded.mockImplementation(
+    mockIsLibraryItemDownloaded.mockImplementation(
       async (libraryItemId: string) => libraryItemId === "complete-book"
     );
   });
