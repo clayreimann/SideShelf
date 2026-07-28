@@ -17,6 +17,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { DownloadInfo, DownloadProgress } from "@/types/services";
+import type {
+  DoneHandler,
+  DownloadTask,
+  ErrorHandler,
+  ProgressHandler,
+} from "@kesha-antonov/react-native-background-downloader";
 import { DownloadService } from "../DownloadService";
 
 // --- Mocks ---
@@ -51,13 +57,15 @@ jest.mock("@/services/ApiClientService", () => ({
 
 // Mock collaborator methods stored as module-level spies so we can verify delegation
 const mockStatusCollaborator = {
-  isLibraryItemDownloaded: jest.fn().mockResolvedValue(true),
-  getDownloadProgress: jest.fn().mockResolvedValue({ downloaded: 2, total: 3, progress: 2 / 3 }),
-  getDownloadedSize: jest.fn().mockResolvedValue(1024 * 1024),
+  isLibraryItemDownloaded: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
+  getDownloadProgress: jest
+    .fn<() => Promise<{ downloaded: number; total: number; progress: number }>>()
+    .mockResolvedValue({ downloaded: 2, total: 3, progress: 2 / 3 }),
+  getDownloadedSize: jest.fn<() => Promise<number>>().mockResolvedValue(1024 * 1024),
 };
 const mockRepairCollaborator = {
-  repairDownloadStatus: jest.fn().mockResolvedValue(1),
-  deleteDownloadedLibraryItem: jest.fn().mockResolvedValue(undefined),
+  repairDownloadStatus: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+  deleteDownloadedLibraryItem: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
 };
 
 jest.mock("@/services/download/DownloadStatusCollaborator", () => ({
@@ -712,9 +720,11 @@ describe("DownloadService facade", () => {
       const mockTask: any = {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
           // Fire done immediately after a tick to simulate async completion
-          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
           return mockTask;
         }),
         error: jest.fn().mockReturnThis(),
@@ -735,8 +745,7 @@ describe("DownloadService facade", () => {
       expect(instance.isDownloadActive("item-1")).toBe(false);
       expect(markAudioFileAsDownloaded).toHaveBeenCalledWith(
         "af-1",
-        expect.stringContaining("chapter-1.mp3"),
-        "documents"
+        expect.stringContaining("chapter-1.mp3")
       );
     });
 
@@ -764,8 +773,10 @@ describe("DownloadService facade", () => {
       const mockTask: any = {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
-          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
           return mockTask;
         }),
         error: jest.fn().mockReturnThis(),
@@ -831,9 +842,11 @@ describe("DownloadService facade", () => {
           handlerRegistrationOrder.push("progress");
           return mockTask;
         }),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
           handlerRegistrationOrder.push("done");
-          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
           return mockTask;
         }),
         error: jest.fn().mockImplementation(() => {
@@ -882,8 +895,10 @@ describe("DownloadService facade", () => {
       const mockTask: any = {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
-          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
           return mockTask;
         }),
         error: jest.fn().mockReturnThis(),
@@ -923,8 +938,8 @@ describe("DownloadService facade", () => {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
         done: jest.fn().mockReturnThis(),
-        error: jest.fn().mockImplementation((cb: (err: any) => void) => {
-          Promise.resolve().then(() => cb({ error: "Download failed" }));
+        error: jest.fn<(callback: ErrorHandler) => DownloadTask>().mockImplementation((cb) => {
+          Promise.resolve().then(() => cb({ error: "Download failed", errorCode: 0 }));
           return mockTask;
         }),
         start: jest.fn(),
@@ -999,10 +1014,12 @@ describe("DownloadService facade", () => {
         const filename = config.metadata.filename as string;
         const task: any = {
           begin: jest.fn().mockReturnThis(),
-          progress: jest.fn().mockImplementation((cb: (data: any) => void) => {
-            progressCallbacks[filename] = cb;
-            return task;
-          }),
+          progress: jest
+            .fn<(callback: ProgressHandler) => DownloadTask>()
+            .mockImplementation((cb) => {
+              progressCallbacks[filename] = cb;
+              return task;
+            }),
           done: jest.fn().mockReturnThis(), // never fires — both downloads stay in-flight
           error: jest.fn().mockReturnThis(),
           start: jest.fn(),
@@ -1066,8 +1083,10 @@ describe("DownloadService facade", () => {
       const mockTask: any = {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
-          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
           return mockTask;
         }),
         error: jest.fn().mockReturnThis(),
@@ -1096,22 +1115,24 @@ describe("DownloadService facade", () => {
 
   describe("initialize() with existing background tasks", () => {
     it("re-attaches progress, done, and error handlers to restored tasks", async () => {
-      let progressCallback: ((data: any) => void) | null = null;
-      let doneCallback: ((data: any) => void) | null = null;
-      let errorCallback: ((err: any) => void) | null = null;
+      let progressCallback: ProgressHandler | undefined;
+      let doneCallback: DoneHandler | undefined;
+      let errorCallback: ErrorHandler | undefined;
 
       const mockTask: any = {
         metadata: { libraryItemId: "item-restored", audioFileId: "af-1", filename: "ch1.mp3" },
         state: "DOWNLOADING",
-        progress: jest.fn().mockImplementation((cb: (data: any) => void) => {
-          progressCallback = cb;
-          return mockTask;
-        }),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+        progress: jest
+          .fn<(callback: ProgressHandler) => DownloadTask>()
+          .mockImplementation((cb) => {
+            progressCallback = cb;
+            return mockTask;
+          }),
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
           doneCallback = cb;
           return mockTask;
         }),
-        error: jest.fn().mockImplementation((cb: (err: any) => void) => {
+        error: jest.fn<(callback: ErrorHandler) => DownloadTask>().mockImplementation((cb) => {
           errorCallback = cb;
           return mockTask;
         }),
@@ -1135,15 +1156,15 @@ describe("DownloadService facade", () => {
       expect(mockTask.resume).toHaveBeenCalledTimes(1);
 
       // Fire the progress callback to cover handleTaskProgress
-      if (progressCallback) {
+      if (progressCallback !== undefined) {
         progressCallback({ bytesDownloaded: 500, bytesTotal: 1000 });
         // Allow async operations to complete
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
 
       // Fire the error callback to cover the error handler
-      if (errorCallback) {
-        errorCallback({ error: "Network error" });
+      if (errorCallback !== undefined) {
+        errorCallback({ error: "Network error", errorCode: 0 });
       }
 
       // Item should be removed from activeDownloads after error
@@ -1205,7 +1226,7 @@ describe("DownloadService facade", () => {
         },
         state: "DOWNLOADING",
         progress: jest.fn().mockReturnThis(),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
           doneCbForAf2 = cb;
           return taskAf2;
         }),
@@ -1221,10 +1242,12 @@ describe("DownloadService facade", () => {
           filename: "ch3.mp3",
         },
         state: "DOWNLOADING",
-        progress: jest.fn().mockImplementation((cb: (data: any) => void) => {
-          progressCbForAf3 = cb;
-          return taskAf3;
-        }),
+        progress: jest
+          .fn<(callback: ProgressHandler) => DownloadTask>()
+          .mockImplementation((cb) => {
+            progressCbForAf3 = cb;
+            return taskAf3;
+          }),
         done: jest.fn().mockReturnThis(),
         error: jest.fn().mockReturnThis(),
         pause: jest.fn(),

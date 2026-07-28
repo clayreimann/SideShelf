@@ -4,9 +4,10 @@
 
 import { libraries } from "@/db/schema/libraries";
 import { libraryItems } from "@/db/schema/libraryItems";
+import type { NewLibraryItemRow } from "@/types/database";
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { createTestDb, TestDatabase } from "../../../__tests__/utils/testDb";
-import { upsertLibraryItems, type NewLibraryItemRow } from "../libraryItems";
+import { upsertLibraryItems } from "../libraryItems";
 
 /** Stub library required for FK constraint on library_items.library_id */
 const STUB_LIBRARY = {

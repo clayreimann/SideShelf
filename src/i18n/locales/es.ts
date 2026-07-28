@@ -402,4 +402,6 @@ export const es = {
   "player.jumpMenu.titleForward": "Avance por",
   "player.jumpMenu.titleBackward": "Retroceso por",
   "player.jumpMenu.seconds": "{seconds} segundos",
+  "player.progressToast.label": "Saltó a {time} ({delta})",
+  "player.progressToast.undo": "Deshacer",
 } as const;

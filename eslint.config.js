@@ -6,7 +6,15 @@ const reactNativeA11y = require("eslint-plugin-react-native-a11y");
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ["dist/*"],
+    ignores: ["coverage/**", "dist/**", ".expo/**", ".claude/**", ".worktrees/**"],
+  },
+  {
+    files: ["src/__tests__/setup-before.js"],
+    languageOptions: {
+      globals: {
+        jest: "readonly",
+      },
+    },
   },
   {
     rules: {

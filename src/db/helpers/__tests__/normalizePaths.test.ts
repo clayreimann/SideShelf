@@ -36,8 +36,8 @@ function loadMigrationStatements(): string[] {
   }
   return migration
     .split("--> statement-breakpoint")
-    .map((s) => s.trim())
-    .filter((statement) => statement.startsWith("UPDATE"));
+    .map((statement: string) => statement.trim())
+    .filter((statement: string) => statement.startsWith("UPDATE"));
 }
 
 describe("normalizePaths migration (journaled runtime 0015)", () => {

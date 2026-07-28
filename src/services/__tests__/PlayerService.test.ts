@@ -140,7 +140,7 @@ jest.mock("@/services/ApiClientService", () => ({
 }));
 
 jest.mock("@/lib/smartRewind", () => ({
-  applySmartRewind: jest.fn().mockResolvedValue(undefined),
+  applySmartRewind: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
 }));
 
 // Mock coordinator so getCoordinator() returns a mock with resolveCanonicalPosition

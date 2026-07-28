@@ -17,7 +17,6 @@ import { getMediaProgressForItems } from "../mediaProgress";
 const STUB_USER = {
   id: "user-1",
   username: "testuser",
-  token: "test-token",
   email: "test@test.com",
   mediaProgress: [],
   serverAddress: "http://localhost:13378",
@@ -88,13 +87,11 @@ describe("mediaProgress DB helper — getMediaProgressForItems", () => {
     // Insert prerequisite rows
     await testDb.db.insert(users).values(STUB_USER);
     await testDb.db.insert(libraries).values(STUB_LIBRARY);
-    await testDb.db
-      .insert(libraryItems)
-      .values([
-        { ...STUB_LIBRARY_ITEM_BASE, id: "item-1" },
-        { ...STUB_LIBRARY_ITEM_BASE, id: "item-2" },
-        { ...STUB_LIBRARY_ITEM_BASE, id: "item-3" },
-      ]);
+    await testDb.db.insert(libraryItems).values([
+      { ...STUB_LIBRARY_ITEM_BASE, id: "item-1" },
+      { ...STUB_LIBRARY_ITEM_BASE, id: "item-2" },
+      { ...STUB_LIBRARY_ITEM_BASE, id: "item-3" },
+    ]);
   });
 
   afterEach(async () => {
@@ -108,10 +105,12 @@ describe("mediaProgress DB helper — getMediaProgressForItems", () => {
   });
 
   it("getMediaProgressForItems returns progress keyed by libraryItemId", async () => {
-    await testDb.db.insert(mediaProgress).values([
-      makeProgressRow("prog-1", "item-1", "user-1"),
-      makeProgressRow("prog-2", "item-2", "user-1"),
-    ]);
+    await testDb.db
+      .insert(mediaProgress)
+      .values([
+        makeProgressRow("prog-1", "item-1", "user-1"),
+        makeProgressRow("prog-2", "item-2", "user-1"),
+      ]);
 
     const result = await getMediaProgressForItems(["item-1", "item-2"], "user-1");
 
@@ -148,13 +147,13 @@ describe("mediaProgress DB helper — getMediaProgressForItems", () => {
       ...STUB_USER,
       id: "user-2",
       username: "otheruser",
-      token: "other-token",
-      email: "other@test.com",
     });
-    await testDb.db.insert(mediaProgress).values([
-      makeProgressRow("prog-u1", "item-1", "user-1", { progress: 0.5 }),
-      makeProgressRow("prog-u2", "item-1", "user-2", { progress: 0.9 }),
-    ]);
+    await testDb.db
+      .insert(mediaProgress)
+      .values([
+        makeProgressRow("prog-u1", "item-1", "user-1", { progress: 0.5 }),
+        makeProgressRow("prog-u2", "item-1", "user-2", { progress: 0.9 }),
+      ]);
 
     const result = await getMediaProgressForItems(["item-1"], "user-1");
 
@@ -170,9 +169,7 @@ describe("mediaProgress DB helper — getMediaProgressForItems", () => {
   });
 
   it("getMediaProgressForItems handles subset of items with no progress", async () => {
-    await testDb.db.insert(mediaProgress).values([
-      makeProgressRow("prog-1", "item-1", "user-1"),
-    ]);
+    await testDb.db.insert(mediaProgress).values([makeProgressRow("prog-1", "item-1", "user-1")]);
 
     const result = await getMediaProgressForItems(["item-1", "item-2", "item-3"], "user-1");
 

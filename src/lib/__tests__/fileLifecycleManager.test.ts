@@ -454,6 +454,14 @@ describe("File Lifecycle Manager", () => {
         },
       ];
       mocks.combinedQueries.getAudioFilesWithDownloadInfo.mockResolvedValue(oldFiles as any);
+      mocks.localData.getAudioFileDownloadInfo.mockResolvedValue({
+        ...oldFiles[0].downloadInfo,
+        audioFileId: oldFiles[0].id,
+        downloadedAt: threeWeeksAgo,
+        updatedAt: threeWeeksAgo,
+        storageLocation: "documents",
+        movedToCacheAt: null,
+      });
 
       const result = await fileLifecycleManager.shouldMoveToCache(libraryItemId, userId);
 
@@ -482,6 +490,14 @@ describe("File Lifecycle Manager", () => {
         },
       ];
       mocks.combinedQueries.getAudioFilesWithDownloadInfo.mockResolvedValue(recentFiles as any);
+      mocks.localData.getAudioFileDownloadInfo.mockResolvedValue({
+        ...recentFiles[0].downloadInfo,
+        audioFileId: recentFiles[0].id,
+        downloadedAt: oneWeekAgo,
+        updatedAt: oneWeekAgo,
+        storageLocation: "documents",
+        movedToCacheAt: null,
+      });
 
       const result = await fileLifecycleManager.shouldMoveToCache(libraryItemId, userId);
 

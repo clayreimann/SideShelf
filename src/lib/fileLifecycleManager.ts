@@ -25,6 +25,7 @@ import {
   updateAudioFileStorageLocation,
   updateAudioFileDownloadPath,
   clearAudioFileDownloadStatus,
+  getAudioFileDownloadInfo,
   getAllDownloadedAudioFiles,
   getDownloadedAudioFilesWithLibraryInfo,
 } from "@/db/helpers/localData";
@@ -231,7 +232,8 @@ export async function shouldMoveToCache(libraryItemId: string, userId: string): 
     // Find the most recent lastAccessedAt time
     let mostRecentAccess: Date | null = null;
     for (const audioFile of audioFiles) {
-      const lastAccessed = audioFile.downloadInfo?.lastAccessedAt;
+      const downloadInfo = await getAudioFileDownloadInfo(audioFile.id);
+      const lastAccessed = downloadInfo?.lastAccessedAt;
       if (lastAccessed) {
         if (!mostRecentAccess || lastAccessed > mostRecentAccess) {
           mostRecentAccess = lastAccessed;

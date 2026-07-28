@@ -42,7 +42,7 @@ describe("updateNowPlayingMetadata", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(0);
-    (mockedTrackPlayer.updateMetadataForTrack as jest.Mock).mockResolvedValue(undefined);
+    jest.mocked(mockedTrackPlayer.updateMetadataForTrack).mockResolvedValue(undefined);
     configureTrackPlayer.mockResolvedValue(undefined);
   });
 

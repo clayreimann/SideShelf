@@ -319,7 +319,7 @@ export default function BundleLoaderScreen() {
             }}
           >
             You can now dynamically switch the update URL at runtime without rebuilding. Enter a PR
-            bundle URL and tap "Switch to This URL" to load updates from that source.
+            bundle URL and tap &quot;Switch to This URL&quot; to load updates from that source.
             {"\n\n"}
             Note: Requires disableAntiBrickingMeasures enabled in the build. You must completely
             close and relaunch the app after switching.
@@ -507,11 +507,11 @@ export default function BundleLoaderScreen() {
               {"\n\n"}
               1. Enter a PR bundle URL (e.g., GitHub Pages)
               {"\n"}
-              2. Tap "Switch to This URL" to configure runtime override
+              2. Tap &quot;Switch to This URL&quot; to configure runtime override
               {"\n"}
               3. Close app completely and relaunch (kill from app switcher)
               {"\n"}
-              4. Tap "Check for Updates" to fetch from new URL
+              4. Tap &quot;Check for Updates&quot; to fetch from new URL
               {"\n"}
               5. Runtime version must match exactly
               {"\n"}

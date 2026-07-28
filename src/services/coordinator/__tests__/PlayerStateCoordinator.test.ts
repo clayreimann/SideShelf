@@ -4,7 +4,8 @@
  * Tests event processing, state machine, metrics, and integration
  */
 
-import type { DiagnosticEvent, PlayerEvent } from "@/types/coordinator";
+import type { DiagnosticEvent, PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
+import type { CurrentChapter, PlayerTrack } from "@/types/player";
 import { PlayerState } from "@/types/coordinator";
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { State } from "react-native-track-player";
@@ -1414,7 +1415,7 @@ describe("PlayerStateCoordinator", () => {
     it("should update pendingSyncPosition to null from SESSION_UPDATED", async () => {
       await coordinator.dispatch({
         type: "SESSION_UPDATED",
-        payload: { sessionId: "sess-1", currentTime: 100 },
+        payload: { position: 100 },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -1424,10 +1425,7 @@ describe("PlayerStateCoordinator", () => {
     it("should update lastServerSync from SESSION_SYNC_COMPLETED", async () => {
       const before = Date.now();
 
-      await coordinator.dispatch({
-        type: "SESSION_SYNC_COMPLETED",
-        payload: { sessionId: "sess-1" },
-      });
+      await coordinator.dispatch({ type: "SESSION_SYNC_COMPLETED" });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const context = coordinator.getContext();
@@ -1456,7 +1454,7 @@ describe("PlayerStateCoordinator", () => {
 
       await coordinator.dispatch({
         type: "SESSION_SYNC_FAILED",
-        payload: { error: syncError, sessionId: "sess-1" },
+        payload: { error: syncError },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -2267,6 +2265,7 @@ describe("PlayerStateCoordinator", () => {
           coverUri: null,
           duration: 3600,
         },
+        currentChapter: null as CurrentChapter | null,
       },
       updatePosition: jest.fn(),
       updatePlayingState: jest.fn(),
@@ -2604,6 +2603,7 @@ describe("PlayerStateCoordinator", () => {
           coverUri: null,
           duration: 3600,
         },
+        currentChapter: null as CurrentChapter | null,
       },
       updatePosition: jest.fn(),
       updatePlayingState: jest.fn(),
@@ -3029,7 +3029,7 @@ describe("PlayerStateCoordinator", () => {
         undefined
       );
 
-      const playDispatches = dispatchSpy.mock.calls.filter(([evt]: [any]) => evt.type === "PLAY");
+      const playDispatches = dispatchSpy.mock.calls.filter(([event]) => event.type === "PLAY");
       expect(playDispatches.length).toBeGreaterThan(0);
 
       dispatchSpy.mockRestore();
@@ -3049,8 +3049,8 @@ describe("PlayerStateCoordinator", () => {
 
   describe("Change 3: coordinator short-circuits LOAD_TRACK when same item already active", () => {
     let mockPlayerService: {
-      executeLoadTrack: ReturnType<typeof jest.fn>;
-      executePlay: ReturnType<typeof jest.fn>;
+      executeLoadTrack: jest.MockedFunction<(libraryItemId: string) => Promise<void>>;
+      executePlay: jest.MockedFunction<() => Promise<void>>;
     };
     const mockTrack: any = {
       libraryItemId: "item-1",
@@ -3106,7 +3106,7 @@ describe("PlayerStateCoordinator", () => {
       // executeLoadTrack should NOT have been called (short-circuited)
       expect(mockPlayerService.executeLoadTrack).not.toHaveBeenCalled();
       // PLAY should have been dispatched instead
-      const playDispatches = dispatchSpy.mock.calls.filter(([evt]: [any]) => evt.type === "PLAY");
+      const playDispatches = dispatchSpy.mock.calls.filter(([event]) => event.type === "PLAY");
       expect(playDispatches.length).toBeGreaterThan(0);
 
       dispatchSpy.mockRestore();
@@ -3115,8 +3115,8 @@ describe("PlayerStateCoordinator", () => {
 
   describe("Change 4: coordinator performs inline queue rebuild when queueStatus is unknown", () => {
     let mockPlayerService: {
-      executePlay: ReturnType<typeof jest.fn>;
-      executeRebuildQueue: ReturnType<typeof jest.fn>;
+      executePlay: jest.MockedFunction<() => Promise<void>>;
+      executeRebuildQueue: jest.MockedFunction<(track: PlayerTrack) => Promise<ResumePositionInfo>>;
     };
     const mockResumeInfo = {
       position: 120,
@@ -3128,7 +3128,7 @@ describe("PlayerStateCoordinator", () => {
     beforeEach(() => {
       const { PlayerService } = require("../../PlayerService");
       mockPlayerService = PlayerService.getInstance();
-      (mockPlayerService.executeRebuildQueue as jest.Mock).mockResolvedValue(mockResumeInfo);
+      mockPlayerService.executeRebuildQueue.mockResolvedValue(mockResumeInfo);
       jest.clearAllMocks();
     });
 
@@ -3222,7 +3222,7 @@ describe("PlayerStateCoordinator", () => {
     });
 
     it("does not call executePlay and clears isLoadingTrack when rebuild fails", async () => {
-      (mockPlayerService.executeRebuildQueue as jest.Mock).mockRejectedValue(
+      mockPlayerService.executeRebuildQueue.mockRejectedValue(
         new Error("No playable sources found")
       );
 
@@ -3249,7 +3249,7 @@ describe("PlayerStateCoordinator", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
       jest.clearAllMocks();
-      (mockPlayerService.executeRebuildQueue as jest.Mock).mockRejectedValue(
+      mockPlayerService.executeRebuildQueue.mockRejectedValue(
         new Error("No playable sources found")
       );
 
@@ -3272,9 +3272,9 @@ describe("PlayerStateCoordinator", () => {
 
   describe("Brief E: NATIVE_PLAYBACK_ERROR marks queue stale for fresh-credential retry", () => {
     let mockPlayerService: {
-      executeLoadTrack: ReturnType<typeof jest.fn>;
-      executePlay: ReturnType<typeof jest.fn>;
-      executeRebuildQueue: ReturnType<typeof jest.fn>;
+      executeLoadTrack: jest.MockedFunction<(libraryItemId: string) => Promise<void>>;
+      executePlay: jest.MockedFunction<() => Promise<void>>;
+      executeRebuildQueue: jest.MockedFunction<(track: PlayerTrack) => Promise<ResumePositionInfo>>;
     };
     const mockResumeInfo = {
       position: 45,
@@ -3286,7 +3286,7 @@ describe("PlayerStateCoordinator", () => {
     beforeEach(() => {
       const { PlayerService } = require("../../PlayerService");
       mockPlayerService = PlayerService.getInstance();
-      (mockPlayerService.executeRebuildQueue as jest.Mock).mockResolvedValue(mockResumeInfo);
+      mockPlayerService.executeRebuildQueue.mockResolvedValue(mockResumeInfo);
       jest.clearAllMocks();
     });
 
@@ -3385,7 +3385,7 @@ describe("PlayerStateCoordinator", () => {
       _setPlaySessionId: jest.fn(),
       _setLastPauseTime: jest.fn(),
       _setPendingProgressJump: jest.fn(),
-      updateNowPlayingMetadata: jest.fn().mockResolvedValue(undefined),
+      updateNowPlayingMetadata: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
       setSleepTimer: jest.fn(),
       cancelSleepTimer: jest.fn(),
     });

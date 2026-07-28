@@ -2,17 +2,18 @@ import { getLocales } from "expo-localization";
 import { en } from "./locales/en";
 import { es } from "./locales/es";
 
-const translations = {
+export type TranslationKey = keyof typeof en;
+export type TranslationDictionary = { readonly [Key in TranslationKey]: string };
+
+const translations: Record<"en" | "es", TranslationDictionary> = {
   en,
   es,
 };
 
 type LocaleCode = keyof typeof translations;
-type TranslationDictionary = (typeof translations)[LocaleCode];
 
 const FALLBACK_LOCALE: LocaleCode = "en";
 
-export type TranslationKey = keyof typeof en;
 export type TranslationReplacements = Record<string, string | number>;
 
 function resolveLocale(): string {

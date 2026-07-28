@@ -44,6 +44,8 @@ import { getItem, saveItem } from "@/lib/secureStore";
 import { extractTokensFromAuthResponse } from "@/db/helpers/tokens";
 import { apiFetch } from "@/lib/api/api";
 
+const mockFetch = jest.fn<typeof fetch>();
+
 const mockGetItem = getItem as jest.MockedFunction<typeof getItem>;
 const mockSaveItem = saveItem as jest.MockedFunction<typeof saveItem>;
 const mockExtractTokens = extractTokensFromAuthResponse as jest.MockedFunction<
@@ -87,7 +89,8 @@ describe("ApiClientService", () => {
     await apiClientService.setBaseUrl("http://test.example.com");
     await apiClientService.setTokens("initial-access", "initial-refresh", "alice");
     mockSaveItem.mockClear();
-    (global as any).fetch = jest.fn();
+    mockFetch.mockReset();
+    global.fetch = mockFetch;
   });
 
   afterEach(() => {
@@ -129,7 +132,7 @@ describe("ApiClientService", () => {
 
   describe("performTokenRefresh (via handleUnauthorized)", () => {
     it("clears tokens and returns rejected when refresh is rejected with 401", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(401, {}));
+      mockFetch.mockResolvedValue(jsonResponse(401, {}));
 
       const result = await apiClientService.handleUnauthorized();
 
@@ -141,7 +144,7 @@ describe("ApiClientService", () => {
     });
 
     it("clears tokens and returns rejected when refresh is rejected with 403", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(403, {}));
+      mockFetch.mockResolvedValue(jsonResponse(403, {}));
 
       const result = await apiClientService.handleUnauthorized();
 
@@ -151,7 +154,7 @@ describe("ApiClientService", () => {
     });
 
     it("does NOT clear tokens and returns transient on a 5xx response", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(500, {}));
+      mockFetch.mockResolvedValue(jsonResponse(500, {}));
 
       const result = await apiClientService.handleUnauthorized();
 
@@ -164,7 +167,7 @@ describe("ApiClientService", () => {
     });
 
     it("does NOT clear tokens and returns transient when fetch throws (network offline)", async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(new TypeError("Network request failed"));
+      mockFetch.mockRejectedValue(new TypeError("Network request failed"));
 
       const result = await apiClientService.handleUnauthorized();
 
@@ -178,7 +181,7 @@ describe("ApiClientService", () => {
     it("does NOT clear tokens and returns transient when fetch aborts (timeout)", async () => {
       const abortError = new Error("Aborted");
       abortError.name = "AbortError";
-      (global.fetch as jest.Mock).mockRejectedValue(abortError);
+      mockFetch.mockRejectedValue(abortError);
 
       const result = await apiClientService.handleUnauthorized();
 
@@ -188,7 +191,7 @@ describe("ApiClientService", () => {
     });
 
     it("sets new tokens and returns refreshed on a successful refresh", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(200, { fake: true }));
+      mockFetch.mockResolvedValue(jsonResponse(200, { fake: true }));
       mockExtractTokens.mockReturnValue({
         accessToken: "new-access",
         refreshToken: "new-refresh",
@@ -204,7 +207,7 @@ describe("ApiClientService", () => {
     it("clears tokens and returns rejected immediately when there is no refresh token to send", async () => {
       // Simulate legacy/token-only auth: no refresh token stored
       await apiClientService.setTokens("legacy-access", null);
-      (global.fetch as jest.Mock).mockClear();
+      mockFetch.mockClear();
 
       const result = await apiClientService.handleUnauthorized();
 
@@ -215,7 +218,7 @@ describe("ApiClientService", () => {
     });
 
     it("treats a malformed successful refresh response as a terminal rejection", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ...jsonResponse(200, {}),
         json: async () => {
           throw new SyntaxError("invalid JSON");
@@ -231,7 +234,7 @@ describe("ApiClientService", () => {
 
     it("does not clear newer credentials when an older refresh later returns 401", async () => {
       const response = deferred<Response>();
-      (global.fetch as jest.Mock).mockReturnValue(response.promise);
+      mockFetch.mockReturnValue(response.promise);
 
       const refresh = apiClientService.handleUnauthorized();
       await apiClientService.setTokens("new-login-access", "new-login-refresh", "alice");
@@ -249,7 +252,7 @@ describe("ApiClientService", () => {
         accessToken: "rotated-old-access",
         refreshToken: "rotated-old-refresh",
       });
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(200, {}));
+      mockFetch.mockResolvedValue(jsonResponse(200, {}));
       mockSaveItem.mockImplementation(async (key, value) => {
         if (key === "abs.accessToken" && value === "rotated-old-access") await oldWrite.promise;
       });
@@ -277,7 +280,7 @@ describe("ApiClientService", () => {
         accessToken: "rotated-old-access",
         refreshToken: "rotated-old-refresh",
       });
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(200, {}));
+      mockFetch.mockResolvedValue(jsonResponse(200, {}));
       mockSaveItem.mockImplementation(async (key, value) => {
         if (key === "abs.accessToken" && value === "rotated-old-access") await oldWrite.promise;
       });
@@ -304,7 +307,7 @@ describe("ApiClientService", () => {
         accessToken: "rotated-old-access",
         refreshToken: "rotated-old-refresh",
       });
-      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse(200, {}));
+      mockFetch.mockResolvedValue(jsonResponse(200, {}));
       mockSaveItem.mockImplementation(async (key, value) => {
         if (key === "abs.accessToken" && value === "rotated-old-access") await oldWrite.promise;
       });
@@ -332,7 +335,7 @@ describe("ApiClientService", () => {
     await apiClientService.setTokens("same-access", "same-refresh", "alice");
     expect(apiClientService.getAuthGeneration()).toBe(initialGeneration + 1);
 
-    (global.fetch as jest.Mock).mockRejectedValue(new TypeError("Network request failed"));
+    mockFetch.mockRejectedValue(new TypeError("Network request failed"));
     const beforeFailure = apiClientService.getAuthGeneration();
     await expect(apiClientService.handleUnauthorized()).resolves.toMatchObject({
       status: "transient",
@@ -346,9 +349,7 @@ describe("ApiClientService", () => {
   ])(
     "surfaces %s through apiFetch as transient while preserving authentication",
     async (_name, refreshResult) => {
-      (global.fetch as jest.Mock)
-        .mockResolvedValueOnce(resourceResponse(401))
-        .mockImplementationOnce(refreshResult);
+      mockFetch.mockResolvedValueOnce(resourceResponse(401)).mockImplementationOnce(refreshResult);
 
       await expect(apiFetch("/api/session/local")).rejects.toMatchObject({
         name: "TransientTokenRefreshError",
@@ -360,7 +361,7 @@ describe("ApiClientService", () => {
 
   it("returns the terminal resource 401 and clears auth when no refresh credential exists", async () => {
     await apiClientService.setTokens("legacy-access", null, "alice");
-    (global.fetch as jest.Mock).mockResolvedValue(resourceResponse(401));
+    mockFetch.mockResolvedValue(resourceResponse(401));
 
     const response = await apiFetch("/api/session/local");
 

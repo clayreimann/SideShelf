@@ -28,7 +28,7 @@ jest.mock("@/stores/appStore", () => ({
 jest.mock("@/services/PlayerService", () => ({
   playerService: {
     executeSetVolume: jest.fn(),
-    executeSeek: jest.fn().mockResolvedValue(undefined),
+    executeSeek: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
   },
 }));
 
@@ -38,12 +38,14 @@ jest.mock("@/services/coordinator/eventBus", () => ({
 
 jest.mock("@/services/ProgressService", () => ({
   progressService: {
-    getCurrentSession: jest.fn().mockResolvedValue(null),
-    updateProgress: jest.fn().mockResolvedValue(undefined),
-    startSession: jest.fn().mockResolvedValue(undefined),
-    forceRehydrateSession: jest.fn().mockResolvedValue(undefined),
-    shouldSyncToServer: jest.fn().mockResolvedValue({ shouldSync: false }),
-    syncSessionToServer: jest.fn().mockResolvedValue(undefined),
+    getCurrentSession: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+    updateProgress: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    startSession: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    forceRehydrateSession: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    shouldSyncToServer: jest
+      .fn<() => Promise<{ shouldSync: boolean }>>()
+      .mockResolvedValue({ shouldSync: false }),
+    syncSessionToServer: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
   },
 }));
 
@@ -52,7 +54,7 @@ jest.mock("@/db/helpers/localData", () => ({
 }));
 
 jest.mock("@/utils/userHelpers", () => ({
-  getCurrentUser: jest.fn().mockResolvedValue(null),
+  getCurrentUser: jest.fn<() => Promise<null>>().mockResolvedValue(null),
 }));
 
 jest.mock("@/services/coordinator/PlayerStateCoordinator", () => ({

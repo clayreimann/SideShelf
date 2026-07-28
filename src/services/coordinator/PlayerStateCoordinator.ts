@@ -266,7 +266,7 @@ export class PlayerStateCoordinator extends EventEmitter {
           event: event.type,
           fromState: currentState,
           itemId: this.context.currentTrack?.libraryItemId,
-          chapterId: this.context.currentChapter?.id,
+          chapterId: this.context.currentChapter?.chapter.id,
           positionMs:
             this.context.position != null ? Math.round(this.context.position * 1000) : undefined,
           restoreSessionId: meta?.restoreSessionId,

@@ -174,15 +174,22 @@ describe("TrackLoadingCollaborator", () => {
 
     mockFacade = {
       dispatchEvent: jest.fn(),
-      getApiInfo: jest.fn().mockReturnValue({ baseUrl: "http://test", accessToken: "tok123" }),
-      getInitializationTimestamp: jest.fn().mockReturnValue(Date.now()),
-      executeRebuildQueue: jest.fn(),
-      resolveCanonicalPosition: jest.fn().mockResolvedValue({
-        position: 0,
-        source: "store",
-        authoritativePosition: null,
-        asyncStoragePosition: null,
+      getApiInfo: jest.fn<IPlayerServiceFacade["getApiInfo"]>().mockReturnValue({
+        baseUrl: "http://test",
+        accessToken: "tok123",
       }),
+      getInitializationTimestamp: jest
+        .fn<IPlayerServiceFacade["getInitializationTimestamp"]>()
+        .mockReturnValue(Date.now()),
+      executeRebuildQueue: jest.fn<IPlayerServiceFacade["executeRebuildQueue"]>(),
+      resolveCanonicalPosition: jest
+        .fn<IPlayerServiceFacade["resolveCanonicalPosition"]>()
+        .mockResolvedValue({
+          position: 0,
+          source: "store",
+          authoritativePosition: null,
+          asyncStoragePosition: null,
+        }),
     };
 
     collaborator = new TrackLoadingCollaborator(mockFacade);
@@ -241,7 +248,7 @@ describe("TrackLoadingCollaborator", () => {
     });
 
     it("calls facade.resolveCanonicalPosition to determine resume position", async () => {
-      (mockFacade.resolveCanonicalPosition as jest.Mock).mockResolvedValue({
+      jest.mocked(mockFacade.resolveCanonicalPosition).mockResolvedValue({
         position: 120,
         source: "activeSession",
         authoritativePosition: 120,
@@ -273,7 +280,7 @@ describe("TrackLoadingCollaborator", () => {
     });
 
     it("seeks to resume position when coordinator provides one", async () => {
-      (mockFacade.resolveCanonicalPosition as jest.Mock).mockResolvedValue({
+      jest.mocked(mockFacade.resolveCanonicalPosition).mockResolvedValue({
         position: 300,
         source: "activeSession",
         authoritativePosition: 300,
@@ -437,7 +444,7 @@ describe("TrackLoadingCollaborator", () => {
     });
 
     it("seeks to resume position when position > 0", async () => {
-      (mockFacade.resolveCanonicalPosition as jest.Mock).mockResolvedValue({
+      jest.mocked(mockFacade.resolveCanonicalPosition).mockResolvedValue({
         position: 300,
         source: "activeSession",
         authoritativePosition: 300,
@@ -620,7 +627,7 @@ describe("TrackLoadingCollaborator", () => {
 
   describe("executeLoadTrack: store position sync", () => {
     it("updates store position after resolveCanonicalPosition (path B) so executePlay reads correct position", async () => {
-      (mockFacade.resolveCanonicalPosition as jest.Mock).mockResolvedValue({
+      jest.mocked(mockFacade.resolveCanonicalPosition).mockResolvedValue({
         position: 300,
         source: "activeSession",
         authoritativePosition: 300,

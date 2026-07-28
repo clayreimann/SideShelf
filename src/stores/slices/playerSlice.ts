@@ -576,9 +576,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
   },
 
   _setPendingProgressJump: (jump) => {
-    set((state) => ({ player: { ...state.player, pendingProgressJump: jump } }));
+    set((state: PlayerSlice) => ({ player: { ...state.player, pendingProgressJump: jump } }));
   },
-
 
   setSleepTimer: (minutes: number) => {
     const endTime = Date.now() + minutes * 60 * 1000;

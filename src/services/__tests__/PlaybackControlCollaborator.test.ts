@@ -66,6 +66,7 @@ describe("PlaybackControlCollaborator", () => {
     },
     _setLastPauseTime: jest.fn(),
     _setTrackLoading: jest.fn(),
+    _setCurrentTrack: jest.fn(),
   };
 
   beforeEach(() => {
@@ -75,15 +76,22 @@ describe("PlaybackControlCollaborator", () => {
 
     mockFacade = {
       dispatchEvent: jest.fn(),
-      getApiInfo: jest.fn().mockReturnValue({ baseUrl: "http://test", accessToken: "tok123" }),
-      getInitializationTimestamp: jest.fn().mockReturnValue(Date.now()),
-      executeRebuildQueue: jest.fn(),
-      resolveCanonicalPosition: jest.fn().mockResolvedValue({
-        position: 0,
-        source: "store",
-        authoritativePosition: null,
-        asyncStoragePosition: null,
+      getApiInfo: jest.fn<IPlayerServiceFacade["getApiInfo"]>().mockReturnValue({
+        baseUrl: "http://test",
+        accessToken: "tok123",
       }),
+      getInitializationTimestamp: jest
+        .fn<IPlayerServiceFacade["getInitializationTimestamp"]>()
+        .mockReturnValue(Date.now()),
+      executeRebuildQueue: jest.fn<IPlayerServiceFacade["executeRebuildQueue"]>(),
+      resolveCanonicalPosition: jest
+        .fn<IPlayerServiceFacade["resolveCanonicalPosition"]>()
+        .mockResolvedValue({
+          position: 0,
+          source: "store",
+          authoritativePosition: null,
+          asyncStoragePosition: null,
+        }),
     };
 
     collaborator = new PlaybackControlCollaborator(mockFacade);

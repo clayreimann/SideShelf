@@ -163,8 +163,8 @@ describe("DownloadRepairCollaborator", () => {
     mockGetMediaMetadataByLibraryItemId.mockResolvedValue(MOCK_METADATA as any);
     mockMarkAudioFileAsDownloaded.mockResolvedValue(undefined as any);
     mockClearAudioFileDownloadStatus.mockResolvedValue(undefined as any);
-    mockCacheCoverIfMissing.mockResolvedValue(undefined);
-    mockSetExcludeFromBackup.mockResolvedValue(undefined);
+    mockCacheCoverIfMissing.mockResolvedValue({ uri: "", wasDownloaded: false });
+    mockSetExcludeFromBackup.mockResolvedValue({ success: true, path: "" });
     mockGetAudioFileLocation.mockReturnValue(null);
   });
 
@@ -309,7 +309,7 @@ describe("DownloadRepairCollaborator", () => {
     });
 
     it("deletes directory and clears DB status when directory exists", async () => {
-      const mockDelete = jest.fn().mockResolvedValue(undefined);
+      const mockDelete = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
       mockGetDownloadsDirectory.mockReturnValue({
         exists: true,
         delete: mockDelete,
@@ -353,7 +353,7 @@ describe("DownloadRepairCollaborator", () => {
     it("throws error when deletion fails", async () => {
       mockGetDownloadsDirectory.mockReturnValue({
         exists: true,
-        delete: jest.fn().mockRejectedValue(new Error("Delete failed")),
+        delete: jest.fn<() => Promise<void>>().mockRejectedValue(new Error("Delete failed")),
       } as any);
 
       await expect(collaborator.deleteDownloadedLibraryItem("item-1")).rejects.toThrow(

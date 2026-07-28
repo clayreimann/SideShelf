@@ -38,7 +38,10 @@ export default function PlayerProgressToast() {
     try {
       await playerService.seekTo(fromPosition);
     } catch (err) {
-      log.error("[handleUndo] Failed to seek back", err);
+      log.error(
+        "[handleUndo] Failed to seek back",
+        err instanceof Error ? err : new Error(String(err))
+      );
     }
   }, [pendingProgressJump, _setPendingProgressJump]);
 

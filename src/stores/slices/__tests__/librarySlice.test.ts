@@ -11,6 +11,7 @@ import {
   mockPodcastLibraryRow,
 } from "../../../__tests__/fixtures";
 import { createTestDb, TestDatabase } from "../../../__tests__/utils/testDb";
+import type { LibraryItemDisplayRow } from "@/types/components";
 import { DEFAULT_SORT_CONFIG, STORAGE_KEYS } from "../../utils";
 import { createLibrarySlice, LibrarySlice } from "../librarySlice";
 
@@ -45,7 +46,6 @@ jest.mock("@/db/helpers/libraryItems", () => ({
   transformItemsToDisplayFormat: jest.fn(),
   upsertLibraryItems: jest.fn(),
   checkLibraryItemExists: jest.fn(),
-  marshalLibraryItemFromApi: jest.fn(),
 }));
 
 jest.mock("@/db/helpers/mediaMetadata", () => ({
@@ -113,12 +113,11 @@ describe("LibrarySlice", () => {
     upsertLibraries.mockResolvedValue();
 
     getLibraryItemsForList.mockResolvedValue([]);
-    marshalLibraryItemFromApi.mockImplementation((item) => item);
     transformItemsToDisplayFormat.mockReturnValue([]);
     marshalLibraryItemsFromResponse.mockReturnValue([]);
     upsertLibraryItems.mockResolvedValue();
     checkLibraryItemExists.mockResolvedValue(false);
-    marshalLibraryItemFromApi.mockImplementation((item: any) => item);
+    marshalLibraryItemFromApi.mockImplementation((item: LibraryItemDisplayRow) => item);
 
     cacheCoversForLibraryItems.mockResolvedValue({ downloadedCount: 0, totalCount: 0 });
     upsertBooksMetadata.mockResolvedValue();
@@ -765,10 +764,52 @@ describe("LibrarySlice", () => {
     });
 
     it("should sort items based on current sort config", () => {
-      const mockItems = [
-        { id: "li-2", title: "Book B", authorName: "Author B" },
-        { id: "li-1", title: "Book A", authorName: "Author A" },
-        { id: "li-3", title: "Book C", authorName: "Author C" },
+      const mockItems: LibraryItemDisplayRow[] = [
+        {
+          id: "li-2",
+          title: "Book B",
+          authorName: "Author B",
+          mediaType: "book",
+          author: null,
+          authorNameLF: null,
+          narrator: null,
+          releaseDate: null,
+          publishedYear: null,
+          addedAt: null,
+          duration: null,
+          coverUri: null,
+          seriesName: null,
+        },
+        {
+          id: "li-1",
+          title: "Book A",
+          authorName: "Author A",
+          mediaType: "book",
+          author: null,
+          authorNameLF: null,
+          narrator: null,
+          releaseDate: null,
+          publishedYear: null,
+          addedAt: null,
+          duration: null,
+          coverUri: null,
+          seriesName: null,
+        },
+        {
+          id: "li-3",
+          title: "Book C",
+          authorName: "Author C",
+          mediaType: "book",
+          author: null,
+          authorNameLF: null,
+          narrator: null,
+          releaseDate: null,
+          publishedYear: null,
+          addedAt: null,
+          duration: null,
+          coverUri: null,
+          seriesName: null,
+        },
       ];
 
       store.setState((state) => ({

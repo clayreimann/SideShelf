@@ -99,7 +99,7 @@ jest.mock("@/lib/api/endpoints", () => ({
 
 jest.mock("@/lib/fileSystem", () => ({
   resolveAppPath: jest.fn().mockReturnValue("/full/path/test.m4b"),
-  verifyFileExists: jest.fn().mockResolvedValue(true),
+  verifyFileExists: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
 }));
 
 describe("ProgressRestoreCollaborator", () => {
@@ -150,8 +150,15 @@ describe("ProgressRestoreCollaborator", () => {
 
     mockFacade = {
       dispatchEvent: jest.fn(),
-      getApiInfo: jest.fn().mockReturnValue({ baseUrl: "http://test", accessToken: "tok123" }),
-      getInitializationTimestamp: jest.fn().mockReturnValue(Date.now()),
+      getApiInfo: jest.fn<IPlayerServiceFacade["getApiInfo"]>().mockReturnValue({
+        baseUrl: "http://test",
+        accessToken: "tok123",
+      }),
+      getInitializationTimestamp: jest
+        .fn<IPlayerServiceFacade["getInitializationTimestamp"]>()
+        .mockReturnValue(Date.now()),
+      executeRebuildQueue: jest.fn<IPlayerServiceFacade["executeRebuildQueue"]>(),
+      resolveCanonicalPosition: jest.fn<IPlayerServiceFacade["resolveCanonicalPosition"]>(),
     };
 
     collaborator = new ProgressRestoreCollaborator(mockFacade);

@@ -28,13 +28,28 @@ jest.mock("react-native-device-info", () => ({
 
 import { fetchMe } from "@/lib/api/endpoints";
 import { apiFetch } from "@/lib/api/api";
-import { logger } from "@/lib/logger";
+import { logger, type SubLogger } from "@/lib/logger";
 
-function getSubLoggerFor(tag: string) {
-  const calls = (logger.forTag as jest.Mock).mock.calls;
+function getSubLoggerFor(tag: string): SubLogger {
+  const mockForTag = jest.mocked(logger.forTag);
+  const calls = mockForTag.mock.calls;
   const idx = calls.findIndex((call) => call[0] === tag);
   if (idx === -1) throw new Error(`logger.forTag was never called with tag "${tag}"`);
-  return (logger.forTag as jest.Mock).mock.results[idx].value;
+  const result = mockForTag.mock.results[idx].value;
+  if (!isSubLogger(result))
+    throw new Error(`logger.forTag did not return a logger for tag "${tag}"`);
+  return result;
+}
+
+function isSubLogger(value: unknown): value is SubLogger {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "debug" in value &&
+    "info" in value &&
+    "warn" in value &&
+    "error" in value
+  );
 }
 
 const endpointsSubLogger = getSubLoggerFor("api:endpoints");
@@ -57,11 +72,13 @@ describe("handleResponseError body redaction", () => {
       accessToken: "leaked-access-token",
       refreshToken: "leaked-refresh-token",
     });
-    (apiFetch as jest.Mock).mockResolvedValue(makeErrorResponse(body));
+    jest.mocked(apiFetch).mockResolvedValue(makeErrorResponse(body));
 
     await expect(fetchMe()).rejects.toThrow("Session invalid");
 
-    const loggedMessages = (endpointsSubLogger.error as jest.Mock).mock.calls.map((c) => c[0]);
+    const loggedMessages = jest
+      .mocked(endpointsSubLogger.error)
+      .mock.calls.map(([message]) => message);
     const combined = loggedMessages.join("\n");
     expect(combined).not.toContain("leaked-access-token");
     expect(combined).not.toContain("leaked-refresh-token");

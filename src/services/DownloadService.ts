@@ -337,7 +337,7 @@ export class DownloadService {
               );
               // Decode percent-encoding: files are saved at decoded POSIX paths (see downloadAudioFile).
               const downloadPathFs = decodeURIComponent(downloadPathUri.replace(/^file:\/\//, ""));
-              markAudioFileAsDownloaded(audioFile.id, downloadPathUri, "documents")
+              markAudioFileAsDownloaded(audioFile.id, downloadPathUri)
                 .then(async () => {
                   log.info(`File marked as downloaded, applying iCloud exclusion`);
 
@@ -381,7 +381,7 @@ export class DownloadService {
           if (error instanceof Error && error.message === "File already exists") {
             // File already downloaded, mark as complete
             const downloadPath = getDownloadPath(libraryItemId, audioFile.filename, "documents");
-            await markAudioFileAsDownloaded(audioFile.id, downloadPath, "documents");
+            await markAudioFileAsDownloaded(audioFile.id, downloadPath);
 
             // Ensure iCloud exclusion is applied
             try {
@@ -824,12 +824,18 @@ export class DownloadService {
 
     for (const task of existingTasks) {
       const libraryItemId = task.metadata?.libraryItemId;
-      if (libraryItemId) {
+      const audioFileId = task.metadata?.audioFileId;
+      const filename = task.metadata?.filename;
+      if (
+        typeof libraryItemId === "string" &&
+        typeof audioFileId === "string" &&
+        typeof filename === "string"
+      ) {
         const tasks = tasksByLibraryItem.get(libraryItemId) || [];
         tasks.push({
           task,
-          audioFileId: task.metadata.audioFileId,
-          filename: task.metadata.filename,
+          audioFileId,
+          filename,
           size: 0, // Will be updated from progress
         });
         tasksByLibraryItem.set(libraryItemId, tasks);
@@ -891,7 +897,7 @@ export class DownloadService {
           const downloadPathUri = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
           // Decode percent-encoding: files are saved at decoded POSIX paths (see downloadAudioFile).
           const downloadPathFs = decodeURIComponent(downloadPathUri.replace(/^file:\/\//, ""));
-          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri, "documents")
+          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri)
             .then(async () => {
               log.info(`File marked as downloaded, applying iCloud exclusion`);
 
@@ -929,7 +935,7 @@ export class DownloadService {
           const downloadPathUri = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
           // Decode percent-encoding: files are saved at decoded POSIX paths (see downloadAudioFile).
           const downloadPathFs = decodeURIComponent(downloadPathUri.replace(/^file:\/\//, ""));
-          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri, "documents")
+          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri)
             .then(async () => {
               try {
                 await setExcludeFromBackup(downloadPathFs);

@@ -118,7 +118,7 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
     refreshData();
 
     // Auto-refresh if enabled
-    let interval: number | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (autoRefresh) {
       interval = setInterval(refreshData, 1000);
     }

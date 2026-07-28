@@ -103,7 +103,6 @@ export default function LibraryItemList({
         data={items}
         numColumns={numColumns}
         key={`${viewMode}-${numColumns}`} // Force re-render when view mode or columns change
-        estimatedItemSize={viewMode === "grid" ? 160 : 80}
         getItemType={(_item) => viewMode}
         renderItem={({ item }: { item: LibraryItemListRow }) => (
           <LibraryItem item={item} variant={viewMode} />

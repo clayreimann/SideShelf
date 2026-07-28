@@ -6,64 +6,93 @@
  */
 
 import { jest } from "@jest/globals";
+import type {
+  downloadFileExists,
+  ensureDownloadsDirectory,
+  getAudioFileLocation,
+  getCachesDirectory,
+  getDocumentsDirectory,
+  getDownloadPath,
+  getDownloadsDirectory,
+  moveAudioFile,
+  verifyDownloadedFileExists,
+  verifyFileExists,
+} from "@/lib/fileSystem";
+import type {
+  clearAudioFileDownloadStatus,
+  getAllDownloadedAudioFiles,
+  getAudioFileDownloadInfo,
+  markAudioFileAsDownloaded,
+  updateAudioFileDownloadPath,
+  updateAudioFileLastAccessed,
+  updateAudioFileStorageLocation,
+} from "@/db/helpers/localData";
+import type { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
+import type { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
+import type { getMediaProgressForLibraryItem } from "@/db/helpers/mediaProgress";
+import type {
+  isExcludedFromBackup,
+  isICloudBackupExclusionAvailable,
+  setExcludeFromBackup,
+} from "@/lib/iCloudBackupExclusion";
 
 /**
  * Mock for file system helpers
  */
 export interface MockFileSystemHelpers {
-  getDownloadPath: jest.Mock;
-  moveAudioFile: jest.Mock;
-  getAudioFileLocation: jest.Mock;
-  ensureDownloadsDirectory: jest.Mock;
-  verifyFileExists: jest.Mock;
-  getDocumentsDirectory: jest.Mock;
-  getCachesDirectory: jest.Mock;
-  getDownloadsDirectory: jest.Mock;
-  downloadFileExists: jest.Mock;
-  verifyDownloadedFileExists: jest.Mock;
+  getDownloadPath: jest.MockedFunction<typeof getDownloadPath>;
+  moveAudioFile: jest.MockedFunction<typeof moveAudioFile>;
+  getAudioFileLocation: jest.MockedFunction<typeof getAudioFileLocation>;
+  ensureDownloadsDirectory: jest.MockedFunction<typeof ensureDownloadsDirectory>;
+  verifyFileExists: jest.MockedFunction<typeof verifyFileExists>;
+  getDocumentsDirectory: jest.MockedFunction<typeof getDocumentsDirectory>;
+  getCachesDirectory: jest.MockedFunction<typeof getCachesDirectory>;
+  getDownloadsDirectory: jest.MockedFunction<typeof getDownloadsDirectory>;
+  downloadFileExists: jest.MockedFunction<typeof downloadFileExists>;
+  verifyDownloadedFileExists: jest.MockedFunction<typeof verifyDownloadedFileExists>;
 }
 
 /**
  * Mock for local data helpers
  */
 export interface MockLocalDataHelpers {
-  updateAudioFileStorageLocation: jest.Mock;
-  clearAudioFileDownloadStatus: jest.Mock;
-  getAllDownloadedAudioFiles: jest.Mock;
-  markAudioFileAsDownloaded: jest.Mock;
-  getAudioFileDownloadInfo: jest.Mock;
-  updateAudioFileLastAccessed: jest.Mock;
-  updateAudioFileDownloadPath: jest.Mock;
+  updateAudioFileStorageLocation: jest.MockedFunction<typeof updateAudioFileStorageLocation>;
+  clearAudioFileDownloadStatus: jest.MockedFunction<typeof clearAudioFileDownloadStatus>;
+  getAllDownloadedAudioFiles: jest.MockedFunction<typeof getAllDownloadedAudioFiles>;
+  markAudioFileAsDownloaded: jest.MockedFunction<typeof markAudioFileAsDownloaded>;
+  getAudioFileDownloadInfo: jest.MockedFunction<typeof getAudioFileDownloadInfo>;
+  updateAudioFileLastAccessed: jest.MockedFunction<typeof updateAudioFileLastAccessed>;
+  updateAudioFileDownloadPath: jest.MockedFunction<typeof updateAudioFileDownloadPath>;
 }
 
 /**
  * Mock for combined queries helpers
  */
 export interface MockCombinedQueriesHelpers {
-  getAudioFilesWithDownloadInfo: jest.Mock;
+  getAudioFilesWithDownloadInfo: jest.MockedFunction<typeof getAudioFilesWithDownloadInfo>;
 }
 
 /**
  * Mock for media metadata helpers
  */
 export interface MockMediaMetadataHelpers {
-  getMediaMetadataByLibraryItemId: jest.Mock;
+  getMediaMetadataByLibraryItemId: jest.MockedFunction<typeof getMediaMetadataByLibraryItemId>;
 }
 
 /**
  * Mock for media progress helpers
  */
 export interface MockMediaProgressHelpers {
-  getMediaProgressForLibraryItem: jest.Mock;
+  getMediaProgressForLibraryItem: jest.MockedFunction<typeof getMediaProgressForLibraryItem>;
 }
 
 /**
  * Mock for iCloud backup exclusion
  */
 export interface MockICloudBackupHelpers {
-  setExcludeFromBackup: jest.Mock;
-  isExcludedFromBackup: jest.Mock;
-  isICloudBackupExclusionAvailable: jest.Mock;
+  setExcludeFromBackup: jest.MockedFunction<typeof setExcludeFromBackup>;
+  isExcludedFromBackup: jest.MockedFunction<typeof isExcludedFromBackup>;
+  isICloudBackupExclusionAvailable: jest.MockedFunction<typeof isICloudBackupExclusionAvailable>;
 }
 
 /**
@@ -71,22 +100,26 @@ export interface MockICloudBackupHelpers {
  */
 export function createMockFileSystemHelpers(): MockFileSystemHelpers {
   return {
-    getDownloadPath: jest.fn(
+    getDownloadPath: jest.fn<typeof getDownloadPath>(
       (id, filename, location = "caches") => `${location}/downloads/${id}/${filename}`
     ),
-    moveAudioFile: jest.fn().mockResolvedValue(true),
-    getAudioFileLocation: jest.fn((id, filename) => {
+    moveAudioFile: jest.fn<typeof moveAudioFile>().mockResolvedValue(true),
+    getAudioFileLocation: jest.fn<typeof getAudioFileLocation>((_id, _filename) => {
       // Default: files exist in caches
       return "caches";
     }),
-    ensureDownloadsDirectory: jest.fn().mockResolvedValue(undefined),
-    verifyFileExists: jest.fn().mockResolvedValue(true),
-    getDocumentsDirectory: jest.fn(),
-    getCachesDirectory: jest.fn(),
-    getDownloadsDirectory: jest.fn(),
+    ensureDownloadsDirectory: jest
+      .fn<typeof ensureDownloadsDirectory>()
+      .mockResolvedValue(undefined),
+    verifyFileExists: jest.fn<typeof verifyFileExists>().mockResolvedValue(true),
+    getDocumentsDirectory: jest.fn<typeof getDocumentsDirectory>(),
+    getCachesDirectory: jest.fn<typeof getCachesDirectory>(),
+    getDownloadsDirectory: jest.fn<typeof getDownloadsDirectory>(),
     // Default: files exist in caches location
-    downloadFileExists: jest.fn((id, filename, location = "caches") => location === "caches"),
-    verifyDownloadedFileExists: jest.fn().mockReturnValue(true),
+    downloadFileExists: jest.fn<typeof downloadFileExists>(
+      (_id, _filename, location = "caches") => location === "caches"
+    ),
+    verifyDownloadedFileExists: jest.fn<typeof verifyDownloadedFileExists>().mockReturnValue(true),
   };
 }
 
@@ -95,13 +128,23 @@ export function createMockFileSystemHelpers(): MockFileSystemHelpers {
  */
 export function createMockLocalDataHelpers(): MockLocalDataHelpers {
   return {
-    updateAudioFileStorageLocation: jest.fn().mockResolvedValue(undefined),
-    clearAudioFileDownloadStatus: jest.fn().mockResolvedValue(undefined),
-    getAllDownloadedAudioFiles: jest.fn().mockResolvedValue([]),
-    markAudioFileAsDownloaded: jest.fn().mockResolvedValue(undefined),
-    getAudioFileDownloadInfo: jest.fn().mockResolvedValue(null),
-    updateAudioFileLastAccessed: jest.fn().mockResolvedValue(undefined),
-    updateAudioFileDownloadPath: jest.fn().mockResolvedValue(undefined),
+    updateAudioFileStorageLocation: jest
+      .fn<typeof updateAudioFileStorageLocation>()
+      .mockResolvedValue(undefined),
+    clearAudioFileDownloadStatus: jest
+      .fn<typeof clearAudioFileDownloadStatus>()
+      .mockResolvedValue(undefined),
+    getAllDownloadedAudioFiles: jest.fn<typeof getAllDownloadedAudioFiles>().mockResolvedValue([]),
+    markAudioFileAsDownloaded: jest
+      .fn<typeof markAudioFileAsDownloaded>()
+      .mockResolvedValue(undefined),
+    getAudioFileDownloadInfo: jest.fn<typeof getAudioFileDownloadInfo>().mockResolvedValue(null),
+    updateAudioFileLastAccessed: jest
+      .fn<typeof updateAudioFileLastAccessed>()
+      .mockResolvedValue(undefined),
+    updateAudioFileDownloadPath: jest
+      .fn<typeof updateAudioFileDownloadPath>()
+      .mockResolvedValue(undefined),
   };
 }
 
@@ -110,7 +153,9 @@ export function createMockLocalDataHelpers(): MockLocalDataHelpers {
  */
 export function createMockCombinedQueriesHelpers(): MockCombinedQueriesHelpers {
   return {
-    getAudioFilesWithDownloadInfo: jest.fn().mockResolvedValue([]),
+    getAudioFilesWithDownloadInfo: jest
+      .fn<typeof getAudioFilesWithDownloadInfo>()
+      .mockResolvedValue([]),
   };
 }
 
@@ -119,7 +164,9 @@ export function createMockCombinedQueriesHelpers(): MockCombinedQueriesHelpers {
  */
 export function createMockMediaMetadataHelpers(): MockMediaMetadataHelpers {
   return {
-    getMediaMetadataByLibraryItemId: jest.fn().mockResolvedValue(null),
+    getMediaMetadataByLibraryItemId: jest
+      .fn<typeof getMediaMetadataByLibraryItemId>()
+      .mockResolvedValue(null),
   };
 }
 
@@ -128,7 +175,9 @@ export function createMockMediaMetadataHelpers(): MockMediaMetadataHelpers {
  */
 export function createMockMediaProgressHelpers(): MockMediaProgressHelpers {
   return {
-    getMediaProgressForLibraryItem: jest.fn().mockResolvedValue(null),
+    getMediaProgressForLibraryItem: jest
+      .fn<typeof getMediaProgressForLibraryItem>()
+      .mockResolvedValue(null),
   };
 }
 
@@ -137,9 +186,15 @@ export function createMockMediaProgressHelpers(): MockMediaProgressHelpers {
  */
 export function createMockICloudBackupHelpers(): MockICloudBackupHelpers {
   return {
-    setExcludeFromBackup: jest.fn().mockResolvedValue({ success: true, path: "" }),
-    isExcludedFromBackup: jest.fn().mockResolvedValue({ excluded: false, path: "" }),
-    isICloudBackupExclusionAvailable: jest.fn().mockReturnValue(true),
+    setExcludeFromBackup: jest
+      .fn<typeof setExcludeFromBackup>()
+      .mockResolvedValue({ success: true, path: "" }),
+    isExcludedFromBackup: jest
+      .fn<typeof isExcludedFromBackup>()
+      .mockResolvedValue({ excluded: false, path: "" }),
+    isICloudBackupExclusionAvailable: jest
+      .fn<typeof isICloudBackupExclusionAvailable>()
+      .mockReturnValue(true),
   };
 }
 

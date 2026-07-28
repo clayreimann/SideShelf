@@ -86,9 +86,15 @@ describe("BackgroundReconnectCollaborator", () => {
 
     mockFacade = {
       dispatchEvent: jest.fn(),
-      getApiInfo: jest.fn().mockReturnValue({ baseUrl: "http://test", accessToken: "tok123" }),
-      getInitializationTimestamp: jest.fn().mockReturnValue(Date.now()),
-      rebuildCurrentTrackIfNeeded: jest.fn().mockResolvedValue(true),
+      getApiInfo: jest.fn<IPlayerServiceFacade["getApiInfo"]>().mockReturnValue({
+        baseUrl: "http://test",
+        accessToken: "tok123",
+      }),
+      getInitializationTimestamp: jest
+        .fn<IPlayerServiceFacade["getInitializationTimestamp"]>()
+        .mockReturnValue(Date.now()),
+      executeRebuildQueue: jest.fn<IPlayerServiceFacade["executeRebuildQueue"]>(),
+      resolveCanonicalPosition: jest.fn<IPlayerServiceFacade["resolveCanonicalPosition"]>(),
     };
 
     collaborator = new BackgroundReconnectCollaborator(mockFacade);

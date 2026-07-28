@@ -37,8 +37,10 @@ jest.mock("@/services/ApiClientService", () => ({
 }));
 
 import { apiFetch } from "@/lib/api/api";
-import { logger } from "@/lib/logger";
+import { logger, type SubLogger } from "@/lib/logger";
 import { apiClientService } from "@/services/ApiClientService";
+
+const mockFetch = jest.fn<typeof fetch>();
 
 const mockHandleUnauthorized = apiClientService.handleUnauthorized as jest.MockedFunction<
   typeof apiClientService.handleUnauthorized
@@ -74,11 +76,26 @@ function makeResponse(
  * jest.clearAllMocks() wipes the forTag mock's call history) to make assertions
  * against the exact sublogger instance apiFetch actually logs through.
  */
-function getSubLoggerFor(tag: string) {
-  const calls = (logger.forTag as jest.Mock).mock.calls;
+function getSubLoggerFor(tag: string): SubLogger {
+  const mockForTag = jest.mocked(logger.forTag);
+  const calls = mockForTag.mock.calls;
   const idx = calls.findIndex((call) => call[0] === tag);
   if (idx === -1) throw new Error(`logger.forTag was never called with tag "${tag}"`);
-  return (logger.forTag as jest.Mock).mock.results[idx].value;
+  const result = mockForTag.mock.results[idx].value;
+  if (!isSubLogger(result))
+    throw new Error(`logger.forTag did not return a logger for tag "${tag}"`);
+  return result;
+}
+
+function isSubLogger(value: unknown): value is SubLogger {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "debug" in value &&
+    "info" in value &&
+    "warn" in value &&
+    "error" in value
+  );
 }
 
 const detailedSubLogger = getSubLoggerFor("api:fetch:detailed");
@@ -86,7 +103,8 @@ const detailedSubLogger = getSubLoggerFor("api:fetch:detailed");
 describe("apiFetch 401 handling", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (global as any).fetch = jest.fn();
+    mockFetch.mockReset();
+    global.fetch = mockFetch;
   });
 
   afterEach(() => {
@@ -94,7 +112,7 @@ describe("apiFetch 401 handling", () => {
   });
 
   it("returns the response directly when status is not 401", async () => {
-    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(200));
+    mockFetch.mockResolvedValue(makeResponse(200));
 
     const res = await apiFetch("/some/path");
 
@@ -104,9 +122,7 @@ describe("apiFetch 401 handling", () => {
   });
 
   it("retries exactly once after a successful refresh on 401", async () => {
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce(makeResponse(401))
-      .mockResolvedValueOnce(makeResponse(200));
+    mockFetch.mockResolvedValueOnce(makeResponse(401)).mockResolvedValueOnce(makeResponse(200));
     mockHandleUnauthorized.mockResolvedValue({ status: "refreshed" });
 
     const res = await apiFetch("/some/path");
@@ -117,9 +133,7 @@ describe("apiFetch 401 handling", () => {
   });
 
   it("does not trigger a second refresh cycle when the retry also 401s", async () => {
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce(makeResponse(401))
-      .mockResolvedValueOnce(makeResponse(401));
+    mockFetch.mockResolvedValueOnce(makeResponse(401)).mockResolvedValueOnce(makeResponse(401));
     mockHandleUnauthorized.mockResolvedValue({ status: "refreshed" });
 
     const res = await apiFetch("/some/path");
@@ -133,7 +147,7 @@ describe("apiFetch 401 handling", () => {
   });
 
   it("returns the original 401 response without retrying when refresh fails", async () => {
-    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(401));
+    mockFetch.mockResolvedValue(makeResponse(401));
     mockHandleUnauthorized.mockResolvedValue({ status: "rejected" });
 
     const res = await apiFetch("/some/path");
@@ -144,7 +158,7 @@ describe("apiFetch 401 handling", () => {
   });
 
   it("simulated server that always 401s does not loop indefinitely even across many calls", async () => {
-    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(401));
+    mockFetch.mockResolvedValue(makeResponse(401));
     mockHandleUnauthorized.mockResolvedValue({ status: "refreshed" }); // refresh keeps "succeeding"
 
     const res = await apiFetch("/permission-scoped-resource");
@@ -157,7 +171,7 @@ describe("apiFetch 401 handling", () => {
 
   it("throws a transient refresh failure instead of returning the resource 401", async () => {
     const refreshError = new Error("Token refresh temporarily unavailable");
-    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(401));
+    mockFetch.mockResolvedValue(makeResponse(401));
     mockHandleUnauthorized.mockResolvedValue({ status: "transient", error: refreshError });
 
     await expect(apiFetch("/some/path")).rejects.toBe(refreshError);
@@ -165,7 +179,7 @@ describe("apiFetch 401 handling", () => {
 
   it("throws a stale refresh cancellation instead of returning a terminal 401", async () => {
     const staleError = new Error("Request cancelled after authentication changed");
-    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(401));
+    mockFetch.mockResolvedValue(makeResponse(401));
     mockHandleUnauthorized.mockResolvedValue({ status: "stale", error: staleError });
 
     await expect(apiFetch("/some/path")).rejects.toBe(staleError);
@@ -188,7 +202,8 @@ describe("apiFetch 401 handling", () => {
 describe("apiFetch detailed logging (api:fetch:detailed)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (global as any).fetch = jest.fn();
+    mockFetch.mockReset();
+    global.fetch = mockFetch;
     // Explicit default per test — clearAllMocks() clears call history but not a
     // previously-set mockReturnValue, so don't rely on cross-test carryover.
     (logger.isTagEnabled as jest.Mock).mockReturnValue(true);
@@ -208,7 +223,7 @@ describe("apiFetch detailed logging (api:fetch:detailed)", () => {
       clone: cloneSpy,
       text: async () => "should never be read",
     } as unknown as Response;
-    (global.fetch as jest.Mock).mockResolvedValue(response);
+    mockFetch.mockResolvedValue(response);
 
     await apiFetch("/api/me");
 
@@ -218,7 +233,7 @@ describe("apiFetch detailed logging (api:fetch:detailed)", () => {
 
   it("does not build the detailed log string (JSON.stringify/redact work) when disabled", async () => {
     (logger.isTagEnabled as jest.Mock).mockReturnValue(false);
-    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(200, { body: "{}" }));
+    mockFetch.mockResolvedValue(makeResponse(200, { body: "{}" }));
 
     await apiFetch("/api/me", { method: "POST", body: JSON.stringify({ password: "hunter2" }) });
 
@@ -233,12 +248,14 @@ describe("apiFetch detailed logging (api:fetch:detailed)", () => {
       accessToken: "eyJ.access.secret",
       refreshToken: "eyJ.refresh.secret",
     });
-    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(200, { body: responseBody }));
+    mockFetch.mockResolvedValue(makeResponse(200, { body: responseBody }));
 
     await apiFetch("/login", { method: "POST", body: JSON.stringify({ password: "hunter2" }) });
 
     expect(detailedSubLogger.info).toHaveBeenCalled();
-    const loggedMessages = (detailedSubLogger.info as jest.Mock).mock.calls.map((c) => c[0]);
+    const loggedMessages = jest
+      .mocked(detailedSubLogger.info)
+      .mock.calls.map(([message]) => message);
     const combined = loggedMessages.join("\n");
 
     // Body IS logged (the feature works) but with credentials scrubbed.
@@ -251,11 +268,13 @@ describe("apiFetch detailed logging (api:fetch:detailed)", () => {
   it("redacts the Authorization header in the detailed request log when enabled", async () => {
     (logger.isTagEnabled as jest.Mock).mockReturnValue(true);
     (apiClientService.getAccessToken as jest.Mock).mockReturnValue("bearer-secret-token");
-    (global.fetch as jest.Mock).mockResolvedValue(makeResponse(200, { body: "{}" }));
+    mockFetch.mockResolvedValue(makeResponse(200, { body: "{}" }));
 
     await apiFetch("/api/me");
 
-    const loggedMessages = (detailedSubLogger.info as jest.Mock).mock.calls.map((c) => c[0]);
+    const loggedMessages = jest
+      .mocked(detailedSubLogger.info)
+      .mock.calls.map(([message]) => message);
     const combined = loggedMessages.join("\n");
     expect(combined).not.toContain("bearer-secret-token");
   });
