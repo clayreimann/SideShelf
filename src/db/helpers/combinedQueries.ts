@@ -1,10 +1,14 @@
-import { db } from '@/db/client';
-import { audioFiles } from '@/db/schema/audioFiles';
-import { libraryFiles } from '@/db/schema/libraryFiles';
-import { localAudioFileDownloads, localCoverCache, localLibraryFileDownloads } from '@/db/schema/localData';
-import { mediaMetadata } from '@/db/schema/mediaMetadata';
-import { resolveAppPath } from '@/lib/fileSystem';
-import { eq } from 'drizzle-orm';
+import { db } from "@/db/client";
+import { audioFiles } from "@/db/schema/audioFiles";
+import { libraryFiles } from "@/db/schema/libraryFiles";
+import {
+  localAudioFileDownloads,
+  localCoverCache,
+  localLibraryFileDownloads,
+} from "@/db/schema/localData";
+import { mediaMetadata } from "@/db/schema/mediaMetadata";
+import { resolveAppPath } from "@/lib/fileSystem";
+import { eq, sql } from "drizzle-orm";
 
 /**
  * Extended types that include local data
@@ -15,6 +19,7 @@ export type AudioFileWithDownloadInfo = typeof audioFiles.$inferSelect & {
     downloadPath: string;
     downloadedAt: Date;
     updatedAt: Date;
+    lastAccessedAt: Date | null;
   };
 };
 
@@ -34,7 +39,9 @@ export type MediaMetadataWithCover = typeof mediaMetadata.$inferSelect & {
 /**
  * Get audio files for a media item with download information
  */
-export async function getAudioFilesWithDownloadInfo(mediaId: string): Promise<AudioFileWithDownloadInfo[]> {
+export async function getAudioFilesWithDownloadInfo(
+  mediaId: string
+): Promise<AudioFileWithDownloadInfo[]> {
   const result = await db
     .select({
       // Audio file fields
@@ -51,7 +58,7 @@ export async function getAudioFilesWithDownloadInfo(mediaId: string): Promise<Au
       ctimeMs: audioFiles.ctimeMs,
       birthtimeMs: audioFiles.birthtimeMs,
       addedAt: audioFiles.addedAt,
-      updatedAt: audioFiles.updatedAt,
+      audioUpdatedAt: sql<number | null>`${audioFiles.updatedAt}`.as("audio_updated_at"),
       trackNumFromMeta: audioFiles.trackNumFromMeta,
       discNumFromMeta: audioFiles.discNumFromMeta,
       trackNumFromFilename: audioFiles.trackNumFromFilename,
@@ -86,15 +93,20 @@ export async function getAudioFilesWithDownloadInfo(mediaId: string): Promise<Au
       // Download info fields
       downloadIsDownloaded: localAudioFileDownloads.isDownloaded,
       downloadPath: localAudioFileDownloads.downloadPath,
-      downloadedAt: localAudioFileDownloads.downloadedAt,
-      downloadUpdatedAt: localAudioFileDownloads.updatedAt,
+      downloadedAt: sql<number | null>`${localAudioFileDownloads.downloadedAt}`.as("downloaded_at"),
+      downloadUpdatedAt: sql<number | null>`${localAudioFileDownloads.updatedAt}`.as(
+        "download_updated_at"
+      ),
+      downloadLastAccessedAt: sql<number | null>`${localAudioFileDownloads.lastAccessedAt}`.as(
+        "download_last_accessed_at"
+      ),
     })
     .from(audioFiles)
     .leftJoin(localAudioFileDownloads, eq(audioFiles.id, localAudioFileDownloads.audioFileId))
     .where(eq(audioFiles.mediaId, mediaId))
     .orderBy(audioFiles.index);
 
-  return result.map(row => ({
+  return result.map((row) => ({
     id: row.id,
     mediaId: row.mediaId,
     index: row.index,
@@ -108,7 +120,7 @@ export async function getAudioFilesWithDownloadInfo(mediaId: string): Promise<Au
     ctimeMs: row.ctimeMs,
     birthtimeMs: row.birthtimeMs,
     addedAt: row.addedAt,
-    updatedAt: row.updatedAt,
+    updatedAt: row.audioUpdatedAt,
     trackNumFromMeta: row.trackNumFromMeta,
     discNumFromMeta: row.discNumFromMeta,
     trackNumFromFilename: row.trackNumFromFilename,
@@ -140,19 +152,28 @@ export async function getAudioFilesWithDownloadInfo(mediaId: string): Promise<Au
     tagComment: row.tagComment,
     tagLanguage: row.tagLanguage,
     tagASIN: row.tagASIN,
-    downloadInfo: row.downloadIsDownloaded && row.downloadPath ? {
-      isDownloaded: row.downloadIsDownloaded,
-      downloadPath: resolveAppPath(row.downloadPath),
-      downloadedAt: row.downloadedAt!,
-      updatedAt: row.downloadUpdatedAt!,
-    } : undefined,
+    downloadInfo:
+      row.downloadIsDownloaded && row.downloadPath
+        ? {
+            isDownloaded: row.downloadIsDownloaded,
+            downloadPath: resolveAppPath(row.downloadPath),
+            downloadedAt: new Date(row.downloadedAt! * 1000),
+            updatedAt: new Date(row.downloadUpdatedAt! * 1000),
+            lastAccessedAt:
+              row.downloadLastAccessedAt === null
+                ? null
+                : new Date(row.downloadLastAccessedAt * 1000),
+          }
+        : undefined,
   }));
 }
 
 /**
  * Get library files for an item with download information
  */
-export async function getLibraryFilesWithDownloadInfo(libraryItemId: string): Promise<LibraryFileWithDownloadInfo[]> {
+export async function getLibraryFilesWithDownloadInfo(
+  libraryItemId: string
+): Promise<LibraryFileWithDownloadInfo[]> {
   const result = await db
     .select({
       // Library file fields
@@ -178,11 +199,14 @@ export async function getLibraryFilesWithDownloadInfo(libraryItemId: string): Pr
       downloadUpdatedAt: localLibraryFileDownloads.updatedAt,
     })
     .from(libraryFiles)
-    .leftJoin(localLibraryFileDownloads, eq(libraryFiles.id, localLibraryFileDownloads.libraryFileId))
+    .leftJoin(
+      localLibraryFileDownloads,
+      eq(libraryFiles.id, localLibraryFileDownloads.libraryFileId)
+    )
     .where(eq(libraryFiles.libraryItemId, libraryItemId))
     .orderBy(libraryFiles.filename);
 
-  return result.map(row => ({
+  return result.map((row) => ({
     id: row.id,
     libraryItemId: row.libraryItemId,
     ino: row.ino,
@@ -198,21 +222,24 @@ export async function getLibraryFilesWithDownloadInfo(libraryItemId: string): Pr
     addedAt: row.addedAt,
     updatedAt: row.updatedAt,
     fileType: row.fileType,
-    downloadInfo: row.downloadIsDownloaded && row.downloadPath
-      ? {
-          isDownloaded: row.downloadIsDownloaded,
-          downloadPath: resolveAppPath(row.downloadPath),
-          downloadedAt: row.downloadedAt!,
-          updatedAt: row.downloadUpdatedAt!,
-        }
-      : undefined,
+    downloadInfo:
+      row.downloadIsDownloaded && row.downloadPath
+        ? {
+            isDownloaded: row.downloadIsDownloaded,
+            downloadPath: resolveAppPath(row.downloadPath),
+            downloadedAt: row.downloadedAt!,
+            updatedAt: row.downloadUpdatedAt!,
+          }
+        : undefined,
   }));
 }
 
 /**
  * Get media metadata with local cover URL
  */
-export async function getMediaMetadataWithCover(mediaId: string): Promise<MediaMetadataWithCover | null> {
+export async function getMediaMetadataWithCover(
+  mediaId: string
+): Promise<MediaMetadataWithCover | null> {
   const result = await db
     .select({
       // Media metadata fields
@@ -305,7 +332,9 @@ export async function getMediaMetadataWithCover(mediaId: string): Promise<MediaM
 /**
  * Get media metadata by library item ID with local cover URL
  */
-export async function getMediaMetadataWithCoverByLibraryItemId(libraryItemId: string): Promise<MediaMetadataWithCover | null> {
+export async function getMediaMetadataWithCoverByLibraryItemId(
+  libraryItemId: string
+): Promise<MediaMetadataWithCover | null> {
   const result = await db
     .select({
       // Media metadata fields

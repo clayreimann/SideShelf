@@ -745,7 +745,8 @@ describe("DownloadService facade", () => {
       expect(instance.isDownloadActive("item-1")).toBe(false);
       expect(markAudioFileAsDownloaded).toHaveBeenCalledWith(
         "af-1",
-        expect.stringContaining("chapter-1.mp3")
+        expect.stringContaining("chapter-1.mp3"),
+        "documents"
       );
     });
 

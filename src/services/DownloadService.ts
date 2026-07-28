@@ -337,7 +337,7 @@ export class DownloadService {
               );
               // Decode percent-encoding: files are saved at decoded POSIX paths (see downloadAudioFile).
               const downloadPathFs = decodeURIComponent(downloadPathUri.replace(/^file:\/\//, ""));
-              markAudioFileAsDownloaded(audioFile.id, downloadPathUri)
+              markAudioFileAsDownloaded(audioFile.id, downloadPathUri, "documents")
                 .then(async () => {
                   log.info(`File marked as downloaded, applying iCloud exclusion`);
 
@@ -381,7 +381,7 @@ export class DownloadService {
           if (error instanceof Error && error.message === "File already exists") {
             // File already downloaded, mark as complete
             const downloadPath = getDownloadPath(libraryItemId, audioFile.filename, "documents");
-            await markAudioFileAsDownloaded(audioFile.id, downloadPath);
+            await markAudioFileAsDownloaded(audioFile.id, downloadPath, "documents");
 
             // Ensure iCloud exclusion is applied
             try {
@@ -897,7 +897,7 @@ export class DownloadService {
           const downloadPathUri = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
           // Decode percent-encoding: files are saved at decoded POSIX paths (see downloadAudioFile).
           const downloadPathFs = decodeURIComponent(downloadPathUri.replace(/^file:\/\//, ""));
-          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri)
+          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri, "documents")
             .then(async () => {
               log.info(`File marked as downloaded, applying iCloud exclusion`);
 
@@ -935,7 +935,7 @@ export class DownloadService {
           const downloadPathUri = getDownloadPath(libraryItemId, taskInfo.filename, "documents");
           // Decode percent-encoding: files are saved at decoded POSIX paths (see downloadAudioFile).
           const downloadPathFs = decodeURIComponent(downloadPathUri.replace(/^file:\/\//, ""));
-          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri)
+          markAudioFileAsDownloaded(taskInfo.audioFileId, downloadPathUri, "documents")
             .then(async () => {
               try {
                 await setExcludeFromBackup(downloadPathFs);

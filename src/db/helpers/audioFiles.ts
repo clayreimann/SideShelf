@@ -1,6 +1,6 @@
 import { db } from "@/db/client";
 import { audioFiles } from "@/db/schema/audioFiles";
-import { isFileDownloadedAndExists } from "@/lib/fileSystem";
+import { isFileDownloadedAndExists, type StorageLocation } from "@/lib/fileSystem";
 import type { ApiAudioFile } from "@/types/api";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -160,9 +160,10 @@ export async function getAudioFilesForMedia(mediaId: string): Promise<AudioFileR
 // Mark audio file as downloaded
 export async function markAudioFileAsDownloaded(
   audioFileId: string,
-  downloadPath: string
+  downloadPath: string,
+  storageLocation: StorageLocation = "caches"
 ): Promise<void> {
-  await markAudioFileDownloadedLocal(audioFileId, downloadPath);
+  await markAudioFileDownloadedLocal(audioFileId, downloadPath, storageLocation);
 }
 
 // Get downloaded audio files for a media item
