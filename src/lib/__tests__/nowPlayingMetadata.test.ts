@@ -4,7 +4,10 @@
 
 import { describe, expect, it, jest, beforeEach } from "@jest/globals";
 import TrackPlayer from "react-native-track-player";
-import { resolveAbsoluteRemoteSeekPosition, updateNowPlayingMetadata } from "../nowPlayingMetadata";
+import {
+  resolveAbsoluteRemoteSeekPosition,
+  updateNowPlayingMetadata,
+} from "@/lib/nowPlayingMetadata";
 import type { PlayerTrack } from "@/types/player";
 
 jest.mock("react-native-track-player", () => ({
