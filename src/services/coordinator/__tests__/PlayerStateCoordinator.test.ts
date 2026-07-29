@@ -3499,6 +3499,58 @@ describe("PlayerStateCoordinator", () => {
       );
     });
 
+    it("does not record the exact 30-second smart rewind reconciliation", async () => {
+      await reachPlayingAt(100);
+      await coordinator.dispatch({ type: "PAUSE" });
+      await waitForEventQueue();
+
+      const { PlayerService } = require("../../PlayerService");
+      PlayerService.getInstance().executePlay.mockResolvedValueOnce({
+        fromPosition: 100,
+        toPosition: 70,
+      });
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await waitForEventQueue();
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 70, duration: 3600 },
+      });
+      await waitForEventQueue();
+
+      expect(mockStore._recordJump).not.toHaveBeenCalled();
+    });
+
+    it("does not record native progress that arrives after restore and before queue reconciliation", async () => {
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack,
+            position: 100,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await waitForEventQueue();
+      expect(coordinator.getContext().queueStatus).toBe("unknown");
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 140, duration: 3600 },
+      });
+      await waitForEventQueue();
+
+      expect(mockStore._recordJump).not.toHaveBeenCalled();
+    });
+
     it("records an explicit seek from the coordinator's pre-seek position", async () => {
       await reachPlayingAt(100);
       jest.clearAllMocks();

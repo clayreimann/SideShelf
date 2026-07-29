@@ -126,6 +126,13 @@ describe("PlaybackControlCollaborator", () => {
       expect(callOrder).toEqual(["play", "applySmartRewind"]);
     });
 
+    it("returns the exact smart rewind outcome for coordinator reconciliation", async () => {
+      const outcome = { fromPosition: 100, toPosition: 70 };
+      applySmartRewind.mockResolvedValue(outcome);
+
+      await expect(collaborator.executePlay()).resolves.toEqual(outcome);
+    });
+
     it("clears last pause time after playing", async () => {
       await collaborator.executePlay();
 

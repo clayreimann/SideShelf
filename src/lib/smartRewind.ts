@@ -20,6 +20,18 @@ import TrackPlayer from "react-native-track-player";
 const log = logger.forTag("SmartRewind");
 
 /**
+ * The exact seek performed by smart rewind, when one is applied.
+ *
+ * Callers use this to reconcile their own position state with TrackPlayer's
+ * subsequent native progress event without treating the intentional rewind as
+ * an unexpected external jump.
+ */
+export type SmartRewindOutcome = {
+  fromPosition: number;
+  toPosition: number;
+};
+
+/**
  * Apply smart rewind based on pause duration
  *
  * Checks if smart rewind is enabled and, if so, determines how long playback
@@ -38,14 +50,16 @@ const log = logger.forTag("SmartRewind");
  * @param currentPosition Optional current position. If provided, uses this instead of reading from TrackPlayer.
  *                        This prevents race conditions when TrackPlayer hasn't finished seeking yet.
  */
-export async function applySmartRewind(currentPosition?: number): Promise<void> {
+export async function applySmartRewind(
+  currentPosition?: number
+): Promise<SmartRewindOutcome | null> {
   const span = trace.startSpan("player.play.smart_rewind");
 
   // Check if smart rewind is enabled
   const smartRewindEnabled = await getSmartRewindEnabled();
   if (!smartRewindEnabled) {
     trace.endSpan(span, "ok", { enabled: false });
-    return;
+    return null;
   }
   const store = useAppStore.getState();
   let lastPlayedTime: number | null = null;
@@ -70,7 +84,7 @@ export async function applySmartRewind(currentPosition?: number): Promise<void> 
           rewindSeconds: 0,
           earlyExit: "no_user",
         });
-        return;
+        return null;
       }
 
       const activeSession = await getActiveSession(
@@ -117,7 +131,7 @@ export async function applySmartRewind(currentPosition?: number): Promise<void> 
       log.error("Failed to get last played time from database for smart rewind", error as Error);
       trace.recordError(error, span);
       trace.endSpan(span, "error");
-      return;
+      return null;
     }
   }
 
@@ -143,7 +157,7 @@ export async function applySmartRewind(currentPosition?: number): Promise<void> 
         positionBeforeMs: Math.round(position * 1000),
         positionAfterMs: Math.round(newPosition * 1000),
       });
-      return;
+      return { fromPosition: position, toPosition: newPosition };
     }
   } else {
     log.info("No last played time available, skipping smart rewind");
@@ -154,4 +168,5 @@ export async function applySmartRewind(currentPosition?: number): Promise<void> 
     source: lastPlayedSource,
     rewindSeconds: 0,
   });
+  return null;
 }

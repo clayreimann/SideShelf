@@ -30,6 +30,7 @@ import { logger } from "@/lib/logger";
 import { updateNowPlayingMetadata } from "@/lib/nowPlayingMetadata";
 import { getStoredUsername } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
+import type { SmartRewindOutcome } from "@/lib/smartRewind";
 import type { JumpRecordInput } from "@/types/player";
 import {
   CoordinatorMetrics,
@@ -56,6 +57,10 @@ import { dispatchPlayerEvent, playerEventBus } from "./eventBus";
 import { validateTransition } from "./transitions";
 
 const log = logger.forTag("PlayerStateCoordinator");
+
+type ExpectedInternalPositionReconciliation = SmartRewindOutcome & {
+  libraryItemId: string;
+};
 
 /**
  * Singleton coordinator for player state management
@@ -100,6 +105,12 @@ export class PlayerStateCoordinator extends EventEmitter {
   // Pending authoritative jump records awaiting flush to the player slice.
   private _pendingJumpRecords: JumpRecordInput[] = [];
   private jumpSequence = 0;
+
+  // Smart rewind seeks TrackPlayer directly. Keep its exact expected native
+  // position until that reconciliation arrives so it cannot be logged as an
+  // unexpected external jump.
+  private expectedInternalPositionReconciliation: ExpectedInternalPositionReconciliation | null =
+    null;
 
   // Open span for the current session sync cycle (SYNC_STARTED → SYNC_COMPLETED/FAILED)
   private activeSyncSpan: SpanHandle | null = null;
@@ -228,6 +239,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       position: this.context.position,
       isSeeking: this.context.isSeeking,
       isLoadingTrack: this.context.isLoadingTrack,
+      queueStatus: this.context.queueStatus,
       currentTrack: this.context.currentTrack,
       sessionId: this.context.sessionId,
     };
@@ -305,6 +317,20 @@ export class PlayerStateCoordinator extends EventEmitter {
       if (event.type === "STOP" || isLoadingDifferentItem) {
         this._pendingJumpRecords = [];
       }
+      if (event.type === "STOP" || event.type === "SEEK" || event.type === "LOAD_TRACK") {
+        this.expectedInternalPositionReconciliation = null;
+      }
+
+      const isExpectedInternalPositionReconciliation =
+        event.type === "NATIVE_PROGRESS_UPDATED" &&
+        this.expectedInternalPositionReconciliation !== null &&
+        before.currentTrack?.libraryItemId ===
+          this.expectedInternalPositionReconciliation.libraryItemId &&
+        event.payload.position === this.expectedInternalPositionReconciliation.toPosition;
+
+      if (isExpectedInternalPositionReconciliation) {
+        this.expectedInternalPositionReconciliation = null;
+      }
 
       if (event.type === "SEEK" && meta?.jump && !meta.suppressJumpHistory && before.currentTrack) {
         this._pendingJumpRecords.push({
@@ -324,6 +350,8 @@ export class PlayerStateCoordinator extends EventEmitter {
         before.currentTrack &&
         !before.isSeeking &&
         !before.isLoadingTrack &&
+        before.queueStatus === "valid" &&
+        !isExpectedInternalPositionReconciliation &&
         Math.abs(event.payload.position - before.position) >= 30
       ) {
         this._pendingJumpRecords.push({
@@ -1337,7 +1365,14 @@ export class PlayerStateCoordinator extends EventEmitter {
                   return;
                 }
               }
-              await playerService.executePlay(meta);
+              const smartRewindOutcome = await playerService.executePlay(meta);
+              if (smartRewindOutcome && this.context.currentTrack) {
+                this.expectedInternalPositionReconciliation = {
+                  ...smartRewindOutcome,
+                  libraryItemId: this.context.currentTrack.libraryItemId,
+                };
+                this.context.position = smartRewindOutcome.toPosition;
+              }
             }
             break;
 

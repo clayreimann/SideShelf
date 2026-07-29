@@ -19,6 +19,7 @@ import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { formatTime } from "@/lib/helpers/formatters";
 import { useAppStore } from "@/stores/appStore";
+import type { SmartRewindOutcome } from "@/lib/smartRewind";
 import type { DispatchMeta, PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
 import type { PlayerTrack } from "@/types/player";
 import TrackPlayer, {
@@ -336,7 +337,7 @@ export class PlayerService implements IPlayerServiceFacade {
   /**
    * Execute play (Internal - Called by Coordinator)
    */
-  async executePlay(meta?: DispatchMeta): Promise<void> {
+  async executePlay(meta?: DispatchMeta): Promise<SmartRewindOutcome | null> {
     return this.playbackControl.executePlay(meta);
   }
 

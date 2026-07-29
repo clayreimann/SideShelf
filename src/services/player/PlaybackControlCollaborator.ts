@@ -8,7 +8,7 @@
  * The coordinator ensures queue is built before calling executePlay via executeRebuildQueue.
  */
 
-import { applySmartRewind } from "@/lib/smartRewind";
+import { applySmartRewind, type SmartRewindOutcome } from "@/lib/smartRewind";
 import { logger } from "@/lib/logger";
 import { useAppStore } from "@/stores/appStore";
 import TrackPlayer from "react-native-track-player";
@@ -28,7 +28,7 @@ export class PlaybackControlCollaborator implements IPlaybackControlCollaborator
    * Applies smart rewind and starts playback. The coordinator ensures the
    * queue is already built before calling this method.
    */
-  async executePlay(meta?: DispatchMeta): Promise<void> {
+  async executePlay(meta?: DispatchMeta): Promise<SmartRewindOutcome | null> {
     try {
       const store = useAppStore.getState();
       // Read position before play() — for streaming tracks, TrackPlayer.getProgress().position
@@ -41,12 +41,13 @@ export class PlaybackControlCollaborator implements IPlaybackControlCollaborator
       // Calling seekTo() on a paused track before play() can trigger a
       // spurious iOS RemotePause ~200ms later (observed in trace seq 175, 233).
       await TrackPlayer.play();
-      if (!meta?.skipSmartRewind) {
-        await applySmartRewind(currentPosition);
-      }
+      const smartRewindOutcome = meta?.skipSmartRewind
+        ? null
+        : await applySmartRewind(currentPosition);
 
       // Clear pause time since we're resuming
       store._setLastPauseTime(null);
+      return smartRewindOutcome;
     } catch (error) {
       const store = useAppStore.getState();
       store._setTrackLoading(false);

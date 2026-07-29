@@ -182,6 +182,7 @@ describe("PlayerService", () => {
   const { getMediaProgressForLibraryItem } = require("@/db/helpers/mediaProgress");
   const { getItem: getAsyncItem } = require("@/lib/asyncStore");
   const { dispatchPlayerEvent } = require("@/services/coordinator/eventBus");
+  const { applySmartRewind } = require("@/lib/smartRewind");
   const {
     __mockResolveCanonicalPosition,
   } = require("@/services/coordinator/PlayerStateCoordinator");
@@ -696,6 +697,13 @@ describe("PlayerService", () => {
       await playerService.executePlay();
 
       expect(mockedTrackPlayer.play).toHaveBeenCalled();
+    });
+
+    it("executePlay returns the exact smart rewind outcome from playback control", async () => {
+      const outcome = { fromPosition: 100, toPosition: 70 };
+      applySmartRewind.mockResolvedValue(outcome);
+
+      await expect(playerService.executePlay()).resolves.toEqual(outcome);
     });
 
     it("restorePlayerServiceFromSession delegates to progressRestore collaborator", async () => {

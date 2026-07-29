@@ -16,6 +16,7 @@
  */
 
 import type { DispatchMeta, PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
+import type { SmartRewindOutcome } from "@/lib/smartRewind";
 import type { PlayerTrack } from "@/types/player";
 import type { Track } from "react-native-track-player";
 
@@ -68,7 +69,11 @@ export interface IPlayerServiceFacade {
  * creation, and TrackPlayer queue management.
  */
 export interface ITrackLoadingCollaborator {
-  executeLoadTrack(libraryItemId: string, episodeId?: string, startPosition?: number): Promise<void>;
+  executeLoadTrack(
+    libraryItemId: string,
+    episodeId?: string,
+    startPosition?: number
+  ): Promise<void>;
   buildTrackList(track: PlayerTrack): Promise<Track[]>;
   executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo>;
 }
@@ -82,7 +87,7 @@ export interface ITrackLoadingCollaborator {
  * store side-effects (e.g., _setLastPauseTime on pause).
  */
 export interface IPlaybackControlCollaborator {
-  executePlay(meta?: DispatchMeta): Promise<void>;
+  executePlay(meta?: DispatchMeta): Promise<SmartRewindOutcome | null>;
   executePause(): Promise<void>;
   executeStop(): Promise<void>;
   executeSeek(position: number): Promise<void>;
