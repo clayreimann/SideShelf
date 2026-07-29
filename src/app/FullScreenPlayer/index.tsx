@@ -13,6 +13,7 @@
 import { translate } from "@/i18n";
 import BookmarkButton from "@/components/player/BookmarkButton";
 import ChapterList from "@/components/player/ChapterList";
+import JumpHistoryModal from "@/components/player/JumpHistoryModal";
 import JumpTrackButton from "@/components/player/JumpTrackButton";
 import PlaybackSpeedControl from "@/components/player/PlaybackSpeedControl";
 import PlayPauseButton from "@/components/player/PlayPauseButton";
@@ -34,13 +35,15 @@ import {
   handleCreateBookmarkLogic,
   handleLongPressBookmarkLogic,
 } from "@/app/FullScreenPlayer/handleCreateBookmarkLogic";
+import { buildPlayerSettingsActions } from "@/app/FullScreenPlayer/playerSettingsActions";
+import type { JumpHistoryEntry } from "@/types/player";
 import { Ionicons } from "@expo/vector-icons";
 import { MenuView } from "@react-native-menu/menu";
 import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { router } from "expo-router";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -70,7 +73,16 @@ export default function FullScreenPlayer() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  const { currentTrack, position, currentChapter, playbackRate, isPlaying } = usePlayer();
+  const {
+    currentTrack,
+    position,
+    currentChapter,
+    playbackRate,
+    isPlaying,
+    jumpHistory,
+    isJumpHistoryModalVisible,
+    setJumpHistoryModalVisible,
+  } = usePlayer();
   const { createBookmark } = useUserProfile();
   const {
     jumpForwardInterval,
@@ -375,6 +387,18 @@ export default function FullScreenPlayer() {
     }
   }, [currentChapter]);
 
+  const handleCloseJumpHistory = useCallback(() => {
+    setJumpHistoryModalVisible(false);
+  }, [setJumpHistoryModalVisible]);
+
+  const handleJumpHistorySelect = useCallback(async (entry: JumpHistoryEntry) => {
+    try {
+      await playerService.seekTo(entry.fromPosition, { suppressJumpHistory: true });
+    } catch (error) {
+      log.error("[handleJumpHistorySelect] Failed to seek to jump-history entry", error as Error);
+    }
+  }, []);
+
   const handleMenuAction = useCallback(
     (actionId: string) => {
       if (actionId === "progressFormat-remaining") updateProgressFormat("remaining");
@@ -385,16 +409,27 @@ export default function FullScreenPlayer() {
       else if (actionId === "chapterBar-total") updateChapterBarShowRemaining(false);
       else if (actionId === "chapterBar-remaining") updateChapterBarShowRemaining(true);
       else if (actionId === "keepAwake") updateKeepScreenAwake(!keepScreenAwake);
+      else if (actionId === "jumpHistory") setJumpHistoryModalVisible(true);
     },
     [
-      bookmarkTitleMode,
-      chapterBarShowRemaining,
       keepScreenAwake,
       updateProgressFormat,
       updateBookmarkTitleMode,
       updateChapterBarShowRemaining,
       updateKeepScreenAwake,
+      setJumpHistoryModalVisible,
     ]
+  );
+
+  const playerSettingsActions = useMemo(
+    () =>
+      buildPlayerSettingsActions({
+        progressFormat,
+        bookmarkTitleMode,
+        chapterBarShowRemaining,
+        keepScreenAwake,
+      }),
+    [progressFormat, bookmarkTitleMode, chapterBarShowRemaining, keepScreenAwake]
   );
 
   // Computed sizes — must be before animated style hooks (hooks must be unconditional)
@@ -529,6 +564,13 @@ export default function FullScreenPlayer() {
         </Modal>
       )}
 
+      <JumpHistoryModal
+        visible={isJumpHistoryModalVisible}
+        entries={jumpHistory?.entries ?? []}
+        onClose={handleCloseJumpHistory}
+        onSelect={handleJumpHistorySelect}
+      />
+
       {/* Drag pill — iOS only, sits above the header row */}
       {Platform.OS === "ios" && (
         <View style={{ alignItems: "center", paddingTop: insets.top + 4 }}>
@@ -573,66 +615,7 @@ export default function FullScreenPlayer() {
           title=""
           shouldOpenOnLongPress={false}
           onPressAction={({ nativeEvent }) => handleMenuAction(nativeEvent.event)}
-          actions={[
-            {
-              id: "progressFormat",
-              title: "Progress Format",
-              subactions: [
-                {
-                  id: "progressFormat-remaining",
-                  title: "Time Remaining",
-                  state: progressFormat === "remaining" ? "on" : "off",
-                },
-                {
-                  id: "progressFormat-elapsed",
-                  title: "Elapsed",
-                  state: progressFormat === "elapsed" ? "on" : "off",
-                },
-                {
-                  id: "progressFormat-percent",
-                  title: "Percent Complete",
-                  state: progressFormat === "percent" ? "on" : "off",
-                },
-              ],
-            },
-            {
-              id: "bookmarkTitleMode",
-              title: "Bookmark Title Mode",
-              subactions: [
-                {
-                  id: "bookmarkTitleMode-auto",
-                  title: "Auto-create",
-                  state: bookmarkTitleMode !== "prompt" ? "on" : "off",
-                },
-                {
-                  id: "bookmarkTitleMode-prompt",
-                  title: "Always Prompt",
-                  state: bookmarkTitleMode === "prompt" ? "on" : "off",
-                },
-              ],
-            },
-            {
-              id: "chapterBarTime",
-              title: "Chapter Bar Time",
-              subactions: [
-                {
-                  id: "chapterBar-total",
-                  title: "Show Total Duration",
-                  state: !chapterBarShowRemaining ? "on" : "off",
-                },
-                {
-                  id: "chapterBar-remaining",
-                  title: "Show Time Remaining",
-                  state: chapterBarShowRemaining ? "on" : "off",
-                },
-              ],
-            },
-            {
-              id: "keepAwake",
-              title: "Keep Screen Awake",
-              state: keepScreenAwake ? "on" : "off",
-            },
-          ]}
+          actions={playerSettingsActions}
         >
           <TouchableOpacity
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

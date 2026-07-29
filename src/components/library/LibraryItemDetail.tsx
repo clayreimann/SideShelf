@@ -6,6 +6,7 @@ import CoverSection from "@/components/library/LibraryItemDetail/CoverSection";
 import DescriptionSection from "@/components/library/LibraryItemDetail/DescriptionSection";
 import DownloadProgressView from "@/components/library/LibraryItemDetail/DownloadProgressView";
 import GenresTagsSection from "@/components/library/LibraryItemDetail/GenresTagsSection";
+import JumpHistorySection from "@/components/library/LibraryItemDetail/JumpHistorySection";
 import MetadataSection from "@/components/library/LibraryItemDetail/MetadataSection";
 import TitleSection from "@/components/library/LibraryItemDetail/TitleSection";
 import { getMediaProgressForLibraryItem, upsertMediaProgress } from "@/db/helpers/mediaProgress";
@@ -603,6 +604,8 @@ export default function LibraryItemDetail({ itemId, onTitleChange }: LibraryItem
           libraryItemId={itemId}
           isCurrentlyPlaying={currentTrack?.libraryItemId === itemId}
         />
+
+        <JumpHistorySection libraryItemId={itemId} />
 
         {/* Bookmarks */}
         <BookmarksSection
