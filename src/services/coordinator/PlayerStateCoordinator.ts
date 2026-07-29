@@ -30,6 +30,7 @@ import { logger } from "@/lib/logger";
 import { updateNowPlayingMetadata } from "@/lib/nowPlayingMetadata";
 import { getStoredUsername } from "@/lib/secureStore";
 import { useAppStore } from "@/stores/appStore";
+import type { JumpRecordInput } from "@/types/player";
 import {
   CoordinatorMetrics,
   DiagnosticEvent,
@@ -96,8 +97,9 @@ export class PlayerStateCoordinator extends EventEmitter {
   // Phase 4: Store bridge - track last synced chapter to debounce metadata updates
   private lastSyncedChapterId: string | null = null;
 
-  // Pending unintentional position jump awaiting flush to store
-  private _pendingProgressJump: { fromPosition: number; toPosition: number } | null = null;
+  // Pending authoritative jump records awaiting flush to the player slice.
+  private _pendingJumpRecords: JumpRecordInput[] = [];
+  private jumpSequence = 0;
 
   // Open span for the current session sync cycle (SYNC_STARTED → SYNC_COMPLETED/FAILED)
   private activeSyncSpan: SpanHandle | null = null;
@@ -222,6 +224,13 @@ export class PlayerStateCoordinator extends EventEmitter {
   private async handleEvent(event: PlayerEvent, meta?: DispatchMeta): Promise<void> {
     const startTime = Date.now();
     const { currentState } = this.context;
+    const before = {
+      position: this.context.position,
+      isSeeking: this.context.isSeeking,
+      isLoadingTrack: this.context.isLoadingTrack,
+      currentTrack: this.context.currentTrack,
+      sessionId: this.context.sessionId,
+    };
 
     // Validate transition
     const validation = validateTransition(currentState, event);
@@ -287,6 +296,48 @@ export class PlayerStateCoordinator extends EventEmitter {
     // diagnostic and history entries still capture post-update context.
     if (validation.allowed) {
       this.updateContextFromEvent(event);
+
+      const isLoadingDifferentItem =
+        event.type === "LOAD_TRACK" &&
+        this._pendingJumpRecords.some(
+          (record) => record.libraryItemId !== event.payload.libraryItemId
+        );
+      if (event.type === "STOP" || isLoadingDifferentItem) {
+        this._pendingJumpRecords = [];
+      }
+
+      if (event.type === "SEEK" && meta?.jump && !meta.suppressJumpHistory && before.currentTrack) {
+        this._pendingJumpRecords.push({
+          id: `${before.currentTrack.libraryItemId}:${Date.now()}:${this.jumpSequence++}`,
+          sessionId: before.sessionId,
+          libraryItemId: before.currentTrack.libraryItemId,
+          ...meta.jump,
+          fromPosition: before.position,
+          toPosition: event.payload.position,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
+
+      if (
+        event.type === "NATIVE_PROGRESS_UPDATED" &&
+        before.currentTrack &&
+        !before.isSeeking &&
+        !before.isLoadingTrack &&
+        Math.abs(event.payload.position - before.position) >= 30
+      ) {
+        this._pendingJumpRecords.push({
+          id: `${before.currentTrack.libraryItemId}:${Date.now()}:${this.jumpSequence++}`,
+          sessionId: before.sessionId,
+          libraryItemId: before.currentTrack.libraryItemId,
+          surface: "native_player",
+          category: "unexpected_native",
+          fromPosition: before.position,
+          toPosition: event.payload.position,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
     }
 
     // Log diagnostic event
@@ -495,10 +546,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       // Position and duration updates
       case "NATIVE_PROGRESS_UPDATED": {
         const newPosition = event.payload.position;
-        const prevPosition = this.context.position;
 
-        // Capture isSeeking before clearing — used below in jump detection
-        const wasSeeking = this.context.isSeeking;
         // Clear isSeeking when progress update arrives during seek (seek is complete)
         if (this.context.isSeeking) {
           this.context.isSeeking = false;
@@ -517,11 +565,6 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.duration = event.payload.duration;
         this.context.lastPositionUpdate = Date.now();
 
-        // Detect unintentional position jumps (not during seek or track load)
-        const delta = newPosition - prevPosition;
-        if (!wasSeeking && !this.context.isLoadingTrack && Math.abs(delta) >= 30) {
-          this._pendingProgressJump = { fromPosition: prevPosition, toPosition: newPosition };
-        }
         break;
       }
 
@@ -907,6 +950,16 @@ export class PlayerStateCoordinator extends EventEmitter {
   // Store Bridge (Phase 4: State Propagation)
   // ============================================================================
 
+  private flushPendingJumpRecords(
+    store: Pick<ReturnType<typeof useAppStore.getState>, "_recordJump">
+  ): void {
+    while (this._pendingJumpRecords.length > 0) {
+      const record = this._pendingJumpRecords[0];
+      store._recordJump(record);
+      this._pendingJumpRecords.shift();
+    }
+  }
+
   /**
    * Lightweight position-only sync — called on every NATIVE_PROGRESS_UPDATED (1Hz).
    *
@@ -927,14 +980,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       const store = useAppStore.getState();
       store.updatePosition(this.context.position); // triggers _updateCurrentChapter synchronously
 
-      // Flush pending progress jump to store for toast display
-      if (this._pendingProgressJump) {
-        store._setPendingProgressJump({
-          ...this._pendingProgressJump,
-          timestamp: Date.now(),
-        });
-        this._pendingProgressJump = null;
-      }
+      this.flushPendingJumpRecords(store);
 
       // Detect chapter boundary crossings using the store's computed chapter id (set
       // synchronously by _updateCurrentChapter above). Debounced by lastSyncedChapterId.
@@ -989,6 +1035,8 @@ export class PlayerStateCoordinator extends EventEmitter {
       store._setPlaybackRate(this.context.playbackRate);
       store._setVolume(this.context.volume);
       store._setPlaySessionId(this.context.sessionId);
+
+      this.flushPendingJumpRecords(store);
 
       // Refresh lock screen metadata at key playback state transitions.
       // Chapter boundary crossings are handled in syncPositionToStore (CLEAN-03), which
@@ -1227,7 +1275,7 @@ export class PlayerStateCoordinator extends EventEmitter {
                   log.info(
                     `[Coordinator] Short-circuit with seek: ${currentPos.toFixed(1)} -> ${startPos.toFixed(1)}`
                   );
-                  dispatchPlayerEvent({ type: "SEEK", payload: { position: startPos } });
+                  dispatchPlayerEvent({ type: "SEEK", payload: { position: startPos } }, meta);
                 } else {
                   log.info(
                     `[Coordinator] Short-circuit: ${event.payload.libraryItemId} already ${previousState} — dispatching PLAY`

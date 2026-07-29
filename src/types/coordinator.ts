@@ -5,7 +5,7 @@
  * Phase 1: Observer mode - types defined but coordinator only observes.
  */
 
-import type { PlayerTrack, CurrentChapter } from "./player";
+import type { PlayerTrack, CurrentChapter, JumpDescriptor } from "./player";
 import type { State } from "react-native-track-player";
 
 /**
@@ -328,6 +328,8 @@ export type DispatchMeta = {
    *  user has intentionally jumped to a position — smart rewind would
    *  be unwanted and confusing. */
   skipSmartRewind?: boolean;
+  jump?: JumpDescriptor;
+  suppressJumpHistory?: boolean;
 };
 
 /**

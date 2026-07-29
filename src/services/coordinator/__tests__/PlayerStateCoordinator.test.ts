@@ -110,6 +110,8 @@ jest.mock("@/lib/logger", () => ({
   },
 }));
 
+const waitForEventQueue = () => new Promise<void>((resolve) => setTimeout(resolve, 50));
+
 describe("PlayerStateCoordinator", () => {
   let coordinator: PlayerStateCoordinator;
 
@@ -2276,7 +2278,7 @@ describe("PlayerStateCoordinator", () => {
       _setVolume: jest.fn(),
       _setPlaySessionId: jest.fn(),
       _setLastPauseTime: jest.fn(),
-      _setPendingProgressJump: jest.fn(),
+      _recordJump: jest.fn(),
       setSleepTimer: jest.fn(),
       cancelSleepTimer: jest.fn(),
     });
@@ -2614,7 +2616,7 @@ describe("PlayerStateCoordinator", () => {
       _setVolume: jest.fn(),
       _setPlaySessionId: jest.fn(),
       _setLastPauseTime: jest.fn(),
-      _setPendingProgressJump: jest.fn(),
+      _recordJump: jest.fn(),
       setSleepTimer: jest.fn(),
       cancelSleepTimer: jest.fn(),
     });
@@ -3111,6 +3113,38 @@ describe("PlayerStateCoordinator", () => {
 
       dispatchSpy.mockRestore();
     });
+
+    it("passes same-track LOAD_TRACK jump metadata to the generated SEEK", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await coordinator.dispatch({ type: "NATIVE_TRACK_CHANGED", payload: { track: mockTrack } });
+      await waitForEventQueue();
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await waitForEventQueue();
+
+      const dispatchSpy = jest.spyOn(playerEventBus, "dispatch");
+      const meta = {
+        source: "ui" as const,
+        jump: { surface: "item_detail" as const, category: "chapter" as const },
+      };
+
+      await coordinator.dispatch(
+        {
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "item-1", startPosition: 500 },
+        },
+        meta
+      );
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const seekDispatch = dispatchSpy.mock.calls.find(([event]) => event.type === "SEEK");
+      expect(seekDispatch).toEqual([{ type: "SEEK", payload: { position: 500 } }, meta]);
+
+      dispatchSpy.mockRestore();
+    });
   });
 
   describe("Change 4: coordinator performs inline queue rebuild when queueStatus is unknown", () => {
@@ -3367,7 +3401,7 @@ describe("PlayerStateCoordinator", () => {
   });
 
   // ============================================================================
-  // Jump detection: _pendingProgressJump set only for unintentional large deltas
+  // Jump history: coordinator captures explicit and unexpected position changes.
   // ============================================================================
 
   describe("Jump detection (NATIVE_PROGRESS_UPDATED)", () => {
@@ -3384,7 +3418,7 @@ describe("PlayerStateCoordinator", () => {
       _setVolume: jest.fn(),
       _setPlaySessionId: jest.fn(),
       _setLastPauseTime: jest.fn(),
-      _setPendingProgressJump: jest.fn(),
+      _recordJump: jest.fn(),
       updateNowPlayingMetadata: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
       setSleepTimer: jest.fn(),
       cancelSleepTimer: jest.fn(),
@@ -3401,15 +3435,49 @@ describe("PlayerStateCoordinator", () => {
       useAppStore.getState.mockReturnValue(mockStore);
     });
 
-    it("detects jump and calls _setPendingProgressJump on large delta (≥30s)", async () => {
-      // Set initial context position directly via a progress update
+    const currentTrack: any = {
+      libraryItemId: "item-1",
+      mediaId: "media-1",
+      title: "Test",
+      duration: 3600,
+      audioFiles: [],
+      chapters: [],
+      isDownloaded: true,
+    };
+
+    async function reachPlayingAt(position: number): Promise<void> {
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack,
+            position: 0,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await waitForEventQueue();
+      await coordinator.dispatch({ type: "RELOAD_QUEUE", payload: { libraryItemId: "item-1" } });
+      await waitForEventQueue();
+      await coordinator.dispatch({ type: "QUEUE_RELOADED", payload: { position: 0 } });
+      await waitForEventQueue();
+      await coordinator.dispatch({ type: "PLAY" });
+      await waitForEventQueue();
+      expect(coordinator.getContext().isLoadingTrack).toBe(false);
       await coordinator.dispatch({
         type: "NATIVE_PROGRESS_UPDATED",
-        payload: { position: 100, duration: 3600 },
+        payload: { position, duration: 3600 },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await waitForEventQueue();
+    }
 
-      // Reset mocks, then dispatch a 40s jump
+    it("records unexpected native jump on large delta (≥30s)", async () => {
+      await reachPlayingAt(100);
+
+      // Reset mocks, then dispatch a 40s jump.
       jest.clearAllMocks();
       mockStore = makeMockStore();
       useAppStore.getState.mockReturnValue(mockStore);
@@ -3418,15 +3486,166 @@ describe("PlayerStateCoordinator", () => {
         type: "NATIVE_PROGRESS_UPDATED",
         payload: { position: 140, duration: 3600 },
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await waitForEventQueue();
 
-      expect(mockStore._setPendingProgressJump).toHaveBeenCalledWith(
+      expect(mockStore._recordJump).toHaveBeenCalledWith(
         expect.objectContaining({
+          libraryItemId: "item-1",
           fromPosition: 100,
           toPosition: 140,
-          timestamp: expect.any(Number),
+          surface: "native_player",
+          category: "unexpected_native",
         })
       );
+    });
+
+    it("records an explicit seek from the coordinator's pre-seek position", async () => {
+      await reachPlayingAt(100);
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch(
+        { type: "SEEK", payload: { position: 500 } },
+        { source: "ui", jump: { surface: "full_screen", category: "scrub" } }
+      );
+      await waitForEventQueue();
+
+      expect(mockStore._recordJump).toHaveBeenCalledWith(
+        expect.objectContaining({
+          libraryItemId: "item-1",
+          fromPosition: 100,
+          toPosition: 500,
+          surface: "full_screen",
+          category: "scrub",
+        })
+      );
+    });
+
+    it("does not record history navigation", async () => {
+      await reachPlayingAt(100);
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch(
+        { type: "SEEK", payload: { position: 500 } },
+        {
+          source: "ui",
+          jump: { surface: "item_detail", category: "chapter" },
+          suppressJumpHistory: true,
+        }
+      );
+      await waitForEventQueue();
+
+      expect(mockStore._recordJump).not.toHaveBeenCalled();
+    });
+
+    it("retries queued jump records in their original order after a store bridge failure", async () => {
+      await reachPlayingAt(100);
+      const unavailableStore = makeMockStore();
+      unavailableStore._recordJump.mockImplementation(() => {
+        throw new Error("Zustand unavailable");
+      });
+      useAppStore.getState.mockReturnValue(unavailableStore);
+
+      await coordinator.dispatch(
+        { type: "SEEK", payload: { position: 500 } },
+        { source: "ui", jump: { surface: "full_screen", category: "scrub" } }
+      );
+      await waitForEventQueue();
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 500, duration: 3600 },
+      });
+      await waitForEventQueue();
+      await coordinator.dispatch({ type: "PLAY" });
+      await waitForEventQueue();
+      await coordinator.dispatch(
+        { type: "SEEK", payload: { position: 600 } },
+        { source: "ui", jump: { surface: "full_screen", category: "scrub" } }
+      );
+      await waitForEventQueue();
+
+      const recoveredStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(recoveredStore);
+
+      await coordinator.dispatch({ type: "SEEK_COMPLETE" });
+      await waitForEventQueue();
+
+      expect(recoveredStore._recordJump).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ fromPosition: 100, toPosition: 500 })
+      );
+      expect(recoveredStore._recordJump).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ fromPosition: 500, toPosition: 600 })
+      );
+    });
+
+    it("drops queued jump records when playback stops before the store bridge recovers", async () => {
+      await reachPlayingAt(100);
+      const unavailableStore = makeMockStore();
+      unavailableStore._recordJump.mockImplementation(() => {
+        throw new Error("Zustand unavailable");
+      });
+      useAppStore.getState.mockReturnValue(unavailableStore);
+
+      await coordinator.dispatch(
+        { type: "SEEK", payload: { position: 500 } },
+        { source: "ui", jump: { surface: "full_screen", category: "scrub" } }
+      );
+      await waitForEventQueue();
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 500, duration: 3600 },
+      });
+      await waitForEventQueue();
+      await coordinator.dispatch({ type: "STOP" });
+      await waitForEventQueue();
+      expect(coordinator.getState()).toBe(PlayerState.STOPPING);
+
+      const recoveredStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(recoveredStore);
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Stopped },
+      });
+      await waitForEventQueue();
+
+      expect(recoveredStore._recordJump).not.toHaveBeenCalled();
+    });
+
+    it("drops queued jump records when a different item starts loading before recovery", async () => {
+      await reachPlayingAt(100);
+      const unavailableStore = makeMockStore();
+      unavailableStore._recordJump.mockImplementation(() => {
+        throw new Error("Zustand unavailable");
+      });
+      useAppStore.getState.mockReturnValue(unavailableStore);
+
+      await coordinator.dispatch(
+        { type: "SEEK", payload: { position: 500 } },
+        { source: "ui", jump: { surface: "full_screen", category: "scrub" } }
+      );
+      await waitForEventQueue();
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 500, duration: 3600 },
+      });
+      await waitForEventQueue();
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-2" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const recoveredStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(recoveredStore);
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await waitForEventQueue();
+
+      expect(recoveredStore._recordJump).not.toHaveBeenCalled();
     });
 
     it("suppresses jump detection when isSeeking was true before the update", async () => {
@@ -3468,14 +3687,14 @@ describe("PlayerStateCoordinator", () => {
       useAppStore.getState.mockReturnValue(mockStore);
 
       // Progress arrives — isSeeking=true at start of this handler, cleared inside it
-      // The 40s jump must NOT trigger _setPendingProgressJump
+      // The 40s jump must not record an unexpected native jump.
       await coordinator.dispatch({
         type: "NATIVE_PROGRESS_UPDATED",
         payload: { position: 140, duration: 3600 },
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(mockStore._setPendingProgressJump).not.toHaveBeenCalled();
+      expect(mockStore._recordJump).not.toHaveBeenCalled();
     });
 
     it("suppresses jump detection when isLoadingTrack is true", async () => {
@@ -3498,7 +3717,7 @@ describe("PlayerStateCoordinator", () => {
       mockStore = makeMockStore();
       useAppStore.getState.mockReturnValue(mockStore);
 
-      // Progress arrives during load — 40s jump must NOT trigger _setPendingProgressJump
+      // Progress arrives during load — 40s jump must not record history.
       // Note: position 0 is filtered by POS-03; use a non-zero position to reach jump detection
       await coordinator.dispatch({
         type: "NATIVE_PROGRESS_UPDATED",
@@ -3506,7 +3725,7 @@ describe("PlayerStateCoordinator", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(mockStore._setPendingProgressJump).not.toHaveBeenCalled();
+      expect(mockStore._recordJump).not.toHaveBeenCalled();
     });
 
     it("does not detect jump for small delta (<30s)", async () => {
@@ -3529,7 +3748,7 @@ describe("PlayerStateCoordinator", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(mockStore._setPendingProgressJump).not.toHaveBeenCalled();
+      expect(mockStore._recordJump).not.toHaveBeenCalled();
     });
   });
 
