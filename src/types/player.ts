@@ -7,6 +7,40 @@
 import type { AudioFileWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import type { ChapterRow } from "@/db/schema/chapters";
 
+export type JumpSurface = "full_screen" | "item_detail" | "lock_screen" | "native_player";
+
+export type JumpCategory =
+  | "scrub"
+  | "skip_forward"
+  | "skip_backward"
+  | "chapter"
+  | "bookmark"
+  | "unexpected_native";
+
+export interface JumpDescriptor {
+  surface: JumpSurface;
+  category: JumpCategory;
+}
+
+export interface JumpHistoryEntry extends JumpDescriptor {
+  id: string;
+  sessionId: string | null;
+  libraryItemId: string;
+  fromPosition: number;
+  toPosition: number;
+  createdAt: number;
+  updatedAt: number;
+  toastPending: boolean;
+}
+
+export interface JumpHistorySession {
+  version: 1;
+  libraryItemId: string;
+  entries: JumpHistoryEntry[];
+}
+
+export type JumpRecordInput = Omit<JumpHistoryEntry, "toastPending">;
+
 /**
  * Track information for the player
  */
