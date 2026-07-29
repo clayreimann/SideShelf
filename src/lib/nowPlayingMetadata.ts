@@ -30,7 +30,33 @@ const log = logger.forTag("NowPlayingMetadata");
 function resolveChapterAtPosition(chapters: ChapterRow[], position: number): ChapterRow {
   const inRange = chapters.find((c) => position >= c.start && position < c.end);
   if (inRange) return inRange;
-  return position >= chapters[chapters.length - 1].end ? chapters[chapters.length - 1] : chapters[0];
+  return position >= chapters[chapters.length - 1].end
+    ? chapters[chapters.length - 1]
+    : chapters[0];
+}
+
+/**
+ * Convert a remote lock-screen seek position into the track's absolute timeline.
+ *
+ * Now-playing metadata reports chapter-relative time when chapters are available,
+ * so iOS sends RemoteSeek positions relative to the chapter currently displayed.
+ */
+export function resolveAbsoluteRemoteSeekPosition(
+  track: PlayerTrack | null,
+  currentAbsolutePosition: number,
+  remotePosition: number
+): number {
+  const trackDuration = Math.max(0, track?.duration ?? 0);
+  if (!track?.chapters.length) {
+    return trackDuration > 0
+      ? Math.max(0, Math.min(trackDuration, remotePosition))
+      : Math.max(0, remotePosition);
+  }
+
+  const chapter = resolveChapterAtPosition(track.chapters, currentAbsolutePosition);
+  const chapterDuration = Math.max(0, chapter.end - chapter.start);
+  const relative = Math.max(0, Math.min(chapterDuration, remotePosition));
+  return Math.max(0, Math.min(trackDuration || chapter.end, chapter.start + relative));
 }
 
 /**

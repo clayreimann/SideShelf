@@ -4,7 +4,7 @@
 
 import { describe, expect, it, jest, beforeEach } from "@jest/globals";
 import TrackPlayer from "react-native-track-player";
-import { updateNowPlayingMetadata } from "../nowPlayingMetadata";
+import { resolveAbsoluteRemoteSeekPosition, updateNowPlayingMetadata } from "../nowPlayingMetadata";
 import type { PlayerTrack } from "@/types/player";
 
 jest.mock("react-native-track-player", () => ({
@@ -37,6 +37,20 @@ const mockTrack: PlayerTrack = {
   ],
   audioFiles: [],
 };
+
+describe("resolveAbsoluteRemoteSeekPosition", () => {
+  it("adds the active chapter start to a chapter-relative remote seek", () => {
+    expect(resolveAbsoluteRemoteSeekPosition(mockTrack, 1900, 120)).toBe(1920);
+  });
+
+  it("clamps a remote seek to the displayed chapter", () => {
+    expect(resolveAbsoluteRemoteSeekPosition(mockTrack, 1900, 9999)).toBe(3600);
+  });
+
+  it("keeps remote seek absolute when the track has no chapters", () => {
+    expect(resolveAbsoluteRemoteSeekPosition({ ...mockTrack, chapters: [] }, 1900, 120)).toBe(120);
+  });
+});
 
 describe("updateNowPlayingMetadata", () => {
   beforeEach(() => {

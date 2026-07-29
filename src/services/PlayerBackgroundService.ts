@@ -9,6 +9,7 @@
 import { updateAudioFileLastAccessed } from "@/db/helpers/localData";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { resolveAbsoluteRemoteSeekPosition } from "@/lib/nowPlayingMetadata";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { MIN_PLAUSIBLE_POSITION } from "@/types/coordinator";
@@ -170,7 +171,10 @@ async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<v
       type: "SEEK",
       payload: { position: newPosition },
     },
-    { source: "remote_command" }
+    {
+      source: "remote_command",
+      jump: { surface: "lock_screen", category: "skip_forward" },
+    }
   );
 
   try {
@@ -220,7 +224,10 @@ async function handleRemoteJumpBackward(event: RemoteJumpBackwardEvent): Promise
       type: "SEEK",
       payload: { position: newPosition },
     },
-    { source: "remote_command" }
+    {
+      source: "remote_command",
+      jump: { surface: "lock_screen", category: "skip_backward" },
+    }
   );
 
   try {
@@ -278,13 +285,23 @@ async function handleRemotePrevious(): Promise<void> {
  */
 async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
   log.debug(`RemoteSeek received position=${event.position} (${describeRuntimeContext()})`);
+  const progress = await TrackPlayer.getProgress();
+  const currentTrack = useAppStore.getState().player.currentTrack;
+  const absolutePosition = resolveAbsoluteRemoteSeekPosition(
+    currentTrack,
+    progress.position,
+    event.position
+  );
 
   dispatchPlayerEvent(
     {
       type: "SEEK",
-      payload: { position: event.position },
+      payload: { position: absolutePosition },
     },
-    { source: "remote_command" }
+    {
+      source: "remote_command",
+      jump: { surface: "lock_screen", category: "scrub" },
+    }
   );
 
   // Update progress immediately after seek
@@ -298,7 +315,7 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
       await progressService.updateProgress(
         ids.userId,
         ids.libraryItemId,
-        event.position,
+        absolutePosition,
         playbackRate,
         volume,
         undefined,
@@ -309,7 +326,7 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
         log.info(
-          `Seek: position=${formatTime(event.position)}s session=${session.sessionId} item=${ids.libraryItemId}`
+          `Seek: position=${formatTime(absolutePosition)}s session=${session.sessionId} item=${ids.libraryItemId}`
         );
       }
     }
@@ -1033,6 +1050,12 @@ const serviceExports = trackPlayerBackgroundService as unknown as {
   _testHandlePlaybackProgressUpdated?: typeof handlePlaybackProgressUpdated;
   /** Test shim: exposes session-start handling without registering native listeners. */
   _testHandleActiveTrackChanged?: typeof handleActiveTrackChanged;
+  /** Test shim: exposes remote seek handling without registering native listeners. */
+  _testHandleRemoteSeek?: typeof handleRemoteSeek;
+  /** Test shim: exposes remote forward skip handling without registering native listeners. */
+  _testHandleRemoteJumpForward?: typeof handleRemoteJumpForward;
+  /** Test shim: exposes remote backward skip handling without registering native listeners. */
+  _testHandleRemoteJumpBackward?: typeof handleRemoteJumpBackward;
 };
 
 serviceExports.reconnectBackgroundService = reconnectBackgroundService;
@@ -1040,5 +1063,8 @@ serviceExports.shutdownBackgroundService = shutdownBackgroundService;
 serviceExports.isBackgroundServiceInitialized = isBackgroundServiceInitialized;
 serviceExports._testHandlePlaybackProgressUpdated = handlePlaybackProgressUpdated;
 serviceExports._testHandleActiveTrackChanged = handleActiveTrackChanged;
+serviceExports._testHandleRemoteSeek = handleRemoteSeek;
+serviceExports._testHandleRemoteJumpForward = handleRemoteJumpForward;
+serviceExports._testHandleRemoteJumpBackward = handleRemoteJumpBackward;
 
 module.exports = trackPlayerBackgroundService;
