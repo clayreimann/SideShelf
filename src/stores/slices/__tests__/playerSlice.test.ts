@@ -8,7 +8,7 @@ import TrackPlayer from "react-native-track-player";
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { ASYNC_KEYS } from "../../../lib/asyncStore";
 import { progressService } from "../../../services/ProgressService";
-import type { PlayerTrack } from "../../../types/player";
+import type { JumpHistorySession, JumpRecordInput, PlayerTrack } from "../../../types/player";
 import { createPlayerSlice, PlayerSlice } from "../playerSlice";
 
 // Mock AsyncStorage (pattern matches librarySlice.test.ts)
@@ -40,7 +40,6 @@ jest.mock("../../../db/helpers/users", () => ({
 jest.mock("../../../lib/secureStore", () => ({
   getStoredUsername: jest.fn(),
 }));
-
 
 describe("PlayerSlice", () => {
   let store: UseBoundStore<StoreApi<PlayerSlice>>;
@@ -81,6 +80,24 @@ describe("PlayerSlice", () => {
     ],
     duration: 3600,
     isDownloaded: true,
+  };
+
+  const jumpInput: JumpRecordInput = {
+    id: "jump-1",
+    sessionId: "session-1",
+    libraryItemId: "item-1",
+    surface: "full_screen",
+    category: "scrub",
+    fromPosition: 100,
+    toPosition: 500,
+    createdAt: 1_000,
+    updatedAt: 1_000,
+  };
+
+  const validSession: JumpHistorySession = {
+    version: 1,
+    libraryItemId: "item-1",
+    entries: [{ ...jumpInput, toastPending: true }],
   };
 
   beforeEach(() => {
@@ -131,6 +148,8 @@ describe("PlayerSlice", () => {
           chapterTarget: null,
         },
         pendingProgressJump: null,
+        jumpHistory: null,
+        isJumpHistoryModalVisible: false,
       });
     });
   });
@@ -227,6 +246,105 @@ describe("PlayerSlice", () => {
       const state = store.getState();
       expect(state.player.currentChapter).not.toBeNull();
       expect(state.player.currentChapter?.chapter.id).toBe("ch-1");
+    });
+
+    it("clears jump history when a different item becomes current", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState()._recordJump(jumpInput);
+
+      store.getState()._setCurrentTrack({ ...mockPlayerTrack, libraryItemId: "item-2" });
+
+      expect(store.getState().player.jumpHistory).toBeNull();
+      expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession);
+    });
+
+    it("clears jump history when playback stops", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState()._recordJump(jumpInput);
+
+      store.getState()._setCurrentTrack(null);
+
+      expect(store.getState().player.jumpHistory).toBeNull();
+      expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession);
+    });
+
+    it("retains jump history when the same item is rehydrated", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState()._recordJump(jumpInput);
+      jest.clearAllMocks();
+
+      store.getState()._setCurrentTrack({ ...mockPlayerTrack });
+
+      expect(store.getState().player.jumpHistory).toEqual(validSession);
+      expect(mockedAsyncStorage.removeItem).not.toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession);
+    });
+  });
+
+  describe("jump history", () => {
+    it("records and persists a jump for the current item", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+
+      store.getState()._recordJump(jumpInput);
+
+      expect(store.getState().player.jumpHistory?.entries[0].fromPosition).toBe(100);
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        ASYNC_KEYS.jumpHistorySession,
+        expect.stringContaining('"jump-1"')
+      );
+    });
+
+    it("dismisses the toast without deleting its jump entry", () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState()._recordJump(jumpInput);
+
+      store.getState()._dismissJumpToast();
+
+      expect(store.getState().player.jumpHistory).toEqual({
+        version: 1,
+        libraryItemId: "item-1",
+        entries: [{ ...jumpInput, toastPending: false }],
+      });
+    });
+
+    it("restores only a valid snapshot for the current item", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      mockedAsyncStorage.getItem.mockImplementation(async (key) =>
+        key === ASYNC_KEYS.jumpHistorySession ? JSON.stringify(validSession) : null
+      );
+
+      await store.getState().restoreJumpHistory();
+
+      expect(store.getState().player.jumpHistory).toEqual(validSession);
+    });
+
+    it("rejects a snapshot for a different item", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      mockedAsyncStorage.getItem.mockResolvedValue(
+        JSON.stringify({ ...validSession, libraryItemId: "item-2" })
+      );
+
+      await store.getState().restoreJumpHistory();
+
+      expect(store.getState().player.jumpHistory).toBeNull();
+    });
+
+    it("rejects a malformed snapshot", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      mockedAsyncStorage.getItem.mockResolvedValue(
+        JSON.stringify({ version: 1, libraryItemId: "item-1", entries: [{ id: "bad" }] })
+      );
+
+      await store.getState().restoreJumpHistory();
+
+      expect(store.getState().player.jumpHistory).toBeNull();
+    });
+
+    it("updates jump history modal visibility", () => {
+      store.getState().setJumpHistoryModalVisible(true);
+      expect(store.getState().player.isJumpHistoryModalVisible).toBe(true);
+
+      store.getState().setJumpHistoryModalVisible(false);
+      expect(store.getState().player.isJumpHistoryModalVisible).toBe(false);
     });
   });
 
@@ -504,6 +622,24 @@ describe("PlayerSlice", () => {
   });
 
   describe("restorePersistedState", () => {
+    it("restores the current track before validating a matching jump snapshot", async () => {
+      mockedAsyncStorage.getItem.mockImplementation((key: string) => {
+        if (key === ASYNC_KEYS.currentTrack) {
+          return Promise.resolve(JSON.stringify(mockPlayerTrack));
+        }
+        if (key === ASYNC_KEYS.jumpHistorySession) {
+          return Promise.resolve(JSON.stringify(validSession));
+        }
+        return Promise.resolve(null);
+      });
+
+      await store.getState().restorePersistedState();
+
+      expect(store.getState().player.currentTrack?.libraryItemId).toBe("item-1");
+      expect(store.getState().player.jumpHistory).toEqual(validSession);
+      expect(mockedAsyncStorage.removeItem).not.toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession);
+    });
+
     it("should restore state from AsyncStorage", async () => {
       // Create expected restored track (dates become strings after JSON round-trip)
       const expectedRestoredTrack = JSON.parse(JSON.stringify(mockPlayerTrack));

@@ -520,12 +520,15 @@ export function usePlayer() {
   const playbackRate = useAppStore((state) => state.player.playbackRate);
   const volume = useAppStore((state) => state.player.volume);
   const isModalVisible = useAppStore((state) => state.player.isModalVisible);
+  const jumpHistory = useAppStore((state) => state.player.jumpHistory);
+  const isJumpHistoryModalVisible = useAppStore((state) => state.player.isJumpHistoryModalVisible);
   const isLoadingTrack = useAppStore((state) => state.player.loading.isLoadingTrack);
   const isSeeking = useAppStore((state) => state.player.loading.isSeeking);
   const initialized = useAppStore((state) => state.player.initialized);
 
   // Only UI-only action
   const setModalVisible = useAppStore((state) => state.setModalVisible);
+  const setJumpHistoryModalVisible = useAppStore((state) => state.setJumpHistoryModalVisible);
 
   return React.useMemo(
     () => ({
@@ -536,10 +539,13 @@ export function usePlayer() {
       playbackRate,
       volume,
       isModalVisible,
+      jumpHistory,
+      isJumpHistoryModalVisible,
       isLoadingTrack,
       isSeeking,
       initialized,
       setModalVisible,
+      setJumpHistoryModalVisible,
     }),
     [
       currentTrack,
@@ -549,10 +555,13 @@ export function usePlayer() {
       playbackRate,
       volume,
       isModalVisible,
+      jumpHistory,
+      isJumpHistoryModalVisible,
       isLoadingTrack,
       isSeeking,
       initialized,
       setModalVisible,
+      setJumpHistoryModalVisible,
     ]
   );
 }

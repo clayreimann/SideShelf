@@ -10,6 +10,7 @@ export const ASYNC_KEYS = {
   currentPlaySessionId: "abs.currentPlaySessionId",
   username: "abs.username",
   sleepTimer: "abs.sleepTimer",
+  jumpHistorySession: "abs.jumpHistorySession",
 };
 
 export async function saveItem(key: string, value: any): Promise<void> {

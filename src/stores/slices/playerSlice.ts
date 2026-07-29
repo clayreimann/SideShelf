@@ -11,15 +11,31 @@
 import { getUserByUsername } from "@/db/helpers/users";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
 import { formatTime } from "@/lib/helpers/formatters";
+import {
+  dismissPendingJump,
+  recordJump,
+  validateJumpHistorySession,
+} from "@/lib/helpers/jumpHistory";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
 import { progressService } from "@/services/ProgressService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
-import type { CurrentChapter, PlayerTrack } from "@/types/player";
+import type {
+  CurrentChapter,
+  JumpHistorySession,
+  JumpRecordInput,
+  PlayerTrack,
+} from "@/types/player";
 import type { SliceCreator } from "@/types/store";
 import TrackPlayer from "react-native-track-player";
 
 const log = logger.forTag("PlayerSlice");
+
+const persistJumpHistory = (session: JumpHistorySession | null) => {
+  void saveItem(ASYNC_KEYS.jumpHistorySession, session).catch((error) => {
+    log.error("[persistJumpHistory] Failed to persist jump history", error as Error);
+  });
+};
 
 /**
  * Player slice state interface - scoped under 'player' to avoid conflicts
@@ -68,6 +84,10 @@ export interface PlayerSliceState {
       toPosition: number;
       timestamp: number;
     } | null;
+    /** Active jump ledger for the current library item */
+    jumpHistory: JumpHistorySession | null;
+    /** Whether the jump-history modal is visible */
+    isJumpHistoryModalVisible: boolean;
   };
 }
 
@@ -80,6 +100,8 @@ export interface PlayerSliceState {
 export interface PlayerSliceActions {
   /** Restore persisted player state from AsyncStorage */
   restorePersistedState: () => Promise<void>;
+  /** Restore a valid jump-history snapshot for the current item */
+  restoreJumpHistory: () => Promise<void>;
   // Initialization
   /** Initialize the player slice */
   initializePlayerSlice: () => Promise<void>;
@@ -87,6 +109,8 @@ export interface PlayerSliceActions {
   // UI-only action
   /** Show/hide full-screen modal */
   setModalVisible: (visible: boolean) => void;
+  /** Show/hide the jump-history modal */
+  setJumpHistoryModalVisible: (visible: boolean) => void;
 
   // Internal mutators (used by PlayerBackgroundService)
   /** Update current position (called by PlayerBackgroundService) */
@@ -113,6 +137,12 @@ export interface PlayerSliceActions {
   _setPendingProgressJump: (
     jump: { fromPosition: number; toPosition: number; timestamp: number } | null
   ) => void;
+  /** Record a user-initiated position jump */
+  _recordJump: (input: JumpRecordInput) => void;
+  /** Clear the toast acknowledgement for the pending jump */
+  _dismissJumpToast: () => void;
+  /** Clear the active jump-history ledger */
+  _clearJumpHistory: () => void;
   /** Set sleep timer with duration in minutes */
   setSleepTimer: (minutes: number) => void;
   /** Set sleep timer to end at chapter boundary */
@@ -147,6 +177,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         notFound.push(`currentTrack`);
       }
     }
+
+    await get().restoreJumpHistory();
 
     const playbackRate = await getAsyncItem(ASYNC_KEYS.playbackRate);
     if (playbackRate !== null && playbackRate !== undefined) {
@@ -373,6 +405,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       chapterTarget: null,
     },
     pendingProgressJump: null,
+    jumpHistory: null,
+    isJumpHistoryModalVisible: false,
   },
 
   // Actions
@@ -393,6 +427,16 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       player: {
         ...state.player,
         isModalVisible: visible,
+      },
+    }));
+  },
+
+  setJumpHistoryModalVisible: (visible: boolean) => {
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        isJumpHistoryModalVisible: visible,
       },
     }));
   },
@@ -426,6 +470,11 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   _setCurrentTrack: (track: PlayerTrack | null) => {
     const state = get() as PlayerSlice;
+    const shouldClearJumpHistory =
+      track === null ||
+      (state.player.currentTrack !== null &&
+        state.player.currentTrack.libraryItemId !== track.libraryItemId);
+
     set((state: PlayerSlice) => ({
       ...state,
       player: {
@@ -433,8 +482,12 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         currentTrack: track,
         position: track ? state.player.position : 0,
         currentChapter: null,
+        jumpHistory: shouldClearJumpHistory ? null : state.player.jumpHistory,
       },
     }));
+    if (shouldClearJumpHistory) {
+      persistJumpHistory(null);
+    }
     // Persist current track to AsyncStorage
     saveItem(ASYNC_KEYS.currentTrack, track);
     // Update current chapter if we have a track
@@ -577,6 +630,70 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   _setPendingProgressJump: (jump) => {
     set((state: PlayerSlice) => ({ player: { ...state.player, pendingProgressJump: jump } }));
+  },
+
+  _recordJump: (input: JumpRecordInput) => {
+    const session = recordJump(get().player.jumpHistory, input);
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        jumpHistory: session,
+      },
+    }));
+    persistJumpHistory(session);
+  },
+
+  _dismissJumpToast: () => {
+    const session = dismissPendingJump(get().player.jumpHistory);
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        jumpHistory: session,
+      },
+    }));
+    persistJumpHistory(session);
+  },
+
+  _clearJumpHistory: () => {
+    const jumpHistory = get().player.jumpHistory;
+    if (!jumpHistory) {
+      persistJumpHistory(null);
+      return;
+    }
+
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        jumpHistory: null,
+      },
+    }));
+    persistJumpHistory(null);
+  },
+
+  restoreJumpHistory: async () => {
+    const libraryItemId = get().player.currentTrack?.libraryItemId;
+    if (!libraryItemId) {
+      return;
+    }
+
+    const session = validateJumpHistorySession(
+      await getAsyncItem(ASYNC_KEYS.jumpHistorySession),
+      libraryItemId
+    );
+    if (!session) {
+      return;
+    }
+
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        jumpHistory: session,
+      },
+    }));
   },
 
   setSleepTimer: (minutes: number) => {

@@ -5,6 +5,8 @@
  * making it easy to create test doubles with sensible defaults.
  */
 
+import type { JumpHistorySession, JumpRecordInput } from "@/types/player";
+
 export interface MockPlayerSliceOptions {
   /** Override player state properties */
   state?: Partial<MockPlayerSlice["player"]>;
@@ -23,6 +25,8 @@ export interface MockPlayerSlice {
     currentChapter: any | null;
     lastPauseTime: number | null;
     isModalVisible: boolean;
+    jumpHistory: JumpHistorySession | null;
+    isJumpHistoryModalVisible: boolean;
     loading: {
       isLoadingTrack: boolean;
       isSeeking: boolean;
@@ -40,7 +44,11 @@ export interface MockPlayerSlice {
   updatePlayingState: jest.Mock;
   _setPlaySessionId: jest.Mock;
   _setLastPauseTime: jest.Mock;
+  _recordJump: jest.Mock<(input: JumpRecordInput) => void>;
+  _dismissJumpToast: jest.Mock;
+  _clearJumpHistory: jest.Mock;
   setModalVisible: jest.Mock;
+  setJumpHistoryModalVisible: jest.Mock;
   _setSeeking: jest.Mock;
   _setPlaybackRate: jest.Mock;
   _setVolume: jest.Mock;
@@ -83,6 +91,8 @@ export function createMockPlayerSlice(options: MockPlayerSliceOptions = {}): Moc
       currentChapter: null,
       lastPauseTime: null,
       isModalVisible: false,
+      jumpHistory: null,
+      isJumpHistoryModalVisible: false,
       loading: {
         isLoadingTrack: false,
         isSeeking: false,
@@ -101,7 +111,11 @@ export function createMockPlayerSlice(options: MockPlayerSliceOptions = {}): Moc
     updatePlayingState: jest.fn(),
     _setPlaySessionId: jest.fn(),
     _setLastPauseTime: jest.fn(),
+    _recordJump: jest.fn(),
+    _dismissJumpToast: jest.fn(),
+    _clearJumpHistory: jest.fn(),
     setModalVisible: jest.fn(),
+    setJumpHistoryModalVisible: jest.fn(),
     _setSeeking: jest.fn(),
     _setPlaybackRate: jest.fn(),
     _setVolume: jest.fn(),
