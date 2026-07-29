@@ -42,6 +42,8 @@ import type {
 const log = logger.forTag("PlayerService");
 const diagLog = logger.forDiagnostics("PlayerService");
 
+export type SeekOptions = Pick<DispatchMeta, "jump" | "suppressJumpHistory">;
+
 /**
  * Track player service facade.
  * Implements IPlayerServiceFacade so collaborators can call back via the interface.
@@ -278,13 +280,13 @@ export class PlayerService implements IPlayerServiceFacade {
   /**
    * Seek to position in seconds (Public API - Dispatches Event)
    */
-  async seekTo(position: number): Promise<void> {
+  async seekTo(position: number, options?: SeekOptions): Promise<void> {
     dispatchPlayerEvent(
       {
         type: "SEEK",
         payload: { position },
       },
-      { source: "ui" }
+      { source: "ui", ...options }
     );
   }
 

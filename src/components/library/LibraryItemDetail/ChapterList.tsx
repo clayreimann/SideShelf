@@ -78,7 +78,11 @@ export default function ChapterList({
       log.info(`[handleChapterPress] Jumping to chapter at ${chapterStart.toFixed(1)}s`);
       dispatchPlayerEvent(
         { type: "LOAD_TRACK", payload: { libraryItemId, startPosition: chapterStart } },
-        { source: "ui", skipSmartRewind: true }
+        {
+          source: "ui",
+          skipSmartRewind: true,
+          jump: { surface: "item_detail", category: "chapter" },
+        }
       );
     },
     [libraryItemId]

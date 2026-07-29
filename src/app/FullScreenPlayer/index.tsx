@@ -130,7 +130,9 @@ export default function FullScreenPlayer() {
   const handleChapterPress = useCallback(
     async (chapterStart: number) => {
       try {
-        await playerService.seekTo(chapterStart);
+        await playerService.seekTo(chapterStart, {
+          jump: { surface: "full_screen", category: "chapter" },
+        });
         setShowChapterList(false); // Close chapter list after selection
         coverSizeSV.value = withTiming(0, { duration: PANEL_DURATION });
         chapterPanelSV.value = withTiming(0, { duration: PANEL_DURATION });
@@ -174,7 +176,9 @@ export default function FullScreenPlayer() {
   const handleSeekComplete = useCallback(async (value: number) => {
     setIsSeekingSlider(false);
     try {
-      await playerService.seekTo(value);
+      await playerService.seekTo(value, {
+        jump: { surface: "full_screen", category: "scrub" },
+      });
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to seek:", error);
     }
@@ -189,7 +193,9 @@ export default function FullScreenPlayer() {
         targetPositionMs: Math.round(targetPosition * 1000),
         intervalSeconds: jumpBackwardInterval,
       });
-      await playerService.seekTo(targetPosition);
+      await playerService.seekTo(targetPosition, {
+        jump: { surface: "full_screen", category: "skip_backward" },
+      });
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to skip backward:", error);
     }
@@ -204,7 +210,9 @@ export default function FullScreenPlayer() {
         targetPositionMs: Math.round(targetPosition * 1000),
         intervalSeconds: jumpForwardInterval,
       });
-      await playerService.seekTo(targetPosition);
+      await playerService.seekTo(targetPosition, {
+        jump: { surface: "full_screen", category: "skip_forward" },
+      });
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to skip forward:", error);
     }
@@ -213,7 +221,9 @@ export default function FullScreenPlayer() {
   const handleJumpBackward = useCallback(
     async (seconds: number) => {
       try {
-        await playerService.seekTo(Math.max(position - seconds, 0));
+        await playerService.seekTo(Math.max(position - seconds, 0), {
+          jump: { surface: "full_screen", category: "skip_backward" },
+        });
       } catch (error) {
         console.error("[FullScreenPlayer] Failed to jump backward:", error);
       }
@@ -224,7 +234,9 @@ export default function FullScreenPlayer() {
   const handleJumpForward = useCallback(
     async (seconds: number) => {
       try {
-        await playerService.seekTo(position + seconds);
+        await playerService.seekTo(position + seconds, {
+          jump: { surface: "full_screen", category: "skip_forward" },
+        });
       } catch (error) {
         console.error("[FullScreenPlayer] Failed to jump forward:", error);
       }
@@ -340,7 +352,9 @@ export default function FullScreenPlayer() {
       return;
     }
     try {
-      await playerService.seekTo(currentChapter?.chapter.start || 0);
+      await playerService.seekTo(currentChapter?.chapter.start || 0, {
+        jump: { surface: "full_screen", category: "chapter" },
+      });
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to seek to start:", error);
     }
@@ -352,7 +366,10 @@ export default function FullScreenPlayer() {
     }
     try {
       const chapterEnd = currentChapter?.chapter.end || 0;
-      await playerService.seekTo(chapterEnd + 0.1); // Seek just past end to trigger next chapter
+      // Seek just past end to trigger next chapter.
+      await playerService.seekTo(chapterEnd + 0.1, {
+        jump: { surface: "full_screen", category: "chapter" },
+      });
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to seek to next chapter:", error);
     }

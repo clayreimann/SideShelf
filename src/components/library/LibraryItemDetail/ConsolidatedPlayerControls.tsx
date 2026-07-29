@@ -69,7 +69,9 @@ export default function ConsolidatedPlayerControls({
         targetPositionMs: Math.round(targetPosition * 1000),
         intervalSeconds: jumpBackwardInterval,
       });
-      await playerService.seekTo(targetPosition);
+      await playerService.seekTo(targetPosition, {
+        jump: { surface: "item_detail", category: "skip_backward" },
+      });
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to skip backward:", error);
     }
@@ -84,7 +86,9 @@ export default function ConsolidatedPlayerControls({
         targetPositionMs: Math.round(targetPosition * 1000),
         intervalSeconds: jumpForwardInterval,
       });
-      await playerService.seekTo(targetPosition);
+      await playerService.seekTo(targetPosition, {
+        jump: { surface: "item_detail", category: "skip_forward" },
+      });
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to skip forward:", error);
     }

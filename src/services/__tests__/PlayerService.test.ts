@@ -607,6 +607,29 @@ describe("PlayerService", () => {
       );
     });
 
+    it("forwards jump metadata with a public seek", async () => {
+      await playerService.seekTo(500, {
+        jump: { surface: "full_screen", category: "scrub" },
+      });
+
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        { type: "SEEK", payload: { position: 500 } },
+        {
+          source: "ui",
+          jump: { surface: "full_screen", category: "scrub" },
+        }
+      );
+    });
+
+    it("forwards jump history suppression with a public seek", async () => {
+      await playerService.seekTo(500, { suppressJumpHistory: true });
+
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        { type: "SEEK", payload: { position: 500 } },
+        { source: "ui", suppressJumpHistory: true }
+      );
+    });
+
     it("should dispatch SET_RATE event", async () => {
       await playerService.setRate(1.5);
       expect(dispatchPlayerEvent).toHaveBeenCalledWith(

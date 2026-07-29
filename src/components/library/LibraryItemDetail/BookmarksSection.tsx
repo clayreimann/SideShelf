@@ -93,10 +93,11 @@ export default function BookmarksSection({
     async (time: number) => {
       try {
         if (isCurrentlyPlaying) {
-          await playerService.seekTo(time);
+          await playerService.seekTo(time, {
+            jump: { surface: "item_detail", category: "bookmark" },
+          });
         } else {
-          await playerService.playTrack(libraryItemId);
-          await playerService.seekTo(time);
+          await playerService.playTrack(libraryItemId, undefined, time);
         }
       } catch (error) {
         log.error("[handleJumpToBookmark] Failed to jump to bookmark", error as Error);
