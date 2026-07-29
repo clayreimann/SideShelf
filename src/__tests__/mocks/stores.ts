@@ -58,6 +58,7 @@ export interface MockPlayerSlice {
   cancelSleepTimer: jest.Mock;
   getSleepTimerRemaining: jest.Mock;
   restorePersistedState: jest.Mock;
+  restoreJumpHistory: jest.Mock;
   initializePlayerSlice: jest.Mock;
 }
 
@@ -125,6 +126,7 @@ export function createMockPlayerSlice(options: MockPlayerSliceOptions = {}): Moc
     cancelSleepTimer: jest.fn(),
     getSleepTimerRemaining: jest.fn(),
     restorePersistedState: jest.fn(),
+    restoreJumpHistory: jest.fn(),
     initializePlayerSlice: jest.fn(),
     ...methods,
   };
