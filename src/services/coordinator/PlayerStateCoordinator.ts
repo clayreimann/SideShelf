@@ -321,14 +321,23 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.expectedInternalPositionReconciliation = null;
       }
 
-      const isExpectedInternalPositionReconciliation =
+      const expectedInternalPositionReconciliation =
         event.type === "NATIVE_PROGRESS_UPDATED" &&
         this.expectedInternalPositionReconciliation !== null &&
         before.currentTrack?.libraryItemId ===
-          this.expectedInternalPositionReconciliation.libraryItemId &&
-        event.payload.position === this.expectedInternalPositionReconciliation.toPosition;
+          this.expectedInternalPositionReconciliation.libraryItemId
+          ? this.expectedInternalPositionReconciliation
+          : null;
 
-      if (isExpectedInternalPositionReconciliation) {
+      const isExpectedInternalPositionReconciliation =
+        expectedInternalPositionReconciliation !== null &&
+        event.payload.position === expectedInternalPositionReconciliation.toPosition;
+
+      // TrackPlayer can emit a same-item progress update between play() and the
+      // direct smart-rewind seek. The first such event is the one reconciliation
+      // opportunity; consume the one-shot expectation even when its position
+      // misses the target so a later real jump to that target remains recordable.
+      if (expectedInternalPositionReconciliation !== null) {
         this.expectedInternalPositionReconciliation = null;
       }
 

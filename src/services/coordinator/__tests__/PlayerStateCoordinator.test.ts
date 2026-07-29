@@ -3525,6 +3525,51 @@ describe("PlayerStateCoordinator", () => {
       expect(mockStore._recordJump).not.toHaveBeenCalled();
     });
 
+    it("expires a missed smart rewind reconciliation before a later large jump reaches its stale target", async () => {
+      await reachPlayingAt(100);
+      await coordinator.dispatch({ type: "PAUSE" });
+      await waitForEventQueue();
+
+      const { PlayerService } = require("../../PlayerService");
+      PlayerService.getInstance().executePlay.mockResolvedValueOnce({
+        fromPosition: 100,
+        toPosition: 70,
+      });
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await waitForEventQueue();
+
+      // This first same-item report was emitted before the rewind settled, so it
+      // cannot be the expected 70s reconciliation. It must consume the one-shot
+      // expectation rather than leaving 70 armed indefinitely.
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 101, duration: 3600 },
+      });
+      await waitForEventQueue();
+      expect(coordinator.getContext().position).toBe(101);
+
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 70, duration: 3600 },
+      });
+      await waitForEventQueue();
+
+      expect(mockStore._recordJump).toHaveBeenCalledWith(
+        expect.objectContaining({
+          libraryItemId: "item-1",
+          fromPosition: 101,
+          toPosition: 70,
+          surface: "native_player",
+          category: "unexpected_native",
+        })
+      );
+    });
+
     it("does not record native progress that arrives after restore and before queue reconciliation", async () => {
       await coordinator.dispatch({
         type: "RESTORE_STATE",
