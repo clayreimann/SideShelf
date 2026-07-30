@@ -1,7 +1,7 @@
 import PlayerProgressToast from "@/components/ui/PlayerProgressToast";
 import type { JumpHistoryEntry, JumpHistorySession } from "@/types/player";
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { AppState, type AppStateStatus } from "react-native";
+import { AppState, type AppStateEvent, type AppStateStatus } from "react-native";
 
 const mockDismissJumpToast = jest.fn();
 const mockRestoreJumpHistory = jest.fn<Promise<void>, []>();
@@ -80,12 +80,12 @@ describe("PlayerProgressToast", () => {
     });
     jest
       .spyOn(AppState, "addEventListener")
-      .mockImplementation(
-        (_event: "change", listener: (nextState: AppStateStatus) => void | Promise<void>) => {
+      .mockImplementation((event: AppStateEvent, listener: (nextState: AppStateStatus) => void) => {
+        if (event === "change") {
           mockAppStateListener = listener;
-          return mockAppStateSubscription;
         }
-      );
+        return mockAppStateSubscription;
+      });
   });
 
   afterEach(() => {

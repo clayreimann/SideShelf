@@ -161,6 +161,10 @@ describe("jumpHistory", () => {
       });
     }
 
+    if (session === null) {
+      throw new Error("recordJump should create a session");
+    }
+
     expect(session.entries).toHaveLength(100);
     expect(session.entries[0].id).toBe("jump-101");
     expect(session.entries[99].id).toBe("jump-2");

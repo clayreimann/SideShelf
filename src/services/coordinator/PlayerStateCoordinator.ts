@@ -321,8 +321,9 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.expectedInternalPositionReconciliation = null;
       }
 
+      const nativeProgressEvent = event.type === "NATIVE_PROGRESS_UPDATED" ? event : null;
       const expectedInternalPositionReconciliation =
-        event.type === "NATIVE_PROGRESS_UPDATED" &&
+        nativeProgressEvent !== null &&
         this.expectedInternalPositionReconciliation !== null &&
         before.currentTrack?.libraryItemId ===
           this.expectedInternalPositionReconciliation.libraryItemId
@@ -330,8 +331,9 @@ export class PlayerStateCoordinator extends EventEmitter {
           : null;
 
       const isExpectedInternalPositionReconciliation =
+        nativeProgressEvent !== null &&
         expectedInternalPositionReconciliation !== null &&
-        event.payload.position === expectedInternalPositionReconciliation.toPosition;
+        nativeProgressEvent.payload.position === expectedInternalPositionReconciliation.toPosition;
 
       // TrackPlayer can emit a same-item progress update between play() and the
       // direct smart-rewind seek. The first such event is the one reconciliation
