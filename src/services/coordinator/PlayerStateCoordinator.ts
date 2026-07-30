@@ -60,7 +60,11 @@ const log = logger.forTag("PlayerStateCoordinator");
 
 type ExpectedInternalPositionReconciliation = SmartRewindOutcome & {
   libraryItemId: string;
+  generation: number;
 };
+
+const SMART_REWIND_RECONCILIATION_WINDOW_MS = 2_000;
+const SMART_REWIND_POSITION_TOLERANCE_SECONDS = 1;
 
 /**
  * Singleton coordinator for player state management
@@ -111,6 +115,8 @@ export class PlayerStateCoordinator extends EventEmitter {
   // unexpected external jump.
   private expectedInternalPositionReconciliation: ExpectedInternalPositionReconciliation | null =
     null;
+  private expectedInternalPositionReconciliationTimeout: NodeJS.Timeout | null = null;
+  private internalPositionReconciliationGeneration = 0;
 
   // Open span for the current session sync cycle (SYNC_STARTED → SYNC_COMPLETED/FAILED)
   private activeSyncSpan: SpanHandle | null = null;
@@ -148,6 +154,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         clearInterval(PlayerStateCoordinator.instance.diagnosticInterval);
         PlayerStateCoordinator.instance.diagnosticInterval = null;
       }
+      PlayerStateCoordinator.instance.clearExpectedInternalPositionReconciliation();
     }
     PlayerStateCoordinator.instance = null;
   }
@@ -227,12 +234,83 @@ export class PlayerStateCoordinator extends EventEmitter {
   }
 
   /**
+   * Same-item chapter/bookmark loads are position changes, not track loads.
+   * Normalize them before transition validation so they retain the current
+   * PLAYING/PAUSED state and never pass through LOADING.
+   */
+  private normalizeSameTrackLoad(event: PlayerEvent): PlayerEvent {
+    if (
+      event.type !== "LOAD_TRACK" ||
+      event.payload.startPosition === undefined ||
+      (this.context.currentState !== PlayerState.PLAYING &&
+        this.context.currentState !== PlayerState.PAUSED) ||
+      event.payload.libraryItemId !== this.context.currentTrack?.libraryItemId ||
+      Math.abs(event.payload.startPosition - this.context.position) <= 1
+    ) {
+      return event;
+    }
+
+    return {
+      type: "SAME_TRACK_SEEK",
+      payload: { position: event.payload.startPosition },
+    };
+  }
+
+  /**
+   * Resolve a relative jump from coordinator-owned position state.
+   * Event queue serialization makes rapid commands additive without relying on
+   * React rerenders or independently sampled native positions.
+   */
+  private resolveRelativeSeekPosition(event: PlayerEvent, fromPosition: number): number | null {
+    if (event.type !== "JUMP_FORWARD" && event.type !== "JUMP_BACKWARD") {
+      return null;
+    }
+
+    const requestedSeconds = Number.isFinite(event.payload.seconds)
+      ? Math.max(0, event.payload.seconds)
+      : 0;
+    const signedSeconds = event.type === "JUMP_FORWARD" ? requestedSeconds : -requestedSeconds;
+    const duration = Math.max(0, this.context.currentTrack?.duration ?? this.context.duration);
+    const unclampedTarget = fromPosition + signedSeconds;
+
+    return Math.max(0, duration > 0 ? Math.min(duration, unclampedTarget) : unclampedTarget);
+  }
+
+  private clearExpectedInternalPositionReconciliation(): void {
+    this.internalPositionReconciliationGeneration++;
+    this.expectedInternalPositionReconciliation = null;
+    if (this.expectedInternalPositionReconciliationTimeout) {
+      clearTimeout(this.expectedInternalPositionReconciliationTimeout);
+      this.expectedInternalPositionReconciliationTimeout = null;
+    }
+  }
+
+  private armExpectedInternalPositionReconciliation(
+    outcome: SmartRewindOutcome,
+    libraryItemId: string
+  ): void {
+    this.clearExpectedInternalPositionReconciliation();
+    const generation = this.internalPositionReconciliationGeneration;
+    this.expectedInternalPositionReconciliation = {
+      ...outcome,
+      libraryItemId,
+      generation,
+    };
+    this.expectedInternalPositionReconciliationTimeout = setTimeout(() => {
+      if (this.expectedInternalPositionReconciliation?.generation === generation) {
+        this.clearExpectedInternalPositionReconciliation();
+      }
+    }, SMART_REWIND_RECONCILIATION_WINDOW_MS);
+  }
+
+  /**
    * Handle a single event.
    *
    * Validates the transition, updates context, and calls executeTransition
    * to invoke the appropriate execute* method on PlayerService.
    */
-  private async handleEvent(event: PlayerEvent, meta?: DispatchMeta): Promise<void> {
+  private async handleEvent(incomingEvent: PlayerEvent, meta?: DispatchMeta): Promise<void> {
+    const event = this.normalizeSameTrackLoad(incomingEvent);
     const startTime = Date.now();
     const { currentState } = this.context;
     const before = {
@@ -243,6 +321,7 @@ export class PlayerStateCoordinator extends EventEmitter {
       currentTrack: this.context.currentTrack,
       sessionId: this.context.sessionId,
     };
+    const resolvedRelativeSeekPosition = this.resolveRelativeSeekPosition(event, before.position);
 
     // Validate transition
     const validation = validateTransition(currentState, event);
@@ -307,7 +386,11 @@ export class PlayerStateCoordinator extends EventEmitter {
     // diagnostics/trace semantics for ALLOWED events are unchanged: the
     // diagnostic and history entries still capture post-update context.
     if (validation.allowed) {
-      this.updateContextFromEvent(event);
+      if (resolvedRelativeSeekPosition !== null) {
+        this.context.position = resolvedRelativeSeekPosition;
+      } else {
+        this.updateContextFromEvent(event);
+      }
 
       const isLoadingDifferentItem =
         event.type === "LOAD_TRACK" &&
@@ -317,8 +400,15 @@ export class PlayerStateCoordinator extends EventEmitter {
       if (event.type === "STOP" || isLoadingDifferentItem) {
         this._pendingJumpRecords = [];
       }
-      if (event.type === "STOP" || event.type === "SEEK" || event.type === "LOAD_TRACK") {
-        this.expectedInternalPositionReconciliation = null;
+      if (
+        event.type === "STOP" ||
+        event.type === "SEEK" ||
+        event.type === "SAME_TRACK_SEEK" ||
+        event.type === "JUMP_FORWARD" ||
+        event.type === "JUMP_BACKWARD" ||
+        event.type === "LOAD_TRACK"
+      ) {
+        this.clearExpectedInternalPositionReconciliation();
       }
 
       const nativeProgressEvent = event.type === "NATIVE_PROGRESS_UPDATED" ? event : null;
@@ -330,27 +420,39 @@ export class PlayerStateCoordinator extends EventEmitter {
           ? this.expectedInternalPositionReconciliation
           : null;
 
-      const isExpectedInternalPositionReconciliation =
-        nativeProgressEvent !== null &&
-        expectedInternalPositionReconciliation !== null &&
-        nativeProgressEvent.payload.position === expectedInternalPositionReconciliation.toPosition;
+      let isExpectedInternalPositionReconciliation = false;
+      if (nativeProgressEvent !== null && expectedInternalPositionReconciliation !== null) {
+        const reportedPosition = nativeProgressEvent.payload.position;
+        const isPreTargetTick =
+          Math.abs(reportedPosition - expectedInternalPositionReconciliation.fromPosition) <=
+          SMART_REWIND_POSITION_TOLERANCE_SECONDS;
+        const reachedTarget =
+          Math.abs(reportedPosition - expectedInternalPositionReconciliation.toPosition) <=
+          SMART_REWIND_POSITION_TOLERANCE_SECONDS;
 
-      // TrackPlayer can emit a same-item progress update between play() and the
-      // direct smart-rewind seek. The first such event is the one reconciliation
-      // opportunity; consume the one-shot expectation even when its position
-      // misses the target so a later real jump to that target remains recordable.
-      if (expectedInternalPositionReconciliation !== null) {
-        this.expectedInternalPositionReconciliation = null;
+        isExpectedInternalPositionReconciliation = isPreTargetTick || reachedTarget;
+        if (reachedTarget || !isPreTargetTick) {
+          this.clearExpectedInternalPositionReconciliation();
+        }
       }
 
-      if (event.type === "SEEK" && meta?.jump && !meta.suppressJumpHistory && before.currentTrack) {
+      const resolvedIntentionalSeekPosition =
+        event.type === "SEEK" || event.type === "SAME_TRACK_SEEK"
+          ? event.payload.position
+          : resolvedRelativeSeekPosition;
+      if (
+        resolvedIntentionalSeekPosition !== null &&
+        meta?.jump &&
+        !meta.suppressJumpHistory &&
+        before.currentTrack
+      ) {
         this._pendingJumpRecords.push({
           id: `${before.currentTrack.libraryItemId}:${Date.now()}:${this.jumpSequence++}`,
           sessionId: before.sessionId,
           libraryItemId: before.currentTrack.libraryItemId,
           ...meta.jump,
           fromPosition: before.position,
-          toPosition: event.payload.position,
+          toPosition: resolvedIntentionalSeekPosition,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         });
@@ -443,7 +545,7 @@ export class PlayerStateCoordinator extends EventEmitter {
           traceCtx
         );
       }
-      await this.executeTransition(event, nextState, meta);
+      await this.executeTransition(event, nextState, meta, resolvedRelativeSeekPosition);
       // Trace: state entered (only on actual state change)
       if (!isHighFrequency && nextState && nextState !== currentState) {
         trace.addEvent(
@@ -610,6 +712,10 @@ export class PlayerStateCoordinator extends EventEmitter {
       case "SEEK":
         this.context.preSeekState = this.context.currentState; // capture BEFORE transition
         this.context.isSeeking = true;
+        this.context.position = event.payload.position;
+        break;
+
+      case "SAME_TRACK_SEEK":
         this.context.position = event.payload.position;
         break;
 
@@ -1281,7 +1387,8 @@ export class PlayerStateCoordinator extends EventEmitter {
   private async executeTransition(
     event: PlayerEvent,
     nextState: PlayerState | null,
-    meta?: DispatchMeta
+    meta?: DispatchMeta,
+    resolvedRelativeSeekPosition: number | null = null
   ): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PlayerService } = require("../PlayerService") as typeof import("../PlayerService");
@@ -1378,10 +1485,10 @@ export class PlayerStateCoordinator extends EventEmitter {
               }
               const smartRewindOutcome = await playerService.executePlay(meta);
               if (smartRewindOutcome && this.context.currentTrack) {
-                this.expectedInternalPositionReconciliation = {
-                  ...smartRewindOutcome,
-                  libraryItemId: this.context.currentTrack.libraryItemId,
-                };
+                this.armExpectedInternalPositionReconciliation(
+                  smartRewindOutcome,
+                  this.context.currentTrack.libraryItemId
+                );
                 this.context.position = smartRewindOutcome.toPosition;
               }
             }
@@ -1410,6 +1517,28 @@ export class PlayerStateCoordinator extends EventEmitter {
       switch (event.type) {
         case "SEEK":
           await playerService.executeSeek(event.payload.position);
+          break;
+
+        case "SAME_TRACK_SEEK":
+          await playerService.executeSeek(event.payload.position);
+          break;
+
+        case "JUMP_FORWARD":
+        case "JUMP_BACKWARD":
+          if (resolvedRelativeSeekPosition === null) {
+            break;
+          }
+          await playerService.executeSeek(resolvedRelativeSeekPosition);
+          if (meta?.onRelativeSeekResolved) {
+            try {
+              await meta.onRelativeSeekResolved(resolvedRelativeSeekPosition);
+            } catch (resolutionError) {
+              log.error(
+                "[Coordinator] Relative seek persistence callback failed",
+                resolutionError as Error
+              );
+            }
+          }
           break;
 
         case "SET_RATE":

@@ -159,24 +159,12 @@ async function handleRemoteStop(): Promise<void> {
 }
 
 /**
- * Handle remote jump forward command
+ * Persist the same coordinator-resolved target used for a remote jump seek.
  */
-async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<void> {
-  log.debug(`RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`);
-  const progress = await TrackPlayer.getProgress();
-  const newPosition = progress.position + event.interval;
-
-  dispatchPlayerEvent(
-    {
-      type: "SEEK",
-      payload: { position: newPosition },
-    },
-    {
-      source: "remote_command",
-      jump: { surface: "lock_screen", category: "skip_forward" },
-    }
-  );
-
+async function persistResolvedRemoteJump(
+  position: number,
+  direction: "forward" | "backward"
+): Promise<void> {
   try {
     const ids = await getUserIdAndLibraryItemId();
     if (ids) {
@@ -187,7 +175,7 @@ async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<v
       await progressService.updateProgress(
         ids.userId,
         ids.libraryItemId,
-        newPosition,
+        position,
         playbackRate,
         volume,
         undefined,
@@ -198,70 +186,53 @@ async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<v
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
         log.info(
-          `Jump forward: position=${newPosition.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`
+          `Jump ${direction}: position=${position.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`
         );
       }
     }
   } catch (error) {
     const ids = await getUserIdAndLibraryItemId();
     log.error(
-      `Jump forward progress update error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
+      `Jump ${direction} progress update error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
       error as Error
     );
   }
 }
 
 /**
- * Handle remote jump backward command
+ * Handle remote jump forward command.
+ */
+async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<void> {
+  log.debug(`RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`);
+  dispatchPlayerEvent(
+    {
+      type: "JUMP_FORWARD",
+      payload: { seconds: event.interval },
+    },
+    {
+      source: "remote_command",
+      jump: { surface: "lock_screen", category: "skip_forward" },
+      onRelativeSeekResolved: (position) => persistResolvedRemoteJump(position, "forward"),
+    }
+  );
+}
+
+/**
+ * Handle remote jump backward command.
  */
 async function handleRemoteJumpBackward(event: RemoteJumpBackwardEvent): Promise<void> {
   log.debug(`RemoteJumpBackward received interval=${event.interval} (${describeRuntimeContext()})`);
-  const progress = await TrackPlayer.getProgress();
-  const newPosition = Math.max(0, progress.position - event.interval);
-
   dispatchPlayerEvent(
     {
-      type: "SEEK",
-      payload: { position: newPosition },
+      type: "JUMP_BACKWARD",
+      payload: { seconds: event.interval },
     },
     {
       source: "remote_command",
       jump: { surface: "lock_screen", category: "skip_backward" },
+      onRelativeSeekResolved: (position) => persistResolvedRemoteJump(position, "backward"),
     }
   );
-
-  try {
-    const ids = await getUserIdAndLibraryItemId();
-    if (ids) {
-      const playbackRate = await TrackPlayer.getRate();
-      const volume = await TrackPlayer.getVolume();
-      const state = await TrackPlayer.getPlaybackState();
-
-      await progressService.updateProgress(
-        ids.userId,
-        ids.libraryItemId,
-        newPosition,
-        playbackRate,
-        volume,
-        undefined,
-        state.state === State.Playing
-      );
-
-      // store.updatePosition removed: SEEK event → coordinator → syncStateToStore bridge
-      const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
-      if (session) {
-        log.info(
-          `Jump backward: position=${newPosition.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`
-        );
-      }
-    }
-  } catch (error) {
-    const ids = await getUserIdAndLibraryItemId();
-    log.error(
-      `Jump backward progress update error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
-      error as Error
-    );
-  }
 }
 
 /**

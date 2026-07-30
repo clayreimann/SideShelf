@@ -19,8 +19,10 @@ const JumpHistorySection = memo(function JumpHistorySection({
   libraryItemId,
 }: JumpHistorySectionProps) {
   const { colors } = useThemedStyles();
+  const currentTrack = usePlayerState((state) => state.player.currentTrack);
   const jumpHistory = usePlayerState((state) => state.player.jumpHistory);
-  const entries = jumpHistory?.libraryItemId === libraryItemId ? jumpHistory.entries : null;
+  const isActiveItem = currentTrack?.libraryItemId === libraryItemId;
+  const entries = jumpHistory?.libraryItemId === libraryItemId ? jumpHistory.entries : [];
 
   const handleSelect = useCallback(async (entry: JumpHistoryEntry) => {
     try {
@@ -30,7 +32,7 @@ const JumpHistorySection = memo(function JumpHistorySection({
     }
   }, []);
 
-  if (!entries) {
+  if (!isActiveItem) {
     return null;
   }
 

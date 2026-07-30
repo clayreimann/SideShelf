@@ -8,9 +8,17 @@ import { playerService } from "@/services/PlayerService";
 import { usePlayerState } from "@/stores";
 import type { JumpHistoryEntry } from "@/types/player";
 
-jest.mock("@/components/ui", () => ({
-  CollapsibleSection: ({ children }: { children: React.ReactNode }) => children,
-}));
+jest.mock("@/components/ui", () => {
+  const { Text: MockText } = require("react-native");
+  return {
+    CollapsibleSection: ({ children, title }: { children: React.ReactNode; title: string }) => (
+      <>
+        <MockText>{title}</MockText>
+        {children}
+      </>
+    ),
+  };
+});
 
 jest.mock("@/lib/theme", () => ({
   useThemedStyles: () => ({
@@ -47,9 +55,19 @@ const entry: JumpHistoryEntry = {
 const mockUsePlayerState = jest.mocked(usePlayerState);
 const mockSeekTo = jest.mocked(playerService.seekTo);
 
-function setJumpHistory(entries: JumpHistoryEntry[], libraryItemId = "item-1") {
+function setJumpHistory(
+  entries: JumpHistoryEntry[] | null,
+  historyLibraryItemId = "item-1",
+  currentLibraryItemId = historyLibraryItemId
+) {
   mockUsePlayerState.mockImplementation((selector) =>
-    selector({ player: { jumpHistory: { version: 1, libraryItemId, entries } } } as never)
+    selector({
+      player: {
+        currentTrack: { libraryItemId: currentLibraryItemId },
+        jumpHistory:
+          entries === null ? null : { version: 1, libraryItemId: historyLibraryItemId, entries },
+      },
+    } as never)
   );
 }
 
@@ -80,6 +98,21 @@ describe("JumpHistorySection", () => {
         "No jumps in this session yet."
       )
     ).toBeTruthy();
+  });
+
+  it("shows the localized zero-entry state when the active item has null history", () => {
+    setJumpHistory(null, "item-1", "item-1");
+
+    const view = render(<JumpHistorySection libraryItemId="item-1" />);
+
+    expect(view.getByText("Jump History (0)")).toBeTruthy();
+    expect(view.getByText("No jumps in this session yet.")).toBeTruthy();
+  });
+
+  it("stays hidden for an inactive item even if stale history matches the viewed item", () => {
+    setJumpHistory([entry], "item-1", "item-2");
+
+    expect(render(<JumpHistorySection libraryItemId="item-1" />).toJSON()).toBeNull();
   });
 
   it("seeks to the entry origin while suppressing new history", () => {

@@ -6,7 +6,9 @@
  */
 
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { waitFor } from "@testing-library/react-native";
 import TrackPlayer, { State } from "react-native-track-player";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import type { PlayerTrack } from "@/types/player";
 
 jest.mock("@/stores/appStore", () => ({
@@ -47,6 +49,9 @@ jest.mock("@/utils/userHelpers", () => ({
 
 type RemoteSeekHandler = (event: { position: number }) => Promise<void>;
 type RemoteJumpHandler = (event: { interval: number }) => Promise<void>;
+type RelativeJumpResolutionMeta = {
+  onRelativeSeekResolved?: (position: number) => Promise<void> | void;
+};
 
 const currentTrack: PlayerTrack = {
   libraryItemId: "item-1",
@@ -118,23 +123,54 @@ describe("PlayerBackgroundService remote commands", () => {
     await handleRemoteJumpForward({ interval: 30 });
 
     expect(require("@/services/coordinator/eventBus").dispatchPlayerEvent).toHaveBeenCalledWith(
-      { type: "SEEK", payload: { position: 1930 } },
-      {
+      { type: "JUMP_FORWARD", payload: { seconds: 30 } },
+      expect.objectContaining({
         source: "remote_command",
         jump: { surface: "lock_screen", category: "skip_forward" },
-      }
+      })
     );
+    expect(TrackPlayer.getProgress).not.toHaveBeenCalled();
   });
 
   it("records remote backward skips as lock-screen backward jumps", async () => {
     await handleRemoteJumpBackward({ interval: 30 });
 
     expect(require("@/services/coordinator/eventBus").dispatchPlayerEvent).toHaveBeenCalledWith(
-      { type: "SEEK", payload: { position: 1870 } },
-      {
+      { type: "JUMP_BACKWARD", payload: { seconds: 30 } },
+      expect.objectContaining({
         source: "remote_command",
         jump: { surface: "lock_screen", category: "skip_backward" },
-      }
+      })
     );
+    expect(TrackPlayer.getProgress).not.toHaveBeenCalled();
+  });
+
+  it("persists the resolved +2:00 target after four rapid forward commands", async () => {
+    let resolvedPosition = 100;
+    jest.mocked(dispatchPlayerEvent).mockImplementation((event, meta) => {
+      if (event.type !== "JUMP_FORWARD") {
+        return;
+      }
+      resolvedPosition += event.payload.seconds;
+      const resolutionMeta = meta as typeof meta & RelativeJumpResolutionMeta;
+      void resolutionMeta?.onRelativeSeekResolved?.(resolvedPosition);
+    });
+
+    await Promise.all([
+      handleRemoteJumpForward({ interval: 30 }),
+      handleRemoteJumpForward({ interval: 30 }),
+      handleRemoteJumpForward({ interval: 30 }),
+      handleRemoteJumpForward({ interval: 30 }),
+    ]);
+
+    await waitFor(() => {
+      expect(
+        require("@/services/ProgressService").progressService.updateProgress
+      ).toHaveBeenCalledTimes(4);
+    });
+    expect(
+      require("@/services/ProgressService").progressService.updateProgress
+    ).toHaveBeenLastCalledWith("user-1", "item-1", 220, 1, 1, undefined, true);
+    expect(TrackPlayer.getProgress).not.toHaveBeenCalled();
   });
 });

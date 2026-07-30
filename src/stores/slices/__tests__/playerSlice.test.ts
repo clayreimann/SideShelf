@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { waitFor } from "@testing-library/react-native";
 import TrackPlayer from "react-native-track-player";
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { ASYNC_KEYS } from "../../../lib/asyncStore";
@@ -40,6 +41,16 @@ jest.mock("../../../db/helpers/users", () => ({
 jest.mock("../../../lib/secureStore", () => ({
   getStoredUsername: jest.fn(),
 }));
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
 
 describe("PlayerSlice", () => {
   let store: UseBoundStore<StoreApi<PlayerSlice>>;
@@ -247,24 +258,28 @@ describe("PlayerSlice", () => {
       expect(state.player.currentChapter?.chapter.id).toBe("ch-1");
     });
 
-    it("clears jump history when a different item becomes current", () => {
+    it("clears jump history when a different item becomes current", async () => {
       store.getState()._setCurrentTrack(mockPlayerTrack);
       store.getState()._recordJump(jumpInput);
 
       store.getState()._setCurrentTrack({ ...mockPlayerTrack, libraryItemId: "item-2" });
 
       expect(store.getState().player.jumpHistory).toBeNull();
-      expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession);
+      await waitFor(() =>
+        expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession)
+      );
     });
 
-    it("clears jump history when playback stops", () => {
+    it("clears jump history when playback stops", async () => {
       store.getState()._setCurrentTrack(mockPlayerTrack);
       store.getState()._recordJump(jumpInput);
 
       store.getState()._setCurrentTrack(null);
 
       expect(store.getState().player.jumpHistory).toBeNull();
-      expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession);
+      await waitFor(() =>
+        expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession)
+      );
     });
 
     it("retains jump history when the same item is rehydrated", () => {
@@ -280,15 +295,17 @@ describe("PlayerSlice", () => {
   });
 
   describe("jump history", () => {
-    it("records and persists a jump for the current item", () => {
+    it("records and persists a jump for the current item", async () => {
       store.getState()._setCurrentTrack(mockPlayerTrack);
 
       store.getState()._recordJump(jumpInput);
 
       expect(store.getState().player.jumpHistory?.entries[0].fromPosition).toBe(100);
-      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
-        ASYNC_KEYS.jumpHistorySession,
-        expect.stringContaining('"jump-1"')
+      await waitFor(() =>
+        expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+          ASYNC_KEYS.jumpHistorySession,
+          expect.stringContaining('"jump-1"')
+        )
       );
     });
 
@@ -314,6 +331,142 @@ describe("PlayerSlice", () => {
       await store.getState().restoreJumpHistory();
 
       expect(store.getState().player.jumpHistory).toEqual(validSession);
+    });
+
+    it("does not let a deferred restore overwrite a concurrently recorded jump", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      const deferredRead = createDeferred<string | null>();
+      mockedAsyncStorage.getItem.mockImplementation((key) =>
+        key === ASYNC_KEYS.jumpHistorySession ? deferredRead.promise : Promise.resolve(null)
+      );
+
+      const restoring = store.getState().restoreJumpHistory();
+      await waitFor(() =>
+        expect(mockedAsyncStorage.getItem).toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession)
+      );
+      store.getState()._recordJump({
+        ...jumpInput,
+        id: "jump-2",
+        toPosition: 600,
+        createdAt: 2_000,
+        updatedAt: 2_000,
+      });
+      deferredRead.resolve(JSON.stringify(validSession));
+      await restoring;
+
+      expect(store.getState().player.jumpHistory?.entries[0].id).toBe("jump-2");
+      expect(store.getState().player.jumpHistory?.entries[0].toPosition).toBe(600);
+    });
+
+    it("does not let a deferred restore re-arm a concurrently dismissed toast", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      store.getState()._recordJump(jumpInput);
+      const deferredRead = createDeferred<string | null>();
+      mockedAsyncStorage.getItem.mockImplementation((key) =>
+        key === ASYNC_KEYS.jumpHistorySession ? deferredRead.promise : Promise.resolve(null)
+      );
+
+      const restoring = store.getState().restoreJumpHistory();
+      await waitFor(() =>
+        expect(mockedAsyncStorage.getItem).toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession)
+      );
+      store.getState()._dismissJumpToast();
+      deferredRead.resolve(JSON.stringify(validSession));
+      await restoring;
+
+      expect(store.getState().player.jumpHistory?.entries[0].toastPending).toBe(false);
+    });
+
+    it("does not let a deferred restore attach item A history after switching to item B", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      const deferredRead = createDeferred<string | null>();
+      mockedAsyncStorage.getItem.mockImplementation((key) =>
+        key === ASYNC_KEYS.jumpHistorySession ? deferredRead.promise : Promise.resolve(null)
+      );
+
+      const restoring = store.getState().restoreJumpHistory();
+      await waitFor(() =>
+        expect(mockedAsyncStorage.getItem).toHaveBeenCalledWith(ASYNC_KEYS.jumpHistorySession)
+      );
+      store.getState()._setCurrentTrack({ ...mockPlayerTrack, libraryItemId: "item-2" });
+      deferredRead.resolve(JSON.stringify(validSession));
+      await restoring;
+
+      expect(store.getState().player.currentTrack?.libraryItemId).toBe("item-2");
+      expect(store.getState().player.jumpHistory).toBeNull();
+    });
+
+    it("ignores an older active restore that resolves after a newer active restore", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      const firstRead = createDeferred<string | null>();
+      const secondRead = createDeferred<string | null>();
+      const reads = [firstRead, secondRead];
+      mockedAsyncStorage.getItem.mockImplementation((key) => {
+        if (key !== ASYNC_KEYS.jumpHistorySession) {
+          return Promise.resolve(null);
+        }
+        const nextRead = reads.shift();
+        return nextRead?.promise ?? Promise.resolve(null);
+      });
+      const newerSession: JumpHistorySession = {
+        version: 1,
+        libraryItemId: "item-1",
+        entries: [
+          {
+            ...jumpInput,
+            id: "jump-2",
+            toPosition: 600,
+            createdAt: 2_000,
+            updatedAt: 2_000,
+            toastPending: true,
+          },
+        ],
+      };
+
+      const firstRestore = store.getState().restoreJumpHistory();
+      const secondRestore = store.getState().restoreJumpHistory();
+      await waitFor(() => expect(mockedAsyncStorage.getItem).toHaveBeenCalledTimes(2));
+      secondRead.resolve(JSON.stringify(newerSession));
+      await secondRestore;
+      firstRead.resolve(JSON.stringify(validSession));
+      await firstRestore;
+
+      expect(store.getState().player.jumpHistory).toEqual(newerSession);
+    });
+
+    it("serializes deferred writes so the latest revision persists last", async () => {
+      store.getState()._setCurrentTrack(mockPlayerTrack);
+      jest.clearAllMocks();
+      const firstWrite = createDeferred<void>();
+      const jumpWrites: string[] = [];
+      mockedAsyncStorage.setItem.mockImplementation((key, value) => {
+        if (key !== ASYNC_KEYS.jumpHistorySession) {
+          return Promise.resolve();
+        }
+        jumpWrites.push(value);
+        return jumpWrites.length === 1 ? firstWrite.promise : Promise.resolve();
+      });
+
+      store.getState()._recordJump(jumpInput);
+      await waitFor(() => expect(jumpWrites).toHaveLength(1));
+      store.getState()._recordJump({
+        ...jumpInput,
+        id: "jump-2",
+        toPosition: 600,
+        createdAt: 2_000,
+        updatedAt: 2_000,
+      });
+
+      await Promise.resolve();
+      expect(jumpWrites).toHaveLength(1);
+      firstWrite.resolve(undefined);
+      await waitFor(() => expect(jumpWrites).toHaveLength(2));
+      expect(JSON.parse(jumpWrites[1])).toEqual(
+        expect.objectContaining({
+          libraryItemId: "item-1",
+          entries: [expect.objectContaining({ id: "jump-2", toPosition: 600 }), expect.anything()],
+        })
+      );
     });
 
     it("rejects a snapshot for a different item", async () => {

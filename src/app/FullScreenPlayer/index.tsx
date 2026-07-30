@@ -199,63 +199,51 @@ export default function FullScreenPlayer() {
 
   const handleSkipBackward = useCallback(async () => {
     try {
-      const targetPosition = Math.max(position - jumpBackwardInterval, 0);
       trace.addEvent("player.ui.skip", {
         direction: "backward",
-        fromPositionMs: Math.round(position * 1000),
-        targetPositionMs: Math.round(targetPosition * 1000),
         intervalSeconds: jumpBackwardInterval,
       });
-      await playerService.seekTo(targetPosition, {
+      await playerService.jumpBackward(jumpBackwardInterval, {
         jump: { surface: "full_screen", category: "skip_backward" },
       });
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to skip backward:", error);
     }
-  }, [position, jumpBackwardInterval]);
+  }, [jumpBackwardInterval]);
 
   const handleSkipForward = useCallback(async () => {
     try {
-      const targetPosition = position + jumpForwardInterval;
       trace.addEvent("player.ui.skip", {
         direction: "forward",
-        fromPositionMs: Math.round(position * 1000),
-        targetPositionMs: Math.round(targetPosition * 1000),
         intervalSeconds: jumpForwardInterval,
       });
-      await playerService.seekTo(targetPosition, {
+      await playerService.jumpForward(jumpForwardInterval, {
         jump: { surface: "full_screen", category: "skip_forward" },
       });
     } catch (error) {
       console.error("[FullScreenPlayer] Failed to skip forward:", error);
     }
-  }, [position, jumpForwardInterval]);
+  }, [jumpForwardInterval]);
 
-  const handleJumpBackward = useCallback(
-    async (seconds: number) => {
-      try {
-        await playerService.seekTo(Math.max(position - seconds, 0), {
-          jump: { surface: "full_screen", category: "skip_backward" },
-        });
-      } catch (error) {
-        console.error("[FullScreenPlayer] Failed to jump backward:", error);
-      }
-    },
-    [position]
-  );
+  const handleJumpBackward = useCallback(async (seconds: number) => {
+    try {
+      await playerService.jumpBackward(seconds, {
+        jump: { surface: "full_screen", category: "skip_backward" },
+      });
+    } catch (error) {
+      console.error("[FullScreenPlayer] Failed to jump backward:", error);
+    }
+  }, []);
 
-  const handleJumpForward = useCallback(
-    async (seconds: number) => {
-      try {
-        await playerService.seekTo(position + seconds, {
-          jump: { surface: "full_screen", category: "skip_forward" },
-        });
-      } catch (error) {
-        console.error("[FullScreenPlayer] Failed to jump forward:", error);
-      }
-    },
-    [position]
-  );
+  const handleJumpForward = useCallback(async (seconds: number) => {
+    try {
+      await playerService.jumpForward(seconds, {
+        jump: { surface: "full_screen", category: "skip_forward" },
+      });
+    } catch (error) {
+      console.error("[FullScreenPlayer] Failed to jump forward:", error);
+    }
+  }, []);
 
   const handleRateChange = useCallback(async (rate: number) => {
     try {

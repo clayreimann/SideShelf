@@ -630,6 +630,34 @@ describe("PlayerService", () => {
       );
     });
 
+    it("dispatches forward skips as relative coordinator commands", async () => {
+      await playerService.jumpForward(30, {
+        jump: { surface: "full_screen", category: "skip_forward" },
+      });
+
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        { type: "JUMP_FORWARD", payload: { seconds: 30 } },
+        {
+          source: "ui",
+          jump: { surface: "full_screen", category: "skip_forward" },
+        }
+      );
+    });
+
+    it("dispatches backward skips as relative coordinator commands", async () => {
+      await playerService.jumpBackward(15, {
+        jump: { surface: "item_detail", category: "skip_backward" },
+      });
+
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        { type: "JUMP_BACKWARD", payload: { seconds: 15 } },
+        {
+          source: "ui",
+          jump: { surface: "item_detail", category: "skip_backward" },
+        }
+      );
+    });
+
     it("should dispatch SET_RATE event", async () => {
       await playerService.setRate(1.5);
       expect(dispatchPlayerEvent).toHaveBeenCalledWith(

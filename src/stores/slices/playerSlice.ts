@@ -31,10 +31,36 @@ import TrackPlayer from "react-native-track-player";
 
 const log = logger.forTag("PlayerSlice");
 
-const persistJumpHistory = (session: JumpHistorySession | null) => {
-  void saveItem(ASYNC_KEYS.jumpHistorySession, session).catch((error) => {
-    log.error("[persistJumpHistory] Failed to persist jump history", error as Error);
-  });
+interface JumpHistoryLifecycle {
+  mutationRevision: number;
+  restoreGeneration: number;
+  persistenceTail: Promise<void>;
+}
+
+const createJumpHistoryLifecycle = (): JumpHistoryLifecycle => ({
+  mutationRevision: 0,
+  restoreGeneration: 0,
+  persistenceTail: Promise.resolve(),
+});
+
+const nextJumpHistoryMutationRevision = (lifecycle: JumpHistoryLifecycle): number =>
+  ++lifecycle.mutationRevision;
+
+const persistJumpHistory = (
+  lifecycle: JumpHistoryLifecycle,
+  session: JumpHistorySession | null,
+  revision: number
+): void => {
+  lifecycle.persistenceTail = lifecycle.persistenceTail
+    .then(async () => {
+      if (revision !== lifecycle.mutationRevision) {
+        return;
+      }
+      await saveItem(ASYNC_KEYS.jumpHistorySession, session);
+    })
+    .catch((error) => {
+      log.error("[persistJumpHistory] Failed to persist jump history", error as Error);
+    });
 };
 
 /**
@@ -151,7 +177,11 @@ export interface PlayerSlice extends PlayerSliceState, PlayerSliceActions {}
 /**
  * Create player slice
  */
-export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
+export const createPlayerSlice: SliceCreator<PlayerSlice> = (
+  set,
+  get,
+  jumpHistoryLifecycle: JumpHistoryLifecycle = createJumpHistoryLifecycle()
+) => ({
   restorePersistedState: async () => {
     const restored: string[] = [];
     const notFound: string[] = [];
@@ -463,6 +493,9 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       track === null ||
       (state.player.currentTrack !== null &&
         state.player.currentTrack.libraryItemId !== track.libraryItemId);
+    const jumpHistoryRevision = shouldClearJumpHistory
+      ? nextJumpHistoryMutationRevision(jumpHistoryLifecycle)
+      : null;
 
     set((state: PlayerSlice) => ({
       ...state,
@@ -474,8 +507,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         jumpHistory: shouldClearJumpHistory ? null : state.player.jumpHistory,
       },
     }));
-    if (shouldClearJumpHistory) {
-      persistJumpHistory(null);
+    if (jumpHistoryRevision !== null) {
+      persistJumpHistory(jumpHistoryLifecycle, null, jumpHistoryRevision);
     }
     // Persist current track to AsyncStorage
     saveItem(ASYNC_KEYS.currentTrack, track);
@@ -619,6 +652,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   _recordJump: (input: JumpRecordInput) => {
     const session = recordJump(get().player.jumpHistory, input);
+    const revision = nextJumpHistoryMutationRevision(jumpHistoryLifecycle);
     set((state: PlayerSlice) => ({
       ...state,
       player: {
@@ -626,11 +660,12 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         jumpHistory: session,
       },
     }));
-    persistJumpHistory(session);
+    persistJumpHistory(jumpHistoryLifecycle, session, revision);
   },
 
   _dismissJumpToast: () => {
     const session = dismissPendingJump(get().player.jumpHistory);
+    const revision = nextJumpHistoryMutationRevision(jumpHistoryLifecycle);
     set((state: PlayerSlice) => ({
       ...state,
       player: {
@@ -638,13 +673,14 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         jumpHistory: session,
       },
     }));
-    persistJumpHistory(session);
+    persistJumpHistory(jumpHistoryLifecycle, session, revision);
   },
 
   _clearJumpHistory: () => {
     const jumpHistory = get().player.jumpHistory;
+    const revision = nextJumpHistoryMutationRevision(jumpHistoryLifecycle);
     if (!jumpHistory) {
-      persistJumpHistory(null);
+      persistJumpHistory(jumpHistoryLifecycle, null, revision);
       return;
     }
 
@@ -655,7 +691,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         jumpHistory: null,
       },
     }));
-    persistJumpHistory(null);
+    persistJumpHistory(jumpHistoryLifecycle, null, revision);
   },
 
   restoreJumpHistory: async () => {
@@ -663,6 +699,10 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     if (!libraryItemId) {
       return;
     }
+    const mutationRevision = jumpHistoryLifecycle.mutationRevision;
+    const restoreGeneration = ++jumpHistoryLifecycle.restoreGeneration;
+    const pendingPersistence = jumpHistoryLifecycle.persistenceTail;
+    await pendingPersistence;
 
     const session = validateJumpHistorySession(
       await getAsyncItem(ASYNC_KEYS.jumpHistorySession),
@@ -671,7 +711,15 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     if (!session) {
       return;
     }
+    if (
+      restoreGeneration !== jumpHistoryLifecycle.restoreGeneration ||
+      mutationRevision !== jumpHistoryLifecycle.mutationRevision ||
+      get().player.currentTrack?.libraryItemId !== libraryItemId
+    ) {
+      return;
+    }
 
+    nextJumpHistoryMutationRevision(jumpHistoryLifecycle);
     set((state: PlayerSlice) => ({
       ...state,
       player: {

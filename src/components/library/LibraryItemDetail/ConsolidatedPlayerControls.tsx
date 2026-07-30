@@ -62,37 +62,31 @@ export default function ConsolidatedPlayerControls({
 
   const handleSkipBackward = useCallback(async () => {
     try {
-      const targetPosition = Math.max(position - jumpBackwardInterval, 0);
       trace.addEvent("player.ui.skip", {
         direction: "backward",
-        fromPositionMs: Math.round(position * 1000),
-        targetPositionMs: Math.round(targetPosition * 1000),
         intervalSeconds: jumpBackwardInterval,
       });
-      await playerService.seekTo(targetPosition, {
+      await playerService.jumpBackward(jumpBackwardInterval, {
         jump: { surface: "item_detail", category: "skip_backward" },
       });
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to skip backward:", error);
     }
-  }, [position, jumpBackwardInterval]);
+  }, [jumpBackwardInterval]);
 
   const handleSkipForward = useCallback(async () => {
     try {
-      const targetPosition = position + jumpForwardInterval;
       trace.addEvent("player.ui.skip", {
         direction: "forward",
-        fromPositionMs: Math.round(position * 1000),
-        targetPositionMs: Math.round(targetPosition * 1000),
         intervalSeconds: jumpForwardInterval,
       });
-      await playerService.seekTo(targetPosition, {
+      await playerService.jumpForward(jumpForwardInterval, {
         jump: { surface: "item_detail", category: "skip_forward" },
       });
     } catch (error) {
       console.error("[ConsolidatedPlayerControls] Failed to skip forward:", error);
     }
-  }, [position, jumpForwardInterval]);
+  }, [jumpForwardInterval]);
 
   const handleOpenFullScreenPlayer = useCallback(() => {
     router.push("/FullScreenPlayer");

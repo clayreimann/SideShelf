@@ -90,6 +90,7 @@ export type PlayerEvent =
   | { type: "BUFFERING_STARTED" }
   | { type: "BUFFERING_COMPLETED" }
   | { type: "SEEK_COMPLETE" }
+  | { type: "SAME_TRACK_SEEK"; payload: { position: number } }
   | { type: "RELOAD_QUEUE"; payload: { libraryItemId: string } }
   | { type: "QUEUE_RELOADED"; payload: { position: number } };
 
@@ -330,6 +331,12 @@ export type DispatchMeta = {
   skipSmartRewind?: boolean;
   jump?: JumpDescriptor;
   suppressJumpHistory?: boolean;
+  /**
+   * Best-effort continuation for a coordinator-resolved relative jump.
+   * The coordinator invokes it serially with the same clamped target used for
+   * native seeking and jump-history recording.
+   */
+  onRelativeSeekResolved?: (position: number) => Promise<void> | void;
 };
 
 /**

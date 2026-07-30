@@ -43,6 +43,7 @@ const log = logger.forTag("PlayerService");
 const diagLog = logger.forDiagnostics("PlayerService");
 
 export type SeekOptions = Pick<DispatchMeta, "jump" | "suppressJumpHistory">;
+export type RelativeJumpOptions = Pick<DispatchMeta, "jump">;
 
 /**
  * Track player service facade.
@@ -285,6 +286,32 @@ export class PlayerService implements IPlayerServiceFacade {
       {
         type: "SEEK",
         payload: { position },
+      },
+      { source: "ui", ...options }
+    );
+  }
+
+  /**
+   * Jump forward relative to the coordinator's authoritative position.
+   */
+  async jumpForward(seconds: number, options: RelativeJumpOptions): Promise<void> {
+    dispatchPlayerEvent(
+      {
+        type: "JUMP_FORWARD",
+        payload: { seconds },
+      },
+      { source: "ui", ...options }
+    );
+  }
+
+  /**
+   * Jump backward relative to the coordinator's authoritative position.
+   */
+  async jumpBackward(seconds: number, options: RelativeJumpOptions): Promise<void> {
+    dispatchPlayerEvent(
+      {
+        type: "JUMP_BACKWARD",
+        payload: { seconds },
       },
       { source: "ui", ...options }
     );
