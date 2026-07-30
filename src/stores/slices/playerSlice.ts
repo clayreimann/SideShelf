@@ -78,12 +78,6 @@ export interface PlayerSliceState {
       /** Chapter target: 'current' or 'next', only used when type is 'chapter' */
       chapterTarget: "current" | "next" | null;
     };
-    /** Pending unintentional progress jump awaiting user acknowledgement */
-    pendingProgressJump: {
-      fromPosition: number;
-      toPosition: number;
-      timestamp: number;
-    } | null;
     /** Active jump ledger for the current library item */
     jumpHistory: JumpHistorySession | null;
     /** Whether the jump-history modal is visible */
@@ -133,10 +127,6 @@ export interface PlayerSliceActions {
   _setPlaySessionId: (sessionId: string | null) => void;
   /** Set last pause time (for smart rewind) */
   _setLastPauseTime: (timestamp: number | null) => void;
-  /** Set or clear the pending progress jump toast */
-  _setPendingProgressJump: (
-    jump: { fromPosition: number; toPosition: number; timestamp: number } | null
-  ) => void;
   /** Record a user-initiated position jump */
   _recordJump: (input: JumpRecordInput) => void;
   /** Clear the toast acknowledgement for the pending jump */
@@ -404,7 +394,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       type: null,
       chapterTarget: null,
     },
-    pendingProgressJump: null,
     jumpHistory: null,
     isJumpHistoryModalVisible: false,
   },
@@ -626,10 +615,6 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     // Note: lastPauseTime is not persisted - it's ephemeral state for smart rewind
-  },
-
-  _setPendingProgressJump: (jump) => {
-    set((state: PlayerSlice) => ({ player: { ...state.player, pendingProgressJump: jump } }));
   },
 
   _recordJump: (input: JumpRecordInput) => {

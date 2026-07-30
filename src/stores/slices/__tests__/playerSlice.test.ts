@@ -147,7 +147,6 @@ describe("PlayerSlice", () => {
           type: null,
           chapterTarget: null,
         },
-        pendingProgressJump: null,
         jumpHistory: null,
         isJumpHistoryModalVisible: false,
       });

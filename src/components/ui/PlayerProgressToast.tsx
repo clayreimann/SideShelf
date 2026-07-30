@@ -1,60 +1,80 @@
 /**
- * PlayerProgressToast - Cancellable toast for unintentional progress jumps
+ * PlayerProgressToast - Foreground-aware summary of a pending jump-history entry
  *
- * Appears when NATIVE_PROGRESS_UPDATED detects a position jump ≥30s (not during seek/load).
- * Provides an Undo button to seek back to the pre-jump position.
- * Auto-dismisses after 7 seconds.
+ * Appears while the app is active for seven seconds after a persisted jump is
+ * restored or updated. Dismissing the toast acknowledges the entry without
+ * removing it from the jump ledger.
  */
 
 import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
-import { logger } from "@/lib/logger";
+import { getPendingJump } from "@/lib/helpers/jumpHistory";
 import { useThemedStyles } from "@/lib/theme";
-import { playerService } from "@/services/PlayerService";
 import { useAppStore } from "@/stores/appStore";
-import React, { useCallback, useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { usePathname, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
-const log = logger.forTag("PlayerProgressToast");
+const TOAST_DURATION_MS = 7_000;
 
 export default function PlayerProgressToast() {
   const { isDark } = useThemedStyles();
-  const pendingProgressJump = useAppStore((state) => state.player.pendingProgressJump);
-  const _setPendingProgressJump = useAppStore((state) => state._setPendingProgressJump);
+  const router = useRouter();
+  const pathname = usePathname();
+  const jumpHistory = useAppStore((state) => state.player.jumpHistory);
+  const restoreJumpHistory = useAppStore((state) => state.restoreJumpHistory);
+  const _dismissJumpToast = useAppStore((state) => state._dismissJumpToast);
+  const setJumpHistoryModalVisible = useAppStore((state) => state.setJumpHistoryModalVisible);
+  const pendingJump = getPendingJump(jumpHistory);
+  const [isAppActive, setIsAppActive] = useState(() => AppState.currentState === "active");
 
-  // Auto-dismiss after 7 seconds
   useEffect(() => {
-    if (!pendingProgressJump) return;
-    const timer = setTimeout(() => {
-      _setPendingProgressJump(null);
-    }, 7000);
-    return () => clearTimeout(timer);
-  }, [pendingProgressJump, _setPendingProgressJump]);
+    let isMounted = true;
+    const subscription = AppState.addEventListener("change", async (nextState) => {
+      if (nextState !== "active") {
+        if (isMounted) {
+          setIsAppActive(false);
+        }
+        return;
+      }
 
-  const handleUndo = useCallback(async () => {
-    if (!pendingProgressJump) return;
-    const { fromPosition } = pendingProgressJump;
-    _setPendingProgressJump(null);
-    try {
-      await playerService.seekTo(fromPosition);
-    } catch (err) {
-      log.error(
-        "[handleUndo] Failed to seek back",
-        err instanceof Error ? err : new Error(String(err))
-      );
+      await restoreJumpHistory();
+      if (isMounted) {
+        setIsAppActive(true);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.remove();
+    };
+  }, [restoreJumpHistory]);
+
+  useEffect(() => {
+    if (!pendingJump || !isAppActive) {
+      return;
     }
-  }, [pendingProgressJump, _setPendingProgressJump]);
+
+    const timer = setTimeout(_dismissJumpToast, TOAST_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [isAppActive, pendingJump, pendingJump?.updatedAt, _dismissJumpToast]);
+
+  const handleViewHistory = useCallback(() => {
+    setJumpHistoryModalVisible(true);
+    if (pathname !== "/FullScreenPlayer") {
+      router.push("/FullScreenPlayer");
+    }
+  }, [pathname, router, setJumpHistoryModalVisible]);
 
   const handleDismiss = useCallback(() => {
-    _setPendingProgressJump(null);
-  }, [_setPendingProgressJump]);
+    _dismissJumpToast();
+  }, [_dismissJumpToast]);
 
-  if (!pendingProgressJump) return null;
+  if (!pendingJump) return null;
 
-  const { fromPosition, toPosition } = pendingProgressJump;
+  const { fromPosition, toPosition } = pendingJump;
   const delta = toPosition - fromPosition;
   const deltaLabel = delta >= 0 ? `+${formatTime(delta)}` : `-${formatTime(Math.abs(delta))}`;
-
   const toastBg = isDark ? "rgba(0,0,0,0.88)" : "rgba(20,20,20,0.92)";
 
   return (
@@ -69,12 +89,12 @@ export default function PlayerProgressToast() {
           </Text>
         </View>
         <Pressable
-          onPress={handleUndo}
-          style={styles.undoButton}
+          onPress={handleViewHistory}
+          style={styles.actionButton}
           hitSlop={8}
           accessibilityRole="button"
         >
-          <Text style={styles.undoLabel}>{translate("player.progressToast.undo")}</Text>
+          <Text style={styles.actionLabel}>{translate("player.jumpHistory.view")}</Text>
         </Pressable>
         <Pressable
           onPress={handleDismiss}
@@ -115,14 +135,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
-  undoButton: {
+  actionButton: {
     marginLeft: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
     backgroundColor: "rgba(255,255,255,0.2)",
     borderRadius: 6,
   },
-  undoLabel: {
+  actionLabel: {
     color: "#ffffff",
     fontSize: 13,
     fontWeight: "600",
