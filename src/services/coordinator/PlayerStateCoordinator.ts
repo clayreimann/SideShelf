@@ -115,7 +115,8 @@ export class PlayerStateCoordinator extends EventEmitter {
   // unexpected external jump.
   private expectedInternalPositionReconciliation: ExpectedInternalPositionReconciliation | null =
     null;
-  private expectedInternalPositionReconciliationTimeout: NodeJS.Timeout | null = null;
+  private expectedInternalPositionReconciliationTimeout: ReturnType<typeof setTimeout> | null =
+    null;
   private internalPositionReconciliationGeneration = 0;
 
   // Open span for the current session sync cycle (SYNC_STARTED → SYNC_COMPLETED/FAILED)
