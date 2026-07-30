@@ -12,7 +12,7 @@ import { getPendingJump } from "@/lib/helpers/jumpHistory";
 import { useThemedStyles } from "@/lib/theme";
 import { useAppStore } from "@/stores/appStore";
 import { usePathname, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 
 const TOAST_DURATION_MS = 7_000;
@@ -27,10 +27,15 @@ export default function PlayerProgressToast() {
   const setJumpHistoryModalVisible = useAppStore((state) => state.setJumpHistoryModalVisible);
   const pendingJump = getPendingJump(jumpHistory);
   const [isAppActive, setIsAppActive] = useState(() => AppState.currentState === "active");
+  const appStateGeneration = useRef(0);
+  const latestAppState = useRef(AppState.currentState);
 
   useEffect(() => {
     let isMounted = true;
     const subscription = AppState.addEventListener("change", async (nextState) => {
+      const eventGeneration = ++appStateGeneration.current;
+      latestAppState.current = nextState;
+
       if (nextState !== "active") {
         if (isMounted) {
           setIsAppActive(false);
@@ -39,7 +44,11 @@ export default function PlayerProgressToast() {
       }
 
       await restoreJumpHistory();
-      if (isMounted) {
+      if (
+        isMounted &&
+        appStateGeneration.current === eventGeneration &&
+        latestAppState.current === "active"
+      ) {
         setIsAppActive(true);
       }
     });
@@ -70,7 +79,7 @@ export default function PlayerProgressToast() {
     _dismissJumpToast();
   }, [_dismissJumpToast]);
 
-  if (!pendingJump) return null;
+  if (!pendingJump || !isAppActive) return null;
 
   const { fromPosition, toPosition } = pendingJump;
   const delta = toPosition - fromPosition;

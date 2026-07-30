@@ -138,6 +138,53 @@ describe("PlayerProgressToast", () => {
     expect(mockDismissJumpToast).toHaveBeenCalledTimes(1);
   });
 
+  it("does not let a stale active restoration resume the toast after a newer background event", async () => {
+    let resolveRestore: (() => void) | undefined;
+    mockRestoreJumpHistory.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRestore = resolve;
+      })
+    );
+    AppState.currentState = "background";
+    const view = render(<PlayerProgressToast />);
+
+    act(() => {
+      void mockAppStateListener?.("active");
+    });
+    await act(async () => {
+      await mockAppStateListener?.("background");
+    });
+    await act(async () => {
+      resolveRestore?.();
+    });
+
+    expect(view.queryByText("Jumped to 3:40 (+2:00)")).toBeNull();
+    act(() => jest.advanceTimersByTime(7_000));
+    expect(mockDismissJumpToast).not.toHaveBeenCalled();
+  });
+
+  it("keeps the toast hidden while backgrounded or restoring and shows it after restoration", async () => {
+    let resolveRestore: (() => void) | undefined;
+    mockRestoreJumpHistory.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRestore = resolve;
+      })
+    );
+    AppState.currentState = "background";
+    const view = render(<PlayerProgressToast />);
+
+    expect(view.queryByText("Jumped to 3:40 (+2:00)")).toBeNull();
+    act(() => {
+      void mockAppStateListener?.("active");
+    });
+    expect(view.queryByText("Jumped to 3:40 (+2:00)")).toBeNull();
+
+    await act(async () => {
+      resolveRestore?.();
+    });
+    expect(view.getByText("Jumped to 3:40 (+2:00)")).toBeTruthy();
+  });
+
   it("restarts the visible interval when an additive skip updates the pending jump", () => {
     const pendingJump = makePendingJump();
     const view = render(<PlayerProgressToast />);
