@@ -1,3 +1,4 @@
+import { afterEach } from "@jest/globals";
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 
@@ -42,6 +43,10 @@ const oldest: JumpHistoryEntry = {
 };
 
 describe("JumpHistoryList", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("renders newest first and selects the requested entry", () => {
     const onSelect = jest.fn();
     const view = render(
@@ -65,5 +70,26 @@ describe("JumpHistoryList", () => {
     expect(row).toHaveTextContent(/5:00 → 8:20/);
     expect(row).toHaveTextContent(/\+3:20/);
     expect(row).toHaveTextContent(/just now/);
+  });
+
+  it("keeps the automatic reference time stable across parent rerenders", () => {
+    const onSelect = jest.fn();
+    const dateNowSpy = jest.spyOn(Date, "now").mockReturnValue(10_000);
+    const view = render(<JumpHistoryList entries={[newest]} onSelect={onSelect} />);
+
+    expect(
+      view.getByRole("button", {
+        name: "Full-screen player, Scrub, from 5:00 to 8:20, +3:20, just now",
+      })
+    ).toBeTruthy();
+
+    dateNowSpy.mockReturnValue(70_000);
+    view.rerender(<JumpHistoryList entries={[newest]} onSelect={onSelect} />);
+
+    expect(
+      view.getByRole("button", {
+        name: "Full-screen player, Scrub, from 5:00 to 8:20, +3:20, just now",
+      })
+    ).toBeTruthy();
   });
 });

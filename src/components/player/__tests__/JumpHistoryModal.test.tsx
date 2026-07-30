@@ -1,6 +1,7 @@
 import { afterEach, beforeEach } from "@jest/globals";
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
+import { FlatList } from "react-native";
 
 import JumpHistoryModal from "@/components/player/JumpHistoryModal";
 import type { JumpHistoryEntry } from "@/types/player";
@@ -32,8 +33,10 @@ const entry: JumpHistoryEntry = {
 };
 
 describe("JumpHistoryModal", () => {
+  let dateNowSpy: jest.SpiedFunction<typeof Date.now>;
+
   beforeEach(() => {
-    jest.spyOn(Date, "now").mockReturnValue(1_000);
+    dateNowSpy = jest.spyOn(Date, "now").mockReturnValue(1_000);
   });
 
   afterEach(() => {
@@ -60,6 +63,8 @@ describe("JumpHistoryModal", () => {
       <JumpHistoryModal visible entries={[entry]} onClose={onClose} onSelect={onSelect} />
     );
 
+    expect(view.UNSAFE_getByType(FlatList)).toBeTruthy();
+
     fireEvent.press(
       view.getByRole("button", {
         name: "Lock screen, Skip forward, from 1:00 to 1:30, +0:30, just now",
@@ -68,5 +73,24 @@ describe("JumpHistoryModal", () => {
 
     expect(onSelect).toHaveBeenCalledWith(entry);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("keeps relative-time rows stable when its parent rerenders", () => {
+    const onClose = jest.fn();
+    const onSelect = jest.fn();
+    const view = render(
+      <JumpHistoryModal visible entries={[entry]} onClose={onClose} onSelect={onSelect} />
+    );
+
+    dateNowSpy.mockReturnValue(61_000);
+    view.rerender(
+      <JumpHistoryModal visible entries={[entry]} onClose={onClose} onSelect={onSelect} />
+    );
+
+    expect(
+      view.getByRole("button", {
+        name: "Lock screen, Skip forward, from 1:00 to 1:30, +0:30, just now",
+      })
+    ).toBeTruthy();
   });
 });

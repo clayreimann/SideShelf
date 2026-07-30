@@ -98,7 +98,13 @@ export function CollapsibleSection({
       pointerEvents="none"
       onLayout={handleSizerLayout}
     >
-      {children}
+      <View
+        accessible={false}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        {children}
+      </View>
     </View>
   );
 

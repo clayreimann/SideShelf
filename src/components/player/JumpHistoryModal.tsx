@@ -3,7 +3,7 @@ import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import type { JumpHistoryEntry } from "@/types/player";
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import React, { memo } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 interface JumpHistoryModalProps {
@@ -13,7 +13,7 @@ interface JumpHistoryModalProps {
   onSelect: (entry: JumpHistoryEntry) => void;
 }
 
-export default function JumpHistoryModal({
+const JumpHistoryModal = memo(function JumpHistoryModal({
   visible,
   entries,
   onClose,
@@ -39,18 +39,20 @@ export default function JumpHistoryModal({
               <Ionicons name="close" size={24} color={colors.textPrimary} />
             </Pressable>
           </View>
-          {entries.length > 0 ? (
+          {visible && entries.length > 0 ? (
             <JumpHistoryList entries={entries} onSelect={onSelect} />
-          ) : (
+          ) : visible ? (
             <Text style={[styles.emptyState, { color: colors.textSecondary }]}>
               {translate("player.jumpHistory.empty")}
             </Text>
-          )}
+          ) : null}
         </View>
       </View>
     </Modal>
   );
-}
+});
+
+export default JumpHistoryModal;
 
 const styles = StyleSheet.create({
   backdrop: {

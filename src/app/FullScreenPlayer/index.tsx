@@ -58,6 +58,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const log = logger.forTag("FullScreenPlayer");
+const EMPTY_JUMP_HISTORY_ENTRIES: JumpHistoryEntry[] = [];
 
 /**
  * Guard component that activates keep-awake using a hook.
@@ -566,7 +567,7 @@ export default function FullScreenPlayer() {
 
       <JumpHistoryModal
         visible={isJumpHistoryModalVisible}
-        entries={jumpHistory?.entries ?? []}
+        entries={jumpHistory?.entries ?? EMPTY_JUMP_HISTORY_ENTRIES}
         onClose={handleCloseJumpHistory}
         onSelect={handleJumpHistorySelect}
       />

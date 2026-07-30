@@ -17,7 +17,7 @@
  */
 
 import React from "react";
-import { Text as RNText } from "react-native";
+import { Pressable, Text as RNText } from "react-native";
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { CollapsibleSection } from "@/components/ui";
 
@@ -61,6 +61,23 @@ describe("measurement sizer", () => {
       </CollapsibleSection>
     );
     expect(getByTestId("collapsible-sizer")).toBeTruthy();
+  });
+
+  it("exposes interactive children only from the visible content tree", () => {
+    const { getAllByRole, getByTestId } = render(
+      <CollapsibleSection title="Section" defaultExpanded={true}>
+        <Pressable accessibilityRole="button" accessibilityLabel="First action">
+          <RNText>First action</RNText>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Second action">
+          <RNText>Second action</RNText>
+        </Pressable>
+      </CollapsibleSection>
+    );
+
+    fireSizerLayout(getByTestId, TALL);
+
+    expect(getAllByRole("button")).toHaveLength(3);
   });
 });
 

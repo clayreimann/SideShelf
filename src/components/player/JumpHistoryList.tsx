@@ -2,7 +2,7 @@ import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
 import { useThemedStyles } from "@/lib/theme";
 import type { JumpCategory, JumpHistoryEntry, JumpSurface } from "@/types/player";
-import React, { memo, useCallback, useMemo } from "react";
+import React, { memo, useCallback, useMemo, useRef } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 interface JumpHistoryListProps {
@@ -119,15 +119,62 @@ const JumpHistoryRow = memo(function JumpHistoryRow({
   );
 });
 
-export default function JumpHistoryList({
-  entries,
-  onSelect,
-  now = Date.now(),
-}: JumpHistoryListProps) {
-  const sortedEntries = useMemo(
+function useSortedEntries(entries: JumpHistoryEntry[]): JumpHistoryEntry[] {
+  return useMemo(
     () => [...entries].sort((first, second) => second.updatedAt - first.updatedAt),
     [entries]
   );
+}
+
+function usePresentationReferenceTime(now: number | undefined, isPresented: boolean): number {
+  const referenceTime = useRef<number | null>(null);
+
+  if (now !== undefined) {
+    return now;
+  }
+
+  if (!isPresented) {
+    referenceTime.current = null;
+    return 0;
+  }
+
+  if (referenceTime.current === null) {
+    referenceTime.current = Date.now();
+  }
+
+  return referenceTime.current;
+}
+
+export const JumpHistoryRows = memo(function JumpHistoryRows({
+  entries,
+  onSelect,
+  now,
+}: JumpHistoryListProps) {
+  const sortedEntries = useSortedEntries(entries);
+  const referenceTime = usePresentationReferenceTime(now, sortedEntries.length > 0);
+
+  return (
+    <View style={styles.content}>
+      {sortedEntries.map((entry, index) => (
+        <JumpHistoryRow
+          key={entry.id}
+          entry={entry}
+          isLast={index === sortedEntries.length - 1}
+          now={referenceTime}
+          onSelect={onSelect}
+        />
+      ))}
+    </View>
+  );
+});
+
+const JumpHistoryList = memo(function JumpHistoryList({
+  entries,
+  onSelect,
+  now,
+}: JumpHistoryListProps) {
+  const sortedEntries = useSortedEntries(entries);
+  const referenceTime = usePresentationReferenceTime(now, sortedEntries.length > 0);
 
   const keyExtractor = useCallback((entry: JumpHistoryEntry) => entry.id, []);
   const renderItem = useCallback(
@@ -135,11 +182,11 @@ export default function JumpHistoryList({
       <JumpHistoryRow
         entry={item}
         isLast={index === sortedEntries.length - 1}
-        now={now}
+        now={referenceTime}
         onSelect={onSelect}
       />
     ),
-    [now, onSelect, sortedEntries.length]
+    [onSelect, referenceTime, sortedEntries.length]
   );
 
   return (
@@ -151,7 +198,9 @@ export default function JumpHistoryList({
       contentContainerStyle={styles.content}
     />
   );
-}
+});
+
+export default JumpHistoryList;
 
 const styles = StyleSheet.create({
   list: {

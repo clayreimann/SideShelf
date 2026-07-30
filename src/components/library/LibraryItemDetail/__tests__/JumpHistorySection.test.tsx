@@ -1,6 +1,7 @@
 import { afterEach, beforeEach } from "@jest/globals";
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
+import { FlatList } from "react-native";
 
 import JumpHistorySection from "@/components/library/LibraryItemDetail/JumpHistorySection";
 import { playerService } from "@/services/PlayerService";
@@ -53,9 +54,11 @@ function setJumpHistory(entries: JumpHistoryEntry[], libraryItemId = "item-1") {
 }
 
 describe("JumpHistorySection", () => {
+  let dateNowSpy: jest.SpiedFunction<typeof Date.now>;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(Date, "now").mockReturnValue(1_000);
+    dateNowSpy = jest.spyOn(Date, "now").mockReturnValue(1_000);
     mockSeekTo.mockResolvedValue(undefined);
   });
 
@@ -90,5 +93,31 @@ describe("JumpHistorySection", () => {
     );
 
     expect(mockSeekTo).toHaveBeenCalledWith(100, { suppressJumpHistory: true });
+  });
+
+  it("embeds shared rows under the page scroll owner instead of owning a nested list", () => {
+    setJumpHistory([entry]);
+    const view = render(<JumpHistorySection libraryItemId="item-1" />);
+
+    expect(view.UNSAFE_queryByType(FlatList)).toBeNull();
+    expect(
+      view.getByRole("button", {
+        name: "Item details, Bookmark, from 1:40 to 8:20, +6:40, just now",
+      })
+    ).toBeTruthy();
+  });
+
+  it("does not age shared rows when its parent rerenders", () => {
+    setJumpHistory([entry]);
+    const view = render(<JumpHistorySection libraryItemId="item-1" />);
+
+    dateNowSpy.mockReturnValue(61_000);
+    view.rerender(<JumpHistorySection libraryItemId="item-1" />);
+
+    expect(
+      view.getByRole("button", {
+        name: "Item details, Bookmark, from 1:40 to 8:20, +6:40, just now",
+      })
+    ).toBeTruthy();
   });
 });

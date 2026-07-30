@@ -1,4 +1,4 @@
-import JumpHistoryList from "@/components/player/JumpHistoryList";
+import { JumpHistoryRows } from "@/components/player/JumpHistoryList";
 import { CollapsibleSection } from "@/components/ui";
 import { translate } from "@/i18n";
 import { logger } from "@/lib/logger";
@@ -6,7 +6,7 @@ import { useThemedStyles } from "@/lib/theme";
 import { playerService } from "@/services/PlayerService";
 import { usePlayerState } from "@/stores";
 import type { JumpHistoryEntry } from "@/types/player";
-import React, { useCallback } from "react";
+import React, { memo, useCallback } from "react";
 import { StyleSheet, Text } from "react-native";
 
 interface JumpHistorySectionProps {
@@ -15,7 +15,9 @@ interface JumpHistorySectionProps {
 
 const log = logger.forTag("JumpHistorySection");
 
-export default function JumpHistorySection({ libraryItemId }: JumpHistorySectionProps) {
+const JumpHistorySection = memo(function JumpHistorySection({
+  libraryItemId,
+}: JumpHistorySectionProps) {
   const { colors } = useThemedStyles();
   const jumpHistory = usePlayerState((state) => state.player.jumpHistory);
   const entries = jumpHistory?.libraryItemId === libraryItemId ? jumpHistory.entries : null;
@@ -38,7 +40,7 @@ export default function JumpHistorySection({ libraryItemId }: JumpHistorySection
       defaultExpanded={false}
     >
       {entries.length > 0 ? (
-        <JumpHistoryList entries={entries} onSelect={handleSelect} />
+        <JumpHistoryRows entries={entries} onSelect={handleSelect} />
       ) : (
         <Text style={[styles.emptyState, { color: colors.textSecondary }]}>
           {translate("player.jumpHistory.empty")}
@@ -46,7 +48,9 @@ export default function JumpHistorySection({ libraryItemId }: JumpHistorySection
       )}
     </CollapsibleSection>
   );
-}
+});
+
+export default JumpHistorySection;
 
 const styles = StyleSheet.create({
   emptyState: {
