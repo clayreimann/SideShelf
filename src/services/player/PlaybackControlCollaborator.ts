@@ -27,30 +27,39 @@ export class PlaybackControlCollaborator implements IPlaybackControlCollaborator
    * Execute play (Internal - Called by Coordinator).
    * Applies smart rewind and starts playback. The coordinator ensures the
    * queue is already built before calling this method.
+   *
+   * @param position The coordinator's current authoritative position (seconds).
+   * Task 4c: passed explicitly by the coordinator (context.position) instead of
+   * this method reading store.player.position itself. Previously
+   * TrackLoadingCollaborator wrote the just-resolved seek position to the store
+   * for the SOLE purpose of letting this method read it back — two functions
+   * communicating through global state. For streaming tracks,
+   * TrackPlayer.getProgress().position returns 0 until the stream buffers to the
+   * seekTo position, which is why this can't just read TrackPlayer directly
+   * (applySmartRewind accepts an optional currentPosition for exactly this).
    */
-  async executePlay(meta?: DispatchMeta): Promise<SmartRewindOutcome | null> {
+  async executePlay(position: number, meta?: DispatchMeta): Promise<SmartRewindOutcome | null> {
     try {
       const store = useAppStore.getState();
-      // Read position before play() — for streaming tracks, TrackPlayer.getProgress().position
-      // returns 0 until the stream buffers to the seekTo position. Reading from the store here
-      // avoids that race (applySmartRewind accepts an optional currentPosition for exactly this).
-      const currentPosition = store.player.position;
 
       // Start playback first to establish audio session in "playing" state,
       // then apply smart rewind while already playing.
       // Calling seekTo() on a paused track before play() can trigger a
       // spurious iOS RemotePause ~200ms later (observed in trace seq 175, 233).
       await TrackPlayer.play();
-      const smartRewindOutcome = meta?.skipSmartRewind
-        ? null
-        : await applySmartRewind(currentPosition);
+      const smartRewindOutcome = meta?.skipSmartRewind ? null : await applySmartRewind(position);
 
       // Clear pause time since we're resuming
       store._setLastPauseTime(null);
       return smartRewindOutcome;
     } catch (error) {
-      const store = useAppStore.getState();
-      store._setTrackLoading(false);
+      // Loading-state recovery is owned by the coordinator now (Task 3b/3c):
+      // this rejection propagates to the coordinator's executeTransition catch
+      // block, which dispatches NATIVE_ERROR; the coordinator's NATIVE_ERROR
+      // handler clears context.isLoadingTrack, and its store bridge pushes that
+      // to the store. A direct store._setTrackLoading(false) write here was
+      // dead — it ran before that subsequent syncStateToStore call, which
+      // re-pushed context.isLoadingTrack (still true) right back over it.
       throw error;
     }
   }

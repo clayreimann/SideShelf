@@ -31,17 +31,33 @@ import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
 import { trace } from "@/lib/trace";
 import { getStoredUsername } from "@/lib/secureStore";
-import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { downloadService } from "@/services/DownloadService";
 import { useAppStore } from "@/stores/appStore";
 import type { ApiPlaySessionResponse } from "@/types/api";
 import type { ResumePositionInfo } from "@/types/coordinator";
 import type { PlayerTrack } from "@/types/player";
 import TrackPlayer, { Track } from "react-native-track-player";
-import type { IPlayerServiceFacade, ITrackLoadingCollaborator } from "./types";
+import type {
+  BuildTrackListResult,
+  IPlayerServiceFacade,
+  ITrackLoadingCollaborator,
+  LoadTrackResult,
+} from "./types";
 
 const log = logger.forTag("PlayerService");
 const diagLog = logger.forDiagnostics("PlayerService");
+
+/** Interval between TrackPlayer.getProgress() polls while waiting for a seek to land. */
+const SEEK_LAND_POLL_MS = 50;
+
+/** Upper bound on how long executeLoadTrack waits for a seek to land before giving
+ *  up and returning anyway. The coordinator's load watchdog (LOAD_WATCHDOG_MS in
+ *  PlayerStateCoordinator) is the ultimate backstop if playback still never confirms. */
+const SEEK_LAND_TIMEOUT_MS = 3_000;
+
+/** Tolerance (seconds) for considering TrackPlayer's reported position "at" the
+ *  seek target — native progress reporting isn't exact to the millisecond. */
+const SEEK_LAND_TOLERANCE_SECONDS = 1;
 
 /**
  * Handles track loading, track list construction, and queue rebuild.
@@ -56,7 +72,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
     libraryItemId: string,
     episodeId?: string,
     startPosition?: number
-  ): Promise<void> {
+  ): Promise<LoadTrackResult> {
     try {
       diagLog.info(`playTrack called for libraryItemId: ${libraryItemId}`);
       log.info(`Loading track for library item: ${libraryItemId}`);
@@ -138,7 +154,7 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       await TrackPlayer.reset();
 
       // Determine the audio source (local or remote)
-      const tracks = await this.buildTrackList(track);
+      const { tracks, playSessionId } = await this.buildTrackList(track);
 
       if (tracks.length === 0) {
         const hasDownloadedFiles = track.audioFiles.some((af) => af.downloadInfo?.isDownloaded);
@@ -179,31 +195,19 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       if (startPosition !== undefined) {
         // Caller-specified chapter position — skip resolveCanonicalPosition to avoid
         // spurious progress-jump toast and timing race during queue rebuild.
+        // Threaded back via the return value (Task 4a/4b) — the coordinator's
+        // LOADING handler assigns it to context.position directly. The
+        // POSITION_RECONCILED dispatch this used to make here was dead: LOADING
+        // has no transition entry for POSITION_RECONCILED, so it was always
+        // rejected and (per the rejected-events-have-zero-effect invariant)
+        // never did anything.
         seekPosition = startPosition;
-        dispatchPlayerEvent(
-          { type: "POSITION_RECONCILED", payload: { position: startPosition } },
-          { source: "restore" }
-        );
         log.info(
           `[executeLoadTrack] Using caller-specified startPosition: ${formatTime(startPosition)}s`
         );
       } else {
-        // Reset position context when switching to a different book to prevent
-        // the previous book's position bleeding into resolveCanonicalPosition's
-        // "store" fallback (which reads store.player.position as last resort).
-        const currentItemId = store.player.currentTrack?.libraryItemId;
-        if (currentItemId && currentItemId !== libraryItemId) {
-          store.updatePosition(0);
-          log.debug(
-            `[executeLoadTrack] Switching books (${currentItemId} → ${libraryItemId}): reset store position to 0`
-          );
-        }
         const resumeInfo = await this.facade.resolveCanonicalPosition(libraryItemId);
         seekPosition = resumeInfo.position;
-        // Sync store position so executePlay reads the correct value via store.player.position.
-        // Without this, applySmartRewind would read 0 from the store on the first play of a
-        // streaming book (TrackPlayer hasn't buffered to seekTo position yet).
-        store.updatePosition(seekPosition);
         log.info(
           `[executeLoadTrack] Resuming from ${resumeInfo.source}: ${formatTime(resumeInfo.position)}s`
         );
@@ -211,6 +215,13 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
 
       if (seekPosition > 0) {
         await TrackPlayer.seekTo(seekPosition);
+        // Seek-then-play is deliberate (play-then-seek causes an audible stutter,
+        // especially on remote media) — but RNTP's seekTo() resolves before AVPlayer
+        // actually finishes seeking, so the coordinator's subsequent PLAY dispatch
+        // can land mid-seek and stall the player into Ready/Paused, never emitting
+        // State.Playing. Wait for the seek to actually land before returning control
+        // to the coordinator.
+        await this.waitForSeekToLand(seekPosition);
       }
 
       // Apply playback settings from store to TrackPlayer
@@ -228,19 +239,80 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       }
 
       log.info("Track loaded, returning to coordinator");
+
+      return { track, playSessionId, position: seekPosition };
     } catch (error) {
       log.error(" Failed to load track:", error as Error);
-      // Clear loading state on error
-      const store = useAppStore.getState();
-      store._setTrackLoading(false);
+      // Loading-state recovery is owned by the coordinator now (Task 3b/3c):
+      // the coordinator's NATIVE_ERROR handler clears context.isLoadingTrack
+      // when this rejection routes the machine to ERROR, and its store bridge
+      // pushes that to the store. A direct store._setTrackLoading(false) write
+      // here was dead — it ran before the coordinator's subsequent
+      // syncStateToStore call, which re-pushed context.isLoadingTrack (still
+      // true) right back over it.
       throw error;
+    }
+  }
+
+  /**
+   * Wait for a just-issued TrackPlayer.seekTo(targetPosition) to actually land
+   * before resolving, so the coordinator's subsequent PLAY dispatch doesn't
+   * race a seek that is still in flight natively (see the seek-then-play
+   * comment at the call site in executeLoadTrack).
+   *
+   * Condition-based polling, not a fixed sleep: checks TrackPlayer.getProgress()
+   * every SEEK_LAND_POLL_MS and resolves as soon as the reported position is
+   * within SEEK_LAND_TOLERANCE_SECONDS of the target. Gives up after
+   * SEEK_LAND_TIMEOUT_MS and resolves anyway — this never throws and never
+   * blocks the load indefinitely; the coordinator's load watchdog is the
+   * backstop if playback still never confirms.
+   *
+   * Bails out immediately (no polling at all) if getProgress() throws, returns
+   * no progress object, or reports a non-finite position — this is what the
+   * global test mock (a bare `jest.fn()`, resolving `undefined`) does by
+   * default, so unit tests that load a track don't each pay the full timeout.
+   */
+  private async waitForSeekToLand(targetPosition: number): Promise<void> {
+    const startedAt = Date.now();
+
+    for (;;) {
+      let position: number | undefined;
+      try {
+        const progress = await TrackPlayer.getProgress();
+        position = progress?.position;
+      } catch (error) {
+        log.debug(`[waitForSeekToLand] getProgress() threw, giving up immediately: ${error}`);
+        return;
+      }
+
+      if (position === undefined || !Number.isFinite(position)) {
+        log.debug(
+          "[waitForSeekToLand] getProgress() returned no usable position, giving up immediately"
+        );
+        return;
+      }
+
+      if (Math.abs(position - targetPosition) <= SEEK_LAND_TOLERANCE_SECONDS) {
+        return;
+      }
+
+      if (Date.now() - startedAt >= SEEK_LAND_TIMEOUT_MS) {
+        log.warn(
+          `[waitForSeekToLand] Seek to ${formatTime(targetPosition)}s did not land within ` +
+            `${SEEK_LAND_TIMEOUT_MS}ms (last reported position ${formatTime(position)}s) — ` +
+            `proceeding anyway; the coordinator's load watchdog is the backstop`
+        );
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, SEEK_LAND_POLL_MS));
     }
   }
 
   /**
    * Build track list from PlayerTrack.
    */
-  async buildTrackList(playerTrack: PlayerTrack): Promise<Track[]> {
+  async buildTrackList(playerTrack: PlayerTrack): Promise<BuildTrackListResult> {
     const parentSpan = trace.startSpan("player.load.build_track_list", {
       libraryItemId: playerTrack.libraryItemId,
     });
@@ -302,7 +374,6 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
     if (needsStreaming) {
       try {
         playSession = await startPlaySession(playerTrack.libraryItemId);
-        store._setPlaySessionId(playSession.id);
         log.info(`Started play session: ${playSession.id}`);
         log.info(`Got streaming tracks: ${playSession.audioTracks.length}`);
 
@@ -322,8 +393,15 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       log.info(
         `Clearing stale streaming session ID before local playback for ${playerTrack.libraryItemId}`
       );
-      store._setPlaySessionId(null);
     }
+    // Threaded back via the return value rather than written directly to the
+    // store here — the coordinator's context is authoritative and the store is
+    // a derived projection kept in sync by the coordinator's bridge, which pushes
+    // context.sessionId on every event cycle. A direct store write here would be
+    // immediately fought/overwritten by that bridge on the next sync. null means
+    // "no active streaming session" (local playback, or the session failed to
+    // start) — the coordinator's LOADING handler folds this into context.sessionId.
+    const playSessionId = needsStreaming ? (playSession?.id ?? null) : null;
 
     // Get API info once for all streaming URLs
     let cachedApiInfo = this.facade.getApiInfo();
@@ -442,18 +520,25 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
       missingCount,
     });
 
-    return tracks;
+    return { tracks, playSessionId };
   }
 
   /**
    * Rebuild TrackPlayer queue for the given track (pure execution).
    * No coordinator imports, no event dispatches, throws on failure.
    * Called only by the coordinator via IPlayerServiceFacade.executeRebuildQueue.
+   *
+   * Note: this does not thread buildTrackList's playSessionId anywhere — a
+   * pre-existing gap, not introduced here. The direct store._setPlaySessionId()
+   * write buildTrackList used to make was already fought/overwritten by the
+   * coordinator's store bridge on the very next sync (the bridge pushes
+   * context.sessionId, which RELOAD_QUEUE/QUEUE_RELOADED never update), so
+   * removing that write doesn't regress this path — it was already ineffective.
    */
   async executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo> {
     await TrackPlayer.reset();
 
-    const tracks = await this.buildTrackList(track);
+    const { tracks } = await this.buildTrackList(track);
     if (tracks.length === 0) {
       log.warn(`No playable sources found while rebuilding queue for ${track.libraryItemId}`);
       throw new Error(

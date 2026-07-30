@@ -62,6 +62,45 @@ export interface IPlayerServiceFacade {
 }
 
 /**
+ * Result of TrackLoadingCollaborator.executeLoadTrack().
+ *
+ * The coordinator's context is authoritative and the Zustand store is a derived
+ * projection (see the coordinator's store-bridge docs) — so rather than have the
+ * collaborator write session/position state directly to the store (fighting the
+ * bridge, which pushes context back over it on every sync), these fields are
+ * threaded back through the return value and folded into context by the
+ * coordinator's LOADING handler.
+ */
+export interface LoadTrackResult {
+  track: PlayerTrack;
+  /**
+   * The streaming play session id created for this load, or null when local
+   * playback made streaming unnecessary or the session failed to start — null
+   * means "no active streaming session", i.e. clear whatever stale session id
+   * context/store may have been holding.
+   */
+  playSessionId: string | null;
+  /**
+   * The position (seconds) executeLoadTrack resolved and seeked to — either
+   * the caller-specified startPosition, or the position resolveCanonicalPosition
+   * returned. Threaded back so the coordinator's LOADING handler can assign
+   * context.position directly (Task 4a), instead of TrackLoadingCollaborator
+   * writing it to the store for PlaybackControlCollaborator.executePlay to read
+   * back later (Task 4c passes position to executePlay as a parameter instead).
+   */
+  position: number;
+}
+
+/**
+ * Result of TrackLoadingCollaborator.buildTrackList().
+ * playSessionId mirrors LoadTrackResult's field — see its docs.
+ */
+export interface BuildTrackListResult {
+  tracks: Track[];
+  playSessionId: string | null;
+}
+
+/**
  * Collaborator interface for track loading concern group.
  *
  * Owns: executeLoadTrack, buildTrackList, reloadTrackPlayerQueue.
@@ -73,8 +112,8 @@ export interface ITrackLoadingCollaborator {
     libraryItemId: string,
     episodeId?: string,
     startPosition?: number
-  ): Promise<void>;
-  buildTrackList(track: PlayerTrack): Promise<Track[]>;
+  ): Promise<LoadTrackResult>;
+  buildTrackList(track: PlayerTrack): Promise<BuildTrackListResult>;
   executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo>;
 }
 
@@ -87,7 +126,12 @@ export interface ITrackLoadingCollaborator {
  * store side-effects (e.g., _setLastPauseTime on pause).
  */
 export interface IPlaybackControlCollaborator {
-  executePlay(meta?: DispatchMeta): Promise<SmartRewindOutcome | null>;
+  /**
+   * @param position The coordinator's current authoritative position (seconds),
+   * passed explicitly (Task 4c) instead of executePlay reading store.player.position
+   * itself — two functions communicating through global state, untied.
+   */
+  executePlay(position: number, meta?: DispatchMeta): Promise<SmartRewindOutcome | null>;
   executePause(): Promise<void>;
   executeStop(): Promise<void>;
   executeSeek(position: number): Promise<void>;

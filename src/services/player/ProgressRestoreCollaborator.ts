@@ -262,7 +262,14 @@ export class ProgressRestoreCollaborator implements IProgressRestoreCollaborator
       const playbackState = await TrackPlayer.getPlaybackState();
       const isPlaying = playbackState.state === State.Playing;
 
-      // Update store position (for UI consistency)
+      // Update store position (for UI consistency).
+      // Task 4f: kept as a direct store write (unlike the other position writers
+      // removed elsewhere in this pass) — this method is invoked directly from
+      // LibraryItemDetail's "force resync" button handler, entirely outside the
+      // coordinator's event-dispatch cycle (no PlayerEvent is dispatched here).
+      // The coordinator's store bridge only runs as part of handleEvent, so
+      // there is no cycle for it to piggyback this update on; removing this
+      // write would leave the store silently stale after a forced resync.
       store.updatePosition(session.currentTime);
 
       // Only seek TrackPlayer if NOT actively playing to avoid stutters

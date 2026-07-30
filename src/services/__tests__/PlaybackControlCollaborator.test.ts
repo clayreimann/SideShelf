@@ -121,7 +121,7 @@ describe("PlaybackControlCollaborator", () => {
         callOrder.push("applySmartRewind");
       });
 
-      await collaborator.executePlay();
+      await collaborator.executePlay(0);
 
       expect(callOrder).toEqual(["play", "applySmartRewind"]);
     });
@@ -130,60 +130,73 @@ describe("PlaybackControlCollaborator", () => {
       const outcome = { fromPosition: 100, toPosition: 70 };
       applySmartRewind.mockResolvedValue(outcome);
 
-      await expect(collaborator.executePlay()).resolves.toEqual(outcome);
+      await expect(collaborator.executePlay(0)).resolves.toEqual(outcome);
     });
 
     it("clears last pause time after playing", async () => {
-      await collaborator.executePlay();
+      await collaborator.executePlay(0);
 
       expect(mockStore._setLastPauseTime).toHaveBeenCalledWith(null);
     });
 
-    it("clears track loading state when play fails and rethrows", async () => {
+    it("rethrows when play fails without writing to the store directly (Task 3b/3c)", async () => {
+      // The store._setTrackLoading(false) write that used to live here was dead:
+      // this rejection propagates up through the coordinator's executeTransition,
+      // whose catch block dispatches NATIVE_ERROR — the coordinator's NATIVE_ERROR
+      // handler clears context.isLoadingTrack itself, and its store bridge pushes
+      // that to the store afterward, re-clobbering any direct write made here.
       mockedTrackPlayer.play.mockRejectedValue(new Error("Play failed"));
 
-      await expect(collaborator.executePlay()).rejects.toThrow("Play failed");
-      expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
+      await expect(collaborator.executePlay(0)).rejects.toThrow("Play failed");
+      expect(mockStore._setTrackLoading).not.toHaveBeenCalled();
     });
 
-    it("clears track loading state when applySmartRewind fails and rethrows", async () => {
+    it("rethrows when applySmartRewind fails without writing to the store directly (Task 3b/3c)", async () => {
       applySmartRewind.mockRejectedValue(new Error("Seek failed"));
 
-      await expect(collaborator.executePlay()).rejects.toThrow("Seek failed");
+      await expect(collaborator.executePlay(0)).rejects.toThrow("Seek failed");
       expect(mockedTrackPlayer.play).toHaveBeenCalled();
-      expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
+      expect(mockStore._setTrackLoading).not.toHaveBeenCalled();
     });
 
-    it("passes store position to applySmartRewind to prevent streaming race where TrackPlayer.getProgress returns 0", async () => {
-      mockStore.player.position = 20956;
-
-      await collaborator.executePlay();
+    // Task 4c: executePlay takes the coordinator's current position as an
+    // explicit parameter instead of reading store.player.position itself — two
+    // functions communicating through global state, untied. The coordinator
+    // passes context.position at its executePlay call site.
+    it("passes the given position to applySmartRewind to prevent streaming race where TrackPlayer.getProgress returns 0", async () => {
+      await collaborator.executePlay(20956);
 
       expect(applySmartRewind).toHaveBeenCalledWith(20956);
     });
 
-    it("passes 0 to applySmartRewind when store position is 0 (beginning of book)", async () => {
-      mockStore.player.position = 0;
-
-      await collaborator.executePlay();
+    it("passes 0 to applySmartRewind when position is 0 (beginning of book)", async () => {
+      await collaborator.executePlay(0);
 
       expect(applySmartRewind).toHaveBeenCalledWith(0);
     });
 
+    it("ignores store.player.position entirely — only the explicit parameter is used", async () => {
+      mockStore.player.position = 999;
+
+      await collaborator.executePlay(42);
+
+      expect(applySmartRewind).toHaveBeenCalledWith(42);
+    });
+
     it("calls applySmartRewind when no meta is passed (default behavior preserved)", async () => {
-      await collaborator.executePlay();
+      await collaborator.executePlay(0);
 
       expect(applySmartRewind).toHaveBeenCalled();
     });
 
     it("does NOT call applySmartRewind when skipSmartRewind is true in meta", async () => {
-      await collaborator.executePlay({ skipSmartRewind: true });
+      await collaborator.executePlay(0, { skipSmartRewind: true });
 
       expect(applySmartRewind).not.toHaveBeenCalled();
     });
 
     it("calls applySmartRewind when skipSmartRewind is false in meta (explicit false = same as default)", async () => {
-      await collaborator.executePlay({ skipSmartRewind: false });
+      await collaborator.executePlay(0, { skipSmartRewind: false });
 
       expect(applySmartRewind).toHaveBeenCalled();
     });

@@ -66,6 +66,12 @@ type ExpectedInternalPositionReconciliation = SmartRewindOutcome & {
 const SMART_REWIND_RECONCILIATION_WINDOW_MS = 2_000;
 const SMART_REWIND_POSITION_TOLERANCE_SECONDS = 1;
 
+/** Upper bound on how long a track load may hold the UI in its loading state.
+ *  Native audio may legitimately settle into Ready/Paused without ever emitting
+ *  State.Playing (observed on iOS when play() races a large seek), and no event
+ *  clears isLoadingTrack in that case. */
+const LOAD_WATCHDOG_MS = 10_000;
+
 /**
  * Singleton coordinator for player state management
  */
@@ -119,6 +125,11 @@ export class PlayerStateCoordinator extends EventEmitter {
     null;
   private internalPositionReconciliationGeneration = 0;
 
+  // Load watchdog: guards against isLoadingTrack latching true forever when
+  // native audio never reports State.Playing after a track load. See
+  // LOAD_WATCHDOG_MS above.
+  private loadWatchdogTimeout: ReturnType<typeof setTimeout> | null = null;
+
   // Open span for the current session sync cycle (SYNC_STARTED → SYNC_COMPLETED/FAILED)
   private activeSyncSpan: SpanHandle | null = null;
 
@@ -156,6 +167,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         PlayerStateCoordinator.instance.diagnosticInterval = null;
       }
       PlayerStateCoordinator.instance.clearExpectedInternalPositionReconciliation();
+      PlayerStateCoordinator.instance.clearLoadWatchdog();
     }
     PlayerStateCoordinator.instance = null;
   }
@@ -305,6 +317,66 @@ export class PlayerStateCoordinator extends EventEmitter {
   }
 
   /**
+   * Clear the load watchdog timer without acting on it (e.g. loading resolved
+   * normally, or the machine is being torn down/reset).
+   */
+  private clearLoadWatchdog(): void {
+    if (this.loadWatchdogTimeout) {
+      clearTimeout(this.loadWatchdogTimeout);
+      this.loadWatchdogTimeout = null;
+    }
+  }
+
+  /**
+   * Arm the load watchdog. Called whenever context.isLoadingTrack transitions
+   * false -> true. If isLoadingTrack has not cleared by the time this fires,
+   * native audio never confirmed the load (no State.Playing event arrived) —
+   * recover so the UI is not left permanently stuck in a loading state.
+   */
+  private armLoadWatchdog(): void {
+    this.clearLoadWatchdog();
+    this.loadWatchdogTimeout = setTimeout(() => {
+      this.loadWatchdogTimeout = null;
+      log.warn(
+        `[Coordinator] Load watchdog fired after ${LOAD_WATCHDOG_MS}ms — isLoadingTrack never cleared ` +
+          `(currentState=${this.context.currentState}, hasReachedPlayingState=${this.context.hasReachedPlayingState}, ` +
+          `isPlaying=${this.context.isPlaying}, position=${this.context.position}, ` +
+          `libraryItemId=${this.context.currentTrack?.libraryItemId ?? "none"})`
+      );
+
+      if (this.context.isLoadingTrack) {
+        this.context.isLoadingTrack = false;
+        this.pushTrackLoadingClearedToStore();
+      }
+
+      // Machine optimistically entered PLAYING when LOAD_TRACK auto-dispatched
+      // PLAY, but native audio never confirmed it — reconcile back to PAUSED so
+      // togglePlayPause() can dispatch PLAY again (allowed from PAUSED).
+      if (
+        this.context.currentState === PlayerState.PLAYING &&
+        !this.context.hasReachedPlayingState
+      ) {
+        dispatchPlayerEvent({ type: "PAUSE" }, { source: "native_player" });
+      }
+    }, LOAD_WATCHDOG_MS);
+  }
+
+  /**
+   * Push the cleared isLoadingTrack flag to the Zustand store. Extracted from
+   * syncStateToStore since the watchdog fires outside normal event processing
+   * and has no PlayerEvent to hand syncStateToStore.
+   * Guard: no-op when Zustand is unavailable (Android BGS headless context, PROP-05).
+   */
+  private pushTrackLoadingClearedToStore(): void {
+    try {
+      useAppStore.getState()._setTrackLoading(this.context.isLoadingTrack);
+    } catch {
+      // BGS headless context: Zustand store may not be available (PROP-05)
+      return;
+    }
+  }
+
+  /**
    * Handle a single event.
    *
    * Validates the transition, updates context, and calls executeTransition
@@ -391,6 +463,20 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.context.position = resolvedRelativeSeekPosition;
       } else {
         this.updateContextFromEvent(event);
+      }
+
+      // Load watchdog: arm/disarm on the isLoadingTrack edge so it can never
+      // latch true forever (see LOAD_WATCHDOG_MS). STOP always clears it
+      // regardless of the edge — updateContextFromEvent's STOP case does not
+      // touch isLoadingTrack, so the generic edge check alone would miss a
+      // STOP that arrives while a load is in flight.
+      if (!before.isLoadingTrack && this.context.isLoadingTrack) {
+        this.armLoadWatchdog();
+      } else if (before.isLoadingTrack && !this.context.isLoadingTrack) {
+        this.clearLoadWatchdog();
+      }
+      if (event.type === "STOP") {
+        this.clearLoadWatchdog();
       }
 
       const isLoadingDifferentItem =
@@ -662,8 +748,12 @@ export class PlayerStateCoordinator extends EventEmitter {
         break;
 
       case "NATIVE_TRACK_CHANGED":
-        this.context.currentTrack = event.payload.track;
+        // The only dispatcher (PlayerBackgroundService.handleActiveTrackChanged) sends
+        // track: null because it has no PlayerTrack to hand over. Assigning that null
+        // wiped the track the LOADING handler just set, permanently disabling the
+        // same-item LOAD_TRACK short-circuit.
         if (event.payload.track) {
+          this.context.currentTrack = event.payload.track;
           this.context.duration = event.payload.track.duration;
         }
         break;
@@ -840,6 +930,15 @@ export class PlayerStateCoordinator extends EventEmitter {
       case "NATIVE_ERROR":
         this.context.lastError = event.payload.error;
         this.context.playIntentOnLoad = false;
+        // Task 3c: NATIVE_ERROR is only ever dispatched from executeTransition's
+        // catch block, recovering a failed load/play into ERROR (see the comment
+        // there). Without this, a failed load left isLoadingTrack latched true
+        // forever — the collaborators' own store._setTrackLoading(false) writes
+        // in their catch blocks were already dead: they ran before this event's
+        // subsequent syncStateToStore call, which re-pushed context.isLoadingTrack
+        // (still true) right back over them. Clearing it here, alongside
+        // playIntentOnLoad above, is the actual fix; the dead writes are removed.
+        this.context.isLoadingTrack = false;
         break;
 
       case "NATIVE_PLAYBACK_ERROR":
@@ -903,13 +1002,22 @@ export class PlayerStateCoordinator extends EventEmitter {
    * directly (Phase 02 will wire those callers).
    */
   async resolveCanonicalPosition(libraryItemId: string): Promise<ResumePositionInfo> {
-    const store = useAppStore.getState();
     const [asyncStoragePosition, asyncStoragePositionUpdatedAt] = (await Promise.all([
       getAsyncItem(ASYNC_KEYS.position),
       getAsyncItem(ASYNC_KEYS.positionUpdatedAt),
     ])) as [number | null, number | null];
 
-    let position = store.player.position;
+    // Task 4e: last-resort fallback reads context.position rather than the
+    // Zustand store's (global, not item-scoped) position, and ONLY when
+    // context.currentTrack is the item being resolved — otherwise a different
+    // item's in-memory position (or the store's, which reflects whatever item
+    // last played) could bleed into this resolution. Scoping the fallback to
+    // the item it belongs to makes that bleed impossible by construction,
+    // replacing the prior approach of pre-emptively resetting store position
+    // to 0 on every book switch (which was itself dead code by the time it
+    // ran — see TrackLoadingCollaborator.executeLoadTrack).
+    let position =
+      this.context.currentTrack?.libraryItemId === libraryItemId ? this.context.position : 0;
     let source: ResumeSource = "store";
     let authoritativePosition: number | null = null;
 
@@ -1156,9 +1264,11 @@ export class PlayerStateCoordinator extends EventEmitter {
    * Does NOT sync: lastPauseTime (service-ephemeral), sleepTimer (PROP-04 exception),
    * isModalVisible (UI-only), initialized (lifecycle).
    *
-   * currentTrack exception: Only synced on STOP (to clear). PlayerService retains
-   * responsibility for building and setting PlayerTrack objects (Plan 02 documented
-   * exception - coordinator cannot build PlayerTrack).
+   * currentTrack: synced on STOP (to clear) and whenever context.currentTrack differs
+   * by reference from the store's copy (Task 1 — the coordinator now owns
+   * context.currentTrack after a successful load; previously this only synced on STOP,
+   * which meant the store's currentTrack came exclusively from PlayerService's own
+   * store._setCurrentTrack call in TrackLoadingCollaborator, not from the coordinator).
    *
    * After sync, calls updateNowPlayingMetadata() fire-and-forget on SEEK_COMPLETE,
    * PAUSE, and PLAY to keep the lock screen position accurate at key transitions.
@@ -1169,9 +1279,10 @@ export class PlayerStateCoordinator extends EventEmitter {
   private syncStateToStore(event: PlayerEvent): void {
     try {
       const store = useAppStore.getState();
-      // Only sync currentTrack on STOP (to clear it). PlayerService retains
-      // responsibility for setting currentTrack when loading tracks.
-      if (event.type === "STOP") {
+      // Sync currentTrack on STOP (to clear it) and whenever the coordinator's
+      // value differs by reference from the store's, so the store projection
+      // stays correct now that the coordinator sets currentTrack itself (Task 1).
+      if (event.type === "STOP" || this.context.currentTrack !== store.player.currentTrack) {
         store._setCurrentTrack(this.context.currentTrack);
       }
       store.updatePlayingState(this.context.isPlaying);
@@ -1401,10 +1512,20 @@ export class PlayerStateCoordinator extends EventEmitter {
         switch (nextState) {
           case PlayerState.LOADING:
             if (event.type === "LOAD_TRACK") {
-              // Change 3: short-circuit if same item is already actively playing or paused.
+              // Short-circuit if same item is already actively playing or paused.
               // previousState is the state before transitioning to LOADING.
               // context.currentTrack reflects the track confirmed by a prior playback cycle —
               // safe to trust in PLAYING and PAUSED. READY is excluded (see spec).
+              //
+              // A same-item LOAD_TRACK whose startPosition actually differs from the
+              // current position (by more than 1s) never reaches this handler:
+              // normalizeSameTrackLoad (invoked earlier in handleEvent, before transition
+              // validation) already rewrote it to SAME_TRACK_SEEK using the identical
+              // same-item / PLAYING-or-PAUSED / startPosition-vs-position guard checked
+              // there (it reads context.currentState, which becomes context.previousState
+              // by the time this handler runs, and the same context.position). So every
+              // LOAD_TRACK that lands here for an already-active item has no startPosition,
+              // or one within 1s of the current position — always a plain resume, never a seek.
               const { previousState, currentTrack } = this.context;
               const wasActivelyPlayingOrPaused =
                 previousState === PlayerState.PLAYING || previousState === PlayerState.PAUSED;
@@ -1412,32 +1533,41 @@ export class PlayerStateCoordinator extends EventEmitter {
                 wasActivelyPlayingOrPaused &&
                 event.payload.libraryItemId === currentTrack?.libraryItemId
               ) {
-                // If a startPosition is provided and differs from current position,
-                // dispatch SEEK first so the chapter tap lands at the right spot.
-                const startPos = event.payload.startPosition;
-                // Use context.position (coordinator's canonical position) rather than
-                // the store to avoid test environment issues where store mock is minimal.
-                const currentPos = this.context.position;
-                if (startPos !== undefined && Math.abs(startPos - currentPos) > 1) {
-                  log.info(
-                    `[Coordinator] Short-circuit with seek: ${currentPos.toFixed(1)} -> ${startPos.toFixed(1)}`
-                  );
-                  dispatchPlayerEvent({ type: "SEEK", payload: { position: startPos } }, meta);
-                } else {
-                  log.info(
-                    `[Coordinator] Short-circuit: ${event.payload.libraryItemId} already ${previousState} — dispatching PLAY`
-                  );
-                }
+                log.info(
+                  `[Coordinator] Short-circuit: ${event.payload.libraryItemId} already ${previousState} — dispatching PLAY`
+                );
                 // Thread meta so skipSmartRewind reaches executePlay
                 dispatchPlayerEvent({ type: "PLAY" }, meta ?? { source: "native_player" });
                 return; // skip executeLoadTrack and playIntentOnLoad check
               }
 
-              await playerService.executeLoadTrack(
+              const loadResult = await playerService.executeLoadTrack(
                 event.payload.libraryItemId,
                 event.payload.episodeId,
                 event.payload.startPosition
               );
+              // Task 1: the coordinator now owns context.currentTrack — it is no
+              // longer solely dependent on NATIVE_TRACK_CHANGED (whose only
+              // production dispatcher always sends track: null, see below).
+              // Without this, the same-item short-circuit above never fires.
+              this.context.currentTrack = loadResult.track;
+              this.context.duration = loadResult.track.duration;
+              // Task 3a: currentPlaySessionId is threaded back via the return
+              // value (rather than TrackLoadingCollaborator writing it directly
+              // to the store, which fought the store bridge below) — null means
+              // "no active streaming session" and clears any stale prior value.
+              this.context.sessionId = loadResult.playSessionId;
+              // Task 4a/4b: the position executeLoadTrack resolved and seeked to
+              // (caller-specified startPosition, or resolveCanonicalPosition's
+              // result) is threaded back the same way, covering both branches —
+              // previously the startPosition branch never reached context at all.
+              this.context.position = loadResult.position;
+              // executeLoadTrack already reset/rebuilt the native TrackPlayer queue
+              // (TrackPlayer.reset/add/seekTo) — mark it valid so the queueStatus
+              // === 'unknown' inline-rebuild branch in PlayerState.PLAYING below
+              // (Change 4, for RESTORE_STATE/STOP paths) doesn't immediately
+              // trigger a redundant second rebuild once currentTrack is non-null.
+              this.context.queueStatus = "valid";
               // Change 2: dispatch PLAY after successful load if intent is still set.
               // playIntentOnLoad is cleared if PAUSE or error arrived during LOADING.
               if (this.context.playIntentOnLoad) {
@@ -1484,7 +1614,13 @@ export class PlayerStateCoordinator extends EventEmitter {
                   return;
                 }
               }
-              const smartRewindOutcome = await playerService.executePlay(meta);
+              // Task 4c: pass context.position explicitly rather than have
+              // executePlay read store.player.position itself — the coordinator's
+              // context is the authoritative position value.
+              const smartRewindOutcome = await playerService.executePlay(
+                this.context.position,
+                meta
+              );
               if (smartRewindOutcome && this.context.currentTrack) {
                 this.armExpectedInternalPositionReconciliation(
                   smartRewindOutcome,

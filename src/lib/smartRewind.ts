@@ -148,7 +148,11 @@ export async function applySmartRewind(
       log.info(
         `Smart rewind: jumping back ${rewindSeconds}s (from ${formatTime(position)} to ${formatTime(newPosition)})`
       );
-      useAppStore.getState().updatePosition(newPosition);
+      // Task 4d: no direct store write here — the coordinator assigns
+      // context.position = smartRewindOutcome.toPosition (this function's return
+      // value) after executePlay returns, and its store bridge (syncStateToStore)
+      // runs immediately after in the same event cycle, so the store still gets
+      // this value without this function reaching into global state itself.
       await TrackPlayer.seekTo(newPosition);
       trace.endSpan(span, "ok", {
         enabled: true,

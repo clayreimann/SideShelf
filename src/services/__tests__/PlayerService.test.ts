@@ -269,7 +269,14 @@ describe("PlayerService", () => {
     mockedTrackPlayer.setVolume.mockResolvedValue();
     mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.None });
     mockedTrackPlayer.getQueue.mockResolvedValue([]);
-    mockedTrackPlayer.getProgress.mockResolvedValue({ position: 0, duration: 0, buffered: 0 });
+    // Task 2: executeLoadTrack now polls getProgress() after seeking to wait for
+    // the seek to land (waitForSeekToLand in TrackLoadingCollaborator). Default
+    // to `undefined` (bare jest.fn() behavior) rather than a concrete position —
+    // executeLoadTrack's waitForSeekToLand bails out immediately when getProgress
+    // is unavailable, so tests below that seek to a nonzero resume position don't
+    // each poll for the full 3s real-timer timeout. Nothing in this file asserts
+    // on getProgress's return value.
+    mockedTrackPlayer.getProgress.mockResolvedValue(undefined as any);
     mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(undefined);
     mockedTrackPlayer.getActiveTrack.mockResolvedValue(undefined);
     mockedTrackPlayer.getRate.mockResolvedValue(1.0);
@@ -413,12 +420,18 @@ describe("PlayerService", () => {
       expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(300);
     });
 
-    it("should clear loading state on error", async () => {
+    it("rethrows on error without writing to the store directly (Task 3b/3c)", async () => {
+      // Loading-state recovery on a failed load is owned by the coordinator now:
+      // its NATIVE_ERROR handler clears context.isLoadingTrack when this
+      // rejection routes the machine to ERROR, and the store bridge pushes that
+      // to the store afterward. A direct store._setTrackLoading(false) write
+      // here would be dead (re-clobbered by the coordinator's next
+      // syncStateToStore call), so it was removed — see TrackLoadingCollaborator.
       getLibraryItemById.mockRejectedValue(new Error("Database error"));
 
       await expect(playerService.executeLoadTrack("item-1")).rejects.toThrow();
 
-      expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
+      expect(mockStore._setTrackLoading).not.toHaveBeenCalled();
     });
 
     it("should call repairDownloadStatus before building track list", async () => {
@@ -745,7 +758,7 @@ describe("PlayerService", () => {
       };
       mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
 
-      await playerService.executePlay();
+      await playerService.executePlay(0);
 
       expect(mockedTrackPlayer.play).toHaveBeenCalled();
     });
@@ -754,7 +767,7 @@ describe("PlayerService", () => {
       const outcome = { fromPosition: 100, toPosition: 70 };
       applySmartRewind.mockResolvedValue(outcome);
 
-      await expect(playerService.executePlay()).resolves.toEqual(outcome);
+      await expect(playerService.executePlay(0)).resolves.toEqual(outcome);
     });
 
     it("restorePlayerServiceFromSession delegates to progressRestore collaborator", async () => {

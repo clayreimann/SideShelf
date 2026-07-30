@@ -37,6 +37,7 @@ import type {
   IPlayerServiceFacade,
   IProgressRestoreCollaborator,
   ITrackLoadingCollaborator,
+  LoadTrackResult,
 } from "./player/types";
 
 const log = logger.forTag("PlayerService");
@@ -359,15 +360,15 @@ export class PlayerService implements IPlayerServiceFacade {
     libraryItemId: string,
     episodeId?: string,
     startPosition?: number
-  ): Promise<void> {
+  ): Promise<LoadTrackResult> {
     return this.trackLoading.executeLoadTrack(libraryItemId, episodeId, startPosition);
   }
 
   /**
    * Execute play (Internal - Called by Coordinator)
    */
-  async executePlay(meta?: DispatchMeta): Promise<SmartRewindOutcome | null> {
-    return this.playbackControl.executePlay(meta);
+  async executePlay(position: number, meta?: DispatchMeta): Promise<SmartRewindOutcome | null> {
+    return this.playbackControl.executePlay(position, meta);
   }
 
   /**

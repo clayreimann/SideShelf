@@ -13,6 +13,7 @@ import type {
   JumpSurface,
   PlayerTrack,
 } from "@/types/player";
+import type { LoadTrackResult } from "@/services/player/types";
 import { PlayerState } from "@/types/coordinator";
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { State } from "react-native-track-player";
@@ -25,7 +26,32 @@ import { writeDumpToDisk } from "@/lib/traceDump";
 jest.mock("../../PlayerService", () => {
   const { jest } = require("@jest/globals");
   const mockInstance = {
-    executeLoadTrack: jest.fn(),
+    // Task 1: executeLoadTrack now resolves the loaded PlayerTrack (coordinator
+    // assigns it to context.currentTrack). Default implementation builds a
+    // minimal track mirroring the requested libraryItemId/episodeId so tests
+    // that don't care about the track's shape still get a plausible one —
+    // matching production, where the coordinator can no longer tolerate an
+    // undefined resolution (see TrackLoadingCollaborator.executeLoadTrack).
+    // Task 3a: resolves { track, playSessionId } — the coordinator's LOADING
+    // handler folds playSessionId into context.sessionId. Default null (no
+    // streaming session) so tests that don't care don't need to set one.
+    executeLoadTrack: jest.fn(
+      async (libraryItemId: string, episodeId?: string, _startPosition?: number) => ({
+        track: {
+          libraryItemId,
+          episodeId,
+          mediaId: `media-${libraryItemId}`,
+          title: "Mock Track",
+          author: "Mock Author",
+          coverUri: null,
+          duration: 3600,
+          audioFiles: [],
+          chapters: [],
+          isDownloaded: true,
+        },
+        playSessionId: null,
+      })
+    ),
     executePlay: jest.fn(),
     executePause: jest.fn(),
     executeStop: jest.fn(),
@@ -134,6 +160,15 @@ describe("PlayerStateCoordinator", () => {
   afterEach(() => {
     jest.clearAllTimers();
     jest.clearAllMocks();
+    // Reset the singleton immediately after each test rather than only at the
+    // start of the next one. resetInstance() clears the load watchdog timer
+    // (see PlayerStateCoordinator.armLoadWatchdog / LOAD_WATCHDOG_MS) — without
+    // this, the LAST test in the file that dispatches LOAD_TRACK without ever
+    // reaching a settled state leaves a real 10s setTimeout pending past the
+    // end of the run (no subsequent beforeEach exists to clean it up), which
+    // shows up as Jest's "worker process has failed to exit gracefully" /
+    // "Force exiting Jest" warning.
+    PlayerStateCoordinator.resetInstance();
   });
 
   describe("getInstance", () => {
@@ -1980,15 +2015,68 @@ describe("PlayerStateCoordinator", () => {
         expect(result.source).toBe("asyncStorage");
       });
 
-      it("should fall back to store position as last resort", async () => {
+      // Task 4e: the last-resort fallback no longer reads store.player.position
+      // (a global, not item-scoped, value that could bleed a previous book's
+      // position into a different item's resolution). It now reads
+      // this.context.position, and ONLY when context.currentTrack matches the
+      // item being resolved — otherwise it falls back to 0. This makes the
+      // "previous book's position bleeds into a new load" bug impossible by
+      // construction, replacing TrackLoadingCollaborator's now-deleted
+      // store.updatePosition(0) reset-on-book-switch workaround (which was
+      // itself dead code — see TrackLoadingCollaborator.executeLoadTrack).
+      it("falls back to context.position when context.currentTrack matches the item being resolved", async () => {
         getActiveSession.mockResolvedValue(null);
         getMediaProgressForLibraryItem.mockResolvedValue(null);
         getAsyncItem.mockResolvedValue(null);
-        mockStore.player.position = 300;
+        // Decoy — must NOT be used now that the fallback reads context, not the store.
+        mockStore.player.position = 999;
+
+        await coordinator.dispatch({
+          type: "RESTORE_STATE",
+          payload: {
+            state: {
+              currentTrack: { libraryItemId: "lib-item-1" } as any,
+              position: 450,
+              playbackRate: 1,
+              volume: 1,
+              isPlaying: false,
+              currentPlaySessionId: null,
+            },
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         const result = await coordinator.resolveCanonicalPosition("lib-item-1");
 
-        expect(result.position).toBe(300);
+        expect(result.position).toBe(450);
+        expect(result.source).toBe("store");
+      });
+
+      it("falls back to 0 (not the store, not a different item's context.position) when context.currentTrack is a different item", async () => {
+        getActiveSession.mockResolvedValue(null);
+        getMediaProgressForLibraryItem.mockResolvedValue(null);
+        getAsyncItem.mockResolvedValue(null);
+        // Decoy — neither of these previous-item values should bleed into the resolution.
+        mockStore.player.position = 999;
+
+        await coordinator.dispatch({
+          type: "RESTORE_STATE",
+          payload: {
+            state: {
+              currentTrack: { libraryItemId: "previous-book" } as any,
+              position: 700,
+              playbackRate: 1,
+              volume: 1,
+              isPlaying: false,
+              currentPlaySessionId: null,
+            },
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        const result = await coordinator.resolveCanonicalPosition("a-different-item");
+
+        expect(result.position).toBe(0);
         expect(result.source).toBe("store");
       });
 
@@ -2717,7 +2805,9 @@ describe("PlayerStateCoordinator", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Full sync path should have been called
-      // Note: _setCurrentTrack is NOT called during LOAD_TRACK - PlayerService handles it
+      // Note (Task 1): _setCurrentTrack IS now called during LOAD_TRACK once the
+      // load completes — the coordinator owns context.currentTrack and pushes it
+      // to the store whenever it differs by reference from store.player.currentTrack.
       expect(mockStore._setTrackLoading).toHaveBeenCalled();
       expect(mockStore.updatePlayingState).toHaveBeenCalled();
       expect(mockStore.updatePosition).toHaveBeenCalled();
@@ -3158,6 +3248,17 @@ describe("PlayerStateCoordinator", () => {
       dispatchSpy.mockRestore();
     });
 
+    // NOTE: despite living in the "Change 3" describe block, this test does not
+    // exercise the LOADING-handler short-circuit in executeTransition. A LOAD_TRACK
+    // for the same item with a startPosition more than 1s away from the current
+    // position is intercepted earlier, in handleEvent, by normalizeSameTrackLoad —
+    // which rewrites it to SAME_TRACK_SEEK before transition validation ever runs,
+    // so the event never reaches PlayerState.LOADING at all. The (now-removed)
+    // SEEK-dispatch branch that used to sit inside the LOADING case handler for
+    // this same scenario was therefore unreachable dead code: normalizeSameTrackLoad's
+    // guard (same item, PLAYING/PAUSED, |startPosition - position| > 1) is identical
+    // to the one that branch checked. This test is kept to cover
+    // normalizeSameTrackLoad's SAME_TRACK_SEEK rewrite end-to-end.
     it.each([
       ["playing", PlayerState.PLAYING],
       ["paused", PlayerState.PAUSED],
@@ -3204,6 +3305,243 @@ describe("PlayerStateCoordinator", () => {
         expect(coordinator.getMetrics().rejectedTransitionCount).toBe(rejectedBefore);
       }
     );
+  });
+
+  // ============================================================================
+  // Task 1: coordinator owns context.currentTrack after a successful load
+  //
+  // Root cause of the "tap a chapter while playing" bug: context.currentTrack
+  // was only ever set by NATIVE_TRACK_CHANGED, whose only production dispatcher
+  // (PlayerBackgroundService.handleActiveTrackChanged) always sends
+  // { track: null }. So context.currentTrack was permanently null and the
+  // Change 3 short-circuit above never fired outside of tests, which worked
+  // around the bug by manually dispatching NATIVE_TRACK_CHANGED with a real
+  // track. These tests exercise the LOAD_TRACK path exactly as production
+  // does — no manual NATIVE_TRACK_CHANGED dispatch — to prove the coordinator
+  // itself now owns currentTrack.
+  // ============================================================================
+
+  describe("Task 1: coordinator owns context.currentTrack after a successful load", () => {
+    let mockPlayerService: {
+      executeLoadTrack: jest.MockedFunction<
+        (
+          libraryItemId: string,
+          episodeId?: string,
+          startPosition?: number
+        ) => Promise<LoadTrackResult>
+      >;
+      executeSeek: jest.MockedFunction<(position: number) => Promise<void>>;
+    };
+    const trackA: PlayerTrack = {
+      libraryItemId: "item-A",
+      mediaId: "media-A",
+      title: "Book A",
+      author: "Author A",
+      coverUri: null,
+      duration: 3600,
+      audioFiles: [],
+      chapters: [],
+      isDownloaded: true,
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      jest.clearAllMocks();
+      mockPlayerService.executeLoadTrack.mockResolvedValue({
+        track: trackA,
+        playSessionId: null,
+        position: 0,
+      });
+    });
+
+    it("regression: short-circuits a same-item LOAD_TRACK without ever dispatching NATIVE_TRACK_CHANGED", async () => {
+      // Real production flow: LOAD_TRACK -> auto-PLAY. No NATIVE_TRACK_CHANGED
+      // dispatch anywhere in this test.
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-A" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 100, duration: 3600 },
+      });
+      await waitForEventQueue();
+
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+      // The coordinator set currentTrack itself from executeLoadTrack's return value.
+      expect(coordinator.getContext().currentTrack).toEqual(trackA);
+
+      // User taps a chapter far from the current position while item-A is already playing.
+      await coordinator.dispatch({
+        type: "LOAD_TRACK",
+        payload: { libraryItemId: "item-A", startPosition: 2000 },
+      });
+      await waitForEventQueue();
+
+      // executeLoadTrack must have been called exactly once — from the initial
+      // load. The second LOAD_TRACK for the same item short-circuited: it never
+      // re-enters LOADING at all. Note: with a startPosition set, this request
+      // is actually intercepted one level up, by normalizeSameTrackLoad (which
+      // rewrites it to SAME_TRACK_SEEK before validation) rather than by the
+      // LOADING-handler short-circuit in executeTransition — both depend on the
+      // same context.currentTrack fix, so this is still a faithful regression
+      // test for the bug: without Task 1's fix, context.currentTrack is null,
+      // normalizeSameTrackLoad's libraryItemId comparison always fails, and the
+      // event falls through to a full reload.
+      expect(mockPlayerService.executeLoadTrack).toHaveBeenCalledTimes(1);
+      expect(mockPlayerService.executeSeek).toHaveBeenCalledWith(2000);
+      expect(coordinator.getContext().position).toBe(2000);
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+    });
+
+    it("does not clear context.currentTrack when NATIVE_TRACK_CHANGED arrives with track: null", async () => {
+      // PlayerBackgroundService.handleActiveTrackChanged always sends
+      // { track: null } — this must not wipe the track the LOADING handler set.
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-A" } });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(coordinator.getContext().currentTrack).toEqual(trackA);
+
+      await coordinator.dispatch({ type: "NATIVE_TRACK_CHANGED", payload: { track: null } });
+      await waitForEventQueue();
+
+      expect(coordinator.getContext().currentTrack).toEqual(trackA);
+    });
+  });
+
+  // ============================================================================
+  // Task 3a: coordinator owns context.sessionId after a successful load.
+  //
+  // TrackLoadingCollaborator no longer writes currentPlaySessionId directly to
+  // the store (that write was already being fought/overwritten by the
+  // coordinator's store bridge, which pushes context.sessionId on every sync
+  // cycle) — the value is threaded back through executeLoadTrack's return
+  // value instead, and folded into context.sessionId by the LOADING handler.
+  // ============================================================================
+
+  describe("Task 3a: coordinator owns context.sessionId after a successful load", () => {
+    let mockPlayerService: {
+      executeLoadTrack: jest.MockedFunction<
+        (
+          libraryItemId: string,
+          episodeId?: string,
+          startPosition?: number
+        ) => Promise<LoadTrackResult>
+      >;
+    };
+    const trackB: PlayerTrack = {
+      libraryItemId: "item-B",
+      mediaId: "media-B",
+      title: "Book B",
+      author: "Author B",
+      coverUri: null,
+      duration: 3600,
+      audioFiles: [],
+      chapters: [],
+      isDownloaded: true,
+    };
+
+    beforeEach(() => {
+      const { PlayerService } = require("../../PlayerService");
+      mockPlayerService = PlayerService.getInstance();
+      jest.clearAllMocks();
+    });
+
+    it("sets context.sessionId from executeLoadTrack's playSessionId when a streaming session was started", async () => {
+      mockPlayerService.executeLoadTrack.mockResolvedValue({
+        track: trackB,
+        playSessionId: "sess-live-42",
+        position: 0,
+      });
+
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-B" } });
+      await waitForEventQueue();
+
+      expect(coordinator.getContext().sessionId).toBe("sess-live-42");
+    });
+
+    it("sets context.sessionId to null when executeLoadTrack resolves playSessionId: null (local playback)", async () => {
+      // Start with a stale session id from a previous streaming load...
+      mockPlayerService.executeLoadTrack.mockResolvedValueOnce({
+        track: trackB,
+        playSessionId: "stale-sess",
+        position: 0,
+      });
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-B" } });
+      await waitForEventQueue();
+      expect(coordinator.getContext().sessionId).toBe("stale-sess");
+
+      // ...then load a different (fully local) item — playSessionId: null must
+      // clear the stale value rather than leaving it behind.
+      const trackC: PlayerTrack = { ...trackB, libraryItemId: "item-C" };
+      mockPlayerService.executeLoadTrack.mockResolvedValueOnce({
+        track: trackC,
+        playSessionId: null,
+        position: 0,
+      });
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-C" } });
+      await waitForEventQueue();
+
+      expect(coordinator.getContext().sessionId).toBeNull();
+    });
+  });
+
+  // ============================================================================
+  // Task 2: load watchdog — isLoadingTrack must never latch forever
+  //
+  // Native audio can legitimately settle into Ready/Paused without ever
+  // emitting State.Playing. Before the watchdog, nothing cleared
+  // isLoadingTrack in that case, permanently disabling the play button.
+  // ============================================================================
+
+  describe("Task 2: load watchdog prevents isLoadingTrack from latching forever", () => {
+    const LOAD_WATCHDOG_MS = 10_000; // mirrors PlayerStateCoordinator's private constant
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("clears isLoadingTrack and dispatches PAUSE if native audio never reports State.Playing", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await jest.advanceTimersByTimeAsync(50);
+
+      // LOAD_TRACK's auto-PLAY optimistically moves the machine to PLAYING, but
+      // native audio never confirmed it — isLoadingTrack is still latched true.
+      expect(coordinator.getContext().isLoadingTrack).toBe(true);
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      await jest.advanceTimersByTimeAsync(LOAD_WATCHDOG_MS);
+
+      expect(coordinator.getContext().isLoadingTrack).toBe(false);
+      expect(coordinator.getState()).toBe(PlayerState.PAUSED);
+    });
+
+    it("does not fire if NATIVE_STATE_CHANGED(Playing) arrives before the watchdog elapses", async () => {
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await jest.advanceTimersByTimeAsync(50);
+
+      await coordinator.dispatch({
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: State.Playing },
+      });
+      await jest.advanceTimersByTimeAsync(50);
+
+      expect(coordinator.getContext().isLoadingTrack).toBe(false);
+
+      const dispatchSpy = jest.spyOn(coordinator, "dispatch");
+
+      await jest.advanceTimersByTimeAsync(LOAD_WATCHDOG_MS);
+
+      const pauseDispatches = dispatchSpy.mock.calls.filter(([event]) => event.type === "PAUSE");
+      expect(pauseDispatches.length).toBe(0);
+      expect(coordinator.getContext().isLoadingTrack).toBe(false);
+      expect(coordinator.getState()).toBe(PlayerState.PLAYING);
+
+      dispatchSpy.mockRestore();
+    });
   });
 
   describe("Change 4: coordinator performs inline queue rebuild when queueStatus is unknown", () => {
@@ -3582,6 +3920,30 @@ describe("PlayerStateCoordinator", () => {
       await waitForEventQueue();
 
       expect(mockStore._recordJump).not.toHaveBeenCalled();
+    });
+
+    // Task 4d: smartRewind.ts no longer writes the rewound position to the
+    // store directly (see src/lib/__tests__/smartRewind.test.ts). This proves
+    // the store still ends up correct anyway — the coordinator assigns
+    // context.position = smartRewindOutcome.toPosition right after executePlay
+    // returns, and syncStateToStore (called after executeTransition completes,
+    // in the same event cycle) pushes that value to the store.
+    it("reflects the post-rewind position in the store after a PLAY that triggers smart rewind", async () => {
+      await reachPlayingAt(100);
+      await coordinator.dispatch({ type: "PAUSE" });
+      await waitForEventQueue();
+
+      const { PlayerService } = require("../../PlayerService");
+      PlayerService.getInstance().executePlay.mockResolvedValueOnce({
+        fromPosition: 100,
+        toPosition: 70,
+      });
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await waitForEventQueue();
+
+      expect(coordinator.getContext().position).toBe(70);
+      expect(mockStore.updatePosition).toHaveBeenLastCalledWith(70);
     });
 
     it("suppresses pre-target and float-tolerant smart rewind ticks, then records a later real jump", async () => {
@@ -4174,11 +4536,32 @@ describe("PlayerStateCoordinator", () => {
       executePlay: ReturnType<typeof jest.fn>;
       executeStop: ReturnType<typeof jest.fn>;
     };
+    const { useAppStore } = require("@/stores/appStore");
+    const makeMockStore = () => ({
+      player: {
+        position: 0,
+        currentTrack: null as any,
+        currentChapter: null as CurrentChapter | null,
+      },
+      updatePosition: jest.fn(),
+      updatePlayingState: jest.fn(),
+      _setCurrentTrack: jest.fn(),
+      _setTrackLoading: jest.fn(),
+      _setSeeking: jest.fn(),
+      _setPlaybackRate: jest.fn(),
+      _setVolume: jest.fn(),
+      _setPlaySessionId: jest.fn(),
+      _setLastPauseTime: jest.fn(),
+      _recordJump: jest.fn(),
+    });
+    let mockStore: ReturnType<typeof makeMockStore>;
 
     beforeEach(() => {
       const { PlayerService } = require("../../PlayerService");
       mockPlayerService = PlayerService.getInstance();
       jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
     });
 
     it("dispatches NATIVE_ERROR and transitions LOADING -> ERROR when executeLoadTrack throws", async () => {
@@ -4191,6 +4574,28 @@ describe("PlayerStateCoordinator", () => {
       expect(coordinator.getContext().lastError?.message).toBe("disk read failed");
     });
 
+    // Task 3c: a load failure used to leave context.isLoadingTrack (and
+    // playIntentOnLoad) latched true even after the machine recovered into
+    // ERROR — the dead store._setTrackLoading(false) writes in the collaborators'
+    // catch blocks were immediately re-clobbered back to `true` by the very next
+    // syncStateToStore call (which pushes context.isLoadingTrack, still true).
+    // Fixing the real bug means the NATIVE_ERROR recovery path itself must clear
+    // these context fields so the bridge pushes `false` on its own.
+    it("clears isLoadingTrack and playIntentOnLoad in context and store when a load failure routes to ERROR", async () => {
+      mockPlayerService.executeLoadTrack.mockRejectedValue(new Error("disk read failed"));
+
+      await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(coordinator.getState()).toBe(PlayerState.ERROR);
+      expect(coordinator.getContext().isLoadingTrack).toBe(false);
+      expect(coordinator.getContext().playIntentOnLoad).toBe(false);
+      // The bridge's most recent push must reflect the cleared value — a prior
+      // push of `true` (from entering LOADING) earlier in the same test is fine,
+      // but the LAST call is what the store ends up holding.
+      expect(mockStore._setTrackLoading).toHaveBeenLastCalledWith(false);
+    });
+
     it("allows retry via LOAD_TRACK from ERROR after a failed load", async () => {
       mockPlayerService.executeLoadTrack.mockRejectedValueOnce(new Error("network down"));
 
@@ -4199,7 +4604,24 @@ describe("PlayerStateCoordinator", () => {
       expect(coordinator.getState()).toBe(PlayerState.ERROR);
 
       // Second attempt succeeds — ERROR allows LOAD_TRACK (retry), unblocking playback.
-      mockPlayerService.executeLoadTrack.mockResolvedValueOnce(undefined);
+      // Task 1: executeLoadTrack now resolves the loaded PlayerTrack (the coordinator
+      // assigns it to context.currentTrack) — this used to resolve undefined under
+      // the old Promise<void> contract, which would now throw when the coordinator
+      // reads loadedTrack.duration.
+      mockPlayerService.executeLoadTrack.mockResolvedValueOnce({
+        track: {
+          libraryItemId: "item-1",
+          mediaId: "media-1",
+          title: "Retry Track",
+          author: "Retry Author",
+          coverUri: null,
+          duration: 3600,
+          audioFiles: [],
+          chapters: [],
+          isDownloaded: true,
+        },
+        playSessionId: null,
+      });
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "item-1" } });
       await new Promise((resolve) => setTimeout(resolve, 150));
 

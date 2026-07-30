@@ -61,4 +61,17 @@ describe("applySmartRewind", () => {
     await expect(applySmartRewind(100)).resolves.toEqual({ fromPosition: 100, toPosition: 70 });
     expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(70);
   });
+
+  // Task 4d: the coordinator already assigns context.position =
+  // smartRewindOutcome.toPosition after executePlay returns, and its store
+  // bridge (syncStateToStore) runs after executeTransition completes in the
+  // same event cycle — see PlayerStateCoordinator's "reflects the post-rewind
+  // position in the store after a PLAY that triggers smart rewind" test. So a
+  // direct store write here was a second, redundant path to the same value;
+  // removing it doesn't lose the update, it just stops racing/duplicating it.
+  it("does not write the rewound position to the store directly", async () => {
+    await applySmartRewind(100);
+
+    expect(store.updatePosition).not.toHaveBeenCalled();
+  });
 });
