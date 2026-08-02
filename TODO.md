@@ -79,20 +79,29 @@ summarized in the review discussion; items below are the non-blocking todos it p
         unchanged, so the store screenshots are unaffected.
   - [ ] **~35 more hardcoded English strings remain outside the player** — swept
         2026-08-01, deliberately not fixed in the same pass to keep that change reviewable.
-        The "extract ALL hardcoded strings" item above is still not honestly complete: - `src/app/(tabs)/series/[seriesId]/index.tsx` — "Series not found.",
-        "Loading series...", "No books found in this series.", "Downloaded",
-        "We could not find that series." - `src/app/(tabs)/authors/[authorId]/index.tsx` — "Author not found.",
-        "Loading author...", "Loading books...", "No books found for this author.",
-        "Please select a library to view author's books." - `src/components/errors/TabErrorBoundary.tsx` — "Something Went Wrong",
-        "Try Again", "Go Back", "Go to Home", and the body copy - `src/components/errors/ErrorBoundary.tsx` — "Try Again" + body copy - `src/components/errors/DbErrorScreen.tsx` — "Database Error", "Reset Database",
-        "Copy Error Details" (each with a matching `accessibilityLabel`) + three sentences - `src/app/(tabs)/more/settings.tsx` — "PLAYER", "Progress Format",
-        "Bookmark Title Mode" (more section headers likely; not fully audited) - `src/app/(tabs)/more/progress-format.tsx` — description sentence - `src/app/(tabs)/more/trace-dump-detail.tsx` — "No records in this dump." - `src/components/library/LibraryItemList.tsx` — `accessibilityLabel="Clear search"` - `src/components/library/LibraryItemDetail/AudioFilesSection.tsx` — "Duration: …",
-        "Size: … MB" (interpolated — needs care with pluralization/number formatting) - `src/components/diagnostics/` — 9 strings across `CoordinatorDiagnostics.tsx` and
-        `TraceDumps.tsx`; gated behind `diagnosticsEnabled`, so lowest priority - `src/app/(tabs)/more/collections.tsx` — "Collections screen"; a stub route not
-        linked from anywhere in the app. Check whether it is dead code and delete it
-        rather than translating it.
+        The "extract ALL hardcoded strings" item above is still not honestly complete.
         The error boundaries are the most user-visible of these: they are what a user sees
         when something has already gone wrong, in English, in the middle of a Spanish app.
+        Locations, roughly in priority order:
+        `TabErrorBoundary.tsx` ("Something Went Wrong", "Try Again", "Go Back",
+        "Go to Home", body copy); `ErrorBoundary.tsx` ("Try Again", body copy);
+        `DbErrorScreen.tsx` ("Database Error", "Reset Database", "Copy Error Details",
+        each with a matching `accessibilityLabel`, plus three sentences);
+        `app/(tabs)/series/[seriesId]/index.tsx` ("Series not found.", "Loading series...",
+        "No books found in this series.", "Downloaded", "We could not find that series.");
+        `app/(tabs)/authors/[authorId]/index.tsx` ("Author not found.", "Loading author...",
+        "Loading books...", "No books found for this author.", "Please select a library to
+        view author's books."); `more/settings.tsx` ("PLAYER", "Progress Format",
+        "Bookmark Title Mode", and likely more section headers — not fully audited);
+        `more/progress-format.tsx` (description sentence); `more/trace-dump-detail.tsx`
+        ("No records in this dump."); `LibraryItemList.tsx`
+        (`accessibilityLabel="Clear search"`); `LibraryItemDetail/AudioFilesSection.tsx`
+        ("Duration: …", "Size: … MB" — interpolated, so needs care with pluralization and
+        number formatting); `components/diagnostics/` (9 strings across
+        `CoordinatorDiagnostics.tsx` and `TraceDumps.tsx`, gated behind
+        `diagnosticsEnabled`, so lowest priority); and `more/collections.tsx`
+        ("Collections screen") — a stub route linked from nowhere, so check whether it is
+        dead code and delete it rather than translating it.
 
 ### App Store Requirements
 
