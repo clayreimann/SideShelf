@@ -66,10 +66,33 @@ summarized in the review discussion; items below are the non-blocking todos it p
   - [x] Update settings strings
   - [x] Update error messages
   - [x] Update all button labels, placeholders, and messages
-  - [ ] **Hardcoded English strings remain in the player** — found 2026-08-01, so the
-        "extract ALL hardcoded strings" item above is not actually complete: - `src/app/FullScreenPlayer/index.tsx:799` — `"Sleep Timer"` section header - `src/app/FullScreenPlayer/index.tsx:461` — `currentChapter?.chapter.title || "Loading..."`
-        (there is already a `common.loading` key in `en.ts`; this literal bypasses it)
-        Worth a full sweep for sibling cases rather than fixing just these two.
+  - [x] ~~**Hardcoded English strings remain in the player**~~ — **fixed 2026-08-01.**
+        Spanish ships and auto-selects from the device locale (`src/i18n/index.ts` via
+        `expo-localization`), so these rendered in English for every es user. Fixed:
+        `FullScreenPlayer` — "Sleep Timer", "Speed", "Bookmark", the `|| "Loading..."`
+        literal that bypassed the existing `common.loading` key, and the whole bookmark
+        rename modal (label, `accessibilityLabel`, Cancel, Save); `BookmarksSection` — the
+        same rename-modal duplication plus "Bookmarks (N)", the Rename/Delete menu actions,
+        and three `Alert.alert` error bodies; `CoverImage` — the "Partial" download badge,
+        which renders on every partially-downloaded cover across Home, Library and Series.
+        Key parity verified: 382 en / 382 es, zero divergence. All English values are
+        unchanged, so the store screenshots are unaffected.
+  - [ ] **~35 more hardcoded English strings remain outside the player** — swept
+        2026-08-01, deliberately not fixed in the same pass to keep that change reviewable.
+        The "extract ALL hardcoded strings" item above is still not honestly complete: - `src/app/(tabs)/series/[seriesId]/index.tsx` — "Series not found.",
+        "Loading series...", "No books found in this series.", "Downloaded",
+        "We could not find that series." - `src/app/(tabs)/authors/[authorId]/index.tsx` — "Author not found.",
+        "Loading author...", "Loading books...", "No books found for this author.",
+        "Please select a library to view author's books." - `src/components/errors/TabErrorBoundary.tsx` — "Something Went Wrong",
+        "Try Again", "Go Back", "Go to Home", and the body copy - `src/components/errors/ErrorBoundary.tsx` — "Try Again" + body copy - `src/components/errors/DbErrorScreen.tsx` — "Database Error", "Reset Database",
+        "Copy Error Details" (each with a matching `accessibilityLabel`) + three sentences - `src/app/(tabs)/more/settings.tsx` — "PLAYER", "Progress Format",
+        "Bookmark Title Mode" (more section headers likely; not fully audited) - `src/app/(tabs)/more/progress-format.tsx` — description sentence - `src/app/(tabs)/more/trace-dump-detail.tsx` — "No records in this dump." - `src/components/library/LibraryItemList.tsx` — `accessibilityLabel="Clear search"` - `src/components/library/LibraryItemDetail/AudioFilesSection.tsx` — "Duration: …",
+        "Size: … MB" (interpolated — needs care with pluralization/number formatting) - `src/components/diagnostics/` — 9 strings across `CoordinatorDiagnostics.tsx` and
+        `TraceDumps.tsx`; gated behind `diagnosticsEnabled`, so lowest priority - `src/app/(tabs)/more/collections.tsx` — "Collections screen"; a stub route not
+        linked from anywhere in the app. Check whether it is dead code and delete it
+        rather than translating it.
+        The error boundaries are the most user-visible of these: they are what a user sees
+        when something has already gone wrong, in English, in the middle of a Spanish app.
 
 ### App Store Requirements
 
@@ -86,13 +109,49 @@ summarized in the review discussion; items below are the non-blocking todos it p
         so the frame is full and every book count is correct. Note for future edits: only
         _distinct_ series add rows; adding books to an existing series just changes its
         "N books" count.
+  - [x] ~~**Frames 1 and 4 were pixel-identical**~~ — **fixed 2026-08-01.** Frame 4 was
+        "the same Home screen scrolled to the Downloaded shelf", but the assertion right
+        above it already proved "Downloaded" was on screen, so `scrollUntilVisible` matched
+        immediately and scrolled nothing. Home renders at most three shelves
+        (`home.sections.continueListening` / `.downloaded` / `.listenAgain` — there is no
+        Recently Added / Discover / Newest Authors section in the app), so with this demo
+        library it never overflows one screen and there was nothing to scroll to. The
+        gallery would have shipped one picture twice under two captions. Frame 4 is now the
+        item **detail** page of a downloaded title, which renders an explicit
+        "⬇ Downloaded" badge (`libraryItem.downloaded` in
+        `LibraryItemDetail/MetadataSection.tsx`) and is a surface no other frame uses.
+        Download seeding now selects titles by **name** via `.maestro/_download-title.yaml`
+        instead of grid index, so which books are downloaded is stated rather than
+        inherited from sort order.
+  - [x] ~~**"Listen Again" never appeared on Home in a capture run**~~ — **resolved by the
+        #11 fix, confirmed 2026-08-02.** It was indeed the third symptom of the same
+        "synced server state never reaches the UI" family, not its own bug: Home cached an
+        empty result racing ahead of the first sync, and nothing told it to look again.
+        With `_refetchItems` now reconciling home/authors/series once the first-time
+        full-detail sync completes, Frankenstein appears under Listen Again and frame 1 is
+        full instead of a third empty.
   - [ ] Upload to App Store Connect (manual; filenames are ordered `01-`…`06-`)
 - [x] ~~**Stand up the demo server** (`demo-server/`)~~ — **Done 2026-07-31.** ABS 2.35.1 in
       Docker seeded with 24 public-domain LibriVox titles, verified end-to-end: demo user
       logs in, 24 items, Continue Listening (4) and Listen Again (1) shelves populated.
       Re-seeding is idempotent. See `demo-server/README.md` for the verification record.
-  - [ ] Verify against **ABS 2.28.0** (`ABS_VERSION=2.28.0` against a clean `data/`) —
-        only 2.35.1 has been exercised, but the App Store listing claims "2.28 or newer"
+  - [x] ~~Verify against **ABS 2.28.0**~~ — **Verified 2026-08-01**, so the listing's
+        "2.28 or newer" claim is now substantiated rather than assumed. `ABS_VERSION=2.28.0`
+        against a wiped `data/` seeded cleanly and was then re-checked independently through
+        the API (not just trusting the seeder's exit code): `/status` reports `2.28.0`,
+        `demo-reviewer` logs in, 34 items, 8 series with correct book counts, 5
+        `mediaProgress` entries. Every request shape the seeder uses is accepted by 2.28.0 —
+        `/init`, `/login`, `POST /api/libraries`, scan, `PATCH /api/items/:id/media` (15
+        parse corrections), `POST /api/items/:id/chapters`, `POST /api/users` +
+        `PATCH /api/users/:id`, and `PATCH /api/me/progress/:id`. The demo server now runs
+        2.28.0, and the 1.0 screenshots are shot against it.
+  - [ ] **No server-version gate exists in the app** — found 2026-08-01 while verifying the
+        above. Nothing in `src/` reads a server version: there is no `serverVersion` check
+        anywhere, so "2.28 or newer" is a documentation claim the app does not enforce. A
+        user pointing SideShelf at an older server gets undefined behaviour and confusing
+        failures instead of "your server is too old." Not a 1.0 blocker, but it is the
+        cheap half of the compatibility-gate item above and worth doing before the range
+        widens.
   - [ ] Host it publicly for App Review (separate infra step; it binds to 127.0.0.1 by default)
 - [ ] **Write App Store Description** — drafted in `docs/launch/app-store-listing.md`
   - [x] Subtitle (**30 chars max** — an earlier revision of this file said 80, which is wrong)
@@ -268,9 +327,26 @@ summarized in the review discussion; items below are the non-blocking todos it p
 - [ ] Download All button in series → [#9](https://github.com/clayreimann/SideShelf/issues/9)
 - [ ] Download next item in series when X time left → [#10](https://github.com/clayreimann/SideShelf/issues/10)
 - [x] When the mini-player is shown add padding to the bottom of views so that you can scroll all the way to the bottom
-- [ ] **🚨 LAUNCH BLOCKER — New login initialization is broken** → [#11](https://github.com/clayreimann/SideShelf/issues/11)
-      **⚠️ #11 is marked CLOSED on GitHub but the bug is not fixed — reopen it.**
-      **Reproduced live 2026-08-01** against the seeded demo server, on a clean install:
+- [x] ~~**🚨 LAUNCH BLOCKER — New login initialization is broken**~~ → [#11](https://github.com/clayreimann/SideShelf/issues/11)
+      **FIXED 2026-08-01, verified live 2026-08-02.** It was three independent bugs sharing
+      one shape — a slice runs its one-shot init before login against an empty DB, and
+      nothing ever tells it to look again: 1. `authorsSlice`/`seriesSlice` set `initialized = true` unconditionally and fetch
+      from the pre-sync DB; the later `apiConfigured` effect only flips a `ready`
+      boolean and never re-fetches. 2. `initializeLibrarySlice` had a real TOCTOU race — it wrote back a snapshot taken
+      _before_ its awaits, so a login completing mid-flight had its real library
+      selection wiped back to `null`, permanently. Proved with a controlled-timing
+      deferred-promise test before fixing. 3. `initializeHome` stamped `lastFetchTime` on an empty result, so Home's focus
+      refresh hit `_isHomeCacheValid()` and silently no-oped.
+      Fixes: a `readinessState === "READY"` guard on the stale write, and a reconciliation
+      calling `refetchSeries()`/`refetchAuthors()`/`refreshHome()` once the first-time
+      full-detail sync lands. Note my own initial hypothesis — that a null `libraryId` made
+      downstream fetches no-op — was **wrong**; `getAllAuthors(undefined)` returns all
+      authors, not none.
+      Verified end-to-end by DELETING the `stopApp`/`launchApp` workaround from
+      `.maestro/capture-screenshots.yaml` and re-running the capture: the flow now walks
+      the real first-login path an App Reviewer takes and Home populates without a restart.
+      **Note: #11 is still marked CLOSED on GitHub. It should be reopened and re-closed
+      against this fix, or a fresh issue filed, so the history is honest.** Original report:
       after a first-ever login the Home screen sits on skeleton placeholders **indefinitely**
       — still grey tiles after a 60-second wait, so this is not slow loading. Quitting and
       reopening the app fixes it, because the persisted session initializes correctly.
@@ -404,7 +480,14 @@ summarized in the review discussion; items below are the non-blocking todos it p
 
 ### Download Enhancements
 
-- [ ] **Decide whether `/more/storage` should ship un-gated for 1.0** — raised 2026-08-01.
+- [x] ~~**Decide whether `/more/storage` should ship un-gated for 1.0**~~ — **Decided
+      2026-08-01: keep it gated behind `diagnosticsEnabled` for 1.0.** It is a
+      developer/debugging view, not a user-facing storage manager, so shipping it un-gated
+      would expose an unpolished screen rather than deliver the feature. A real
+      user-facing storage/downloads management screen is 1.1 work (tracked under "Download
+      Enhancements" below). Note the consequence to live with: a default 1.0 install has no
+      way to see or free downloaded files, while the App Store copy promises offline
+      listening — deleting a download is only reachable per-item. Original framing:
       The storage/downloads management screen sits behind the `diagnosticsEnabled` setting
       (`src/app/(tabs)/more/index.tsx`, gate around the `if (diagnosticsEnabled)` block),
       which defaults to `false` in `settingsSlice.ts`. So a default install ships with **no
@@ -441,7 +524,28 @@ summarized in the review discussion; items below are the non-blocking todos it p
 - [ ] Add loading states and skeleton screens → [#31](https://github.com/clayreimann/SideShelf/issues/31)
 - [x] Optimize image loading and caching
 - [x] Implement proper offline support
-- [ ] **Downloaded shelf doesn't refresh when a download completes mid-session**
+- [ ] **`_backfillIncompleteItems` doesn't reconcile the Home shelves** — found 2026-08-01
+      while fixing #11. The first-time sync path in `librarySlice._refetchItems` now calls
+      `refetchSeries()` / `refetchAuthors()` / `refreshHome()` once full item details land,
+      but `_backfillIncompleteItems` — the returning-session repair path added in `a05c415`
+      — only refreshes items. So a _later_ session whose backfill finds stale items can
+      still show a Home screen that never learns the data changed: a narrower replay of
+      #11's home symptom. Outside the reported repro, so deliberately left alone; fix by
+      mirroring the same three-call reconciliation.
+- [ ] **`downloadSlice.ts` has almost no test coverage** — noted 2026-08-01. It had none at
+      all before the Downloaded-shelf fix, which added only the two tests covering the new
+      notification behaviour. This slice owns download lifecycle, progress, cancellation and
+      restore-on-launch; it deserves real coverage.
+- [x] ~~**Downloaded shelf doesn't refresh when a download completes mid-session**~~ —
+      **FIXED 2026-08-01.** `completeDownload()` only ever updated the download slice's own
+      `downloadedItems` set; it never told `homeSlice`, which owns the `home.downloaded`
+      data the Home screen actually renders. `homeSlice` caches its DB read for 5 minutes,
+      so Home's focus-triggered refresh hit `_isHomeCacheValid()` and silently no-oped —
+      only a fresh launch, which re-initializes `homeSlice` from scratch, ever picked the
+      downloads up. `downloadSlice` now notifies `homeSlice` from both places a download
+      reaches `status === "completed"`. The `stopApp`/`launchApp` workaround has been
+      removed from `.maestro/capture-screenshots.yaml`, so the capture run now proves the
+      fix instead of hiding it. Original report:
       Found 2026-08-01 while building the screenshot pipeline. Downloading a title and
       returning to Home leaves the "Downloaded" shelf absent, even though the files are
       genuinely on disk (verified: `Documents/downloads/<id>/*.mp3`). Switching tabs does
@@ -463,7 +567,15 @@ summarized in the review discussion; items below are the non-blocking todos it p
       isolation, `NOT EXISTS` rewrite, and a new `_backfillIncompleteItems` action wired
       into `_checkForNewItems` so an interrupted sync self-heals. Regression tests added
       (suite 1419 → 1431).
-- [ ] **Some series rows render without a cover thumbnail** — found 2026-08-01, root cause
+- [x] ~~**Some series rows render without a cover thumbnail**~~ — **FIXED 2026-08-01,
+      confirmed live 2026-08-02.** `repairMissingCoverArt` now repairs an item when its
+      cover FILE is missing _or_ its `local_cover_cache` ROW is missing, and the dead
+      `cacheCoversForLibrary` is deleted. Verified in the regenerated screenshots: Anne of
+      Green Gables now shows its cover in the Series list, as do all other visible series.
+      The completion log now reports downloads and row-only repairs separately — counting
+      only downloads would have logged "0 covers downloaded" for a run that healed hundreds
+      of rows, reading as "nothing was wrong" for exactly this failure. Original report:
+- [ ] ~~Some series rows render without a cover thumbnail~~ — found 2026-08-01, root cause
       traced 2026-08-01. Anne of Green Gables and Tom Sawyer show no image in the Series
       list while Oz, Sherlock, Barsoom, Little Women and Tarzan do. **Not cosmetic** — the
       same mechanism blanks covers app-wide, not just in the Series list.

@@ -142,12 +142,17 @@ First release.
   types because the Audiobookshelf API returns them, but no podcast UI exists.
   App Review tests description claims — do not reintroduce a podcast claim in
   this file until the v1.1 UI actually ships.
-- **Minimum server version (2.28)** is quoted from `minimumServerVersion` in the
-  compatibility manifest inside
-  `docs/superpowers/plans/2026-07-27-audiobookshelf-api-compatibility.md`. That
-  number has not yet been verified by an actual test run against 2.28 — do the
-  manual check with `ABS_VERSION=2.28.0 npm run demo:up` before submitting, or
-  soften the claim.
+- ~~**Minimum server version (2.28)**~~ — **VERIFIED 2026-08-01, the claim is safe
+  to ship.** The number is quoted from `minimumServerVersion` in the compatibility
+  manifest inside
+  `docs/superpowers/plans/2026-07-27-audiobookshelf-api-compatibility.md`, and it
+  has now been exercised for real: `ABS_VERSION=2.28.0` against a wiped `data/`
+  seeded end-to-end, and an independent API pass confirmed `/status` reports
+  `2.28.0` with 34 items, 8 series, and 5 progress entries readable by the demo
+  user. The 1.0 screenshots were shot against 2.28.0. Caveat worth knowing if a
+  reviewer asks: the app does **not** enforce this floor — nothing in `src/` reads
+  a server version — so the claim describes what is tested, not what is checked at
+  runtime.
 - **AirPlay** is claimed on the strength of the `@douglowder/expo-av-route-picker-view`
   dependency. Confirm the route picker actually works on a physical device
   before submission; simulator AirPlay is not a valid check.

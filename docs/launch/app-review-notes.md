@@ -20,7 +20,9 @@ DEMO SERVER
   Password:   <FILL IN>
 
 Enter the server URL on the first screen, then the username and password. All
-content on the demo server is public-domain audio from LibriVox.
+content on the demo server is public-domain audio from LibriVox — 34 titles
+across 8 series, chosen so nothing copyrighted appears in the app or in our
+screenshots.
 
 ARBITRARY LOADS / APP TRANSPORT SECURITY
 NSAllowsArbitraryLoads is set to true. SideShelf connects only to a server
@@ -65,6 +67,14 @@ All data stays between the device and the user's own server.
 - [ ] Confirm the demo server is publicly reachable from outside your network.
       `demo-server/` binds to `127.0.0.1` by default; exposing it is a separate
       deliberate hosting step.
+- [ ] Decide which Audiobookshelf version the **hosted** demo server runs, and
+      say so in the ASC notes only if you are certain. `demo-server/.env` is
+      currently pinned to `ABS_VERSION=2.28.0` — the oldest version this release
+      supports, verified end-to-end on 2026-08-01 and the version the 1.0
+      screenshots were shot against. Hosting 2.28.0 has the nice property that
+      the reviewer sees the minimum supported configuration; hosting a newer
+      build is also fine. Do not state a version in the notes that does not
+      match what you actually deployed.
 - [ ] Confirm the seeded library is populated (Continue Listening, downloads,
       series, authors) so a reviewer sees a working app, not an empty shelf.
 

@@ -129,12 +129,14 @@ src/
 
 ## 📸 Screenshots
 
-<!-- Generated via `npm run screenshots` (Maestro-driven capture pipeline). -->
-<!-- TODO: run `npm run screenshots` and commit the output before shipping. -->
+Captured against the reproducible LibriVox demo server in [`demo-server/`](demo-server/),
+so every cover shown here is public domain. Regenerate with `npm run screenshots`,
+which writes the App Store set to the gitignored `.screenshots/store/`; the copies
+below are the committed ones GitHub can actually render.
 
-|  ![Screenshot 1](.screenshots/store/01-home.jpg)  |  ![Screenshot 2](.screenshots/store/02-library.jpg)  |  ![Screenshot 3](.screenshots/store/03-player.jpg)  |
-| :-----------------------------------------------: | :--------------------------------------------------: | :-------------------------------------------------: |
-| ![Screenshot 4](.screenshots/store/04-series.jpg) | ![Screenshot 5](.screenshots/store/05-downloads.jpg) | ![Screenshot 6](.screenshots/store/06-settings.jpg) |
+|      ![Home](docs/screenshots/01-home.jpg)       |      ![Player](docs/screenshots/02-player.jpg)      | ![Library](docs/screenshots/03-library-grid.jpg) |
+| :----------------------------------------------: | :-------------------------------------------------: | :----------------------------------------------: |
+| ![Downloaded](docs/screenshots/04-downloads.jpg) | ![Sleep timer](docs/screenshots/05-sleep-timer.jpg) |    ![Series](docs/screenshots/06-series.jpg)     |
 
 ## 🔗 Deep Links
 

@@ -168,6 +168,18 @@ rm -rf "${SANITY_DIR}"
 run_theme() {
   local theme="$1"
   local out="${RAW_DIR}/${theme}"
+
+  # Purge this theme's raw captures before running.
+  #
+  # This is not tidiness, it is the difference between a pipeline that reports
+  # the truth and one that lies. Captures persist between runs, so a flow that
+  # fails PART WAY through leaves the previous run's PNGs sitting on disk —
+  # and every check below (file exists, file is 1320x2868) then passes against
+  # stale images. Observed 2026-08-01: the flow failed at the player step, yet
+  # the pipeline composited five images from a run four hours earlier and
+  # printed "All done". Starting from an empty directory means a failed step
+  # can only ever produce a MISSING file, which fails loudly.
+  rm -rf "${out}"
   mkdir -p "${out}" "${DEBUG_DIR}/${theme}"
 
   log "Switching simulator to ${theme} mode..."
@@ -175,13 +187,23 @@ run_theme() {
   sleep 1
 
   log "Running Maestro flow (${theme})..."
+  # Capture the exit status explicitly rather than relying on `set -e` to
+  # propagate it out of the subshell — the same run that shipped stale images
+  # also sailed past a Maestro run that had plainly reported FAILED, so the
+  # implicit path is not trustworthy here. `|| status=$?` also keeps `set -e`
+  # from killing the script before we can print a useful message.
+  local status=0
   (
     cd "${out}"
     maestro test --udid "${UDID}" "${ENV_FLAGS[@]}" \
       "${REPO_ROOT}/.maestro/capture-screenshots.yaml" \
       --debug-output "${DEBUG_DIR}/${theme}" \
       --flatten-debug-output
-  )
+  ) || status=$?
+
+  if [[ ${status} -ne 0 ]]; then
+    err "Maestro flow FAILED for the ${theme} theme (exit ${status}). Artifacts: ${DEBUG_DIR}/${theme}. Not compositing — the store set would be a mix of this run and whatever was left from the last one."
+  fi
 
   local any_missing=0
   for surface in "${SURFACES[@]}"; do

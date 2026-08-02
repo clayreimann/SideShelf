@@ -241,11 +241,27 @@ Recording these because each was invisible to every static check:
    This is exactly why that step exists — without it roughly half the demo
    library would have reached App Store screenshots with wrong metadata.
 
+### ABS 2.28.0 verified 2026-08-01
+
+The oldest supported server has now been exercised too. `ABS_VERSION=2.28.0`
+against a wiped `data/` (media preserved — see "Editing library.json requires
+a data wipe") seeded end-to-end with no code changes: `/init`, `/login`,
+`POST /api/libraries`, scan, `PATCH /api/items/:id/media` (15 parse
+corrections), `POST /api/items/:id/chapters`, `POST /api/users` +
+`PATCH /api/users/:id`, and `PATCH /api/me/progress/:id` are all accepted
+with identical request shapes to 2.35.1.
+
+Re-checked independently through the API rather than trusting the seeder's
+exit code: `/status` reports `2.28.0`, `demo-reviewer` logs in, the library
+has 34 items and 8 series with correct book counts (Anne of Green Gables 3,
+Barsoom 3, Little Women 3, Oz 3, Sherlock Holmes 3, Tarzan 2, The Jungle
+Book 2, Tom Sawyer 2), and `/api/me` returns 5 `mediaProgress` entries.
+
+The demo server now runs 2.28.0, and the 1.0 App Store screenshots are shot
+against it — so the store images demonstrate the app working on the oldest
+server version the listing claims to support.
+
 ### Still unverified
 
-- **ABS 2.28.0.** Only `2.35.1` has been exercised. Run
-  `ABS_VERSION=2.28.0` against a clean `data/` to confirm the oldest
-  supported server accepts identical request shapes. The App Store listing
-  claims "2.28 or newer", so this is worth doing before submission.
 - **Public hosting.** The compose file binds to `127.0.0.1` by design;
   exposing this for App Review is a separate, deliberate step.
