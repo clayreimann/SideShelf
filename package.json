@@ -1,5 +1,5 @@
 {
-  "name": "abs-react-native",
+  "name": "sideshelf",
   "description": "A modern React Native client for Audiobookshelf - the self-hosted audiobook and podcast server",
   "main": "expo-router/entry",
   "version": "1.0.0",
@@ -14,12 +14,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/abs-react-native.git"
+    "url": "https://github.com/clayreimann/SideShelf.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/abs-react-native/issues"
+    "url": "https://github.com/clayreimann/SideShelf/issues"
   },
-  "homepage": "https://github.com/your-username/abs-react-native#readme",
+  "homepage": "https://github.com/clayreimann/SideShelf#readme",
   "scripts": {
     "start": "expo start",
     "build-testflight": "BUILD_TIMESTAMP=$(date +%Y%m%d%H%M%S) && npm i && BUILD_NUMBER=$BUILD_TIMESTAMP npx eas-cli build --platform ios --profile production --local --non-interactive --output \"build-$BUILD_TIMESTAMP.ipa\"",
@@ -38,8 +38,12 @@
     "generate:expo-types": "npx expo customize tsconfig.json",
     "typecheck": "npm run generate:expo-types && tsc --noEmit --pretty false",
     "static-analysis": "npm run typecheck && npm run lint && npm run check:circular",
-    "screenshots": "bash scripts/run-screenshots.sh",
-    "maestro:test": "bash scripts/run-maestro-tests.sh"
+    "screenshots": "bash scripts/screenshots/run.sh",
+    "maestro:test": "bash scripts/run-maestro-tests.sh",
+    "demo:up": "docker compose -f demo-server/compose.yml up -d",
+    "demo:seed": "node demo-server/seed.mjs",
+    "demo:down": "docker compose -f demo-server/compose.yml down",
+    "demo:reset": "docker compose -f demo-server/compose.yml down --volumes"
   },
   "dependencies": {
     "@douglowder/expo-av-route-picker-view": "^0.0.5",

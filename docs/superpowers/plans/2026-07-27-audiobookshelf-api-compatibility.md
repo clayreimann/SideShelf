@@ -28,6 +28,14 @@
 - End each task with its focused tests, `npm run lint` only when TypeScript/React Native files are touched, and `git diff --check`.
 - Commit each task separately. Do not publish, push, open a pull request, or update production infrastructure without a new explicit request.
 
+## Note: overlap with `demo-server/` (added 2026-07-31)
+
+`demo-server/` was built during launch prep and also runs Audiobookshelf in Docker. **The duplication is deliberate, not an oversight.** The two have opposing hard requirements: this harness demands loopback-only binding, run-scoped disposable Compose projects, and byte-deterministic synthetic audio, while the demo server must be long-lived, publicly reachable for App Review, and full of real LibriVox media. Folding one into the other would mean relaxing the constraints above.
+
+What _is_ worth collapsing: `demo-server/src/abs-client.mjs` already implements the `/status` → `POST /init` → login → create-library → scan-and-poll sequence that **Task 4**'s `initializeServer()` and `bootstrapFixture()` need. Read it before writing those, and lift the shared parts into `api-compatibility/src/bootstrap.mjs` rather than reimplementing them.
+
+Also keep `minimumServerVersion` / `releaseTestVersions` in this plan's manifest as the single source for pinned ABS versions — `demo-server/compose.yml` reads its defaults from those same numbers, and they must not drift.
+
 ---
 
 ### Task 1: Establish the manifest, command model, and local entry point

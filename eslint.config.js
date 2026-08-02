@@ -6,7 +6,20 @@ const reactNativeA11y = require("eslint-plugin-react-native-a11y");
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ["coverage/**", "dist/**", ".expo/**", ".claude/**", ".worktrees/**"],
+    ignores: [
+      "coverage/**",
+      "dist/**",
+      ".expo/**",
+      ".claude/**",
+      ".worktrees/**",
+      // Audiobookshelf's own container-generated runtime data and downloaded
+      // demo media. Both are gitignored, but ESLint's flat config does not read
+      // .gitignore — without these, `eslint .` lints ABS's bundled migration
+      // scripts, and whatever a future ABS version ships there could break
+      // `npm run static-analysis`. Our own demo-server source is NOT ignored.
+      "demo-server/data/**",
+      "demo-server/media/**",
+    ],
   },
   {
     files: ["src/__tests__/setup-before.js"],
