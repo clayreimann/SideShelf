@@ -39,6 +39,7 @@
     "typecheck": "npm run generate:expo-types && tsc --noEmit --pretty false",
     "static-analysis": "npm run typecheck && npm run lint && npm run check:circular",
     "screenshots": "bash scripts/screenshots/run.sh",
+    "test:screenshots-web": "bash scripts/screenshots/web.test.sh",
     "maestro:test": "bash scripts/run-maestro-tests.sh",
     "demo:up": "docker compose -f demo-server/compose.yml up -d",
     "demo:seed": "node demo-server/seed.mjs",

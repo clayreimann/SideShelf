@@ -33,24 +33,14 @@ fi
 THEMES=(dark light)
 SURFACES=(home player library-grid downloads sleep-timer series)
 
-mkdir -p "${TMP_DIR}"
-
 any_missing=0
 for surface in "${SURFACES[@]}"; do
   for theme in "${THEMES[@]}"; do
     src="${RAW_DIR}/${theme}/screenshot-${surface}.png"
-    webp_tmp="${TMP_DIR}/screenshot-${surface}-${theme}.webp"
-    dest="${DEST_DIR}/screenshot-${surface}-${theme}.webp"
-
     if [[ ! -f "${src}" ]]; then
       echo "   MISSING ${src}"
       any_missing=1
-      continue
     fi
-
-    "${CWEBP_BIN}" -q 85 "${src}" -o "${webp_tmp}" >/dev/null 2>&1
-    cp "${webp_tmp}" "${dest}"
-    echo "   OK   screenshot-${surface}-${theme}.webp"
   done
 done
 
@@ -58,6 +48,20 @@ if [[ ${any_missing} -ne 0 ]]; then
   echo "ERROR: some raw captures were missing -- run capture.sh first." >&2
   exit 1
 fi
+
+mkdir -p "${TMP_DIR}"
+
+for surface in "${SURFACES[@]}"; do
+  for theme in "${THEMES[@]}"; do
+    src="${RAW_DIR}/${theme}/screenshot-${surface}.png"
+    webp_tmp="${TMP_DIR}/screenshot-${surface}-${theme}.webp"
+    dest="${DEST_DIR}/screenshot-${surface}-${theme}.webp"
+
+    "${CWEBP_BIN}" -q 85 "${src}" -o "${webp_tmp}" >/dev/null 2>&1
+    cp "${webp_tmp}" "${dest}"
+    echo "   OK   screenshot-${surface}-${theme}.webp"
+  done
+done
 
 echo ""
 echo "WebP pairs written to ${DEST_DIR}/"
