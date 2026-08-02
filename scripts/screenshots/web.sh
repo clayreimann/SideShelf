@@ -30,10 +30,8 @@ if [[ ! -d "${DEST_DIR}" ]]; then
   exit 1
 fi
 
-# The three pairs the site consumes today, plus the two new surfaces added
-# in this workstream. "home" is excluded -- the site has no slot for it.
 THEMES=(dark light)
-SURFACES=(library-grid player downloads series sleep-timer)
+SURFACES=(home player library-grid downloads sleep-timer series)
 
 mkdir -p "${TMP_DIR}"
 
