@@ -47,10 +47,14 @@ summarized in the review discussion; items below are the non-blocking todos it p
 - [ ] **Privacy Policy** — _authored and hosted in the sideshelf.app website repo_
   - [ ] Paste the hosted privacy policy URL into App Store Connect metadata
 - [ ] **Terms of Service / EULA** — _authored and hosted in the sideshelf.app website repo_
-- [ ] **Add "About" section with legal links** (in-app work, this repo)
-  - [ ] Add privacy policy link (→ sideshelf.app) to Settings/More screen
-  - [ ] Add terms of service link (→ sideshelf.app)
-  - [ ] Add support/contact information
+- [x] ~~**Add "About" section with legal links**~~ (in-app work, this repo) — **done in
+      `106bbea`**, verified 2026-08-02 in `src/app/(tabs)/more/index.tsx`. These
+      checkboxes were left stale after the work landed.
+  - [x] Privacy policy link → `https://sideshelf.app/privacy/` (trailing slash deliberate)
+  - [x] Terms of service link → `https://sideshelf.app/terms/`
+  - [x] Support → `https://github.com/clayreimann/SideShelf/issues`. Deliberately NOT
+        `sideshelf.app/support`, which does not exist — the site's own footer uses this
+        same link, and a dead support link is an App Review failure.
   - [x] Add app version display (More screen shows version + build via DeviceInfo)
 
 ### Internationalization (i18n)
