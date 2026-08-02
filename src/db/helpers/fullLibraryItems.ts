@@ -337,8 +337,17 @@ function yieldToEventLoop(): Promise<void> {
 }
 
 // Process multiple full library items from batch API response
+//
+// A failure processing one item (transient DB error, malformed record, etc.)
+// must not prevent every other item in the batch from being synced — this
+// used to `return` on the first error, which silently abandoned the rest of
+// the array (and, since nothing else ever revisits those items, left them
+// permanently stuck with only minified data — e.g. missing series/author
+// links). Each item is now isolated so one bad item only skips itself.
 export async function processFullLibraryItems(apiItems: ApiLibraryItem[]): Promise<void> {
   console.log(`[fullLibraryItems] Processing ${apiItems.length} full library items`);
+
+  let failedCount = 0;
 
   for (let i = 0; i < apiItems.length; i++) {
     const apiItem = apiItems[i];
@@ -351,9 +360,15 @@ export async function processFullLibraryItems(apiItems: ApiLibraryItem[]): Promi
         await yieldToEventLoop();
       }
     } catch (error) {
+      failedCount++;
       console.error(`[fullLibraryItems] Failed to process item ${apiItem.id}:`, error);
-      return;
     }
+  }
+
+  if (failedCount > 0) {
+    console.warn(
+      `[fullLibraryItems] Finished batch with ${failedCount} failed item(s) of ${apiItems.length}`
+    );
   }
 }
 

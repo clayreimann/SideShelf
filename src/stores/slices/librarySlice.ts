@@ -20,6 +20,7 @@ import {
 import {
   checkLibraryItemExists,
   getLibraryItemsForList,
+  getLibraryItemsNeedingRefresh,
   marshalLibraryItemFromApi,
   transformItemsToDisplayFormat,
   upsertLibraryItems,
@@ -107,6 +108,14 @@ export interface LibrarySliceActions {
   // Internal actions (prefixed with underscore)
   /** Load data from AsyncStorage */
   _loadLibrarySettingsFromStorage: () => Promise<void>;
+  /**
+   * Backfill full details (authors, series, audio files) for any library items
+   * that still only have minified data — e.g. because a previous background
+   * sync was interrupted (app reload, crash, network failure) before it
+   * finished. Self-healing: safe to call repeatedly, processes one bounded
+   * batch per call.
+   */
+  _backfillIncompleteItems: () => Promise<void>;
 
   // State machine transitions
   /** Update readiness state based on API/DB availability */
@@ -821,6 +830,63 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
           operationState: "IDLE",
         },
       }));
+
+      // Self-heal: pick up any items left with only minified data by a
+      // previously-interrupted sync. Fire-and-forget — must not block the
+      // IDLE transition or the caller.
+      get()._backfillIncompleteItems();
+    }
+  },
+
+  /**
+   * Backfill full details (authors, series, audio files) for library items
+   * that still only have minified data. Runs one bounded batch; safe to call
+   * repeatedly (e.g. on every app-ready transition) to make further progress
+   * if more incomplete items remain than fit in a single batch.
+   */
+  _backfillIncompleteItems: async () => {
+    const state: LibrarySliceState = get();
+    if (!isReady(state)) return;
+
+    try {
+      const BACKFILL_BATCH_SIZE = 50;
+      const staleItemIds = await getLibraryItemsNeedingRefresh(BACKFILL_BATCH_SIZE);
+      if (staleItemIds.length === 0) return;
+
+      log.info(
+        `[Backfill] Found ${staleItemIds.length} item(s) with incomplete details, fetching full data...`
+      );
+      const fullItems = await fetchLibraryItemsBatch(staleItemIds);
+      await processFullLibraryItems(fullItems);
+      log.info(`[Backfill] Backfilled ${fullItems.length} item(s)`);
+
+      // Refresh series/authors so any newly-linked data shows up without
+      // requiring the user to know to manually refresh.
+      await Promise.all([
+        get()
+          .refetchSeries()
+          .catch((error: Error) => log.error("[Backfill] Failed to refresh series:", error)),
+        get()
+          .refetchAuthors()
+          .catch((error: Error) => log.error("[Backfill] Failed to refresh authors:", error)),
+      ]);
+
+      const currentState: LibrarySliceState = get();
+      const selectedLibraryId = currentState.library.selectedLibraryId;
+      if (selectedLibraryId) {
+        const updatedDbItems = await getLibraryItemsForList(selectedLibraryId);
+        const updatedDisplayItems = transformItemsToDisplayFormat(updatedDbItems);
+        set((state: LibrarySlice) => ({
+          ...state,
+          library: {
+            ...state.library,
+            rawItems: updatedDisplayItems,
+            items: sortLibraryItems(updatedDisplayItems, state.library.sortConfig),
+          },
+        }));
+      }
+    } catch (error) {
+      log.error("[Backfill] Failed to backfill incomplete items:", error as Error);
     }
   },
 

@@ -7,9 +7,14 @@
  */
 
 import { genres } from "@/db/schema/genres";
+import { libraries } from "@/db/schema/libraries";
+import { mediaMetadata } from "@/db/schema/mediaMetadata";
 import { narrators } from "@/db/schema/narrators";
+import { series } from "@/db/schema/series";
 import { tags } from "@/db/schema/tags";
+import type { ApiLibraryItem } from "@/types/api";
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { mockBook, mockBookLibraryItem } from "../../../__tests__/fixtures";
 import { createTestDb, TestDatabase } from "../../../__tests__/utils/testDb";
 import { upsertGenres, upsertNarrators, upsertTags } from "../fullLibraryItems";
 
@@ -117,6 +122,70 @@ describe("FullLibraryItems Helper — top-level batch helpers", () => {
       it("should resolve without error for null input", async () => {
         await expect(upsertTags(null as any)).resolves.not.toThrow();
       });
+    });
+  });
+
+  /**
+   * Regression coverage for the Series tab under-counting bug: a single item
+   * failing to process (e.g. a transient DB/FK error) used to make
+   * processFullLibraryItems() bail out via an early `return`, silently
+   * dropping every subsequent item in the batch. Since nothing else in the
+   * app ever revisits those items, they were permanently stuck with only
+   * minified data — missing their series/author links — which is exactly
+   * what produced the under-reported series book counts.
+   */
+  describe("processFullLibraryItems — batch resilience", () => {
+    beforeEach(() => {
+      jest.doMock("@/db/client", () => ({ db: testDb.db }));
+    });
+
+    function makeItem(id: string, libraryId: string, title: string): ApiLibraryItem {
+      return {
+        ...mockBookLibraryItem,
+        id,
+        libraryId,
+        media: {
+          ...mockBook,
+          id: `media-${id}`,
+          libraryItemId: id,
+          metadata: { ...mockBook.metadata, title },
+        },
+      };
+    }
+
+    it("continues processing later items after an earlier item fails", async () => {
+      const { processFullLibraryItems } = require("../fullLibraryItems");
+
+      // Only "lib-1" exists — an item referencing a non-existent library
+      // fails its FOREIGN KEY constraint on insert, mimicking a real
+      // transient per-item failure.
+      await testDb.db.insert(libraries).values({ id: "lib-1", name: "Test Library" });
+
+      const good1 = makeItem("li-good-1", "lib-1", "Good Book 1");
+      const bad = makeItem("li-bad", "lib-does-not-exist", "Bad Book");
+      const good2 = makeItem("li-good-2", "lib-1", "Good Book 2");
+
+      await processFullLibraryItems([good1, bad, good2]);
+
+      const rows = await testDb.db.select().from(mediaMetadata);
+      const titles = rows.map((r) => r.title).sort();
+
+      // The item after the failing one must still have been processed.
+      expect(titles).toEqual(["Good Book 1", "Good Book 2"]);
+    });
+
+    it("still links series data for items after a failed item in the same batch", async () => {
+      const { processFullLibraryItems } = require("../fullLibraryItems");
+
+      await testDb.db.insert(libraries).values({ id: "lib-1", name: "Test Library" });
+
+      const bad = makeItem("li-bad", "lib-does-not-exist", "Bad Book");
+      const good = makeItem("li-good", "lib-1", "Good Book");
+
+      await processFullLibraryItems([bad, good]);
+
+      const seriesRows = await testDb.db.select().from(series);
+      expect(seriesRows.map((r) => r.name)).toEqual(["Classic Literature"]);
     });
   });
 });

@@ -41,6 +41,7 @@ jest.mock("@/db/helpers/libraries", () => ({
 
 jest.mock("@/db/helpers/libraryItems", () => ({
   getLibraryItemsForList: jest.fn(),
+  getLibraryItemsNeedingRefresh: jest.fn(),
   marshalLibraryItemFromApi: jest.fn(),
   marshalLibraryItemsFromResponse: jest.fn(),
   transformItemsToDisplayFormat: jest.fn(),
@@ -79,6 +80,7 @@ describe("LibrarySlice", () => {
   } = require("@/db/helpers/libraries");
   const {
     getLibraryItemsForList,
+    getLibraryItemsNeedingRefresh,
     marshalLibraryItemFromApi,
     marshalLibraryItemsFromResponse,
     transformItemsToDisplayFormat,
@@ -113,6 +115,7 @@ describe("LibrarySlice", () => {
     upsertLibraries.mockResolvedValue();
 
     getLibraryItemsForList.mockResolvedValue([]);
+    getLibraryItemsNeedingRefresh.mockResolvedValue([]);
     transformItemsToDisplayFormat.mockReturnValue([]);
     marshalLibraryItemsFromResponse.mockReturnValue([]);
     upsertLibraryItems.mockResolvedValue();
@@ -755,6 +758,100 @@ describe("LibrarySlice", () => {
 
       const state = store.getState();
       expect(state.library.operationState).toBe("IDLE");
+    });
+  });
+
+  /**
+   * Regression coverage for the Series tab under-counting bug: when a
+   * previous background sync is interrupted (app reload, crash, network
+   * failure), some library items are left with only minified data — no
+   * series/author links. `_backfillIncompleteItems` is the self-healing
+   * pass that finds and reprocesses those items so they don't stay broken
+   * forever. It's wired into `_checkForNewItems`, which already runs on
+   * every app-ready transition and on pull-to-refresh.
+   */
+  describe("_backfillIncompleteItems", () => {
+    beforeEach(async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+      store.setState((state) => ({
+        ...state,
+        library: {
+          ...state.library,
+          selectedLibraryId: "lib-1",
+          selectedLibrary: mockLibraryRow,
+        },
+      }));
+      jest.clearAllMocks();
+    });
+
+    it("does nothing when no items need refreshing", async () => {
+      getLibraryItemsNeedingRefresh.mockResolvedValue([]);
+
+      await (store.getState() as any)._backfillIncompleteItems();
+
+      expect(fetchLibraryItemsBatch).not.toHaveBeenCalled();
+      expect(processFullLibraryItems).not.toHaveBeenCalled();
+    });
+
+    it("fetches and reprocesses full details for items still missing them", async () => {
+      getLibraryItemsNeedingRefresh.mockResolvedValue(["item-1", "item-2"]);
+      const fullItems = [{ id: "item-1" }, { id: "item-2" }];
+      fetchLibraryItemsBatch.mockResolvedValue(fullItems);
+      processFullLibraryItems.mockResolvedValue();
+
+      await (store.getState() as any)._backfillIncompleteItems();
+
+      expect(fetchLibraryItemsBatch).toHaveBeenCalledWith(["item-1", "item-2"]);
+      expect(processFullLibraryItems).toHaveBeenCalledWith(fullItems);
+    });
+
+    it("does not throw if the batch fetch fails", async () => {
+      getLibraryItemsNeedingRefresh.mockResolvedValue(["item-1"]);
+      fetchLibraryItemsBatch.mockRejectedValue(new Error("network error"));
+
+      await expect((store.getState() as any)._backfillIncompleteItems()).resolves.not.toThrow();
+
+      expect(processFullLibraryItems).not.toHaveBeenCalled();
+    });
+
+    it("does nothing if the slice is not ready", async () => {
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, readinessState: "NOT_READY" },
+      }));
+
+      await (store.getState() as any)._backfillIncompleteItems();
+
+      expect(getLibraryItemsNeedingRefresh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("_checkForNewItems triggers backfill", () => {
+    beforeEach(async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+      store.setState((state) => ({
+        ...state,
+        library: {
+          ...state.library,
+          selectedLibraryId: "lib-1",
+          selectedLibrary: mockLibraryRow,
+        },
+      }));
+      fetchLibraryItemsByAddedAt.mockResolvedValue({ results: [] });
+      jest.clearAllMocks();
+    });
+
+    it("attempts a backfill pass after checking for new items", async () => {
+      fetchLibraryItemsByAddedAt.mockResolvedValue({ results: [] });
+      getLibraryItemsNeedingRefresh.mockResolvedValue([]);
+
+      await (store.getState() as any)._checkForNewItems();
+      // The backfill call is fire-and-forget inside the `finally` block.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(getLibraryItemsNeedingRefresh).toHaveBeenCalled();
     });
   });
 
