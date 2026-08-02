@@ -1,4 +1,5 @@
 import { OfflineIcon } from "@/components/icons";
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { useDownloads, useNetwork } from "@/stores";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -76,7 +77,7 @@ export default function CoverImage({ uri, title, fontSize, libraryItemId }: Cove
       {isPartiallyDownloaded && !isDownloaded && (
         <View style={styles.partialBadgeContainer}>
           <View style={styles.partialBadgeBackground}>
-            <Text style={styles.partialBadgeText}>Partial</Text>
+            <Text style={styles.partialBadgeText}>{translate("download.status.partial")}</Text>
           </View>
         </View>
       )}

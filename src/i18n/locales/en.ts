@@ -88,6 +88,7 @@ export const en = {
   "common.play": "Play",
   "common.refresh": "Refresh",
   "common.resume": "Resume",
+  "common.save": "Save",
   "common.sort": "Sort",
   "common.success": "Success",
 
@@ -100,6 +101,16 @@ export const en = {
   "library.sortOptions.publishedYear": "Published Year",
   "library.sortOptions.dateAdded": "Date Added",
   "library.searchPlaceholder": "Search by author, title, series, or narrator...",
+
+  // Bookmarks (item detail)
+  "bookmarks.sectionTitle": "Bookmarks ({count})",
+  "bookmarks.menu.rename": "Rename",
+  "bookmarks.menu.delete": "Delete",
+  "bookmarks.renameModal.title": "Rename Bookmark",
+  "bookmarks.renameModal.inputLabel": "Bookmark title",
+  "bookmarks.errors.deleteFailed": "Failed to delete bookmark. Please try again.",
+  "bookmarks.errors.renameFailed": "Failed to rename bookmark. Please try again.",
+  "bookmarks.errors.jumpFailed": "Failed to jump to bookmark. Please try again.",
 
   // Sort Menu
   "sortMenu.title": "Sort by",
@@ -154,6 +165,7 @@ export const en = {
   "download.status.cancelled": "Download Cancelled",
   "download.status.error": "Download Error",
   "download.status.paused": "Download Paused",
+  "download.status.partial": "Partial",
   "download.progress.overall": "Overall Progress: {percent}%",
   "download.progress.currentFile": "Current File: {percent}%",
   "download.info.files": "Files: ",
@@ -423,4 +435,7 @@ export const en = {
   "player.jumpHistory.hoursAgo": "{count}h ago",
   "player.jumpHistory.rowAccessibility":
     "{source}, {category}, from {from} to {to}, {delta}, {when}",
+  "player.speedLabel": "Speed",
+  "player.bookmarkLabel": "Bookmark",
+  "player.bookmarkTitle.title": "Bookmark Title",
 } as const;

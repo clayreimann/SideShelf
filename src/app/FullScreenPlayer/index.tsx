@@ -458,7 +458,7 @@ export default function FullScreenPlayer() {
 
   const duration = currentTrack.duration;
   const currentPosition = position;
-  const chapterTitle = currentChapter?.chapter.title || "Loading...";
+  const chapterTitle = currentChapter?.chapter.title || translate("common.loading");
   const chapterPosition = currentChapter?.positionInChapter || 0;
   const chapterDuration = currentChapter?.chapterDuration || 0;
 
@@ -499,13 +499,13 @@ export default function FullScreenPlayer() {
                   marginBottom: 12,
                 }}
               >
-                Bookmark Title
+                {translate("player.bookmarkTitle.title")}
               </Text>
               <TextInput
                 value={promptValue}
                 onChangeText={setPromptValue}
                 autoFocus
-                accessibilityLabel="Bookmark Title"
+                accessibilityLabel={translate("player.bookmarkTitle.title")}
                 returnKeyType="done"
                 style={{
                   borderWidth: 1,
@@ -531,7 +531,9 @@ export default function FullScreenPlayer() {
                   accessibilityRole="button"
                   accessibilityLabel={translate("accessibility.cancel")}
                 >
-                  <Text style={{ color: colors.textPrimary, fontSize: 15 }}>Cancel</Text>
+                  <Text style={{ color: colors.textPrimary, fontSize: 15 }}>
+                    {translate("common.cancel")}
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
@@ -545,7 +547,9 @@ export default function FullScreenPlayer() {
                   accessibilityRole="button"
                   accessibilityLabel={translate("accessibility.save")}
                 >
-                  <Text style={{ color: colors.link, fontSize: 15, fontWeight: "600" }}>Save</Text>
+                  <Text style={{ color: colors.link, fontSize: 15, fontWeight: "600" }}>
+                    {translate("common.save")}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -758,7 +762,7 @@ export default function FullScreenPlayer() {
               accessibilityElementsHidden={true}
               importantForAccessibility="no"
             >
-              Speed
+              {translate("player.speedLabel")}
             </Text>
             <PlaybackSpeedControl />
           </View>
@@ -768,7 +772,7 @@ export default function FullScreenPlayer() {
               accessibilityElementsHidden={true}
               importantForAccessibility="no"
             >
-              Bookmark
+              {translate("player.bookmarkLabel")}
             </Text>
             <View
               style={{
@@ -796,7 +800,7 @@ export default function FullScreenPlayer() {
               accessibilityElementsHidden={true}
               importantForAccessibility="no"
             >
-              Sleep Timer
+              {translate("player.sleepTimer.title")}
             </Text>
             <SleepTimerControl />
           </View>

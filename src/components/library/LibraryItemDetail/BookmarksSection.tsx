@@ -52,7 +52,7 @@ export default function BookmarksSection({
         await onDeleteBookmark(libraryItemId, bookmark.time);
       } catch (error) {
         log.error("[handleDeleteBookmark] Failed to delete bookmark", error as Error);
-        Alert.alert("Error", "Failed to delete bookmark. Please try again.");
+        Alert.alert(translate("common.error"), translate("bookmarks.errors.deleteFailed"));
       }
     },
     [libraryItemId, onDeleteBookmark]
@@ -74,7 +74,7 @@ export default function BookmarksSection({
       setRenamingBookmark(null);
     } catch (error) {
       log.error("[handleSaveRename] Failed to rename bookmark", error as Error);
-      Alert.alert("Error", "Failed to rename bookmark. Please try again.");
+      Alert.alert(translate("common.error"), translate("bookmarks.errors.renameFailed"));
     }
   }, [renamingBookmark, renameValue, libraryItemId, onRenameBookmark]);
 
@@ -101,7 +101,7 @@ export default function BookmarksSection({
         }
       } catch (error) {
         log.error("[handleJumpToBookmark] Failed to jump to bookmark", error as Error);
-        Alert.alert("Error", "Failed to jump to bookmark. Please try again.");
+        Alert.alert(translate("common.error"), translate("bookmarks.errors.jumpFailed"));
       }
     },
     [libraryItemId, isCurrentlyPlaying]
@@ -113,7 +113,10 @@ export default function BookmarksSection({
 
   return (
     <>
-      <CollapsibleSection title={`Bookmarks (${bookmarks.length})`} defaultExpanded={false}>
+      <CollapsibleSection
+        title={translate("bookmarks.sectionTitle", { count: bookmarks.length })}
+        defaultExpanded={false}
+      >
         {sortedBookmarks.map((bookmark, index) => (
           <View
             key={`${bookmark.id}-${bookmark.time}`}
@@ -156,8 +159,12 @@ export default function BookmarksSection({
                 handleBookmarkMenuAction(bookmark, nativeEvent.event)
               }
               actions={[
-                { id: "rename", title: "Rename" },
-                { id: "delete", title: "Delete", attributes: { destructive: true } },
+                { id: "rename", title: translate("bookmarks.menu.rename") },
+                {
+                  id: "delete",
+                  title: translate("bookmarks.menu.delete"),
+                  attributes: { destructive: true },
+                },
               ]}
             >
               <Pressable
@@ -203,14 +210,14 @@ export default function BookmarksSection({
                 marginBottom: 12,
               }}
             >
-              Rename Bookmark
+              {translate("bookmarks.renameModal.title")}
             </Text>
             <TextInput
               value={renameValue}
               onChangeText={setRenameValue}
               autoFocus
               returnKeyType="done"
-              accessibilityLabel="Bookmark title"
+              accessibilityLabel={translate("bookmarks.renameModal.inputLabel")}
               style={{
                 borderWidth: 1,
                 borderColor: isDark ? "#444" : "#ccc",
@@ -231,14 +238,18 @@ export default function BookmarksSection({
                 style={{ padding: 8 }}
                 accessibilityRole="button"
               >
-                <Text style={{ color: colors.textPrimary, fontSize: 15 }}>Cancel</Text>
+                <Text style={{ color: colors.textPrimary, fontSize: 15 }}>
+                  {translate("common.cancel")}
+                </Text>
               </Pressable>
               <Pressable
                 onPress={() => void handleSaveRename()}
                 style={{ padding: 8 }}
                 accessibilityRole="button"
               >
-                <Text style={{ color: colors.link, fontSize: 15, fontWeight: "600" }}>Save</Text>
+                <Text style={{ color: colors.link, fontSize: 15, fontWeight: "600" }}>
+                  {translate("common.save")}
+                </Text>
               </Pressable>
             </View>
           </View>

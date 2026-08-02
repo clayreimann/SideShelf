@@ -88,6 +88,7 @@ export const es = {
   "common.play": "Reproducir",
   "common.refresh": "Actualizar",
   "common.resume": "Reanudar",
+  "common.save": "Guardar",
   "common.sort": "Ordenar",
   "common.success": "Éxito",
 
@@ -100,6 +101,16 @@ export const es = {
   "library.sortOptions.publishedYear": "Año de publicación",
   "library.sortOptions.dateAdded": "Fecha de adición",
   "library.searchPlaceholder": "Buscar por autor, título, serie o narrador...",
+
+  // Bookmarks (item detail)
+  "bookmarks.sectionTitle": "Marcadores ({count})",
+  "bookmarks.menu.rename": "Renombrar",
+  "bookmarks.menu.delete": "Eliminar",
+  "bookmarks.renameModal.title": "Renombrar marcador",
+  "bookmarks.renameModal.inputLabel": "Título del marcador",
+  "bookmarks.errors.deleteFailed": "No se pudo eliminar el marcador. Inténtalo de nuevo.",
+  "bookmarks.errors.renameFailed": "No se pudo renombrar el marcador. Inténtalo de nuevo.",
+  "bookmarks.errors.jumpFailed": "No se pudo saltar al marcador. Inténtalo de nuevo.",
 
   // Sort Menu
   "sortMenu.title": "Ordenar por",
@@ -155,6 +166,7 @@ export const es = {
   "download.status.cancelled": "Descarga cancelada",
   "download.status.error": "Error de descarga",
   "download.status.paused": "Descarga pausada",
+  "download.status.partial": "Parcial",
   "download.progress.overall": "Progreso general: {percent}%",
   "download.progress.currentFile": "Archivo actual: {percent}%",
   "download.info.files": "Archivos: ",
@@ -426,4 +438,7 @@ export const es = {
   "player.jumpHistory.minutesAgo": "hace {count} min",
   "player.jumpHistory.hoursAgo": "hace {count} h",
   "player.jumpHistory.rowAccessibility": "{source}, {category}, de {from} a {to}, {delta}, {when}",
+  "player.speedLabel": "Velocidad",
+  "player.bookmarkLabel": "Marcador",
+  "player.bookmarkTitle.title": "Título del marcador",
 } as const;
