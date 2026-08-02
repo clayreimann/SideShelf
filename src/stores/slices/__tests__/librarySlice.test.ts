@@ -51,6 +51,8 @@ jest.mock("@/db/helpers/libraryItems", () => ({
 
 jest.mock("@/db/helpers/mediaMetadata", () => ({
   cacheCoversForLibraryItems: jest.fn(),
+  upsertBookMetadata: jest.fn(),
+  upsertPodcastMetadata: jest.fn(),
   upsertBooksMetadata: jest.fn(),
   upsertPodcastsMetadata: jest.fn(),
 }));
@@ -89,6 +91,8 @@ describe("LibrarySlice", () => {
   } = require("@/db/helpers/libraryItems");
   const {
     cacheCoversForLibraryItems,
+    upsertBookMetadata,
+    upsertPodcastMetadata,
     upsertBooksMetadata,
     upsertPodcastsMetadata,
   } = require("@/db/helpers/mediaMetadata");
@@ -123,6 +127,8 @@ describe("LibrarySlice", () => {
     marshalLibraryItemFromApi.mockImplementation((item: LibraryItemDisplayRow) => item);
 
     cacheCoversForLibraryItems.mockResolvedValue({ downloadedCount: 0, totalCount: 0 });
+    upsertBookMetadata.mockResolvedValue();
+    upsertPodcastMetadata.mockResolvedValue();
     upsertBooksMetadata.mockResolvedValue();
     upsertPodcastsMetadata.mockResolvedValue();
 
@@ -217,6 +223,58 @@ describe("LibrarySlice", () => {
       // Test case 3: Both API and DB (ready)
       await store.getState().initializeLibrarySlice(true, true);
       expect(store.getState().library.readinessState).toBe("READY");
+    });
+  });
+
+  /**
+   * Regression coverage for GitHub issue #11 (fresh-login initialization is broken).
+   *
+   * StoreProvider's useLibraryStoreInitializer fires initializeLibrarySlice(apiConfigured,
+   * dbInitialized) as soon as dbInitialized is true — which happens before login, while
+   * apiConfigured is still false. That early call reads the (empty, pre-sync) local cache
+   * and, after its awaits resolve, unconditionally overwrites selectedLibraryId/libraries
+   * with what it captured. If login completes and _onTransitionToReady (triggered by the
+   * separate _updateReadiness effect) finishes populating a real selection *before* that
+   * slow early call's own trailing set() runs, the early call's stale, empty snapshot wins
+   * the race and wipes the real selection back out — permanently, since nothing re-triggers
+   * _onTransitionToReady afterward. This is what produces "no library is selected by
+   * default" after a first-ever login.
+   */
+  describe("initializeLibrarySlice — fresh-login race", () => {
+    it("does not let a slow pre-auth cache load clobber a selection made by a concurrent login", async () => {
+      // Simulate the pre-auth initializeLibrarySlice(false, true) call's local DB read
+      // being slow enough to still be in flight when login completes.
+      let resolveGetAllLibraries!: (value: unknown) => void;
+      const deferred = new Promise((resolve) => {
+        resolveGetAllLibraries = resolve;
+      });
+      getAllLibraries.mockImplementation(() => deferred);
+
+      const earlyInit = store.getState().initializeLibrarySlice(false, true);
+
+      // Let the early call reach and issue its getAllLibraries() call.
+      await new Promise((r) => setImmediate(r));
+      expect(getAllLibraries).toHaveBeenCalledTimes(1);
+
+      // Login completes: apiConfigured flips true. This is what
+      // useLibraryStoreInitializer's second effect does on every dependency change,
+      // independent of (and not gated behind) the still-pending early call above.
+      getAllLibraries.mockResolvedValue([mockLibraryRow, mockPodcastLibraryRow]);
+      marshalLibrariesFromResponse.mockReturnValue([mockLibraryRow, mockPodcastLibraryRow]);
+      store.getState()._updateReadiness(true, true);
+      await new Promise((r) => setTimeout(r, 0));
+
+      // The login-triggered transition should have selected a library already.
+      expect(store.getState().library.selectedLibraryId).toBe("lib-1");
+
+      // Now the slow pre-auth read finally resolves with the stale, empty snapshot it
+      // captured before login happened.
+      resolveGetAllLibraries([]);
+      await earlyInit;
+
+      const state = store.getState();
+      expect(state.library.selectedLibraryId).toBe("lib-1");
+      expect(state.library.libraries.length).toBeGreaterThan(0);
     });
   });
 
@@ -758,6 +816,58 @@ describe("LibrarySlice", () => {
 
       const state = store.getState();
       expect(state.library.operationState).toBe("IDLE");
+    });
+
+    /**
+     * Regression coverage for GitHub issue #11 symptoms 1, 3 and 4 ("home isn't
+     * refreshed", "authors don't populate", "series don't populate" after a first-ever
+     * login). _refetchItems() is the path used for a brand-new library sync (via
+     * _onTransitionToReady's first-time selectLibrary(id, true) call): it populates
+     * library items and, in the background, full item details including author/series
+     * links — but never told the authors/series/home slices that new data had landed.
+     * Those slices had already run their own one-shot initialization earlier (before
+     * login, against an empty DB) and nothing else ever re-fetches them, so they stay
+     * empty forever. This mirrors the exact shape of the `_backfillIncompleteItems`
+     * reconciliation added for the Series under-counting bug — it just wasn't wired
+     * into this, the first-sync code path too.
+     */
+    it("refreshes authors, series, and home once the first-time full-detail sync completes", async () => {
+      const refetchSeries = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
+      const refetchAuthors = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
+      const refreshHome = jest
+        .fn<(userId: string, force?: boolean) => Promise<void>>()
+        .mockResolvedValue(undefined);
+      (store as any).setState((state: any) => ({
+        ...state,
+        userProfile: { activeUserId: "user-1" },
+        refetchSeries,
+        refetchAuthors,
+        refreshHome,
+      }));
+
+      fetchAllLibraryItems.mockResolvedValue([
+        {
+          id: "li-1",
+          libraryId: "lib-1",
+          mediaType: "book",
+          media: { metadata: { title: "Book 1" } },
+        },
+      ]);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+      fetchLibraryItemsBatch.mockResolvedValue([{ id: "li-1" }]);
+      processFullLibraryItems.mockResolvedValue();
+      cacheCoversForLibraryItems.mockResolvedValue({ downloadedCount: 0, totalCount: 0 });
+
+      await (store.getState() as any)._refetchItems();
+
+      // The full-detail batch sync runs as a fire-and-forget background task.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(refetchSeries).toHaveBeenCalled();
+      expect(refetchAuthors).toHaveBeenCalled();
+      expect(refreshHome).toHaveBeenCalledWith("user-1", true);
     });
   });
 
