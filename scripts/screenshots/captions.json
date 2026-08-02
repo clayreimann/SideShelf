@@ -1,0 +1,38 @@
+[
+  {
+    "order": 1,
+    "name": "home",
+    "file": "screenshot-home",
+    "caption": "Pick up right where you left off"
+  },
+  {
+    "order": 2,
+    "name": "player",
+    "file": "screenshot-player",
+    "caption": "A player built for long listens"
+  },
+  {
+    "order": 3,
+    "name": "library-grid",
+    "file": "screenshot-library-grid",
+    "caption": "Your whole shelf, beautifully browsable"
+  },
+  {
+    "order": 4,
+    "name": "downloads",
+    "file": "screenshot-downloads",
+    "caption": "Take your library offline"
+  },
+  {
+    "order": 5,
+    "name": "sleep-timer",
+    "file": "screenshot-sleep-timer",
+    "caption": "Fall asleep without losing your place"
+  },
+  {
+    "order": 6,
+    "name": "series",
+    "file": "screenshot-series",
+    "caption": "Browse by series, author, or collection"
+  }
+]

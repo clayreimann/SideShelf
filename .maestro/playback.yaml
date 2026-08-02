@@ -3,8 +3,8 @@ appId: cloud.madtown.sideshelf
 # Regression flow: Playback
 # Verifies: login -> start playback -> full-screen player -> pause -> seek -> speed control -> dismiss
 - launchApp
-- runFlow: .maestro/_login.yaml
-- runFlow: .maestro/_start-playback.yaml
+- runFlow: _login.yaml
+- runFlow: _start-playback.yaml
 
 # Navigate to Home to access FloatingPlayer (it hides on item detail page)
 - tapOn: "Home"

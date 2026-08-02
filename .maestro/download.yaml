@@ -3,7 +3,7 @@ appId: cloud.madtown.sideshelf
 # Regression flow: Download
 # Verifies: login -> navigate to item -> trigger download -> assert download progress
 - launchApp
-- runFlow: .maestro/_login.yaml
+- runFlow: _login.yaml
 
 # Navigate to Library and open first item
 - tapOn: "Library"

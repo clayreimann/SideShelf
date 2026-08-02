@@ -3,7 +3,7 @@ appId: cloud.madtown.sideshelf
 # Regression flow: Library navigation
 # Verifies: login -> Library tab -> browse items -> tap item -> item detail screen
 - launchApp
-- runFlow: .maestro/_login.yaml
+- runFlow: _login.yaml
 - tapOn: "Library"
 - waitForAnimationToEnd
 # Double-tap to ensure list root

@@ -50,6 +50,7 @@ export default function SeriesScreen() {
       return (
         <TouchableOpacity
           onPress={() => router.push(`/series/${item.id}`)}
+          testID="series-item"
           style={{
             flexDirection: "row",
             padding: 16,
