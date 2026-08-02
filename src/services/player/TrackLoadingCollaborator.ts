@@ -528,12 +528,35 @@ export class TrackLoadingCollaborator implements ITrackLoadingCollaborator {
    * No coordinator imports, no event dispatches, throws on failure.
    * Called only by the coordinator via IPlayerServiceFacade.executeRebuildQueue.
    *
-   * Note: this does not thread buildTrackList's playSessionId anywhere — a
-   * pre-existing gap, not introduced here. The direct store._setPlaySessionId()
-   * write buildTrackList used to make was already fought/overwritten by the
-   * coordinator's store bridge on the very next sync (the bridge pushes
-   * context.sessionId, which RELOAD_QUEUE/QUEUE_RELOADED never update), so
-   * removing that write doesn't regress this path — it was already ineffective.
+   * Note: this does not thread buildTrackList's playSessionId back to the
+   * caller — a pre-existing gap, not introduced by the recent context-ownership
+   * work (the direct store._setPlaySessionId() write buildTrackList used to make
+   * was already fought/overwritten by the coordinator's store bridge on the very
+   * next sync, so removing that write didn't regress anything).
+   *
+   * Traced consequence (not merely theoretical — this is reachable): when a
+   * streaming rebuild is triggered by NATIVE_PLAYBACK_ERROR's token-rotation path
+   * (see the queueStatus='unknown' comment in PlayerStateCoordinator's
+   * NATIVE_PLAYBACK_ERROR case), buildTrackList mints a fresh server play
+   * session, but because it isn't threaded back here, context.sessionId (and the
+   * store's currentPlaySessionId projection) keep the pre-error value.
+   * PlayerBackgroundService.handlePlaybackError also calls
+   * progressService.endCurrentSession() for that item, so the next
+   * NATIVE_TRACK_CHANGED's handleActiveTrackChanged does NOT hit its
+   * "session already exists" short-circuit — it reads the stale
+   * currentPlaySessionId and passes it as existingServerSessionId into
+   * progressService.startSession(), which persists it into the new local
+   * session row's serverSessionId column via updateServerSessionId().
+   *
+   * That column, however, is never read back for anything that talks to the
+   * server: the progress-sync outbox (ProgressSyncWorker → createLocalSession)
+   * addresses sessions exclusively by the app's own local session UUID
+   * (pending.session.id), and the endpoints.ts syncSession()/closeSession()
+   * functions that DO address a session by server play-session ID are not
+   * called anywhere in this app. So the stale value here can leave a wrong
+   * serverSessionId sitting in an otherwise-unread DB column, but it cannot
+   * cause progress to sync to, or a session to be closed against, the wrong
+   * server-side play session. Confirmed benign — left unthreaded deliberately.
    */
   async executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo> {
     await TrackPlayer.reset();

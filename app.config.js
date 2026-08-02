@@ -63,8 +63,25 @@ module.exports = ({ config }) => {
     // to LAN servers) would already fail with a network security exception.
     // usesCleartextTraffic: true below restores parity with the iOS
     // decision above (allow cleartext, warn on login instead of blocking).
+    // --- iPad support decision (v1.0) -------------------------------------
+    // supportsTablet is false for 1.0. This is a deliberate de-scope, not an
+    // oversight.
+    //
+    // App Store Connect makes the 13" iPad screenshot set (2064x2752)
+    // MANDATORY the moment supportsTablet is true, and it subjects the build
+    // to iPad-specific App Review scrutiny. Neither is worth taking on for
+    // 1.0, because there are no tablet layouts: the library grid hardcodes
+    // three columns regardless of width (src/components/library/
+    // LibraryItemList.tsx), and FullScreenPlayer is the only screen that
+    // reads useWindowDimensions at all. On a 13" iPad that renders three
+    // enormous covers across ~2000pt.
+    //
+    // What this does NOT do: remove the app from iPad users. iPhone-only
+    // apps still install and run on iPad in compatibility mode. So this
+    // trades a stretched-but-shipping iPad experience for a smaller launch
+    // surface, and buys time to do tablet layouts properly in 1.1.
     ios: {
-      supportsTablet: true,
+      supportsTablet: false,
       buildNumber: BUILD_NUMBER,
       infoPlist: {
         NSAppTransportSecurity: {

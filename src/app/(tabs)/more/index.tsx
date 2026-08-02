@@ -145,6 +145,36 @@ export default function MoreScreen() {
     }
   };
 
+  // Trailing slashes match the canonical URLs the site itself links to
+  // (SideShelf-web/src/_includes/base.njk) — Eleventy emits these pages as
+  // /privacy/index.html, so the slash-less form relies on a redirect.
+  const openPrivacyPolicy = async () => {
+    try {
+      await WebBrowser.openBrowserAsync("https://sideshelf.app/privacy/");
+    } catch (error) {
+      console.error("[MoreScreen] Failed to open privacy policy:", error);
+    }
+  };
+
+  const openTermsOfService = async () => {
+    try {
+      await WebBrowser.openBrowserAsync("https://sideshelf.app/terms/");
+    } catch (error) {
+      console.error("[MoreScreen] Failed to open terms of service:", error);
+    }
+  };
+
+  // Points at GitHub issues rather than sideshelf.app/support: there is no
+  // support page on the site, and the site's own footer uses this same link as
+  // its support channel. A dead support link is an App Review failure.
+  const openSupport = async () => {
+    try {
+      await WebBrowser.openBrowserAsync("https://github.com/clayreimann/SideShelf/issues");
+    } catch (error) {
+      console.error("[MoreScreen] Failed to open support page:", error);
+    }
+  };
+
   const data = useMemo(() => {
     const items: ActionItem[] = [];
 
@@ -179,6 +209,27 @@ export default function MoreScreen() {
         label: translate("more.feedback"),
         onPress: openFeedback,
         icon: { sf: "envelope" as SFSymbol, ionicon: "mail-outline" as IoniconsName },
+      },
+      {
+        label: translate("more.privacyPolicy"),
+        onPress: openPrivacyPolicy,
+        icon: {
+          sf: "hand.raised" as SFSymbol,
+          ionicon: "shield-checkmark-outline" as IoniconsName,
+        },
+      },
+      {
+        label: translate("more.termsOfService"),
+        onPress: openTermsOfService,
+        icon: { sf: "doc.text" as SFSymbol, ionicon: "document-text-outline" as IoniconsName },
+      },
+      {
+        label: translate("more.support"),
+        onPress: openSupport,
+        icon: {
+          sf: "questionmark.circle" as SFSymbol,
+          ionicon: "help-circle-outline" as IoniconsName,
+        },
       }
     );
 
@@ -271,6 +322,9 @@ export default function MoreScreen() {
     errorCount,
     diagnosticsEnabled,
     openFeedback,
+    openPrivacyPolicy,
+    openTermsOfService,
+    openSupport,
     hiddenTabsData,
   ]);
 

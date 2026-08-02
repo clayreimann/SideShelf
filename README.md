@@ -2,13 +2,18 @@
 
 A modern, feature-rich React Native client for [Audiobookshelf](https://www.audiobookshelf.org/) - the self-hosted audiobook and podcast server.
 
+<!-- TODO: Replace with the real App Store badge once SideShelf is live -->
+<!-- [![Download on the App Store](https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg)](https://apps.apple.com/app/idXXXXXXXXXX) -->
+
 ## 📱 About
 
-This app provides a native mobile experience for your Audiobookshelf library, featuring offline downloads, progress synchronization, and a beautiful, intuitive interface optimized for audiobook and podcast consumption.
+This app provides a native mobile experience for your Audiobookshelf library, featuring offline downloads, progress synchronization, and a beautiful, intuitive interface built for audiobook listening.
+
+> **v1.0 is audiobooks only.** Audiobookshelf also serves podcasts, but SideShelf has no podcast UI yet — podcast support is planned for v1.1.
 
 ### ✨ Key Features
 
-- **📚 Complete Library Management**: Browse and search your audiobook and podcast collections
+- **📚 Complete Library Management**: Browse and search your audiobook collection
 - **⬇️ Offline Downloads**: Download content for offline listening with intelligent storage management
 - **🎵 Advanced Audio Player**: Full-featured player with progress tracking, and playback speed controls
 - **🔄 Real-time Sync**: Seamless progress synchronization across all your devices
@@ -21,7 +26,7 @@ This app provides a native mobile experience for your Audiobookshelf library, fe
 
 - Node.js (v18 or later)
 - Expo CLI
-- iOS Simulator (for iOS development) or Android Studio (for Android development)
+- Xcode with an iOS Simulator (v1.0 is iOS-only; Android is untested)
 - An active Audiobookshelf server
 
 ### Installation
@@ -29,8 +34,8 @@ This app provides a native mobile experience for your Audiobookshelf library, fe
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/your-username/abs-react-native.git
-   cd abs-react-native
+   git clone https://github.com/clayreimann/SideShelf.git
+   cd SideShelf
    ```
 
 2. **Install dependencies**
@@ -39,16 +44,15 @@ This app provides a native mobile experience for your Audiobookshelf library, fe
    npm install
    ```
 
-3. **Start the development server**
+3. **Run the app**
+
+   The app uses native modules (track player, background downloader), so it requires a
+   development build — it does not run in Expo Go.
 
    ```bash
-   npx expo start
+   npm run ios          # Prebuild and run on the iOS Simulator
+   npm run ios:device   # Build and install on a connected iPhone
    ```
-
-4. **Run on your preferred platform**
-   - **iOS Simulator**: Press `i` in the terminal or scan the QR code with your iOS device
-   - **Android Emulator**: Press `a` in the terminal or scan the QR code with your Android device
-   - **Physical Device**: Install Expo Go and scan the QR code
 
 ### Development Setup
 
@@ -104,7 +108,7 @@ src/
 
 #### Library Browsing
 
-- Browse your audiobook and podcast collections
+- Browse your audiobook collection
 - Sort by title, author, date added, or progress
 - Switch between grid and list views
 - Filter by download status, progress, or genre
@@ -122,6 +126,15 @@ src/
 - Monitor download progress with detailed statistics
 - Automatic cleanup of old downloads
 - Background downloading support
+
+## 📸 Screenshots
+
+<!-- Generated via `npm run screenshots` (Maestro-driven capture pipeline). -->
+<!-- TODO: run `npm run screenshots` and commit the output before shipping. -->
+
+|  ![Screenshot 1](.screenshots/store/01-home.jpg)  |  ![Screenshot 2](.screenshots/store/02-library.jpg)  |  ![Screenshot 3](.screenshots/store/03-player.jpg)  |
+| :-----------------------------------------------: | :--------------------------------------------------: | :-------------------------------------------------: |
+| ![Screenshot 4](.screenshots/store/04-series.jpg) | ![Screenshot 5](.screenshots/store/05-downloads.jpg) | ![Screenshot 6](.screenshots/store/06-settings.jpg) |
 
 ## 🔗 Deep Links
 
@@ -167,35 +180,16 @@ All deep links require the user to be authenticated. Unauthenticated links redir
 ### Available Scripts
 
 ```bash
-npm start          # Start Expo development server
-npm run ios        # Run on iOS simulator
-npm run android    # Run on Android emulator
-npm test           # Run test suite
-npm run lint       # Run ESLint
-npm run test:coverage # Run tests with coverage report
-npm run abs:debug  # Run Audiobookshelf API debugging utility
-./scripts/capture-ios-logs.sh [device|udid] # Stream iOS logs (sim/device)
+npm start                  # Start Expo development server
+npm run ios                # Run on iOS Simulator
+npm run ios:device         # Build and install on a connected iPhone
+npm test                   # Run test suite
+npm run lint               # Run ESLint
+npm run test:coverage      # Run tests with coverage report
+npm run static-analysis    # Typecheck + lint + circular-import check (CI gate)
+npm run screenshots        # Capture marketing screenshots via Maestro
+npm run build-testflight   # Local production build for TestFlight
 ```
-
-#### API Debugging Utility
-
-Use the debugging script to capture real Audiobookshelf responses and exercise session lifecycle endpoints:
-
-```bash
-ABN_BASE_URL="https://your-server" \
-ABN_USERNAME="user" \
-ABN_PASSWORD="pass" \
-npm run abs:debug -- \
-  --library-id LIBRARY_ID \
-  --library-item-id ITEM_ID \
-  --sync-mode playback \
-  --open-session-sync \
-  --check-session-reuse \
-  --fetch-progress \
-  --output api-response-samples/debug-session.json
-```
-
-The script logs each step (login, library fetches, session create/sync/close, optional reuse checks, and `/play` calls), redacting credentials while writing a structured JSON report you can feed into tests or inspect manually. By default it mirrors the app's minimal local-session payload and uses `/api/session/local`; add `--sync-mode playback` to send the richer playback-session body, or `--open-session-sync` to exercise the `/api/session/:id/sync` and `/close` endpoints used for streaming sessions.
 
 ### Testing
 
@@ -228,11 +222,10 @@ See our [TODO.md](./TODO.md) for detailed development plans and feature roadmap.
 
 ### Upcoming Features
 
+- **Podcast Support**: Podcast browsing, episode management, and podcast-specific playback (v1.1) — the API and database layers already handle podcast media types; the UI is what's missing
+- **CarPlay / Android Auto**: Vehicle integration and audio-browser support (v1.2)
+- **Android**: Android support is out of scope for 1.0 and planned for a later release
 - **Real-time Updates**: WebSocket integration for live progress sync
-- **Podcast Support**: Enhanced podcast features with episode management
-- **Advanced Player**: Sleep timer, bookmarking, and advanced controls
-- **Series Management**: Better series organization and tracking
-- **CarPlay/Android Auto**: Vehicle integration support
 
 ## 📄 License
 
@@ -247,8 +240,8 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ## 📞 Support
 
-- **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/your-username/abs-react-native/issues)
-- **Discussions**: Join the conversation in [GitHub Discussions](https://github.com/your-username/abs-react-native/discussions)
+- **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/clayreimann/SideShelf/issues)
+- **Discussions**: Join the conversation in [GitHub Discussions](https://github.com/clayreimann/SideShelf/discussions)
 - **Audiobookshelf Community**: Connect with the broader community on [Discord](https://discord.gg/audiobookshelf)
 
 ---
