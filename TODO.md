@@ -576,6 +576,35 @@ summarized in the review discussion; items below are the non-blocking todos it p
       isolation, `NOT EXISTS` rewrite, and a new `_backfillIncompleteItems` action wired
       into `_checkForNewItems` so an interrupted sync self-heals. Regression tests added
       (suite 1419 → 1431).
+- [ ] **Add a startup backfill for missing AUTHOR images** — checked 2026-08-02. The
+      series half of this was fixed (see below), but **author images were not**, because
+      they are a completely separate cache: author avatars come from `cachedImageUri`,
+      derived at read time by `src/db/helpers/authors.ts` calling
+      `isAuthorImageCached(author.id)` against files in `src/lib/authorImages.ts` — they
+      never touch `local_cover_cache`, so the `repairMissingCoverArt` widening does nothing
+      for them. There is no startup repair for author images at all; the only retry is
+      `authorsSlice.ts:204` filtering `!item.cachedImageUri` whenever authors are
+      re-fetched. So an author image that fails to download, or that is orphaned when the
+      iOS container UUID rotates, falls back to initials until something happens to
+      re-trigger that fetch. Worth a repair pass at startup for parity with covers.
+      Note the two caches differ in kind: author images are **filesystem-only**, so they
+      cannot suffer the file-present/row-missing divergence that made covers blank forever
+      — this is a missing-retry gap, not a correctness bug, and is correspondingly lower
+      priority.
+- [ ] **Delete dead `getLibraryItemsNeedingFullData`** (`src/db/helpers/libraryItems.ts:134`)
+      — verified dead 2026-08-02: zero callers anywhere outside its own definition. Note
+      this is **not** the function fixed in `a05c415`; that was its sibling
+      `getLibraryItemsNeedingRefresh` (line 175), which is the one `librarySlice.ts:905`
+      actually calls. There is also a third sibling,
+      `getLibraryItemsNeedingFullRefresh` (`fullLibraryItems.ts:376`) — check whether that
+      one is live before touching it.
+      Bugs it carries, recorded so the deletion is an informed one rather than a guess:
+      its second query LEFT JOINs `mediaMetadata` and then filters
+      `not(inArray(mediaMetadata.id, …))`, but `NULL NOT IN (…)` evaluates to NULL rather
+      than TRUE in SQL — so items with **no metadata row at all** are silently excluded,
+      which is exactly the set "needs full data" is supposed to return. It also loads every
+      complete item into memory to build that `NOT IN` list, unbounded, before applying
+      `.limit()`. Both are moot if it is deleted; fix them only if a caller turns up.
 - [x] ~~**Some series rows render without a cover thumbnail**~~ — **FIXED 2026-08-01,
       confirmed live 2026-08-02.** `repairMissingCoverArt` now repairs an item when its
       cover FILE is missing _or_ its `local_cover_cache` ROW is missing, and the dead
