@@ -2727,6 +2727,18 @@ describe("PlayerStateCoordinator", () => {
       useAppStore.getState.mockReturnValue(mockStore);
     });
 
+    it("does not project unhydrated coordinator defaults on APP_FOREGROUNDED", async () => {
+      await coordinator.dispatch({ type: "APP_FOREGROUNDED" });
+      await waitForEventQueue();
+
+      expect(mockStore.updatePosition).not.toHaveBeenCalled();
+      expect(mockStore.updatePlayingState).not.toHaveBeenCalled();
+      expect(mockStore._setCurrentTrack).not.toHaveBeenCalled();
+      expect(mockStore._setPlaybackRate).not.toHaveBeenCalled();
+      expect(mockStore._setVolume).not.toHaveBeenCalled();
+      expect(mockStore._setPlaySessionId).not.toHaveBeenCalled();
+    });
+
     it("syncPositionToStore updates store position on NATIVE_PROGRESS_UPDATED", async () => {
       // Reach PLAYING state first
       await coordinator.dispatch({ type: "LOAD_TRACK", payload: { libraryItemId: "test-item" } });
@@ -3870,6 +3882,157 @@ describe("PlayerStateCoordinator", () => {
       });
       await waitForEventQueue();
     }
+
+    async function rebuildQueueOnPlayAt(
+      position: number,
+      smartRewindOutcome: { fromPosition: number; toPosition: number } | null = null
+    ): Promise<void> {
+      const { PlayerService } = jest.requireMock<{
+        PlayerService: {
+          getInstance: () => {
+            executeRebuildQueue: ReturnType<typeof jest.fn>;
+            executePlay: ReturnType<typeof jest.fn>;
+          };
+        };
+      }>("../../PlayerService");
+      PlayerService.getInstance().executeRebuildQueue.mockResolvedValueOnce({
+        position,
+        source: "activeSession",
+        authoritativePosition: position,
+        asyncStoragePosition: null,
+      });
+      PlayerService.getInstance().executePlay.mockResolvedValueOnce(smartRewindOutcome);
+
+      await coordinator.dispatch({
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack,
+            position,
+            playbackRate: 1,
+            volume: 1,
+            isPlaying: false,
+            currentPlaySessionId: null,
+          },
+        },
+      });
+      await waitForEventQueue();
+      expect(coordinator.getContext().queueStatus).toBe("unknown");
+
+      await coordinator.dispatch({ type: "PLAY" });
+      await waitForEventQueue();
+      expect(coordinator.getContext().queueStatus).toBe("valid");
+      expect(coordinator.getContext().position).toBe(smartRewindOutcome?.toPosition ?? position);
+    }
+
+    it("queue rebuild reconciliation ignores reset zero and accepts the restored target without jump history", async () => {
+      await rebuildQueueOnPlayAt(120);
+
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 0, duration: 3600 },
+      });
+      await waitForEventQueue();
+
+      expect(coordinator.getContext().position).toBe(120);
+      expect(mockStore.updatePosition).not.toHaveBeenCalledWith(0);
+      expect(mockStore._recordJump).not.toHaveBeenCalled();
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 120, duration: 3600 },
+      });
+      await waitForEventQueue();
+
+      expect(coordinator.getContext().position).toBe(120);
+      expect(mockStore._recordJump).not.toHaveBeenCalled();
+    });
+
+    it("queue rebuild reconciliation suppresses reset and resume ticks before a smart-rewind target", async () => {
+      await rebuildQueueOnPlayAt(120, { fromPosition: 120, toPosition: 90 });
+
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      for (const position of [0, 120, 90]) {
+        await coordinator.dispatch({
+          type: "NATIVE_PROGRESS_UPDATED",
+          payload: { position, duration: 3600 },
+        });
+        await waitForEventQueue();
+      }
+
+      expect(coordinator.getContext().position).toBe(90);
+      expect(mockStore.updatePosition).not.toHaveBeenCalledWith(0);
+      expect(mockStore.updatePosition).not.toHaveBeenCalledWith(120);
+      expect(mockStore._recordJump).not.toHaveBeenCalled();
+    });
+
+    it("queue rebuild reconciliation is cancelled by an explicit seek to zero", async () => {
+      await rebuildQueueOnPlayAt(120);
+
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch(
+        { type: "SEEK", payload: { position: 0 } },
+        { source: "ui", jump: { surface: "full_screen", category: "scrub" } }
+      );
+      await waitForEventQueue();
+
+      expect(coordinator.getContext().position).toBe(0);
+      expect(mockStore._recordJump).toHaveBeenCalledWith(
+        expect.objectContaining({
+          libraryItemId: "item-1",
+          fromPosition: 120,
+          toPosition: 0,
+          surface: "full_screen",
+          category: "scrub",
+        })
+      );
+    });
+
+    it("queue rebuild reconciliation releases the first unrelated native position", async () => {
+      await rebuildQueueOnPlayAt(120);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 120, duration: 3600 },
+      });
+      await waitForEventQueue();
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 125, duration: 3600 },
+      });
+      await waitForEventQueue();
+
+      jest.clearAllMocks();
+      mockStore = makeMockStore();
+      useAppStore.getState.mockReturnValue(mockStore);
+
+      await coordinator.dispatch({
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: 0, duration: 3600 },
+      });
+      await waitForEventQueue();
+
+      expect(coordinator.getContext().position).toBe(0);
+      expect(mockStore._recordJump).toHaveBeenCalledWith(
+        expect.objectContaining({
+          libraryItemId: "item-1",
+          fromPosition: 125,
+          toPosition: 0,
+          surface: "native_player",
+          category: "unexpected_native",
+        })
+      );
+    });
 
     it("records unexpected native jump on large delta (≥30s)", async () => {
       await reachPlayingAt(100);

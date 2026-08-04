@@ -63,8 +63,18 @@ type ExpectedInternalPositionReconciliation = SmartRewindOutcome & {
   generation: number;
 };
 
+type ExpectedQueuePositionReconciliation = {
+  libraryItemId: string;
+  transientPositions: number[];
+  targetPosition: number;
+  generation: number;
+};
+
+type QueuePositionReconciliationMatch = "transient" | "target" | null;
+
 const SMART_REWIND_RECONCILIATION_WINDOW_MS = 2_000;
 const SMART_REWIND_POSITION_TOLERANCE_SECONDS = 1;
+const QUEUE_POSITION_RECONCILIATION_WINDOW_MS = 5_000;
 
 /** Upper bound on how long a track load may hold the UI in its loading state.
  *  Native audio may legitimately settle into Ready/Paused without ever emitting
@@ -125,6 +135,13 @@ export class PlayerStateCoordinator extends EventEmitter {
     null;
   private internalPositionReconciliationGeneration = 0;
 
+  // Rebuilding TrackPlayer's queue can emit stale positions from reset(), the
+  // restored resume seek, and an immediately-following smart rewind. Preserve
+  // the coordinator's final target until those known internal ticks settle.
+  private expectedQueuePositionReconciliation: ExpectedQueuePositionReconciliation | null = null;
+  private expectedQueuePositionReconciliationTimeout: ReturnType<typeof setTimeout> | null = null;
+  private queuePositionReconciliationGeneration = 0;
+
   // Load watchdog: guards against isLoadingTrack latching true forever when
   // native audio never reports State.Playing after a track load. See
   // LOAD_WATCHDOG_MS above.
@@ -167,6 +184,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         PlayerStateCoordinator.instance.diagnosticInterval = null;
       }
       PlayerStateCoordinator.instance.clearExpectedInternalPositionReconciliation();
+      PlayerStateCoordinator.instance.clearExpectedQueuePositionReconciliation();
       PlayerStateCoordinator.instance.clearLoadWatchdog();
     }
     PlayerStateCoordinator.instance = null;
@@ -302,6 +320,7 @@ export class PlayerStateCoordinator extends EventEmitter {
     outcome: SmartRewindOutcome,
     libraryItemId: string
   ): void {
+    this.clearExpectedQueuePositionReconciliation();
     this.clearExpectedInternalPositionReconciliation();
     const generation = this.internalPositionReconciliationGeneration;
     this.expectedInternalPositionReconciliation = {
@@ -314,6 +333,87 @@ export class PlayerStateCoordinator extends EventEmitter {
         this.clearExpectedInternalPositionReconciliation();
       }
     }, SMART_REWIND_RECONCILIATION_WINDOW_MS);
+  }
+
+  private clearExpectedQueuePositionReconciliation(): void {
+    this.queuePositionReconciliationGeneration++;
+    this.expectedQueuePositionReconciliation = null;
+    if (this.expectedQueuePositionReconciliationTimeout) {
+      clearTimeout(this.expectedQueuePositionReconciliationTimeout);
+      this.expectedQueuePositionReconciliationTimeout = null;
+    }
+  }
+
+  private armExpectedQueuePositionReconciliation(
+    libraryItemId: string,
+    transientPositions: number[],
+    targetPosition: number
+  ): void {
+    this.clearExpectedInternalPositionReconciliation();
+    this.clearExpectedQueuePositionReconciliation();
+
+    const distinctTransientPositions = transientPositions.filter(
+      (position, index, positions) =>
+        Math.abs(position - targetPosition) > SMART_REWIND_POSITION_TOLERANCE_SECONDS &&
+        positions.findIndex(
+          (candidate) => Math.abs(candidate - position) <= SMART_REWIND_POSITION_TOLERANCE_SECONDS
+        ) === index
+    );
+    if (distinctTransientPositions.length === 0) {
+      return;
+    }
+
+    const generation = this.queuePositionReconciliationGeneration;
+    this.expectedQueuePositionReconciliation = {
+      libraryItemId,
+      transientPositions: distinctTransientPositions,
+      targetPosition,
+      generation,
+    };
+    this.expectedQueuePositionReconciliationTimeout = setTimeout(() => {
+      if (this.expectedQueuePositionReconciliation?.generation === generation) {
+        this.clearExpectedQueuePositionReconciliation();
+      }
+    }, QUEUE_POSITION_RECONCILIATION_WINDOW_MS);
+  }
+
+  private classifyExpectedQueuePositionReconciliation(
+    event: PlayerEvent,
+    libraryItemId: string | undefined
+  ): QueuePositionReconciliationMatch {
+    if (event.type !== "NATIVE_PROGRESS_UPDATED") {
+      return null;
+    }
+
+    const expected = this.expectedQueuePositionReconciliation;
+    if (!expected) {
+      return null;
+    }
+    if (libraryItemId !== expected.libraryItemId) {
+      this.clearExpectedQueuePositionReconciliation();
+      return null;
+    }
+
+    const reportedPosition = event.payload.position;
+    if (
+      expected.transientPositions.some(
+        (position) =>
+          Math.abs(reportedPosition - position) <= SMART_REWIND_POSITION_TOLERANCE_SECONDS
+      )
+    ) {
+      return "transient";
+    }
+    if (
+      Math.abs(reportedPosition - expected.targetPosition) <=
+      SMART_REWIND_POSITION_TOLERANCE_SECONDS
+    ) {
+      return "target";
+    }
+
+    // The first position outside the known reset/seek sequence is real native
+    // movement. Release it immediately rather than hiding it until the timeout.
+    this.clearExpectedQueuePositionReconciliation();
+    return null;
   }
 
   /**
@@ -459,8 +559,25 @@ export class PlayerStateCoordinator extends EventEmitter {
     // diagnostics/trace semantics for ALLOWED events are unchanged: the
     // diagnostic and history entries still capture post-update context.
     if (validation.allowed) {
+      const queuePositionReconciliationMatch = this.classifyExpectedQueuePositionReconciliation(
+        event,
+        before.currentTrack?.libraryItemId
+      );
+
       if (resolvedRelativeSeekPosition !== null) {
         this.context.position = resolvedRelativeSeekPosition;
+      } else if (
+        event.type === "NATIVE_PROGRESS_UPDATED" &&
+        queuePositionReconciliationMatch === "transient"
+      ) {
+        // reset()/seekTo() reports can arrive after the queue rebuild has
+        // already resolved. They are useful for duration/timing, but must not
+        // replace the final restored (or smart-rewound) position.
+        if (this.context.isSeeking) {
+          this.context.isSeeking = false;
+        }
+        this.context.duration = event.payload.duration;
+        this.context.lastPositionUpdate = Date.now();
       } else {
         this.updateContextFromEvent(event);
       }
@@ -493,9 +610,15 @@ export class PlayerStateCoordinator extends EventEmitter {
         event.type === "SAME_TRACK_SEEK" ||
         event.type === "JUMP_FORWARD" ||
         event.type === "JUMP_BACKWARD" ||
-        event.type === "LOAD_TRACK"
+        event.type === "LOAD_TRACK" ||
+        event.type === "NATIVE_TRACK_CHANGED" ||
+        event.type === "RELOAD_QUEUE" ||
+        event.type === "RESTORE_STATE" ||
+        event.type === "NATIVE_ERROR" ||
+        event.type === "NATIVE_PLAYBACK_ERROR"
       ) {
         this.clearExpectedInternalPositionReconciliation();
+        this.clearExpectedQueuePositionReconciliation();
       }
 
       const nativeProgressEvent = event.type === "NATIVE_PROGRESS_UPDATED" ? event : null;
@@ -552,6 +675,7 @@ export class PlayerStateCoordinator extends EventEmitter {
         !before.isLoadingTrack &&
         before.queueStatus === "valid" &&
         !isExpectedInternalPositionReconciliation &&
+        queuePositionReconciliationMatch === null &&
         Math.abs(event.payload.position - before.position) >= 30
       ) {
         this._pendingJumpRecords.push({
@@ -651,7 +775,11 @@ export class PlayerStateCoordinator extends EventEmitter {
       // Sync coordinator state to Zustand store (Phase 4: State Propagation)
       if (event.type === "NATIVE_PROGRESS_UPDATED") {
         this.syncPositionToStore();
-      } else {
+      } else if (event.type !== "APP_FOREGROUNDED") {
+        // Cold-start APP_FOREGROUNDED is dispatched before restorePersistedState().
+        // The coordinator still contains constructor defaults at that point, so
+        // projecting them would overwrite the persisted track position with 0
+        // immediately before restoration reads it.
         this.syncStateToStore(event);
       }
     } else {
@@ -1587,6 +1715,8 @@ export class PlayerStateCoordinator extends EventEmitter {
           case PlayerState.PLAYING:
             // Only call executePlay when actually transitioning into PLAYING (not same-state no-ops like SET_RATE)
             if (event.type === "PLAY") {
+              let queueRebuildResumePosition: number | null = null;
+
               // Change 4: Inline queue rebuild if queueStatus is unknown.
               // This handles the RESTORE_STATE and STOP paths where the OS may have
               // cleared the TrackPlayer queue. Direct context mutations are used
@@ -1594,6 +1724,7 @@ export class PlayerStateCoordinator extends EventEmitter {
               // via the transition table — bypassing the queue preserves POS-03 guard.
               if (this.context.queueStatus === "unknown" && this.context.currentTrack) {
                 const track = this.context.currentTrack;
+                this.clearExpectedQueuePositionReconciliation();
                 this.updateContextFromEvent({
                   type: "RELOAD_QUEUE",
                   payload: { libraryItemId: track.libraryItemId },
@@ -1604,6 +1735,7 @@ export class PlayerStateCoordinator extends EventEmitter {
                     type: "QUEUE_RELOADED",
                     payload: { position: resumeInfo.position },
                   }); // sets isLoadingTrack=false, queueStatus='valid'
+                  queueRebuildResumePosition = resumeInfo.position;
                 } catch (rebuildError) {
                   // Clear loading state and abort — calling executePlay on an empty queue would fail
                   this.context.isLoadingTrack = false;
@@ -1621,12 +1753,29 @@ export class PlayerStateCoordinator extends EventEmitter {
                 this.context.position,
                 meta
               );
-              if (smartRewindOutcome && this.context.currentTrack) {
+              if (smartRewindOutcome) {
+                this.context.position = smartRewindOutcome.toPosition;
+              }
+
+              if (queueRebuildResumePosition !== null && this.context.currentTrack) {
+                const targetPosition = smartRewindOutcome?.toPosition ?? queueRebuildResumePosition;
+                const transientPositions = [0];
+                if (
+                  Math.abs(queueRebuildResumePosition - targetPosition) >
+                  SMART_REWIND_POSITION_TOLERANCE_SECONDS
+                ) {
+                  transientPositions.push(queueRebuildResumePosition);
+                }
+                this.armExpectedQueuePositionReconciliation(
+                  this.context.currentTrack.libraryItemId,
+                  transientPositions,
+                  targetPosition
+                );
+              } else if (smartRewindOutcome && this.context.currentTrack) {
                 this.armExpectedInternalPositionReconciliation(
                   smartRewindOutcome,
                   this.context.currentTrack.libraryItemId
                 );
-                this.context.position = smartRewindOutcome.toPosition;
               }
             }
             break;
