@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { PlayerEventBus, dispatchPlayerEvent, playerEventBus } from '../eventBus';
-import type { PlayerEvent } from '@/types/coordinator';
+import type { DispatchMeta, PlayerEvent } from '@/types/coordinator';
 
 describe('PlayerEventBus', () => {
   let bus: PlayerEventBus;
@@ -21,8 +21,8 @@ describe('PlayerEventBus', () => {
 
   describe('dispatch', () => {
     it('should dispatch event to all listeners', () => {
-      const listener1 = jest.fn<(event: PlayerEvent) => void>();
-      const listener2 = jest.fn<(event: PlayerEvent) => void>();
+      const listener1 = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
+      const listener2 = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
 
       bus.subscribe(listener1);
       bus.subscribe(listener2);
@@ -30,12 +30,12 @@ describe('PlayerEventBus', () => {
       const event: PlayerEvent = { type: 'PLAY' };
       bus.dispatch(event);
 
-      expect(listener1).toHaveBeenCalledWith(event);
-      expect(listener2).toHaveBeenCalledWith(event);
+      expect(listener1).toHaveBeenCalledWith(event, undefined);
+      expect(listener2).toHaveBeenCalledWith(event, undefined);
     });
 
     it('should dispatch events with payload', () => {
-      const listener = jest.fn<(event: PlayerEvent) => void>();
+      const listener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
       bus.subscribe(listener);
 
       const event: PlayerEvent = {
@@ -45,7 +45,7 @@ describe('PlayerEventBus', () => {
 
       bus.dispatch(event);
 
-      expect(listener).toHaveBeenCalledWith(event);
+      expect(listener).toHaveBeenCalledWith(event, undefined);
       expect(listener).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'LOAD_TRACK',
@@ -53,12 +53,13 @@ describe('PlayerEventBus', () => {
             libraryItemId: 'book-123',
             episodeId: 'ep-456',
           },
-        })
+        }),
+        undefined
       );
     });
 
     it('should handle async listeners without blocking', async () => {
-      const asyncListener = jest.fn<(event: PlayerEvent) => Promise<void>>(async () => {
+      const asyncListener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => Promise<void>>(async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
 
@@ -68,14 +69,14 @@ describe('PlayerEventBus', () => {
       bus.dispatch(event); // Don't await
 
       // Dispatch should not block
-      expect(asyncListener).toHaveBeenCalledWith(event);
+      expect(asyncListener).toHaveBeenCalledWith(event, undefined);
     });
 
     it('should not throw if listener throws error', () => {
-      const errorListener = jest.fn<(event: PlayerEvent) => void>(() => {
+      const errorListener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>(() => {
         throw new Error('Listener error');
       });
-      const goodListener = jest.fn<(event: PlayerEvent) => void>();
+      const goodListener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
 
       bus.subscribe(errorListener);
       bus.subscribe(goodListener);
@@ -86,9 +87,9 @@ describe('PlayerEventBus', () => {
       expect(() => bus.dispatch(event)).not.toThrow();
 
       // Error listener should have been called
-      expect(errorListener).toHaveBeenCalledWith(event);
+      expect(errorListener).toHaveBeenCalledWith(event, undefined);
       // Good listener should still be called
-      expect(goodListener).toHaveBeenCalledWith(event);
+      expect(goodListener).toHaveBeenCalledWith(event, undefined);
     });
 
     it('should add event to history', () => {
@@ -138,7 +139,7 @@ describe('PlayerEventBus', () => {
 
   describe('subscribe', () => {
     it('should add listener and return unsubscribe function', () => {
-      const listener = jest.fn<(event: PlayerEvent) => void>();
+      const listener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
 
       const unsubscribe = bus.subscribe(listener);
 
@@ -155,9 +156,9 @@ describe('PlayerEventBus', () => {
     });
 
     it('should support multiple subscribers', () => {
-      const listener1 = jest.fn<(event: PlayerEvent) => void>();
-      const listener2 = jest.fn<(event: PlayerEvent) => void>();
-      const listener3 = jest.fn<(event: PlayerEvent) => void>();
+      const listener1 = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
+      const listener2 = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
+      const listener3 = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
 
       bus.subscribe(listener1);
       bus.subscribe(listener2);
@@ -171,7 +172,7 @@ describe('PlayerEventBus', () => {
     });
 
     it('should allow same listener to be subscribed multiple times', () => {
-      const listener = jest.fn<(event: PlayerEvent) => void>();
+      const listener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
 
       bus.subscribe(listener);
       bus.subscribe(listener);
@@ -183,7 +184,7 @@ describe('PlayerEventBus', () => {
     });
 
     it('should handle unsubscribe called multiple times', () => {
-      const listener = jest.fn<(event: PlayerEvent) => void>();
+      const listener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
 
       const unsubscribe = bus.subscribe(listener);
 
@@ -197,8 +198,8 @@ describe('PlayerEventBus', () => {
 
   describe('clearListeners', () => {
     it('should remove all listeners', () => {
-      const listener1 = jest.fn<(event: PlayerEvent) => void>();
-      const listener2 = jest.fn<(event: PlayerEvent) => void>();
+      const listener1 = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
+      const listener2 = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
 
       bus.subscribe(listener1);
       bus.subscribe(listener2);
@@ -242,18 +243,28 @@ describe('PlayerEventBus', () => {
 
   describe('dispatchPlayerEvent helper', () => {
     it('should dispatch to global playerEventBus', () => {
-      const listener = jest.fn<(event: PlayerEvent) => void>();
+      const listener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
       playerEventBus.subscribe(listener);
 
       dispatchPlayerEvent({ type: 'PLAY' });
 
-      expect(listener).toHaveBeenCalledWith({ type: 'PLAY' });
+      expect(listener).toHaveBeenCalledWith({ type: 'PLAY' }, undefined);
+    });
+
+    it('should forward meta to global playerEventBus', () => {
+      const listener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
+      playerEventBus.subscribe(listener);
+
+      const meta: DispatchMeta = { source: 'restore', restoreSessionId: 'abc123' };
+      dispatchPlayerEvent({ type: 'PLAY' }, meta);
+
+      expect(listener).toHaveBeenCalledWith({ type: 'PLAY' }, meta);
     });
   });
 
   describe('edge cases', () => {
     it('should handle rapid event dispatching', () => {
-      const listener = jest.fn<(event: PlayerEvent) => void>();
+      const listener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
       bus.subscribe(listener);
 
       // Dispatch 1000 events rapidly
@@ -282,7 +293,7 @@ describe('PlayerEventBus', () => {
     });
 
     it('should handle listener that throws async error', async () => {
-      const asyncErrorListener = jest.fn<(event: PlayerEvent) => Promise<void>>(async () => {
+      const asyncErrorListener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => Promise<void>>(async () => {
         throw new Error('Async error');
       });
 
@@ -299,13 +310,13 @@ describe('PlayerEventBus', () => {
     });
 
     it('should handle null/undefined payload', () => {
-      const listener = jest.fn<(event: PlayerEvent) => void>();
+      const listener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
       bus.subscribe(listener);
 
       const event: PlayerEvent = { type: 'PLAY' };
       bus.dispatch(event);
 
-      expect(listener).toHaveBeenCalledWith({ type: 'PLAY' });
+      expect(listener).toHaveBeenCalledWith({ type: 'PLAY' }, undefined);
     });
   });
 
@@ -315,7 +326,7 @@ describe('PlayerEventBus', () => {
 
       // Add 100 subscribers
       for (let i = 0; i < 100; i++) {
-        const listener = jest.fn<(event: PlayerEvent) => void>();
+        const listener = jest.fn<(event: PlayerEvent, meta?: DispatchMeta) => void>();
         listeners.push(listener);
         bus.subscribe(listener);
       }

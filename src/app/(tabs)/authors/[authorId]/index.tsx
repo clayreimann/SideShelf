@@ -1,18 +1,21 @@
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
+import { PaddedFlatList } from "@/components/ui";
 import { getLibraryItemsByAuthor, transformItemsToDisplayFormat } from "@/db/helpers/libraryItems";
 import { formatTime } from "@/lib/helpers/formatters";
+import { getAuthorItemRoute } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
 import { useAppStore, useLibrary } from "@/stores";
 import type { LibraryItemDisplayRow } from "@/types/components";
 import { useFocusEffect } from "@react-navigation/native";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, FlatList, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 
 export default function AuthorDetailScreen() {
   const { styles, colors } = useThemedStyles();
   const { selectedLibrary } = useLibrary();
   const router = useRouter();
+  const pathname = usePathname();
   const params = useLocalSearchParams<{ authorId?: string | string[] }>();
   const authorId = Array.isArray(params.authorId) ? params.authorId[0] : params.authorId;
   const getOrFetchAuthorById = useAppStore((state) => state.getOrFetchAuthorById);
@@ -77,7 +80,7 @@ export default function AuthorDetailScreen() {
     ({ item }: { item: LibraryItemDisplayRow }) => {
       return (
         <TouchableOpacity
-          onPress={() => authorId && router.push(`/authors/${authorId}/item/${item.id}`)}
+          onPress={() => authorId && router.push(getAuthorItemRoute(pathname, authorId, item.id))}
           style={{
             flexDirection: "row",
             paddingVertical: 12,
@@ -98,7 +101,12 @@ export default function AuthorDetailScreen() {
               backgroundColor: colors.coverBackground,
             }}
           >
-            <CoverImage uri={item.coverUri} title={item.title} fontSize={12} />
+            <CoverImage
+              uri={item.coverUri}
+              title={item.title}
+              fontSize={12}
+              libraryItemId={item.id}
+            />
           </View>
           <View style={{ flex: 1, justifyContent: "center" }}>
             <Text style={[styles.text, { fontSize: 16, fontWeight: "600" }]} numberOfLines={2}>
@@ -128,7 +136,7 @@ export default function AuthorDetailScreen() {
         </TouchableOpacity>
       );
     },
-    [colors.coverBackground, router, styles.text.color, authorId]
+    [colors.coverBackground, router, styles.text.color, authorId, pathname]
   );
 
   if (!authorId) {
@@ -159,7 +167,7 @@ export default function AuthorDetailScreen() {
         ]}
       >
         <Text style={[styles.text, { textAlign: "center", marginBottom: 16 }]}>
-          Please select a library to view author's books.
+          Please select a library to view author&apos;s books.
         </Text>
         <Stack.Screen options={{ title: author.name }} />
       </View>
@@ -168,7 +176,7 @@ export default function AuthorDetailScreen() {
 
   return (
     <>
-      <FlatList
+      <PaddedFlatList
         data={books}
         keyExtractor={(item) => item.id}
         renderItem={renderBook}
@@ -184,7 +192,7 @@ export default function AuthorDetailScreen() {
             )}
           </View>
         }
-        contentContainerStyle={[styles.flatListContainer, { paddingBottom: 40 }]}
+        contentContainerStyle={styles.flatListContainer}
       />
       <Stack.Screen
         options={{

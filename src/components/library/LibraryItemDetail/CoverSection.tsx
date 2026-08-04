@@ -1,4 +1,4 @@
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import React from "react";
 import { View } from "react-native";
 

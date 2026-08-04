@@ -9,9 +9,11 @@
 import { updateAudioFileLastAccessed } from "@/db/helpers/localData";
 import { formatTime } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { resolveAbsoluteRemoteSeekPosition } from "@/lib/nowPlayingMetadata";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { MIN_PLAUSIBLE_POSITION } from "@/types/coordinator";
+import { playerService } from "@/services/PlayerService";
 import { progressService } from "@/services/ProgressService";
 import { useAppStore } from "@/stores/appStore";
 import { getCurrentUser } from "@/utils/userHelpers";
@@ -36,6 +38,11 @@ const diagLog = logger.forDiagnostics("PlayerBackgroundService");
 
 // Generate a unique ID for this module instance to detect multiple instances
 const MODULE_INSTANCE_UUID = `BGS-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+// Sleep timer fade state
+let _preFadeVolume: number | null = null;
+const FADE_WINDOW_SECONDS = 5;
+const REWIND_ON_SLEEP_SECONDS = 2.5;
 
 /**
  * HEADLESS JS ARCHITECTURE NOTE:
@@ -98,15 +105,15 @@ declare global {
  */
 async function handleRemotePlay(): Promise<void> {
   log.debug(`RemotePlay received (${describeRuntimeContext()})`);
-  dispatchPlayerEvent({ type: "PLAY" });
+  dispatchPlayerEvent({ type: "PLAY" }, { source: "remote_command" });
 }
 
 /**
  * Handle remote pause command
  */
 async function handleRemotePause(): Promise<void> {
-  log.debug(`RemotePause received (${describeRuntimeContext()})`);
-  dispatchPlayerEvent({ type: "PAUSE" });
+  log.info(`RemotePause received (${describeRuntimeContext()})`);
+  dispatchPlayerEvent({ type: "PAUSE" }, { source: "remote_command" });
 }
 
 /**
@@ -135,7 +142,7 @@ async function getUserIdAndLibraryItemId(): Promise<{
  */
 async function handleRemoteStop(): Promise<void> {
   log.debug(`RemoteStop received (${describeRuntimeContext()})`);
-  dispatchPlayerEvent({ type: "STOP" });
+  dispatchPlayerEvent({ type: "STOP" }, { source: "remote_command" });
 
   const ids = await getUserIdAndLibraryItemId();
   if (ids) {
@@ -152,18 +159,12 @@ async function handleRemoteStop(): Promise<void> {
 }
 
 /**
- * Handle remote jump forward command
+ * Persist the same coordinator-resolved target used for a remote jump seek.
  */
-async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<void> {
-  log.debug(`RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`);
-  const progress = await TrackPlayer.getProgress();
-  const newPosition = progress.position + event.interval;
-
-  dispatchPlayerEvent({
-    type: "SEEK",
-    payload: { position: newPosition },
-  });
-
+async function persistResolvedRemoteJump(
+  position: number,
+  direction: "forward" | "backward"
+): Promise<void> {
   try {
     const ids = await getUserIdAndLibraryItemId();
     if (ids) {
@@ -174,7 +175,7 @@ async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<v
       await progressService.updateProgress(
         ids.userId,
         ids.libraryItemId,
-        newPosition,
+        position,
         playbackRate,
         volume,
         undefined,
@@ -185,64 +186,53 @@ async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<v
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
         log.info(
-          `Jump forward: position=${newPosition.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`
+          `Jump ${direction}: position=${position.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`
         );
       }
     }
   } catch (error) {
     const ids = await getUserIdAndLibraryItemId();
     log.error(
-      `Jump forward progress update error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
+      `Jump ${direction} progress update error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
       error as Error
     );
   }
 }
 
 /**
- * Handle remote jump backward command
+ * Handle remote jump forward command.
+ */
+async function handleRemoteJumpForward(event: RemoteJumpForwardEvent): Promise<void> {
+  log.debug(`RemoteJumpForward received interval=${event.interval} (${describeRuntimeContext()})`);
+  dispatchPlayerEvent(
+    {
+      type: "JUMP_FORWARD",
+      payload: { seconds: event.interval },
+    },
+    {
+      source: "remote_command",
+      jump: { surface: "lock_screen", category: "skip_forward" },
+      onRelativeSeekResolved: (position) => persistResolvedRemoteJump(position, "forward"),
+    }
+  );
+}
+
+/**
+ * Handle remote jump backward command.
  */
 async function handleRemoteJumpBackward(event: RemoteJumpBackwardEvent): Promise<void> {
   log.debug(`RemoteJumpBackward received interval=${event.interval} (${describeRuntimeContext()})`);
-  const progress = await TrackPlayer.getProgress();
-  const newPosition = Math.max(0, progress.position - event.interval);
-
-  dispatchPlayerEvent({
-    type: "SEEK",
-    payload: { position: newPosition },
-  });
-
-  try {
-    const ids = await getUserIdAndLibraryItemId();
-    if (ids) {
-      const playbackRate = await TrackPlayer.getRate();
-      const volume = await TrackPlayer.getVolume();
-      const state = await TrackPlayer.getPlaybackState();
-
-      await progressService.updateProgress(
-        ids.userId,
-        ids.libraryItemId,
-        newPosition,
-        playbackRate,
-        volume,
-        undefined,
-        state.state === State.Playing
-      );
-
-      // store.updatePosition removed: SEEK event → coordinator → syncStateToStore bridge
-      const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
-      if (session) {
-        log.info(
-          `Jump backward: position=${newPosition.toFixed(2)}s session=${session.sessionId} item=${ids.libraryItemId}`
-        );
-      }
+  dispatchPlayerEvent(
+    {
+      type: "JUMP_BACKWARD",
+      payload: { seconds: event.interval },
+    },
+    {
+      source: "remote_command",
+      jump: { surface: "lock_screen", category: "skip_backward" },
+      onRelativeSeekResolved: (position) => persistResolvedRemoteJump(position, "backward"),
     }
-  } catch (error) {
-    const ids = await getUserIdAndLibraryItemId();
-    log.error(
-      `Jump backward progress update error: ${(error as Error).message} item=${ids?.libraryItemId || "unknown"}`,
-      error as Error
-    );
-  }
+  );
 }
 
 /**
@@ -266,11 +256,24 @@ async function handleRemotePrevious(): Promise<void> {
  */
 async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
   log.debug(`RemoteSeek received position=${event.position} (${describeRuntimeContext()})`);
+  const progress = await TrackPlayer.getProgress();
+  const currentTrack = useAppStore.getState().player.currentTrack;
+  const absolutePosition = resolveAbsoluteRemoteSeekPosition(
+    currentTrack,
+    progress.position,
+    event.position
+  );
 
-  dispatchPlayerEvent({
-    type: "SEEK",
-    payload: { position: event.position },
-  });
+  dispatchPlayerEvent(
+    {
+      type: "SEEK",
+      payload: { position: absolutePosition },
+    },
+    {
+      source: "remote_command",
+      jump: { surface: "lock_screen", category: "scrub" },
+    }
+  );
 
   // Update progress immediately after seek
   try {
@@ -283,7 +286,7 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
       await progressService.updateProgress(
         ids.userId,
         ids.libraryItemId,
-        event.position,
+        absolutePosition,
         playbackRate,
         volume,
         undefined,
@@ -294,7 +297,7 @@ async function handleRemoteSeek(event: RemoteSeekEvent): Promise<void> {
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
       if (session) {
         log.info(
-          `Seek: position=${formatTime(event.position)}s session=${session.sessionId} item=${ids.libraryItemId}`
+          `Seek: position=${formatTime(absolutePosition)}s session=${session.sessionId} item=${ids.libraryItemId}`
         );
       }
     }
@@ -319,15 +322,15 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
     if (ids) {
       if (event.permanent) {
         log.info(`Pausing playback (permanent duck)`);
-        dispatchPlayerEvent({ type: "PAUSE" });
+        dispatchPlayerEvent({ type: "PAUSE" }, { source: "audio_focus" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else if (event.paused) {
         log.info(`Pausing playback (duck)`);
-        dispatchPlayerEvent({ type: "PAUSE" });
+        dispatchPlayerEvent({ type: "PAUSE" }, { source: "audio_focus" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, true);
       } else {
         // Resuming from duck - coordinator's executePlay() handles applySmartRewind
-        dispatchPlayerEvent({ type: "PLAY" });
+        dispatchPlayerEvent({ type: "PLAY" }, { source: "audio_focus" });
         await progressService.handleDuck(ids.userId, ids.libraryItemId, false);
       }
 
@@ -353,10 +356,13 @@ async function handleRemoteDuck(event: RemoteDuckEvent): Promise<void> {
 async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<void> {
   try {
     // Phase 1: Dispatch to event bus
-    dispatchPlayerEvent({
-      type: "NATIVE_STATE_CHANGED",
-      payload: { state: event.state },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "NATIVE_STATE_CHANGED",
+        payload: { state: event.state },
+      },
+      { source: "native_player" }
+    );
 
     // isLoadingTrack(false), updatePosition, and updatePlayingState removed:
     // NATIVE_STATE_CHANGED event → coordinator → syncStateToStore bridge handles all three
@@ -402,28 +408,103 @@ async function handlePlaybackStateChanged(event: PlaybackStateEvent): Promise<vo
 async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent): Promise<void> {
   try {
     // Phase 1: Dispatch to event bus
-    dispatchPlayerEvent({
-      type: "NATIVE_PROGRESS_UPDATED",
-      payload: { position: event.position, duration: event.duration, buffered: event.buffered },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "NATIVE_PROGRESS_UPDATED",
+        payload: { position: event.position, duration: event.duration, buffered: event.buffered },
+      },
+      { source: "native_player" }
+    );
 
     const store = useAppStore.getState();
     const currentTrack = store.player.currentTrack;
+    const currentChapter = store.player.currentChapter;
     const ids = await getUserIdAndLibraryItemId();
+
+    // Detect sleep timer cancel mid-fade: restore volume if timer was cleared while fade was active
+    const timerActive = store.player.sleepTimer.type !== null;
+    if (!timerActive && _preFadeVolume !== null) {
+      log.info("[handlePlaybackProgressUpdated] Sleep timer cancelled mid-fade, restoring volume");
+      await playerService.executeSetVolume(_preFadeVolume);
+      _preFadeVolume = null;
+    }
+
+    // Check sleep timer: apply volume fade and pause if expired
+    // Use store.player.isPlaying for sleep timer check — matches coordinator state and is testable
+    const { sleepTimer } = store.player;
+    if (sleepTimer.type && store.player.isPlaying) {
+      // Volume fade: linear ramp to silence over final 30 seconds
+      const remaining = store.getSleepTimerRemaining(); // handles both duration and chapter types
+      if (remaining !== null && remaining <= FADE_WINDOW_SECONDS && remaining > 0) {
+        if (_preFadeVolume === null) {
+          _preFadeVolume = store.player.volume;
+          log.info(
+            `[handlePlaybackProgressUpdated] Sleep timer fade started, pre-fade volume=${_preFadeVolume}`
+          );
+        }
+        const fadedVolume = _preFadeVolume * (remaining / FADE_WINDOW_SECONDS);
+        await playerService.executeSetVolume(Math.max(0, fadedVolume));
+      }
+
+      let shouldPause = false;
+
+      if (sleepTimer.type === "duration" && sleepTimer.endTime) {
+        // Time-based timer
+        if (Date.now() >= sleepTimer.endTime) {
+          shouldPause = true;
+          log.info("Sleep timer expired (duration-based), pausing playback");
+        }
+      } else if (sleepTimer.type === "chapter" && currentChapter) {
+        // Chapter-based timer
+        const targetChapter =
+          sleepTimer.chapterTarget === "current"
+            ? currentChapter.chapter
+            : currentTrack?.chapters.find((ch) => ch.start === currentChapter.chapter.end);
+
+        if (targetChapter && event.position >= targetChapter.end) {
+          shouldPause = true;
+          log.info(
+            `Sleep timer expired (end of ${sleepTimer.chapterTarget} chapter), pausing playback`
+          );
+        }
+      }
+
+      if (shouldPause) {
+        // Restore volume to pre-fade value before stopping (silent fade complete)
+        if (_preFadeVolume !== null) {
+          log.info(
+            `[handlePlaybackProgressUpdated] Sleep timer expired, restoring volume=${_preFadeVolume}`
+          );
+          await playerService.executeSetVolume(_preFadeVolume);
+          _preFadeVolume = null;
+        }
+        // Rewind slightly so any audio that faded out silently gets replayed next session
+        const rewindTarget = Math.max(0, event.position - REWIND_ON_SLEEP_SECONDS);
+        log.info(
+          `[handlePlaybackProgressUpdated] Sleep timer expired, rewinding ${REWIND_ON_SLEEP_SECONDS}s to position=${rewindTarget.toFixed(2)}`
+        );
+        await playerService.executeSeek(rewindTarget);
+        // Cancel the timer and pause playback
+        store.cancelSleepTimer();
+        const pauseTime = Date.now();
+        store._setLastPauseTime(pauseTime);
+        dispatchPlayerEvent({ type: "PAUSE" }, { source: "sleep_timer" });
+      }
+    }
 
     if (ids) {
       const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
 
       if (Math.floor(event.position) % 5 === 0) {
         const { id, title } = store.player.currentChapter?.chapter || { id: null, title: null };
-        log.info(
+        log.debug(
           `Playback progress updated: position=${formatTime(event.position)} appState=${AppState.currentState} uuid=${MODULE_INSTANCE_UUID} session=${session?.sessionId || "none"} item=${ids.libraryItemId} chapter=${JSON.stringify({ id, title })}`
         );
       }
       const playbackRate = await TrackPlayer.getRate();
       const volume = await TrackPlayer.getVolume();
-      const state = await TrackPlayer.getPlaybackState();
-      const isPlaying = state.state === State.Playing;
+      const nativeState = await TrackPlayer.getPlaybackState();
+      const isPlaying = nativeState.state === State.Playing;
 
       // Update session progress (DB is source of truth)
       await progressService.updateProgress(
@@ -443,51 +524,6 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
       // syncPositionToStore bridge handles position propagation (PROP-02/PROP-03 two-tier sync)
       if (!updatedSession) {
         log.debug(`No session found after updateProgress, position=${formatTime(event.position)}s`);
-      }
-
-      // Check sleep timer and pause if expired
-      const { sleepTimer } = store.player;
-      if (sleepTimer.type && isPlaying) {
-        let shouldPause = false;
-
-        if (sleepTimer.type === "duration" && sleepTimer.endTime) {
-          // Time-based timer
-          if (Date.now() >= sleepTimer.endTime) {
-            shouldPause = true;
-            log.info("Sleep timer expired (duration-based), pausing playback");
-          }
-        } else if (sleepTimer.type === "chapter" && currentChapter) {
-          // Chapter-based timer
-          const targetChapter =
-            sleepTimer.chapterTarget === "current"
-              ? currentChapter.chapter
-              : currentTrack?.chapters.find((ch) => ch.start === currentChapter.chapter.end);
-
-          if (targetChapter && event.position >= targetChapter.end) {
-            shouldPause = true;
-            log.info(
-              `Sleep timer expired (end of ${sleepTimer.chapterTarget} chapter), pausing playback`
-            );
-          }
-        }
-
-        if (shouldPause) {
-          // Cancel the timer and pause playback
-          store.cancelSleepTimer();
-          const pauseTime = Date.now();
-          store._setLastPauseTime(pauseTime);
-          dispatchPlayerEvent({ type: "PAUSE" });
-        }
-      }
-
-      // Check if we should sync to server (uses adaptive intervals based on network type)
-      const syncCheck = await progressService.shouldSyncToServer(ids.userId, ids.libraryItemId);
-      if (syncCheck.shouldSync) {
-        const session = await progressService.getCurrentSession(ids.userId, ids.libraryItemId);
-        log.info(
-          `Syncing to server: ${syncCheck.reason} appState=${AppState.currentState} session=${session?.sessionId || "none"} item=${ids.libraryItemId}`
-        );
-        await progressService.syncSessionToServer(ids.userId, ids.libraryItemId);
       }
 
       // Track meaningful listening time (≥2 minutes) for file lifecycle management
@@ -593,7 +629,8 @@ async function handlePlaybackProgressUpdated(event: PlaybackProgressUpdatedEvent
                 currentTrack.duration,
                 playbackRate,
                 volume,
-                sessionId || undefined
+                sessionId || undefined,
+                currentTrack.episodeId
               );
 
               // Now update progress with the new session
@@ -664,10 +701,13 @@ async function handleActiveTrackChanged(
 
     // Phase 1: Dispatch to event bus
     // Note: We pass null for track since we don't have PlayerTrack here
-    dispatchPlayerEvent({
-      type: "NATIVE_TRACK_CHANGED",
-      payload: { track: null },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "NATIVE_TRACK_CHANGED",
+        payload: { track: null },
+      },
+      { source: "native_player" }
+    );
 
     lastActiveTrackId.value = currentActiveTrack.id;
 
@@ -753,7 +793,8 @@ async function handleActiveTrackChanged(
         currentTrack.duration,
         playbackRate,
         volume,
-        sessionId || undefined
+        sessionId || undefined,
+        currentTrack.episodeId
       );
     }
 
@@ -775,10 +816,13 @@ async function handleActiveTrackChanged(
 async function handlePlaybackError(event: PlaybackErrorEvent): Promise<void> {
   try {
     // Dispatch to coordinator so isLoadingTrack is cleared via syncStateToStore bridge
-    dispatchPlayerEvent({
-      type: "NATIVE_PLAYBACK_ERROR",
-      payload: { code: event.code, message: event.message },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "NATIVE_PLAYBACK_ERROR",
+        payload: { code: event.code, message: event.message },
+      },
+      { source: "native_player" }
+    );
 
     const ids = await getUserIdAndLibraryItemId();
     const store = useAppStore.getState();
@@ -973,10 +1017,25 @@ const serviceExports = trackPlayerBackgroundService as unknown as {
   reconnectBackgroundService?: typeof reconnectBackgroundService;
   shutdownBackgroundService?: typeof shutdownBackgroundService;
   isBackgroundServiceInitialized?: typeof isBackgroundServiceInitialized;
+  /** Test shim: exposes internal handlePlaybackProgressUpdated for unit tests. Not for production use. */
+  _testHandlePlaybackProgressUpdated?: typeof handlePlaybackProgressUpdated;
+  /** Test shim: exposes session-start handling without registering native listeners. */
+  _testHandleActiveTrackChanged?: typeof handleActiveTrackChanged;
+  /** Test shim: exposes remote seek handling without registering native listeners. */
+  _testHandleRemoteSeek?: typeof handleRemoteSeek;
+  /** Test shim: exposes remote forward skip handling without registering native listeners. */
+  _testHandleRemoteJumpForward?: typeof handleRemoteJumpForward;
+  /** Test shim: exposes remote backward skip handling without registering native listeners. */
+  _testHandleRemoteJumpBackward?: typeof handleRemoteJumpBackward;
 };
 
 serviceExports.reconnectBackgroundService = reconnectBackgroundService;
 serviceExports.shutdownBackgroundService = shutdownBackgroundService;
 serviceExports.isBackgroundServiceInitialized = isBackgroundServiceInitialized;
+serviceExports._testHandlePlaybackProgressUpdated = handlePlaybackProgressUpdated;
+serviceExports._testHandleActiveTrackChanged = handleActiveTrackChanged;
+serviceExports._testHandleRemoteSeek = handleRemoteSeek;
+serviceExports._testHandleRemoteJumpForward = handleRemoteJumpForward;
+serviceExports._testHandleRemoteJumpBackward = handleRemoteJumpBackward;
 
 module.exports = trackPlayerBackgroundService;

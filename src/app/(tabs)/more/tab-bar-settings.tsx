@@ -173,6 +173,12 @@ function DraggableTabItem({
         <Pressable
           onPress={() => onMoveSection(tab.name)}
           disabled={isUpdating}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={translate("accessibility.moveTabToMoreMenu", {
+            tab: translate(tab.titleKey),
+          })}
+          accessibilityState={{ disabled: isUpdating }}
           style={{ padding: 8, opacity: isUpdating ? 0.5 : 1 }}
         >
           <Ionicons name="remove-circle-outline" size={20} color="#FF3B30" />
@@ -181,6 +187,12 @@ function DraggableTabItem({
         <Pressable
           onPress={() => onMoveSection(tab.name)}
           disabled={isUpdating}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={translate("accessibility.moveTabToTabBar", {
+            tab: translate(tab.titleKey),
+          })}
+          accessibilityState={{ disabled: isUpdating }}
           style={{ padding: 8, opacity: isUpdating ? 0.5 : 1 }}
         >
           <Ionicons name="add-circle-outline" size={20} color="#34C759" />
@@ -434,6 +446,8 @@ export default function TabBarSettingsScreen() {
           <Pressable
             onPress={resetToDefaults}
             disabled={isUpdating}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isUpdating }}
             style={{
               backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
               borderRadius: 10,

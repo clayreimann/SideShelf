@@ -10,6 +10,7 @@ import {
 } from "@/lib/downloads/speedTracker";
 import {
   constructDownloadUrl,
+  deleteDownloadFile,
   downloadFileExists,
   ensureDownloadsDirectory,
   getDownloadPath,
@@ -155,7 +156,17 @@ export class DownloadService {
   }
 
   /**
-   * Rewire progress callbacks - useful when rebuilding views
+   * Rewire progress callbacks - useful when rebuilding views.
+   *
+   * Only removes the callback that a *previous* call to rewireProgressCallbacks()
+   * registered for this library item (tracked via `primaryCallback`), then adds
+   * `newCallback` in its place. Other independent subscribers added via
+   * subscribeToProgress() are left untouched.
+   *
+   * (No production call site exists for this method today — it's documented in
+   * README.md as the reconnect hook for a rebuilding view. The previous
+   * implementation called `progressCallbacks.clear()`, which would have silently
+   * dropped any unrelated subscriber sharing the same libraryItemId.)
    */
   public rewireProgressCallbacks(
     libraryItemId: string,
@@ -163,9 +174,26 @@ export class DownloadService {
   ): () => void {
     const downloadInfo = this.activeDownloads.get(libraryItemId);
     if (downloadInfo) {
-      // Clear existing callbacks and add the new one
-      downloadInfo.progressCallbacks.clear();
-      return this.subscribeToProgress(libraryItemId, newCallback);
+      if (downloadInfo.primaryCallback) {
+        downloadInfo.progressCallbacks.delete(downloadInfo.primaryCallback);
+      }
+      downloadInfo.progressCallbacks.add(newCallback);
+      downloadInfo.primaryCallback = newCallback;
+
+      // Send current progress immediately if available (matches subscribeToProgress)
+      if (downloadInfo.speedTracker.lastProgressUpdate) {
+        newCallback(downloadInfo.speedTracker.lastProgressUpdate);
+      }
+
+      return () => {
+        const info = this.activeDownloads.get(libraryItemId);
+        if (info) {
+          info.progressCallbacks.delete(newCallback);
+          if (info.primaryCallback === newCallback) {
+            info.primaryCallback = undefined;
+          }
+        }
+      };
     }
 
     return () => {}; // No-op unsubscribe function
@@ -238,12 +266,12 @@ export class DownloadService {
         downloadedBytes: 0,
         isPaused: false,
         speedTracker: createSpeedTracker(),
+        completedFileIds: new Set(),
+        completedBytes: 0,
+        inFlightBytes: new Map(),
       };
 
       this.activeDownloads.set(libraryItemId, downloadInfo);
-
-      let downloadedFiles = 0;
-      let totalBytesDownloaded = 0;
 
       const updateProgress = (
         currentFile: string,
@@ -257,8 +285,8 @@ export class DownloadService {
           fileBytesDownloaded,
           fileTotalBytes,
           totalFiles, // Don't count cover as a file
-          downloadedFiles,
-          totalBytesDownloaded + fileBytesDownloaded,
+          downloadInfo.completedFileIds.size,
+          this.computeAggregateBytes(downloadInfo),
           totalBytes,
           overrideStatus
         );
@@ -281,6 +309,7 @@ export class DownloadService {
               size: audioFile.size || undefined,
             },
             (taskInfo, bytesDownloaded, bytesTotal) => {
+              this.updateInFlightBytes(downloadInfo, taskInfo.audioFileId, bytesDownloaded);
               updateProgress(taskInfo.filename, bytesDownloaded, bytesTotal);
             },
             options?.forceRedownload
@@ -325,8 +354,7 @@ export class DownloadService {
                   }
 
                   log.info(`Updating progress`);
-                  downloadedFiles++;
-                  totalBytesDownloaded += data.bytesDownloaded;
+                  this.markFileCompleted(downloadInfo, audioFile.id, data.bytesDownloaded);
                   updateProgress(
                     audioFile.filename,
                     data.bytesDownloaded,
@@ -365,8 +393,7 @@ export class DownloadService {
               );
             }
 
-            downloadedFiles++;
-            totalBytesDownloaded += audioFile.size || 0;
+            this.markFileCompleted(downloadInfo, audioFile.id, audioFile.size || 0);
             return;
           }
           throw error;
@@ -510,6 +537,44 @@ export class DownloadService {
 
   // Private methods
 
+  /**
+   * Unified per-file byte accounting, shared by the fresh-download path (startDownload)
+   * and the restored path (handleTaskProgress / handleTaskCompletion / restoreExistingDownloads).
+   *
+   * A file's contribution to the aggregate is either "completed" (counted once, in full)
+   * or "in-flight" (the most recent partial byte count), never both — markFileCompleted
+   * removes any in-flight entry for the file so a task that finishes doesn't get counted
+   * twice, and callers must check completedFileIds before recording further in-flight
+   * progress for a file (see updateInFlightBytes).
+   */
+
+  /** Record a file as fully downloaded. Idempotent — a file already marked complete is not double-counted. */
+  private markFileCompleted(downloadInfo: DownloadInfo, audioFileId: string, bytes: number): void {
+    if (downloadInfo.completedFileIds.has(audioFileId)) return;
+    downloadInfo.completedFileIds.add(audioFileId);
+    downloadInfo.completedBytes += bytes;
+    downloadInfo.inFlightBytes.delete(audioFileId);
+  }
+
+  /** Record the latest in-flight byte count for a file that has not yet completed. */
+  private updateInFlightBytes(
+    downloadInfo: DownloadInfo,
+    audioFileId: string,
+    bytes: number
+  ): void {
+    if (downloadInfo.completedFileIds.has(audioFileId)) return;
+    downloadInfo.inFlightBytes.set(audioFileId, bytes);
+  }
+
+  /** Sum of completed bytes plus all currently in-flight bytes across every tracked file. */
+  private computeAggregateBytes(downloadInfo: DownloadInfo): number {
+    let sum = downloadInfo.completedBytes;
+    for (const bytes of downloadInfo.inFlightBytes.values()) {
+      sum += bytes;
+    }
+    return sum;
+  }
+
   private async downloadAudioFile(
     libraryItemId: string,
     audioFile: { id: string; ino: string; filename: string; size?: number },
@@ -536,8 +601,12 @@ export class DownloadService {
     if (downloadFileExists(libraryItemId, audioFile.filename, "documents")) {
       if (forceRedownload) {
         log.info(`Force redownload requested, removing existing file: ${audioFile.filename}`);
-        // TODO: Delete existing file before redownloading
-        // For now, let the download overwrite it
+        // Delete the existing file before creating the task rather than relying on the
+        // downloader's overwrite semantics — those aren't guaranteed and a stale/corrupt
+        // file could otherwise survive a "redownload" request. Deletion uses the same
+        // "documents" location + filename as the existence check above (destPath above
+        // is percent-decoded for the downloader's destination, not for existence checks).
+        deleteDownloadFile(libraryItemId, audioFile.filename, "documents");
       } else {
         log.info(`File already exists: ${audioFile.filename}`);
         throw new Error("File already exists");
@@ -755,12 +824,18 @@ export class DownloadService {
 
     for (const task of existingTasks) {
       const libraryItemId = task.metadata?.libraryItemId;
-      if (libraryItemId) {
+      const audioFileId = task.metadata?.audioFileId;
+      const filename = task.metadata?.filename;
+      if (
+        typeof libraryItemId === "string" &&
+        typeof audioFileId === "string" &&
+        typeof filename === "string"
+      ) {
         const tasks = tasksByLibraryItem.get(libraryItemId) || [];
         tasks.push({
           task,
-          audioFileId: task.metadata.audioFileId,
-          filename: task.metadata.filename,
+          audioFileId,
+          filename,
           size: 0, // Will be updated from progress
         });
         tasksByLibraryItem.set(libraryItemId, tasks);
@@ -769,30 +844,43 @@ export class DownloadService {
 
     // Restore download tracking for each library item
     for (const [libraryItemId, tasks] of tasksByLibraryItem) {
-      // Get the actual audio files from database to determine correct totals
-      let totalExpectedFiles = tasks.length; // Fallback to task count
+      const downloadInfo: DownloadInfo = {
+        tasks,
+        progressCallbacks: new Set<DownloadProgressCallback>(),
+        totalBytes: 0, // Will be calculated below from the database, if available
+        downloadedBytes: 0,
+        isPaused: false,
+        speedTracker: createSpeedTracker(),
+        expectedTotalFiles: tasks.length, // Fallback to task count; refined below
+        completedFileIds: new Set(),
+        completedBytes: 0,
+        inFlightBytes: new Map(),
+      };
+
+      // Fetch DB state once per restore (not on every progress event — see
+      // handleTaskProgress) to determine the correct file/byte totals and to seed
+      // any files that were already fully downloaded before this restore.
       try {
         const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
         if (metadata) {
           const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-          totalExpectedFiles = audioFiles.length;
+          downloadInfo.expectedTotalFiles = audioFiles.length;
+          downloadInfo.totalBytes = audioFiles.reduce(
+            (sum: number, file) => sum + (file.size || 0),
+            0
+          );
+          for (const file of audioFiles) {
+            if (file.downloadInfo?.isDownloaded) {
+              this.markFileCompleted(downloadInfo, file.id, file.size || 0);
+            }
+          }
           log.info(
-            `ApiLibrary item ${libraryItemId} has ${audioFiles.length} audio files in database, ${tasks.length} active tasks`
+            `ApiLibrary item ${libraryItemId} has ${audioFiles.length} audio files in database, ${tasks.length} active tasks, ${downloadInfo.completedFileIds.size} already downloaded`
           );
         }
       } catch (error) {
         log.error(`Error getting audio files for ${libraryItemId}:`, error as Error);
       }
-
-      const downloadInfo: DownloadInfo = {
-        tasks,
-        progressCallbacks: new Set<DownloadProgressCallback>(),
-        totalBytes: 0, // Will be calculated
-        downloadedBytes: 0,
-        isPaused: false,
-        speedTracker: createSpeedTracker(),
-        expectedTotalFiles: totalExpectedFiles, // Store the expected total
-      };
 
       this.activeDownloads.set(libraryItemId, downloadInfo);
 
@@ -885,22 +973,32 @@ export class DownloadService {
 
     log.info(`Task completed: ${taskInfo.filename} (${bytesDownloaded} bytes)`);
 
-    // Check if all tasks are completed
+    // Record this file as fully downloaded. Falls back to the just-reported
+    // bytesDownloaded if no progress event ever populated taskInfo.size (e.g. a task
+    // that was already DONE at restore time before any progress event fired).
+    // Idempotent: a file already counted (e.g. seeded from the DB snapshot taken at
+    // restore) is not double-counted here.
+    this.markFileCompleted(downloadInfo, taskInfo.audioFileId, taskInfo.size || bytesDownloaded);
+
+    // Check if all active tasks are completed
     const allTasksCompleted = downloadInfo.tasks.every((task) => task.task.state === "DONE");
 
     if (allTasksCompleted) {
       log.info(`All tasks completed for library item ${libraryItemId}`);
 
+      const totalFiles = downloadInfo.expectedTotalFiles || downloadInfo.tasks.length;
+      const totalBytes =
+        downloadInfo.totalBytes > 0 ? downloadInfo.totalBytes : downloadInfo.completedBytes;
+
       // Send final completion progress update
-      const totalBytes = downloadInfo.tasks.reduce((sum, task) => sum + (task.size || 0), 0);
       const finalProgress: DownloadProgress = {
         libraryItemId,
         status: "completed",
         totalProgress: 1.0,
         fileProgress: 1.0,
         currentFile: taskInfo.filename,
-        downloadedFiles: downloadInfo.tasks.length,
-        totalFiles: downloadInfo.tasks.length,
+        downloadedFiles: totalFiles,
+        totalFiles,
         bytesDownloaded: totalBytes,
         totalBytes: totalBytes,
         fileBytesDownloaded: taskInfo.size || bytesDownloaded,
@@ -921,83 +1019,33 @@ export class DownloadService {
     }
   }
 
-  private async handleTaskProgress(
+  private handleTaskProgress(
     libraryItemId: string,
     taskInfo: DownloadTaskInfo,
     bytesDownloaded: number,
     bytesTotal: number
-  ): Promise<void> {
+  ): void {
     const downloadInfo = this.activeDownloads.get(libraryItemId);
     if (!downloadInfo) return;
 
     // Update the task info with current progress
     taskInfo.size = bytesTotal;
 
-    // Calculate totals across all tasks
+    this.updateInFlightBytes(downloadInfo, taskInfo.audioFileId, bytesDownloaded);
+
+    // DB state (already-downloaded files, total file/byte counts) was fetched once at
+    // restore time and lives on downloadInfo — no DB access here on every progress event.
     const totalFiles = downloadInfo.expectedTotalFiles || downloadInfo.tasks.length;
-    let downloadedFiles = 0;
-    let totalBytesDownloaded = 0;
-    let totalBytes = 0;
+    const totalBytes =
+      downloadInfo.totalBytes > 0
+        ? downloadInfo.totalBytes
+        : downloadInfo.tasks.reduce((sum, task) => sum + (task.size || 0), 0); // Fallback if DB fetch failed at restore
+
+    const downloadedFiles = downloadInfo.completedFileIds.size;
+    const totalBytesDownloaded = this.computeAggregateBytes(downloadInfo);
 
     log.info(
-      `Calculating progress for ${libraryItemId}, ${totalFiles} expected files, ${downloadInfo.tasks.length} active tasks`
-    );
-
-    // First, check how many files are already downloaded in the database
-    let alreadyDownloadedFiles = 0;
-    try {
-      const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
-      if (metadata) {
-        const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
-        alreadyDownloadedFiles = audioFiles.filter(
-          (file) => file.downloadInfo?.isDownloaded
-        ).length;
-        log.info(`${alreadyDownloadedFiles} files already marked as downloaded in database`);
-
-        // Calculate total bytes from all audio files
-        totalBytes = audioFiles.reduce((sum, file) => sum + (file.size || 0), 0);
-
-        // Add bytes from already downloaded files
-        const downloadedFileBytes = audioFiles
-          .filter((file) => file.downloadInfo?.isDownloaded)
-          .reduce((sum, file) => sum + (file.size || 0), 0);
-        totalBytesDownloaded += downloadedFileBytes;
-        log.info(`Added ${downloadedFileBytes} bytes from already downloaded files`);
-      }
-    } catch (error) {
-      log.error(`Error checking downloaded files:`, error as Error);
-    }
-
-    downloadedFiles = alreadyDownloadedFiles;
-
-    for (const task of downloadInfo.tasks) {
-      log.info(`Task ${task.filename}: state=${task.task.state}, size=${task.size}`);
-
-      if (task.size && totalBytes === 0) {
-        // Fallback: if we couldn't get total from database, sum from tasks
-        totalBytes += task.size;
-      }
-
-      if (task.task.state === "DONE") {
-        // Only count if not already counted in database
-        const isAlreadyCounted = alreadyDownloadedFiles > 0; // Simplified check
-        if (!isAlreadyCounted) {
-          downloadedFiles++;
-          totalBytesDownloaded += task.size || 0;
-        }
-        log.info(`Task ${task.filename} is DONE`);
-      } else if (task === taskInfo) {
-        // Current task progress
-        totalBytesDownloaded += bytesDownloaded;
-        log.info(`Current task ${task.filename} progress: ${bytesDownloaded}/${bytesTotal}`);
-      } else {
-        // This task is neither done nor current - we need to account for its progress too
-        log.info(`Task ${task.filename} is neither current nor done, state: ${task.task.state}`);
-      }
-    }
-
-    log.info(
-      `Progress calculation: ${downloadedFiles}/${totalFiles} files, ${totalBytesDownloaded}/${totalBytes} bytes`
+      `Progress calculation for ${libraryItemId}: ${downloadedFiles}/${totalFiles} files, ${totalBytesDownloaded}/${totalBytes} bytes`
     );
 
     this.updateProgress(

@@ -1,5 +1,6 @@
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate, type TranslationKey } from "@/i18n";
+import { getMoreTabIndexRoute, type MovableTabName } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAppStore } from "@/stores/appStore";
@@ -26,19 +27,24 @@ type ActionItem = {
   isNavItem?: boolean;
 };
 
-// Tab configuration with labels (matching tab-bar-settings.tsx)
-const ALL_TABS = [
-  { name: "home", titleKey: "tabs.home" as TranslationKey },
-  { name: "library", titleKey: "tabs.library" as TranslationKey },
+type MoreTabMenuConfig = {
+  name: MovableTabName;
+  titleKey: TranslationKey;
+  icon?: { sf: SFSymbol; ionicon: IoniconsName };
+};
+
+const ALL_TABS: MoreTabMenuConfig[] = [
+  { name: "home", titleKey: "tabs.home" },
+  { name: "library", titleKey: "tabs.library" },
   {
     name: "series",
-    titleKey: "tabs.series" as TranslationKey,
-    icon: { sf: "square.stack" as SFSymbol, ionicon: "layers-outline" as IoniconsName },
+    titleKey: "tabs.series",
+    icon: { sf: "square.stack", ionicon: "layers-outline" },
   },
   {
     name: "authors",
-    titleKey: "tabs.authors" as TranslationKey,
-    icon: { sf: "person.circle" as SFSymbol, ionicon: "people-circle-outline" as IoniconsName },
+    titleKey: "tabs.authors",
+    icon: { sf: "person.circle", ionicon: "people-circle-outline" },
   },
 ];
 
@@ -139,6 +145,36 @@ export default function MoreScreen() {
     }
   };
 
+  // Trailing slashes match the canonical URLs the site itself links to
+  // (SideShelf-web/src/_includes/base.njk) — Eleventy emits these pages as
+  // /privacy/index.html, so the slash-less form relies on a redirect.
+  const openPrivacyPolicy = async () => {
+    try {
+      await WebBrowser.openBrowserAsync("https://sideshelf.app/privacy/");
+    } catch (error) {
+      console.error("[MoreScreen] Failed to open privacy policy:", error);
+    }
+  };
+
+  const openTermsOfService = async () => {
+    try {
+      await WebBrowser.openBrowserAsync("https://sideshelf.app/terms/");
+    } catch (error) {
+      console.error("[MoreScreen] Failed to open terms of service:", error);
+    }
+  };
+
+  // Points at GitHub issues rather than sideshelf.app/support: there is no
+  // support page on the site, and the site's own footer uses this same link as
+  // its support channel. A dead support link is an App Review failure.
+  const openSupport = async () => {
+    try {
+      await WebBrowser.openBrowserAsync("https://github.com/clayreimann/SideShelf/issues");
+    } catch (error) {
+      console.error("[MoreScreen] Failed to open support page:", error);
+    }
+  };
+
   const data = useMemo(() => {
     const items: ActionItem[] = [];
 
@@ -146,8 +182,7 @@ export default function MoreScreen() {
     hiddenTabsData.forEach((tab) => {
       items.push({
         label: translate(tab.titleKey),
-        onPress: () =>
-          tab.name === "series" ? router.push("/more/series") : router.push("/more/authors"),
+        onPress: () => router.push(getMoreTabIndexRoute(tab.name)),
         icon: tab.icon,
         isNavItem: true,
       });
@@ -174,6 +209,27 @@ export default function MoreScreen() {
         label: translate("more.feedback"),
         onPress: openFeedback,
         icon: { sf: "envelope" as SFSymbol, ionicon: "mail-outline" as IoniconsName },
+      },
+      {
+        label: translate("more.privacyPolicy"),
+        onPress: openPrivacyPolicy,
+        icon: {
+          sf: "hand.raised" as SFSymbol,
+          ionicon: "shield-checkmark-outline" as IoniconsName,
+        },
+      },
+      {
+        label: translate("more.termsOfService"),
+        onPress: openTermsOfService,
+        icon: { sf: "doc.text" as SFSymbol, ionicon: "document-text-outline" as IoniconsName },
+      },
+      {
+        label: translate("more.support"),
+        onPress: openSupport,
+        icon: {
+          sf: "questionmark.circle" as SFSymbol,
+          ionicon: "help-circle-outline" as IoniconsName,
+        },
       }
     );
 
@@ -196,6 +252,12 @@ export default function MoreScreen() {
           label: translate("more.trackPlayer"),
           onPress: () => router.push("/more/track-player"),
           icon: { sf: "waveform" as SFSymbol, ionicon: "radio-outline" as IoniconsName },
+          isNavItem: true,
+        },
+        {
+          label: translate("more.traceDumps"),
+          onPress: () => router.push("/more/trace-dumps"),
+          icon: { sf: "doc.badge.gearshape" as SFSymbol, ionicon: "bug-outline" as IoniconsName },
           isNavItem: true,
         },
         {
@@ -260,6 +322,9 @@ export default function MoreScreen() {
     errorCount,
     diagnosticsEnabled,
     openFeedback,
+    openPrivacyPolicy,
+    openTermsOfService,
+    openSupport,
     hiddenTabsData,
   ]);
 
@@ -274,6 +339,11 @@ export default function MoreScreen() {
             style={({ pressed }) => [styles.listItem, pressed && { opacity: 0.6 }]}
             onPress={item.onPress}
             android_ripple={{ color: textSecondary }}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={
+              item.badge !== undefined ? `${item.label}, ${item.badge}` : item.label
+            }
           >
             <View
               style={{

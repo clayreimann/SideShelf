@@ -40,6 +40,8 @@ export interface AuthorsSliceState {
     initialized: boolean;
     /** Whether API and DB are ready for operations */
     ready: boolean;
+    /** Whether authenticated API requests may be used for missing author images */
+    apiConfigured: boolean;
   };
 }
 
@@ -93,6 +95,7 @@ const initialAuthorsState: AuthorsSliceState = {
     loading: INITIAL_AUTHORS_LOADING_STATES,
     initialized: false,
     ready: false,
+    apiConfigured: false,
   },
 };
 
@@ -178,8 +181,10 @@ export const createAuthorsSlice: SliceCreator<AuthorsSlice> = (set, get) => ({
     try {
       console.log("[AuthorsSlice] Refreshing authors from database...");
 
-      // Fetch authors from database
-      const authors = await getAllAuthors();
+      // Fetch authors from database, filtered to the selected library so book
+      // counts match what the author detail screen shows.
+      const libraryId = get().library?.selectedLibraryId ?? undefined;
+      const authors = await getAllAuthors(libraryId);
       let displayItems = transformAuthorsToDisplayFormat(authors);
 
       // Initial update with authors (includes already cached images)
@@ -197,6 +202,14 @@ export const createAuthorsSlice: SliceCreator<AuthorsSlice> = (set, get) => ({
       // Note: We fetch for all authors that don't have cachedImageUri set,
       // regardless of imageUrl, since the API endpoint works with just author ID
       const authorsNeedingImages = displayItems.filter((item) => !item.cachedImageUri);
+
+      // Cached author records and locally cached image files remain available while
+      // signed out or awaiting reauthentication. Do not turn that local refresh into
+      // authenticated HEAD/GET requests when the API is not configured.
+      if (!get().authors.apiConfigured) {
+        console.log("[AuthorsSlice] API not configured, skipping missing image fetches");
+        return authors;
+      }
 
       if (authorsNeedingImages.length === 0) {
         console.log(`[AuthorsSlice] All ${authors.length} authors already have cached images`);
@@ -315,16 +328,18 @@ export const createAuthorsSlice: SliceCreator<AuthorsSlice> = (set, get) => ({
   },
 
   /**
-   * Set ready state based on API and DB initialization
+   * Set ready state based on DB initialization.
+   * Author records are cached locally; API credentials are only needed for
+   * optional image refreshes, not for browsing cached content.
    */
   _setAuthorsReady: (apiConfigured: boolean, dbInitialized: boolean) => {
-    const ready = apiConfigured && dbInitialized;
+    const ready = dbInitialized;
     console.log(
       `[AuthorsSlice] Setting ready state: ${ready} (api=${apiConfigured}, db=${dbInitialized})`
     );
     set((state: AuthorsSlice) => ({
       ...state,
-      authors: { ...state.authors, ready },
+      authors: { ...state.authors, ready, apiConfigured },
     }));
   },
 

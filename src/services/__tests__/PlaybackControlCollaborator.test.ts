@@ -8,7 +8,6 @@
  *   - react-native-track-player
  *   - @/lib/smartRewind
  *   - @/stores/appStore
- *   - mockFacade.rebuildCurrentTrackIfNeeded (injected)
  *   - mockFacade.dispatchEvent (injected)
  */
 
@@ -63,9 +62,11 @@ describe("PlaybackControlCollaborator", () => {
   const mockStore = {
     player: {
       currentTrack: null as any,
+      position: 0,
     },
     _setLastPauseTime: jest.fn(),
     _setTrackLoading: jest.fn(),
+    _setCurrentTrack: jest.fn(),
   };
 
   beforeEach(() => {
@@ -75,9 +76,22 @@ describe("PlaybackControlCollaborator", () => {
 
     mockFacade = {
       dispatchEvent: jest.fn(),
-      getApiInfo: jest.fn().mockReturnValue({ baseUrl: "http://test", accessToken: "tok123" }),
-      getInitializationTimestamp: jest.fn().mockReturnValue(Date.now()),
-      rebuildCurrentTrackIfNeeded: jest.fn().mockResolvedValue(true),
+      getApiInfo: jest.fn<IPlayerServiceFacade["getApiInfo"]>().mockReturnValue({
+        baseUrl: "http://test",
+        accessToken: "tok123",
+      }),
+      getInitializationTimestamp: jest
+        .fn<IPlayerServiceFacade["getInitializationTimestamp"]>()
+        .mockReturnValue(Date.now()),
+      executeRebuildQueue: jest.fn<IPlayerServiceFacade["executeRebuildQueue"]>(),
+      resolveCanonicalPosition: jest
+        .fn<IPlayerServiceFacade["resolveCanonicalPosition"]>()
+        .mockResolvedValue({
+          position: 0,
+          source: "store",
+          authoritativePosition: null,
+          asyncStoragePosition: null,
+        }),
     };
 
     collaborator = new PlaybackControlCollaborator(mockFacade);
@@ -98,33 +112,93 @@ describe("PlaybackControlCollaborator", () => {
   });
 
   describe("executePlay", () => {
-    it("calls facade.rebuildCurrentTrackIfNeeded then TrackPlayer.play", async () => {
-      await collaborator.executePlay();
+    it("calls TrackPlayer.play before applySmartRewind", async () => {
+      const callOrder: string[] = [];
+      mockedTrackPlayer.play.mockImplementation(async () => {
+        callOrder.push("play");
+      });
+      applySmartRewind.mockImplementation(async () => {
+        callOrder.push("applySmartRewind");
+      });
 
-      expect(mockFacade.rebuildCurrentTrackIfNeeded).toHaveBeenCalled();
-      expect(applySmartRewind).toHaveBeenCalled();
-      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+      await collaborator.executePlay(0);
+
+      expect(callOrder).toEqual(["play", "applySmartRewind"]);
     });
 
-    it("clears last pause time before playing", async () => {
-      await collaborator.executePlay();
+    it("returns the exact smart rewind outcome for coordinator reconciliation", async () => {
+      const outcome = { fromPosition: 100, toPosition: 70 };
+      applySmartRewind.mockResolvedValue(outcome);
+
+      await expect(collaborator.executePlay(0)).resolves.toEqual(outcome);
+    });
+
+    it("clears last pause time after playing", async () => {
+      await collaborator.executePlay(0);
 
       expect(mockStore._setLastPauseTime).toHaveBeenCalledWith(null);
     });
 
-    it("does not call TrackPlayer.play when rebuildCurrentTrackIfNeeded returns false", async () => {
-      (mockFacade.rebuildCurrentTrackIfNeeded as jest.Mock).mockResolvedValue(false);
-
-      await collaborator.executePlay();
-
-      expect(mockedTrackPlayer.play).not.toHaveBeenCalled();
-    });
-
-    it("clears track loading state on error and rethrows", async () => {
+    it("rethrows when play fails without writing to the store directly (Task 3b/3c)", async () => {
+      // The store._setTrackLoading(false) write that used to live here was dead:
+      // this rejection propagates up through the coordinator's executeTransition,
+      // whose catch block dispatches NATIVE_ERROR — the coordinator's NATIVE_ERROR
+      // handler clears context.isLoadingTrack itself, and its store bridge pushes
+      // that to the store afterward, re-clobbering any direct write made here.
       mockedTrackPlayer.play.mockRejectedValue(new Error("Play failed"));
 
-      await expect(collaborator.executePlay()).rejects.toThrow("Play failed");
-      expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
+      await expect(collaborator.executePlay(0)).rejects.toThrow("Play failed");
+      expect(mockStore._setTrackLoading).not.toHaveBeenCalled();
+    });
+
+    it("rethrows when applySmartRewind fails without writing to the store directly (Task 3b/3c)", async () => {
+      applySmartRewind.mockRejectedValue(new Error("Seek failed"));
+
+      await expect(collaborator.executePlay(0)).rejects.toThrow("Seek failed");
+      expect(mockedTrackPlayer.play).toHaveBeenCalled();
+      expect(mockStore._setTrackLoading).not.toHaveBeenCalled();
+    });
+
+    // Task 4c: executePlay takes the coordinator's current position as an
+    // explicit parameter instead of reading store.player.position itself — two
+    // functions communicating through global state, untied. The coordinator
+    // passes context.position at its executePlay call site.
+    it("passes the given position to applySmartRewind to prevent streaming race where TrackPlayer.getProgress returns 0", async () => {
+      await collaborator.executePlay(20956);
+
+      expect(applySmartRewind).toHaveBeenCalledWith(20956);
+    });
+
+    it("passes 0 to applySmartRewind when position is 0 (beginning of book)", async () => {
+      await collaborator.executePlay(0);
+
+      expect(applySmartRewind).toHaveBeenCalledWith(0);
+    });
+
+    it("ignores store.player.position entirely — only the explicit parameter is used", async () => {
+      mockStore.player.position = 999;
+
+      await collaborator.executePlay(42);
+
+      expect(applySmartRewind).toHaveBeenCalledWith(42);
+    });
+
+    it("calls applySmartRewind when no meta is passed (default behavior preserved)", async () => {
+      await collaborator.executePlay(0);
+
+      expect(applySmartRewind).toHaveBeenCalled();
+    });
+
+    it("does NOT call applySmartRewind when skipSmartRewind is true in meta", async () => {
+      await collaborator.executePlay(0, { skipSmartRewind: true });
+
+      expect(applySmartRewind).not.toHaveBeenCalled();
+    });
+
+    it("calls applySmartRewind when skipSmartRewind is false in meta (explicit false = same as default)", async () => {
+      await collaborator.executePlay(0, { skipSmartRewind: false });
+
+      expect(applySmartRewind).toHaveBeenCalled();
     });
   });
 

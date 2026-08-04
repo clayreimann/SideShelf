@@ -30,6 +30,7 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
     NATIVE_STATE_CHANGED: PlayerState.LOADING, // Allow state changes during loading
     NATIVE_PROGRESS_UPDATED: PlayerState.LOADING, // Allow progress updates during loading
+    STOP: PlayerState.IDLE, // Allow bailing out of a hung/stuck load (review-b)
   },
 
   [PlayerState.READY]: {
@@ -37,6 +38,10 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     LOAD_TRACK: PlayerState.LOADING,
     STOP: PlayerState.IDLE,
     SEEK: PlayerState.SEEKING,
+    SAME_TRACK_SEEK: PlayerState.READY,
+    JUMP_FORWARD: PlayerState.READY,
+    JUMP_BACKWARD: PlayerState.READY,
+    SEEK_COMPLETE: PlayerState.READY,
     NATIVE_STATE_CHANGED: PlayerState.READY, // Allow native state changes during ready
     NATIVE_ERROR: PlayerState.ERROR,
     NATIVE_PLAYBACK_ERROR: PlayerState.ERROR,
@@ -46,10 +51,15 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     PAUSE: PlayerState.PAUSED,
     STOP: PlayerState.STOPPING,
     SEEK: PlayerState.SEEKING,
+    SAME_TRACK_SEEK: PlayerState.PLAYING,
+    JUMP_FORWARD: PlayerState.PLAYING,
+    JUMP_BACKWARD: PlayerState.PLAYING,
+    SEEK_COMPLETE: PlayerState.PLAYING,
     LOAD_TRACK: PlayerState.LOADING, // Allow switching tracks while playing
     BUFFERING_STARTED: PlayerState.BUFFERING,
     SET_RATE: PlayerState.PLAYING, // No-op transition — rate change doesn't change state
     SET_VOLUME: PlayerState.PLAYING, // No-op transition — volume change doesn't change state
+    POSITION_RECONCILED: PlayerState.PLAYING, // Position resolved after resume while already playing
     NATIVE_STATE_CHANGED: PlayerState.PLAYING, // Allow native state changes during playback
     NATIVE_TRACK_CHANGED: PlayerState.PLAYING, // Allow track changes during playback
     NATIVE_ERROR: PlayerState.ERROR,
@@ -61,6 +71,10 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
     PLAY: PlayerState.PLAYING,
     STOP: PlayerState.STOPPING,
     SEEK: PlayerState.SEEKING,
+    SAME_TRACK_SEEK: PlayerState.PAUSED,
+    JUMP_FORWARD: PlayerState.PAUSED,
+    JUMP_BACKWARD: PlayerState.PAUSED,
+    SEEK_COMPLETE: PlayerState.PAUSED,
     LOAD_TRACK: PlayerState.LOADING,
     SET_RATE: PlayerState.PAUSED, // No-op transition — rate change doesn't change state
     SET_VOLUME: PlayerState.PAUSED, // No-op transition — volume change doesn't change state
@@ -72,6 +86,8 @@ export const transitions: Record<PlayerState, Partial<Record<PlayerEvent["type"]
 
   [PlayerState.SEEKING]: {
     SEEK_COMPLETE: PlayerState.READY,
+    JUMP_FORWARD: PlayerState.SEEKING,
+    JUMP_BACKWARD: PlayerState.SEEKING,
     NATIVE_PROGRESS_UPDATED: PlayerState.READY, // Seek complete
     NATIVE_STATE_CHANGED: PlayerState.SEEKING, // Allow native state changes during seek
     NATIVE_ERROR: PlayerState.ERROR,

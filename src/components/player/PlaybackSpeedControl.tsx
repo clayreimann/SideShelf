@@ -42,6 +42,13 @@ export default function PlaybackSpeedControl() {
         }))}
       >
         <View
+          testID="speed-control"
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={translate("accessibility.playbackSpeed")}
+          accessibilityValue={{
+            text: translate("player.playbackSpeed.rate", { rate: playbackRate }),
+          }}
           style={{
             flexDirection: "row",
             alignItems: "center",

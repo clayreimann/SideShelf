@@ -272,7 +272,12 @@ export default function TrackPlayerScreen() {
               { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
             ]}
           >
-            <Pressable onPress={item.onPress} disabled={item.disabled}>
+            <Pressable
+              onPress={item.onPress}
+              disabled={item.disabled}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: item.disabled }}
+            >
               <Text style={item.disabled ? styles.text : styles.link}>{item.label}</Text>
             </Pressable>
             {item.component && item.component}

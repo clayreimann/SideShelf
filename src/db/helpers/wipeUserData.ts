@@ -5,7 +5,9 @@
  * previous user/server leaks into a new session.
  *
  * Tables wiped (all rows deleted, no WHERE clause):
- *   media_progress, library_items, media_metadata, audio_files, chapters,
+ *   pending_bookmark_ops, bookmarks,
+ *   media_progress, local_progress_snapshots, local_listening_sessions,
+ *   progress_sync_outbox, library_items, media_metadata, audio_files, chapters,
  *   authors, series, media_genres, media_tags, media_authors, media_series,
  *   media_narrators
  *
@@ -16,6 +18,7 @@
 
 import { db } from "../client";
 import { audioFiles } from "../schema/audioFiles";
+import { bookmarks, pendingBookmarkOps } from "../schema/bookmarks";
 import { authors } from "../schema/authors";
 import { chapters } from "../schema/chapters";
 import { genres } from "../schema/genres";
@@ -32,6 +35,11 @@ import { mediaProgress } from "../schema/mediaProgress";
 import { narrators } from "../schema/narrators";
 import { series } from "../schema/series";
 import { tags } from "../schema/tags";
+import {
+  localListeningSessions,
+  localProgressSnapshots,
+  progressSyncOutbox,
+} from "../schema/localData";
 
 /**
  * Delete all user-specific rows from every content table.
@@ -41,6 +49,16 @@ import { tags } from "../schema/tags";
  * most tables use ON DELETE CASCADE — being explicit here avoids surprises.
  */
 export async function wipeUserData(): Promise<void> {
+  // Bookmark sync queue first (references users only, no FK to content tables)
+  await db.delete(pendingBookmarkOps);
+  await db.delete(bookmarks);
+
+  // Explicit logout must remove durable playback work before content parents.
+  // Do not rely on FK cascades: embedded SQLite configurations can disable them.
+  await db.delete(progressSyncOutbox);
+  await db.delete(localProgressSnapshots);
+  await db.delete(localListeningSessions);
+
   // Join tables first (reference mediaMetadata, authors, series, etc.)
   await db.delete(mediaAuthors);
   await db.delete(mediaGenres);

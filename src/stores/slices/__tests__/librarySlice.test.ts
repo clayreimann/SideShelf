@@ -11,6 +11,7 @@ import {
   mockPodcastLibraryRow,
 } from "../../../__tests__/fixtures";
 import { createTestDb, TestDatabase } from "../../../__tests__/utils/testDb";
+import type { LibraryItemDisplayRow } from "@/types/components";
 import { DEFAULT_SORT_CONFIG, STORAGE_KEYS } from "../../utils";
 import { createLibrarySlice, LibrarySlice } from "../librarySlice";
 
@@ -40,16 +41,18 @@ jest.mock("@/db/helpers/libraries", () => ({
 
 jest.mock("@/db/helpers/libraryItems", () => ({
   getLibraryItemsForList: jest.fn(),
+  getLibraryItemsNeedingRefresh: jest.fn(),
   marshalLibraryItemFromApi: jest.fn(),
   marshalLibraryItemsFromResponse: jest.fn(),
   transformItemsToDisplayFormat: jest.fn(),
   upsertLibraryItems: jest.fn(),
   checkLibraryItemExists: jest.fn(),
-  marshalLibraryItemFromApi: jest.fn(),
 }));
 
 jest.mock("@/db/helpers/mediaMetadata", () => ({
   cacheCoversForLibraryItems: jest.fn(),
+  upsertBookMetadata: jest.fn(),
+  upsertPodcastMetadata: jest.fn(),
   upsertBooksMetadata: jest.fn(),
   upsertPodcastsMetadata: jest.fn(),
 }));
@@ -79,6 +82,7 @@ describe("LibrarySlice", () => {
   } = require("@/db/helpers/libraries");
   const {
     getLibraryItemsForList,
+    getLibraryItemsNeedingRefresh,
     marshalLibraryItemFromApi,
     marshalLibraryItemsFromResponse,
     transformItemsToDisplayFormat,
@@ -87,6 +91,8 @@ describe("LibrarySlice", () => {
   } = require("@/db/helpers/libraryItems");
   const {
     cacheCoversForLibraryItems,
+    upsertBookMetadata,
+    upsertPodcastMetadata,
     upsertBooksMetadata,
     upsertPodcastsMetadata,
   } = require("@/db/helpers/mediaMetadata");
@@ -113,14 +119,16 @@ describe("LibrarySlice", () => {
     upsertLibraries.mockResolvedValue();
 
     getLibraryItemsForList.mockResolvedValue([]);
-    marshalLibraryItemFromApi.mockImplementation((item) => item);
+    getLibraryItemsNeedingRefresh.mockResolvedValue([]);
     transformItemsToDisplayFormat.mockReturnValue([]);
     marshalLibraryItemsFromResponse.mockReturnValue([]);
     upsertLibraryItems.mockResolvedValue();
     checkLibraryItemExists.mockResolvedValue(false);
-    marshalLibraryItemFromApi.mockImplementation((item: any) => item);
+    marshalLibraryItemFromApi.mockImplementation((item: LibraryItemDisplayRow) => item);
 
     cacheCoversForLibraryItems.mockResolvedValue({ downloadedCount: 0, totalCount: 0 });
+    upsertBookMetadata.mockResolvedValue();
+    upsertPodcastMetadata.mockResolvedValue();
     upsertBooksMetadata.mockResolvedValue();
     upsertPodcastsMetadata.mockResolvedValue();
 
@@ -215,6 +223,58 @@ describe("LibrarySlice", () => {
       // Test case 3: Both API and DB (ready)
       await store.getState().initializeLibrarySlice(true, true);
       expect(store.getState().library.readinessState).toBe("READY");
+    });
+  });
+
+  /**
+   * Regression coverage for GitHub issue #11 (fresh-login initialization is broken).
+   *
+   * StoreProvider's useLibraryStoreInitializer fires initializeLibrarySlice(apiConfigured,
+   * dbInitialized) as soon as dbInitialized is true — which happens before login, while
+   * apiConfigured is still false. That early call reads the (empty, pre-sync) local cache
+   * and, after its awaits resolve, unconditionally overwrites selectedLibraryId/libraries
+   * with what it captured. If login completes and _onTransitionToReady (triggered by the
+   * separate _updateReadiness effect) finishes populating a real selection *before* that
+   * slow early call's own trailing set() runs, the early call's stale, empty snapshot wins
+   * the race and wipes the real selection back out — permanently, since nothing re-triggers
+   * _onTransitionToReady afterward. This is what produces "no library is selected by
+   * default" after a first-ever login.
+   */
+  describe("initializeLibrarySlice — fresh-login race", () => {
+    it("does not let a slow pre-auth cache load clobber a selection made by a concurrent login", async () => {
+      // Simulate the pre-auth initializeLibrarySlice(false, true) call's local DB read
+      // being slow enough to still be in flight when login completes.
+      let resolveGetAllLibraries!: (value: unknown) => void;
+      const deferred = new Promise((resolve) => {
+        resolveGetAllLibraries = resolve;
+      });
+      getAllLibraries.mockImplementation(() => deferred);
+
+      const earlyInit = store.getState().initializeLibrarySlice(false, true);
+
+      // Let the early call reach and issue its getAllLibraries() call.
+      await new Promise((r) => setImmediate(r));
+      expect(getAllLibraries).toHaveBeenCalledTimes(1);
+
+      // Login completes: apiConfigured flips true. This is what
+      // useLibraryStoreInitializer's second effect does on every dependency change,
+      // independent of (and not gated behind) the still-pending early call above.
+      getAllLibraries.mockResolvedValue([mockLibraryRow, mockPodcastLibraryRow]);
+      marshalLibrariesFromResponse.mockReturnValue([mockLibraryRow, mockPodcastLibraryRow]);
+      store.getState()._updateReadiness(true, true);
+      await new Promise((r) => setTimeout(r, 0));
+
+      // The login-triggered transition should have selected a library already.
+      expect(store.getState().library.selectedLibraryId).toBe("lib-1");
+
+      // Now the slow pre-auth read finally resolves with the stale, empty snapshot it
+      // captured before login happened.
+      resolveGetAllLibraries([]);
+      await earlyInit;
+
+      const state = store.getState();
+      expect(state.library.selectedLibraryId).toBe("lib-1");
+      expect(state.library.libraries.length).toBeGreaterThan(0);
     });
   });
 
@@ -757,6 +817,152 @@ describe("LibrarySlice", () => {
       const state = store.getState();
       expect(state.library.operationState).toBe("IDLE");
     });
+
+    /**
+     * Regression coverage for GitHub issue #11 symptoms 1, 3 and 4 ("home isn't
+     * refreshed", "authors don't populate", "series don't populate" after a first-ever
+     * login). _refetchItems() is the path used for a brand-new library sync (via
+     * _onTransitionToReady's first-time selectLibrary(id, true) call): it populates
+     * library items and, in the background, full item details including author/series
+     * links — but never told the authors/series/home slices that new data had landed.
+     * Those slices had already run their own one-shot initialization earlier (before
+     * login, against an empty DB) and nothing else ever re-fetches them, so they stay
+     * empty forever. This mirrors the exact shape of the `_backfillIncompleteItems`
+     * reconciliation added for the Series under-counting bug — it just wasn't wired
+     * into this, the first-sync code path too.
+     */
+    it("refreshes authors, series, and home once the first-time full-detail sync completes", async () => {
+      const refetchSeries = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
+      const refetchAuthors = jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
+      const refreshHome = jest
+        .fn<(userId: string, force?: boolean) => Promise<void>>()
+        .mockResolvedValue(undefined);
+      (store as any).setState((state: any) => ({
+        ...state,
+        userProfile: { activeUserId: "user-1" },
+        refetchSeries,
+        refetchAuthors,
+        refreshHome,
+      }));
+
+      fetchAllLibraryItems.mockResolvedValue([
+        {
+          id: "li-1",
+          libraryId: "lib-1",
+          mediaType: "book",
+          media: { metadata: { title: "Book 1" } },
+        },
+      ]);
+      getLibraryItemsForList.mockResolvedValue([]);
+      transformItemsToDisplayFormat.mockReturnValue([]);
+      fetchLibraryItemsBatch.mockResolvedValue([{ id: "li-1" }]);
+      processFullLibraryItems.mockResolvedValue();
+      cacheCoversForLibraryItems.mockResolvedValue({ downloadedCount: 0, totalCount: 0 });
+
+      await (store.getState() as any)._refetchItems();
+
+      // The full-detail batch sync runs as a fire-and-forget background task.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(refetchSeries).toHaveBeenCalled();
+      expect(refetchAuthors).toHaveBeenCalled();
+      expect(refreshHome).toHaveBeenCalledWith("user-1", true);
+    });
+  });
+
+  /**
+   * Regression coverage for the Series tab under-counting bug: when a
+   * previous background sync is interrupted (app reload, crash, network
+   * failure), some library items are left with only minified data — no
+   * series/author links. `_backfillIncompleteItems` is the self-healing
+   * pass that finds and reprocesses those items so they don't stay broken
+   * forever. It's wired into `_checkForNewItems`, which already runs on
+   * every app-ready transition and on pull-to-refresh.
+   */
+  describe("_backfillIncompleteItems", () => {
+    beforeEach(async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+      store.setState((state) => ({
+        ...state,
+        library: {
+          ...state.library,
+          selectedLibraryId: "lib-1",
+          selectedLibrary: mockLibraryRow,
+        },
+      }));
+      jest.clearAllMocks();
+    });
+
+    it("does nothing when no items need refreshing", async () => {
+      getLibraryItemsNeedingRefresh.mockResolvedValue([]);
+
+      await (store.getState() as any)._backfillIncompleteItems();
+
+      expect(fetchLibraryItemsBatch).not.toHaveBeenCalled();
+      expect(processFullLibraryItems).not.toHaveBeenCalled();
+    });
+
+    it("fetches and reprocesses full details for items still missing them", async () => {
+      getLibraryItemsNeedingRefresh.mockResolvedValue(["item-1", "item-2"]);
+      const fullItems = [{ id: "item-1" }, { id: "item-2" }];
+      fetchLibraryItemsBatch.mockResolvedValue(fullItems);
+      processFullLibraryItems.mockResolvedValue();
+
+      await (store.getState() as any)._backfillIncompleteItems();
+
+      expect(fetchLibraryItemsBatch).toHaveBeenCalledWith(["item-1", "item-2"]);
+      expect(processFullLibraryItems).toHaveBeenCalledWith(fullItems);
+    });
+
+    it("does not throw if the batch fetch fails", async () => {
+      getLibraryItemsNeedingRefresh.mockResolvedValue(["item-1"]);
+      fetchLibraryItemsBatch.mockRejectedValue(new Error("network error"));
+
+      await expect((store.getState() as any)._backfillIncompleteItems()).resolves.not.toThrow();
+
+      expect(processFullLibraryItems).not.toHaveBeenCalled();
+    });
+
+    it("does nothing if the slice is not ready", async () => {
+      store.setState((state) => ({
+        ...state,
+        library: { ...state.library, readinessState: "NOT_READY" },
+      }));
+
+      await (store.getState() as any)._backfillIncompleteItems();
+
+      expect(getLibraryItemsNeedingRefresh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("_checkForNewItems triggers backfill", () => {
+    beforeEach(async () => {
+      getAllLibraries.mockResolvedValue([mockLibraryRow]);
+      await store.getState().initializeLibrarySlice(true, true);
+      store.setState((state) => ({
+        ...state,
+        library: {
+          ...state.library,
+          selectedLibraryId: "lib-1",
+          selectedLibrary: mockLibraryRow,
+        },
+      }));
+      fetchLibraryItemsByAddedAt.mockResolvedValue({ results: [] });
+      jest.clearAllMocks();
+    });
+
+    it("attempts a backfill pass after checking for new items", async () => {
+      fetchLibraryItemsByAddedAt.mockResolvedValue({ results: [] });
+      getLibraryItemsNeedingRefresh.mockResolvedValue([]);
+
+      await (store.getState() as any)._checkForNewItems();
+      // The backfill call is fire-and-forget inside the `finally` block.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(getLibraryItemsNeedingRefresh).toHaveBeenCalled();
+    });
   });
 
   describe("_sortLibraryItems", () => {
@@ -765,10 +971,52 @@ describe("LibrarySlice", () => {
     });
 
     it("should sort items based on current sort config", () => {
-      const mockItems = [
-        { id: "li-2", title: "Book B", authorName: "Author B" },
-        { id: "li-1", title: "Book A", authorName: "Author A" },
-        { id: "li-3", title: "Book C", authorName: "Author C" },
+      const mockItems: LibraryItemDisplayRow[] = [
+        {
+          id: "li-2",
+          title: "Book B",
+          authorName: "Author B",
+          mediaType: "book",
+          author: null,
+          authorNameLF: null,
+          narrator: null,
+          releaseDate: null,
+          publishedYear: null,
+          addedAt: null,
+          duration: null,
+          coverUri: null,
+          seriesName: null,
+        },
+        {
+          id: "li-1",
+          title: "Book A",
+          authorName: "Author A",
+          mediaType: "book",
+          author: null,
+          authorNameLF: null,
+          narrator: null,
+          releaseDate: null,
+          publishedYear: null,
+          addedAt: null,
+          duration: null,
+          coverUri: null,
+          seriesName: null,
+        },
+        {
+          id: "li-3",
+          title: "Book C",
+          authorName: "Author C",
+          mediaType: "book",
+          author: null,
+          authorNameLF: null,
+          narrator: null,
+          releaseDate: null,
+          publishedYear: null,
+          addedAt: null,
+          duration: null,
+          coverUri: null,
+          seriesName: null,
+        },
       ];
 
       store.setState((state) => ({

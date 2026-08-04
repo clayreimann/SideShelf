@@ -1,5 +1,5 @@
 import { HeaderControls, SortMenu } from "@/components/ui";
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import { SeriesListRow } from "@/db/helpers/series";
 import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
@@ -50,6 +50,7 @@ export default function SeriesScreen() {
       return (
         <TouchableOpacity
           onPress={() => router.push(`/series/${item.id}`)}
+          testID="series-item"
           style={{
             flexDirection: "row",
             padding: 16,
@@ -57,8 +58,10 @@ export default function SeriesScreen() {
             borderBottomColor: styles.text.color + "20",
             alignItems: "center",
           }}
+          accessible={true}
           accessibilityRole="button"
-          accessibilityHint={`View books in ${item.name}`}
+          accessibilityLabel={`${item.name}, ${bookCountLabel}`}
+          accessibilityHint={translate("accessibility.openSeries")}
         >
           {item.firstBookCoverUrl && (
             <View

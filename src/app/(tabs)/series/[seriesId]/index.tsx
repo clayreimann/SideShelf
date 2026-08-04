@@ -1,24 +1,24 @@
-import { ProgressBar } from "@/components/ui";
-import CoverImage from "@/components/ui/CoverImange";
+import { PaddedFlatList, ProgressBar } from "@/components/ui";
+import CoverImage from "@/components/ui/CoverImage";
 import { MediaProgressRow } from "@/db/helpers/mediaProgress";
 import { SeriesBookRow } from "@/db/helpers/series";
-import { useFloatingPlayerPadding } from "@/hooks/useFloatingPlayerPadding";
 import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
+import { getSeriesItemRoute } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { useAppStore, useDownloads, useNetwork, useSeries } from "@/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from "react-native";
 
 export default function SeriesDetailScreen() {
   const { styles, colors } = useThemedStyles();
-  const floatingPlayerPadding = useFloatingPlayerPadding();
   const { series: seriesList, ready, isInitializing, refetchSeries } = useSeries();
   const router = useRouter();
+  const pathname = usePathname();
   const params = useLocalSearchParams<{ seriesId?: string | string[] }>();
   const seriesId = Array.isArray(params.seriesId) ? params.seriesId[0] : params.seriesId;
   const { userId, isAuthenticated } = useAuth();
@@ -148,7 +148,9 @@ export default function SeriesDetailScreen() {
 
       return (
         <TouchableOpacity
-          onPress={() => seriesId && router.push(`/series/${seriesId}/item/${item.libraryItemId}`)}
+          onPress={() =>
+            seriesId && router.push(getSeriesItemRoute(pathname, seriesId, item.libraryItemId))
+          }
           style={{
             flexDirection: "row",
             paddingVertical: 12,
@@ -169,7 +171,12 @@ export default function SeriesDetailScreen() {
               backgroundColor: colors.coverBackground,
             }}
           >
-            <CoverImage uri={item.coverUrl} title={item.title} fontSize={12} />
+            <CoverImage
+              uri={item.coverUrl}
+              title={item.title}
+              fontSize={12}
+              libraryItemId={item.libraryItemId}
+            />
           </View>
           <View style={{ flex: 1, justifyContent: "center" }}>
             <Text style={[styles.text, { fontSize: 16, fontWeight: "600" }]} numberOfLines={2}>
@@ -225,7 +232,15 @@ export default function SeriesDetailScreen() {
         </TouchableOpacity>
       );
     },
-    [colors.coverBackground, router, seriesId, styles.text.color, progressMap, isItemDownloaded]
+    [
+      colors.coverBackground,
+      router,
+      seriesId,
+      styles.text.color,
+      progressMap,
+      isItemDownloaded,
+      pathname,
+    ]
   );
 
   if (!seriesId) {
@@ -265,7 +280,7 @@ export default function SeriesDetailScreen() {
 
   return (
     <>
-      <FlatList
+      <PaddedFlatList
         data={selectedSeries.books}
         keyExtractor={(item) => item.libraryItemId}
         renderItem={renderBook}
@@ -274,10 +289,7 @@ export default function SeriesDetailScreen() {
             <Text style={[styles.text, { opacity: 0.7 }]}>No books found in this series.</Text>
           </View>
         }
-        contentContainerStyle={[
-          styles.flatListContainer,
-          { paddingBottom: floatingPlayerPadding.paddingBottom },
-        ]}
+        contentContainerStyle={styles.flatListContainer}
       />
       <Stack.Screen
         options={{
@@ -286,6 +298,12 @@ export default function SeriesDetailScreen() {
             <TouchableOpacity
               onPress={handleDownloadAllUnfinished}
               disabled={isDownloadingAll || serverReachable === false}
+              accessibilityRole="button"
+              accessibilityLabel={translate("accessibility.download")}
+              accessibilityState={{
+                disabled: isDownloadingAll || serverReachable === false,
+                busy: isDownloadingAll,
+              }}
               style={{
                 paddingHorizontal: 16,
                 paddingVertical: 4,

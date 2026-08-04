@@ -1,6 +1,8 @@
 import { apiFetch } from "@/lib/api/api";
+import { redactBody } from "@/lib/api/redact";
 import { logger } from "@/lib/logger";
 import type {
+  ApiAudioBookmark,
   ApiError,
   ApiLibrariesResponse,
   ApiLibraryItem,
@@ -17,21 +19,111 @@ import DeviceInfo from "react-native-device-info";
 
 const log = logger.forTag("api:endpoints");
 
-async function handleResponseError(response: Response, defaultMessage: string) {
-  if (!response.ok) {
-    const text = await response.clone().text();
-    log.error(`${defaultMessage}: ${text}`);
-    try {
-      const error: ApiError = JSON.parse(text);
-      throw new Error(error.message || error.error || defaultMessage);
-    } catch (parseError) {
-      // If JSON parsing fails, the server returned plain text (e.g., "OK", "Offline")
-      // Use the raw text as the error message instead of exposing the parse error
-      const errorMessage = text?.trim() || defaultMessage;
-      log.warn(`Server returned non-JSON error response: ${errorMessage}`);
-      throw new Error(errorMessage);
-    }
+type BookmarkCreateResponse = { bookmark?: ApiAudioBookmark | null } | ApiAudioBookmark | null;
+
+/**
+ * An API response error with the HTTP data the progress sync worker needs to
+ * classify the failure. `retryAfter` is a delay in milliseconds when supplied.
+ */
+export class ApiResponseError extends Error {
+  readonly status: number;
+  readonly retryAfter: number | undefined;
+  readonly responseBody: string;
+
+  constructor(params: {
+    message: string;
+    status: number;
+    retryAfter?: number;
+    responseBody: string;
+  }) {
+    super(params.message);
+    this.name = "ApiResponseError";
+    this.status = params.status;
+    this.retryAfter = params.retryAfter;
+    this.responseBody = params.responseBody;
   }
+}
+
+function fallbackBookmarkId(bookmark: Pick<ApiAudioBookmark, "libraryItemId" | "time" | "title">) {
+  return `${bookmark.libraryItemId}:${bookmark.time}:${bookmark.title}`;
+}
+
+export function normalizeBookmarkResponse(
+  payload: BookmarkCreateResponse,
+  fallback: Pick<ApiAudioBookmark, "libraryItemId" | "time" | "title">
+): ApiAudioBookmark {
+  const bookmarkCandidate =
+    payload && typeof payload === "object" && "bookmark" in payload ? payload.bookmark : payload;
+  const bookmark = bookmarkCandidate as Partial<ApiAudioBookmark> | null;
+  if (!bookmark) {
+    return {
+      id: fallbackBookmarkId(fallback),
+      libraryItemId: fallback.libraryItemId,
+      title: fallback.title,
+      time: fallback.time,
+      createdAt: Date.now(),
+    };
+  }
+
+  return {
+    id:
+      bookmark.id ||
+      fallbackBookmarkId({
+        libraryItemId: bookmark.libraryItemId ?? fallback.libraryItemId,
+        time: bookmark.time ?? fallback.time,
+        title: bookmark.title ?? fallback.title,
+      }),
+    libraryItemId: bookmark.libraryItemId ?? fallback.libraryItemId,
+    title: bookmark.title ?? fallback.title,
+    time: bookmark.time ?? fallback.time,
+    createdAt: bookmark.createdAt ?? Date.now(),
+  };
+}
+
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined;
+
+  const seconds = Number(value);
+  if (Number.isInteger(seconds) && seconds >= 0) {
+    return seconds * 1000;
+  }
+
+  const retryAt = Date.parse(value);
+  if (Number.isNaN(retryAt)) return undefined;
+  return Math.max(0, retryAt - Date.now());
+}
+
+function getErrorMessage(responseBody: string, defaultMessage: string): string {
+  try {
+    const error: ApiError = JSON.parse(responseBody);
+    return error.message || error.error || defaultMessage;
+  } catch {
+    return responseBody.trim() || defaultMessage;
+  }
+}
+
+async function handleResponseError(response: Response, defaultMessage: string): Promise<void> {
+  if (response.ok) return;
+
+  const text = await response.clone().text();
+  const responseBody = redactBody(text);
+  // This log runs on every failed request across the app (not gated behind a
+  // detailed-logging tag), including a failed /login — redact before it ever
+  // hits the persisted log store in case a server echoes request/session data
+  // back in an error body.
+  log.error(`${defaultMessage}: ${responseBody}`);
+
+  const message = getErrorMessage(responseBody, defaultMessage);
+  if (message === defaultMessage && text?.trim()) {
+    log.warn(`Server returned non-JSON error response: ${responseBody}`);
+  }
+
+  throw new ApiResponseError({
+    message,
+    status: response.status,
+    retryAfter: parseRetryAfter(response.headers?.get("Retry-After") ?? null),
+    responseBody,
+  });
 }
 
 export async function fetchMe(): Promise<ApiMeResponse> {
@@ -260,7 +352,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
  */
 export async function createLocalSession(
   params: CreateLocalSessionParams
-): Promise<{ id: string }> {
+): Promise<{ id: string; duplicate: boolean }> {
   const {
     sessionId,
     userId,
@@ -310,9 +402,7 @@ export async function createLocalSession(
   }
 
   const bodyText = JSON.stringify(body);
-  log.info(
-    `Creating local session localId=${sessionId} libraryItem=${libraryItemId} body=${bodyText}`
-  );
+  log.info("Creating local listening session");
   const response = await apiFetch("/api/session/local", {
     method: "POST",
     headers: {
@@ -321,9 +411,45 @@ export async function createLocalSession(
     body: bodyText,
   });
 
-  await handleResponseError(response, "Failed to create local session");
+  try {
+    await handleResponseError(response, "Failed to create local session");
+  } catch (error) {
+    if (
+      error instanceof ApiResponseError &&
+      error.status === 409 &&
+      getSessionIdFromResponse(error.responseBody) === sessionId
+    ) {
+      return { id: sessionId, duplicate: true };
+    }
+    throw error;
+  }
 
-  return { id: sessionId };
+  const responseText = await response.text();
+  const responseSessionId = getSessionIdFromResponse(responseText);
+  if (responseSessionId && responseSessionId !== sessionId) {
+    throw new ApiResponseError({
+      message: "Failed to create local session: response ID did not match submitted session",
+      status: response.status,
+      retryAfter: parseRetryAfter(response.headers?.get("Retry-After") ?? null),
+      responseBody: redactBody(responseText),
+    });
+  }
+
+  return { id: sessionId, duplicate: false };
+}
+
+function getSessionIdFromResponse(responseBody: string): string | undefined {
+  if (!responseBody.trim()) return undefined;
+
+  try {
+    const response = JSON.parse(responseBody) as { id?: unknown; session?: { id?: unknown } };
+    if (typeof response.id === "string") return response.id;
+    if (typeof response.session?.id === "string") return response.session.id;
+  } catch {
+    // A successful empty or non-JSON response still acknowledges the submitted stable ID.
+  }
+
+  return undefined;
 }
 
 function sanitizeSeconds(value: number): number {
@@ -506,6 +632,7 @@ export async function createBookmark(
   time: number,
   title?: string
 ): Promise<{ bookmark: import("@/types/api").ApiAudioBookmark }> {
+  const resolvedTitle = title || `Bookmark at ${formatTime(time)}`;
   const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark`, {
     method: "POST",
     headers: {
@@ -513,28 +640,60 @@ export async function createBookmark(
     },
     body: JSON.stringify({
       time,
-      title: title || `Bookmark at ${formatTime(time)}`,
+      title: resolvedTitle,
     }),
   });
 
   await handleResponseError(response, "Failed to create bookmark");
-  return response.json();
+  const payload = (await response.json()) as BookmarkCreateResponse;
+  return {
+    bookmark: normalizeBookmarkResponse(payload, {
+      libraryItemId,
+      time,
+      title: resolvedTitle,
+    }),
+  };
 }
 
 /**
- * Delete a bookmark
+ * Delete a bookmark by its time position
  * @param libraryItemId - The library item ID
- * @param bookmarkId - The bookmark ID to delete
+ * @param time - The bookmark time position in seconds (numeric, matches ABS API)
  */
-export async function deleteBookmark(
-  libraryItemId: string,
-  bookmarkId: string
-): Promise<void> {
-  const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark/${bookmarkId}`, {
+export async function deleteBookmark(libraryItemId: string, time: number): Promise<void> {
+  const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark/${time}`, {
     method: "DELETE",
   });
 
   await handleResponseError(response, "Failed to delete bookmark");
+}
+
+/**
+ * Rename a bookmark by updating its title
+ * @param libraryItemId - The library item ID
+ * @param time - The time position of the bookmark to rename
+ * @param title - The new title for the bookmark
+ * @returns The updated bookmark
+ */
+export async function renameBookmark(
+  libraryItemId: string,
+  time: number,
+  title: string
+): Promise<{ bookmark: ApiAudioBookmark }> {
+  const response = await apiFetch(`/api/me/item/${libraryItemId}/bookmark`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ time, title }),
+  });
+  await handleResponseError(response, "Failed to rename bookmark");
+  const payload = (await response.json()) as BookmarkCreateResponse;
+  return {
+    bookmark: normalizeBookmarkResponse(payload, {
+      libraryItemId,
+      time,
+      title,
+    }),
+  };
 }
 
 // Helper function to format time for bookmark titles

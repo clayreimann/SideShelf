@@ -1,12 +1,13 @@
 import { LibraryItemList, LibraryPicker } from "@/components/library";
 import { HeaderControls } from "@/components/ui";
 import { translate } from "@/i18n";
+import { getLibraryItemRoute } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
 import { SortField, useLibrary, useSettings } from "@/stores";
 import type { LibraryItemDisplayRow } from "@/types/components";
 import type { SortConfig } from "@/types/store";
 import { MenuAction } from "@react-native-menu/menu";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Platform, Text, View } from "react-native";
 
@@ -25,6 +26,7 @@ export default function LibraryScreen() {
   const { viewMode, updateViewMode } = useSettings();
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
+  const pathname = usePathname();
   const { openItem } = useLocalSearchParams<{ openItem?: string | string[] }>();
   const handledOpenItemRef = useRef<string | null>(null);
 
@@ -68,8 +70,8 @@ export default function LibraryScreen() {
 
     handledOpenItemRef.current = itemId;
     router.setParams({ openItem: undefined });
-    router.push(`/library/${itemId}`);
-  }, [openItem, router]);
+    router.push(getLibraryItemRoute(pathname, itemId));
+  }, [openItem, pathname, router]);
 
   const handleSortChange = useCallback(
     (config: SortConfig) => {
@@ -154,7 +156,9 @@ export default function LibraryScreen() {
           searchQuery={selectedLibrary ? searchQuery : undefined}
           onSearchChange={selectedLibrary ? setSearchQuery : undefined}
         />
-        <Stack.Screen options={{ title, headerTitle: title, headerRight: controls }} />
+        <Stack.Screen
+          options={{ title, headerTitle: title, headerRight: controls, headerTitleAlign: "center" }}
+        />
       </View>
     </>
   );

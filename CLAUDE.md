@@ -15,6 +15,12 @@ jest --findRelatedTests path/to/file.ts    # Run tests related to a file
 npm run drizzle:generate                   # Generate migrations after schema changes
 npm run lint                               # Run ESLint
 npx dpdm --circular src/services/X.ts     # Check for circular import cycles
+
+# Log analysis (queries logs/ directory — all .txt + trace-dump-*.json files)
+uv run scripts/query-logs.py --schema                        # Show tables and columns
+uv run scripts/query-logs.py --list                          # List available log/trace files
+uv run scripts/query-logs.py "SELECT ..."                    # SQL against logs, spans, trace_events
+uv run scripts/query-logs.py --dir /path "SELECT ..."        # Use a different directory
 ```
 
 ## Architecture
@@ -98,6 +104,13 @@ Circular imports cause uninitialized values at runtime. Never allow them:
 - Type naming: `{Domain}SliceState`, `{Domain}SliceActions`, `{Entity}Row`, `Api{Action}{Entity}`
 - Private service methods: underscore prefix (`_setCurrentTrack`)
 - Constants: `UPPER_SNAKE_CASE`
+
+### Accessibility
+
+- **Icon-only buttons: use `IconButton`** (`@/components/ui/IconButton`) — never a raw `Pressable`. Its required `accessibilityLabel` prop makes unlabeled buttons a compile error; pass platform icons as children
+- **Selection/option rows: use `OptionRow`** (`@/components/ui/OptionRow`) — its `selected` prop drives the checkmark and `accessibilityState.selected` together
+- ESLint enforces a11y props on all touchables (`eslint-plugin-react-native-a11y`); label strings live in the `accessibility.*` i18n namespace (en + es key sets must match or tsc fails)
+- Collapsing a row with `accessible={true}` swallows interactive descendants — never collapse a container that has buttons inside it
 
 ### Logging
 

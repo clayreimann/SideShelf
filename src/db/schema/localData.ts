@@ -1,4 +1,4 @@
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { audioFiles } from "./audioFiles";
 import { libraryFiles } from "./libraryFiles";
 import { mediaMetadata } from "./mediaMetadata";
@@ -60,43 +60,81 @@ export const localLibraryFileDownloads = sqliteTable("local_library_file_downloa
  * This table stores listening sessions that can be synced to the server later
  * Each session represents a continuous listening period with start/end times and progress
  */
-export const localListeningSessions = sqliteTable("local_listening_sessions", {
-  id: text("id").primaryKey(), // UUID generated locally
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  libraryItemId: text("library_item_id").notNull(),
-  mediaId: text("media_id")
-    .notNull()
-    .references(() => mediaMetadata.id, { onDelete: "cascade" }),
+export const localListeningSessions = sqliteTable(
+  "local_listening_sessions",
+  {
+    id: text("id").primaryKey(), // UUID generated locally
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    libraryItemId: text("library_item_id").notNull(),
+    mediaId: text("media_id")
+      .notNull()
+      .references(() => mediaMetadata.id, { onDelete: "cascade" }),
+    episodeId: text("episode_id"),
 
-  // Session timing
-  sessionStart: integer("session_start", { mode: "timestamp" }).notNull(),
-  sessionEnd: integer("session_end", { mode: "timestamp" }), // null if session is still active
+    // Session timing
+    sessionStart: integer("session_start", { mode: "timestamp" }).notNull(),
+    sessionEnd: integer("session_end", { mode: "timestamp" }), // null if session is still active
 
-  // Progress tracking
-  startTime: real("start_time").notNull(), // Position in seconds when session started
-  endTime: real("end_time"), // Position in seconds when session ended (null if active)
-  currentTime: real("current_time").notNull(), // Current position in seconds
-  duration: real("duration").notNull(), // Total media duration in seconds
-  timeListening: real("time_listening").notNull().default(0), // Cumulative listening time in seconds
+    // Progress tracking
+    startTime: real("start_time").notNull(), // Position in seconds when session started
+    endTime: real("end_time"), // Position in seconds when session ended (null if active)
+    currentTime: real("current_time").notNull(), // Current position in seconds
+    duration: real("duration").notNull(), // Total media duration in seconds
+    timeListening: real("time_listening").notNull().default(0), // Cumulative listening time in seconds
 
-  // Playback info
-  playbackRate: real("playback_rate").notNull().default(1.0),
-  volume: real("volume").notNull().default(1.0),
+    // Playback info
+    playbackRate: real("playback_rate").notNull().default(1.0),
+    volume: real("volume").notNull().default(1.0),
 
-  // Sync status
-  isSynced: integer("is_synced", { mode: "boolean" }).notNull().default(false),
-  syncAttempts: integer("sync_attempts").notNull().default(0),
-  lastSyncAttempt: integer("last_sync_attempt", { mode: "timestamp" }),
-  lastSyncTime: integer("last_sync_time", { mode: "timestamp" }), // Last successful sync time
-  serverSessionId: text("server_session_id"), // Server session ID if synced
-  syncError: text("sync_error"), // Last sync error message if any
+    // Sync status
+    isSynced: integer("is_synced", { mode: "boolean" }).notNull().default(false),
+    syncAttempts: integer("sync_attempts").notNull().default(0),
+    lastSyncAttempt: integer("last_sync_attempt", { mode: "timestamp" }),
+    lastSyncTime: integer("last_sync_time", { mode: "timestamp" }), // Last successful sync time
+    serverSessionId: text("server_session_id"), // Server session ID if synced
+    syncError: text("sync_error"), // Last sync error message if any
 
-  // Metadata
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-});
+    // Metadata
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    // Every 1Hz progress tick queries this table by (userId, libraryItemId) via
+    // getActiveSession — this is the hottest lookup in the app. Was previously
+    // the only hot table in this schema directory without an index (compare
+    // media_progress_user_library_idx in mediaProgress.ts).
+    index("local_listening_sessions_user_library_idx").on(table.userId, table.libraryItemId),
+  ]
+);
+
+/**
+ * Delivery state for local listening-session progress. One row coalesces all
+ * outbound-relevant local changes for a session through monotonically increasing revisions.
+ */
+export const progressSyncOutbox = sqliteTable(
+  "progress_sync_outbox",
+  {
+    sessionId: text("session_id")
+      .primaryKey()
+      .references(() => localListeningSessions.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    desiredRevision: integer("desired_revision").notNull().default(1),
+    acknowledgedRevision: integer("acknowledged_revision").notNull().default(0),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastAttemptAt: integer("last_attempt_at", { mode: "timestamp" }),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp" }),
+    lastSuccessAt: integer("last_success_at", { mode: "timestamp" }),
+    lastError: text("last_error"),
+    terminalReason: text("terminal_reason"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [index("progress_sync_outbox_user_retry_idx").on(table.userId, table.nextAttemptAt)]
+);
 
 /**
  * Local progress snapshots - periodic progress saves during playback
@@ -135,6 +173,9 @@ export type NewLocalLibraryFileDownloadRow = typeof localLibraryFileDownloads.$i
 
 export type LocalListeningSessionRow = typeof localListeningSessions.$inferSelect;
 export type NewLocalListeningSessionRow = typeof localListeningSessions.$inferInsert;
+
+export type ProgressSyncOutboxRow = typeof progressSyncOutbox.$inferSelect;
+export type NewProgressSyncOutboxRow = typeof progressSyncOutbox.$inferInsert;
 
 export type LocalProgressSnapshotRow = typeof localProgressSnapshots.$inferSelect;
 export type NewLocalProgressSnapshotRow = typeof localProgressSnapshots.$inferInsert;

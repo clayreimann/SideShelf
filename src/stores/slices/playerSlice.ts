@@ -11,16 +11,57 @@
 import { getUserByUsername } from "@/db/helpers/users";
 import { ASYNC_KEYS, getItem as getAsyncItem, saveItem } from "@/lib/asyncStore";
 import { formatTime } from "@/lib/helpers/formatters";
+import {
+  dismissPendingJump,
+  recordJump,
+  validateJumpHistorySession,
+} from "@/lib/helpers/jumpHistory";
 import { logger } from "@/lib/logger";
 import { getStoredUsername } from "@/lib/secureStore";
-import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { progressService } from "@/services/ProgressService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
-import type { CurrentChapter, PlayerTrack } from "@/types/player";
+import type {
+  CurrentChapter,
+  JumpHistorySession,
+  JumpRecordInput,
+  PlayerTrack,
+} from "@/types/player";
 import type { SliceCreator } from "@/types/store";
 import TrackPlayer from "react-native-track-player";
 
 const log = logger.forTag("PlayerSlice");
+
+interface JumpHistoryLifecycle {
+  mutationRevision: number;
+  restoreGeneration: number;
+  persistenceTail: Promise<void>;
+}
+
+const createJumpHistoryLifecycle = (): JumpHistoryLifecycle => ({
+  mutationRevision: 0,
+  restoreGeneration: 0,
+  persistenceTail: Promise.resolve(),
+});
+
+const nextJumpHistoryMutationRevision = (lifecycle: JumpHistoryLifecycle): number =>
+  ++lifecycle.mutationRevision;
+
+const persistJumpHistory = (
+  lifecycle: JumpHistoryLifecycle,
+  session: JumpHistorySession | null,
+  revision: number
+): void => {
+  lifecycle.persistenceTail = lifecycle.persistenceTail
+    .then(async () => {
+      if (revision !== lifecycle.mutationRevision) {
+        return;
+      }
+      await saveItem(ASYNC_KEYS.jumpHistorySession, session);
+    })
+    .catch((error) => {
+      log.error("[persistJumpHistory] Failed to persist jump history", error as Error);
+    });
+};
 
 /**
  * Player slice state interface - scoped under 'player' to avoid conflicts
@@ -63,6 +104,10 @@ export interface PlayerSliceState {
       /** Chapter target: 'current' or 'next', only used when type is 'chapter' */
       chapterTarget: "current" | "next" | null;
     };
+    /** Active jump ledger for the current library item */
+    jumpHistory: JumpHistorySession | null;
+    /** Whether the jump-history modal is visible */
+    isJumpHistoryModalVisible: boolean;
   };
 }
 
@@ -75,6 +120,8 @@ export interface PlayerSliceState {
 export interface PlayerSliceActions {
   /** Restore persisted player state from AsyncStorage */
   restorePersistedState: () => Promise<void>;
+  /** Restore a valid jump-history snapshot for the current item */
+  restoreJumpHistory: () => Promise<void>;
   // Initialization
   /** Initialize the player slice */
   initializePlayerSlice: () => Promise<void>;
@@ -82,6 +129,8 @@ export interface PlayerSliceActions {
   // UI-only action
   /** Show/hide full-screen modal */
   setModalVisible: (visible: boolean) => void;
+  /** Show/hide the jump-history modal */
+  setJumpHistoryModalVisible: (visible: boolean) => void;
 
   // Internal mutators (used by PlayerBackgroundService)
   /** Update current position (called by PlayerBackgroundService) */
@@ -104,8 +153,12 @@ export interface PlayerSliceActions {
   _setPlaySessionId: (sessionId: string | null) => void;
   /** Set last pause time (for smart rewind) */
   _setLastPauseTime: (timestamp: number | null) => void;
-  /** Update now playing metadata with chapter information */
-  updateNowPlayingMetadata: () => Promise<void>;
+  /** Record a user-initiated position jump */
+  _recordJump: (input: JumpRecordInput) => void;
+  /** Clear the toast acknowledgement for the pending jump */
+  _dismissJumpToast: () => void;
+  /** Clear the active jump-history ledger */
+  _clearJumpHistory: () => void;
   /** Set sleep timer with duration in minutes */
   setSleepTimer: (minutes: number) => void;
   /** Set sleep timer to end at chapter boundary */
@@ -124,7 +177,11 @@ export interface PlayerSlice extends PlayerSliceState, PlayerSliceActions {}
 /**
  * Create player slice
  */
-export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
+export const createPlayerSlice: SliceCreator<PlayerSlice> = (
+  set,
+  get,
+  jumpHistoryLifecycle: JumpHistoryLifecycle = createJumpHistoryLifecycle()
+) => ({
   restorePersistedState: async () => {
     const restored: string[] = [];
     const notFound: string[] = [];
@@ -140,6 +197,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         notFound.push(`currentTrack`);
       }
     }
+
+    await get().restoreJumpHistory();
 
     const playbackRate = await getAsyncItem(ASYNC_KEYS.playbackRate);
     if (playbackRate !== null && playbackRate !== undefined) {
@@ -319,24 +378,30 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
     // Notify coordinator that state has been restored
     const finalState = get();
-    dispatchPlayerEvent({
-      type: "RESTORE_STATE",
-      payload: {
-        state: {
-          currentTrack: finalState.player.currentTrack,
-          position: finalState.player.position,
-          playbackRate: finalState.player.playbackRate,
-          volume: finalState.player.volume,
-          isPlaying: finalState.player.isPlaying,
-          currentPlaySessionId: finalState.player.currentPlaySessionId,
+    dispatchPlayerEvent(
+      {
+        type: "RESTORE_STATE",
+        payload: {
+          state: {
+            currentTrack: finalState.player.currentTrack,
+            position: finalState.player.position,
+            playbackRate: finalState.player.playbackRate,
+            volume: finalState.player.volume,
+            isPlaying: finalState.player.isPlaying,
+            currentPlaySessionId: finalState.player.currentPlaySessionId,
+          },
         },
       },
-    });
+      { source: "restore" }
+    );
 
     // Signal that restoration is complete
-    dispatchPlayerEvent({
-      type: "RESTORE_COMPLETE",
-    });
+    dispatchPlayerEvent(
+      {
+        type: "RESTORE_COMPLETE",
+      },
+      { source: "restore" }
+    );
   },
   // Initial scoped state
   player: {
@@ -359,6 +424,8 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       type: null,
       chapterTarget: null,
     },
+    jumpHistory: null,
+    isJumpHistoryModalVisible: false,
   },
 
   // Actions
@@ -383,6 +450,16 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     }));
   },
 
+  setJumpHistoryModalVisible: (visible: boolean) => {
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        isJumpHistoryModalVisible: visible,
+      },
+    }));
+  },
+
   updatePosition: (position: number) => {
     const state = get() as PlayerSlice;
     // Position is always absolute (book position in seconds), not chapter-relative
@@ -394,6 +471,7 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
       },
     }));
     saveItem(ASYNC_KEYS.position, position);
+    saveItem(ASYNC_KEYS.positionUpdatedAt, Date.now());
     // Update current chapter (calculates chapter-relative position internally)
     state._updateCurrentChapter(position);
   },
@@ -411,6 +489,14 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
 
   _setCurrentTrack: (track: PlayerTrack | null) => {
     const state = get() as PlayerSlice;
+    const shouldClearJumpHistory =
+      track === null ||
+      (state.player.currentTrack !== null &&
+        state.player.currentTrack.libraryItemId !== track.libraryItemId);
+    const jumpHistoryRevision = shouldClearJumpHistory
+      ? nextJumpHistoryMutationRevision(jumpHistoryLifecycle)
+      : null;
+
     set((state: PlayerSlice) => ({
       ...state,
       player: {
@@ -418,8 +504,12 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
         currentTrack: track,
         position: track ? state.player.position : 0,
         currentChapter: null,
+        jumpHistory: shouldClearJumpHistory ? null : state.player.jumpHistory,
       },
     }));
+    if (jumpHistoryRevision !== null) {
+      persistJumpHistory(jumpHistoryLifecycle, null, jumpHistoryRevision);
+    }
     // Persist current track to AsyncStorage
     saveItem(ASYNC_KEYS.currentTrack, track);
     // Update current chapter if we have a track
@@ -560,70 +650,83 @@ export const createPlayerSlice: SliceCreator<PlayerSlice> = (set, get) => ({
     // Note: lastPauseTime is not persisted - it's ephemeral state for smart rewind
   },
 
-  /**
-   * Update now playing metadata with chapter information
-   *
-   * Updates the now playing center with:
-   * - Title: Current chapter title
-   * - Album: Book title
-   * - Duration: Chapter duration (so progress bar shows chapter progress)
-   * - Elapsed time: Chapter-relative position (resets to 0 at start of each chapter)
-   *
-   * Note: TrackPlayer's actual playback position is always absolute (book position),
-   * but we set elapsedTime to chapter-relative position so the now playing center
-   * shows progress within the current chapter.
-   */
-  updateNowPlayingMetadata: async () => {
-    try {
-      const state = get();
-      const { currentTrack, currentChapter } = state.player;
-      if (!currentTrack || !currentChapter) {
-        log.debug("Skipping now playing metadata update - missing track or chapter");
-        return;
-      }
+  _recordJump: (input: JumpRecordInput) => {
+    const session = recordJump(get().player.jumpHistory, input);
+    const revision = nextJumpHistoryMutationRevision(jumpHistoryLifecycle);
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        jumpHistory: session,
+      },
+    }));
+    persistJumpHistory(jumpHistoryLifecycle, session, revision);
+  },
 
-      log.debug(
-        `Updating now playing metadata for track=${currentTrack.libraryItemId} chapter=${currentChapter.chapter.id}`
-      );
+  _dismissJumpToast: () => {
+    const session = dismissPendingJump(get().player.jumpHistory);
+    const revision = nextJumpHistoryMutationRevision(jumpHistoryLifecycle);
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        jumpHistory: session,
+      },
+    }));
+    persistJumpHistory(jumpHistoryLifecycle, session, revision);
+  },
 
-      // Use chapter-relative position for elapsed time
-      // positionInChapter is calculated as: absolutePosition - chapter.start
-      const chapterElapsedTime = currentChapter.positionInChapter;
-      const chapterDuration = currentChapter.chapterDuration;
-      const chapterTitle = currentChapter.chapter.title;
-      const bookTitle = currentTrack.title;
-      const author = currentTrack.author;
-
-      // Get the active track index to update its metadata
-      const activeTrackIndex = await TrackPlayer.getActiveTrackIndex();
-      if (activeTrackIndex === undefined || activeTrackIndex === null || activeTrackIndex < 0) {
-        log.warn("Cannot update now playing metadata - no active track index");
-        return;
-      }
-
-      const activeTrack = await TrackPlayer.getActiveTrack();
-      // Update now playing metadata with chapter info
-      // TrackPlayer will use this for the lock screen and notification controls
-      await TrackPlayer.updateMetadataForTrack(activeTrackIndex, {
-        title: chapterTitle,
-        artist: author,
-        album: bookTitle,
-        // Always set artwork when available to ensure it displays
-        artwork: currentTrack.coverUri || undefined,
-        duration: chapterDuration,
-        // @ts-ignore - elapsedTime is used by iOS native code (Metadata.swift) but not in TypeScript types
-        elapsedTime: chapterElapsedTime,
-      });
-
-      // Double check that we don't lose the trackplayer controls on the lock screen
-      await configureTrackPlayer();
-
-      log.debug(
-        `Updated now playing: chapter="${chapterTitle}" elapsed=${formatTime(chapterElapsedTime)}/${formatTime(chapterDuration)}`
-      );
-    } catch (error) {
-      log.error("Failed to update now playing metadata:", error as Error);
+  _clearJumpHistory: () => {
+    const jumpHistory = get().player.jumpHistory;
+    const revision = nextJumpHistoryMutationRevision(jumpHistoryLifecycle);
+    if (!jumpHistory) {
+      persistJumpHistory(jumpHistoryLifecycle, null, revision);
+      return;
     }
+
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        jumpHistory: null,
+      },
+    }));
+    persistJumpHistory(jumpHistoryLifecycle, null, revision);
+  },
+
+  restoreJumpHistory: async () => {
+    const libraryItemId = get().player.currentTrack?.libraryItemId;
+    if (!libraryItemId) {
+      return;
+    }
+    const mutationRevision = jumpHistoryLifecycle.mutationRevision;
+    const restoreGeneration = ++jumpHistoryLifecycle.restoreGeneration;
+    const pendingPersistence = jumpHistoryLifecycle.persistenceTail;
+    await pendingPersistence;
+
+    const session = validateJumpHistorySession(
+      await getAsyncItem(ASYNC_KEYS.jumpHistorySession),
+      libraryItemId
+    );
+    if (!session) {
+      return;
+    }
+    if (
+      restoreGeneration !== jumpHistoryLifecycle.restoreGeneration ||
+      mutationRevision !== jumpHistoryLifecycle.mutationRevision ||
+      get().player.currentTrack?.libraryItemId !== libraryItemId
+    ) {
+      return;
+    }
+
+    nextJumpHistoryMutationRevision(jumpHistoryLifecycle);
+    set((state: PlayerSlice) => ({
+      ...state,
+      player: {
+        ...state.player,
+        jumpHistory: session,
+      },
+    }));
   },
 
   setSleepTimer: (minutes: number) => {

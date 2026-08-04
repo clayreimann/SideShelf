@@ -1,8 +1,10 @@
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { type HomeScreenItem } from "@/db/helpers/homeScreen";
+import { translate } from "@/i18n";
+import { getHomeItemRoute } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
 interface CoverItemProps {
@@ -16,15 +18,26 @@ interface CoverItemProps {
  */
 export default function CoverItem({ item, showProgress = false }: CoverItemProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { styles, colors } = useThemedStyles();
 
   const coverSize = 140;
 
   return (
     <Pressable
-      onPress={() => router.push(`/home/item/${item.id}`)}
+      onPress={() => router.push(getHomeItemRoute(pathname, item.id))}
+      accessible={true}
       accessibilityRole="button"
-      accessibilityHint={`Open details for ${item.title}`}
+      accessibilityLabel={[
+        item.title,
+        item.authorName,
+        showProgress && item.progress !== undefined && item.progress > 0
+          ? translate("accessibility.percentFinished", { percent: Math.round(item.progress * 100) })
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(", ")}
+      accessibilityHint={translate("accessibility.openItemDetails")}
       style={{ marginRight: 16 }}
     >
       <View style={{ width: coverSize }}>
@@ -42,7 +55,12 @@ export default function CoverItem({ item, showProgress = false }: CoverItemProps
             elevation: 5,
           }}
         >
-          <CoverImage uri={item.imageUrl ?? null} title={item.title} fontSize={16} libraryItemId={item.id} />
+          <CoverImage
+            uri={item.imageUrl ?? null}
+            title={item.title}
+            fontSize={16}
+            libraryItemId={item.id}
+          />
         </View>
 
         {/* Progress Bar - only shown for items with progress */}

@@ -118,7 +118,7 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
     refreshData();
 
     // Auto-refresh if enabled
-    let interval: number | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (autoRefresh) {
       interval = setInterval(refreshData, 1000);
     }
@@ -191,13 +191,25 @@ export function CoordinatorDiagnostics({ autoRefresh = true }: { autoRefresh?: b
     <ScrollView style={styles.container}>
       {/* Controls */}
       <View style={styles.controls}>
-        <TouchableOpacity style={styles.button} onPress={copyDiagnostics}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={copyDiagnostics}
+          accessibilityRole="button"
+        >
           <Text style={styles.buttonText}>Copy</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={exportDiagnostics}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={exportDiagnostics}
+          accessibilityRole="button"
+        >
           <Text style={styles.buttonText}>Export</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.button, styles.buttonDanger]} onPress={clearHistory}>
+        <TouchableOpacity
+          style={[styles.button, styles.buttonDanger]}
+          onPress={clearHistory}
+          accessibilityRole="button"
+        >
           <Text style={styles.buttonText}>Clear History</Text>
         </TouchableOpacity>
       </View>

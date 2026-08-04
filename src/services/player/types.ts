@@ -15,7 +15,8 @@
  * always import IPlayerServiceFacade from this file to prevent circular deps.
  */
 
-import type { PlayerEvent } from "@/types/coordinator";
+import type { DispatchMeta, PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
+import type { SmartRewindOutcome } from "@/lib/smartRewind";
 import type { PlayerTrack } from "@/types/player";
 import type { Track } from "react-native-track-player";
 
@@ -47,12 +48,56 @@ export interface IPlayerServiceFacade {
   getInitializationTimestamp(): number;
 
   /**
-   * Rebuild the current track if it is missing but should exist.
-   * Delegated to ProgressRestoreCollaborator — exposed here so
-   * PlaybackControlCollaborator can call it via the facade reference
-   * without importing ProgressRestoreCollaborator directly.
+   * Rebuild the TrackPlayer queue for the given track.
+   * Pure execution: resets queue, builds track list, resolves position.
+   * Called only by the coordinator from executeTransition. Throws on failure.
    */
-  rebuildCurrentTrackIfNeeded(): Promise<boolean>;
+  executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo>;
+
+  /**
+   * Resolve the canonical resume position for a library item.
+   * Delegates to coordinator.resolveCanonicalPosition() without exposing coordinator.
+   */
+  resolveCanonicalPosition(libraryItemId: string): Promise<ResumePositionInfo>;
+}
+
+/**
+ * Result of TrackLoadingCollaborator.executeLoadTrack().
+ *
+ * The coordinator's context is authoritative and the Zustand store is a derived
+ * projection (see the coordinator's store-bridge docs) — so rather than have the
+ * collaborator write session/position state directly to the store (fighting the
+ * bridge, which pushes context back over it on every sync), these fields are
+ * threaded back through the return value and folded into context by the
+ * coordinator's LOADING handler.
+ */
+export interface LoadTrackResult {
+  track: PlayerTrack;
+  /**
+   * The streaming play session id created for this load, or null when local
+   * playback made streaming unnecessary or the session failed to start — null
+   * means "no active streaming session", i.e. clear whatever stale session id
+   * context/store may have been holding.
+   */
+  playSessionId: string | null;
+  /**
+   * The position (seconds) executeLoadTrack resolved and seeked to — either
+   * the caller-specified startPosition, or the position resolveCanonicalPosition
+   * returned. Threaded back so the coordinator's LOADING handler can assign
+   * context.position directly (Task 4a), instead of TrackLoadingCollaborator
+   * writing it to the store for PlaybackControlCollaborator.executePlay to read
+   * back later (Task 4c passes position to executePlay as a parameter instead).
+   */
+  position: number;
+}
+
+/**
+ * Result of TrackLoadingCollaborator.buildTrackList().
+ * playSessionId mirrors LoadTrackResult's field — see its docs.
+ */
+export interface BuildTrackListResult {
+  tracks: Track[];
+  playSessionId: string | null;
 }
 
 /**
@@ -63,9 +108,13 @@ export interface IPlayerServiceFacade {
  * creation, and TrackPlayer queue management.
  */
 export interface ITrackLoadingCollaborator {
-  executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void>;
-  buildTrackList(track: PlayerTrack): Promise<Track[]>;
-  reloadTrackPlayerQueue(track: PlayerTrack): Promise<boolean>;
+  executeLoadTrack(
+    libraryItemId: string,
+    episodeId?: string,
+    startPosition?: number
+  ): Promise<LoadTrackResult>;
+  buildTrackList(track: PlayerTrack): Promise<BuildTrackListResult>;
+  executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo>;
 }
 
 /**
@@ -77,7 +126,12 @@ export interface ITrackLoadingCollaborator {
  * store side-effects (e.g., _setLastPauseTime on pause).
  */
 export interface IPlaybackControlCollaborator {
-  executePlay(): Promise<void>;
+  /**
+   * @param position The coordinator's current authoritative position (seconds),
+   * passed explicitly (Task 4c) instead of executePlay reading store.player.position
+   * itself — two functions communicating through global state, untied.
+   */
+  executePlay(position: number, meta?: DispatchMeta): Promise<SmartRewindOutcome | null>;
   executePause(): Promise<void>;
   executeStop(): Promise<void>;
   executeSeek(position: number): Promise<void>;
@@ -96,7 +150,6 @@ export interface IPlaybackControlCollaborator {
 export interface IProgressRestoreCollaborator {
   restorePlayerServiceFromSession(): Promise<void>;
   syncPositionFromDatabase(): Promise<void>;
-  rebuildCurrentTrackIfNeeded(): Promise<boolean>;
 }
 
 /**

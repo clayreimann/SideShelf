@@ -17,6 +17,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { DownloadInfo, DownloadProgress } from "@/types/services";
+import type {
+  DoneHandler,
+  DownloadTask,
+  ErrorHandler,
+  ProgressHandler,
+} from "@kesha-antonov/react-native-background-downloader";
 import { DownloadService } from "../DownloadService";
 
 // --- Mocks ---
@@ -51,13 +57,15 @@ jest.mock("@/services/ApiClientService", () => ({
 
 // Mock collaborator methods stored as module-level spies so we can verify delegation
 const mockStatusCollaborator = {
-  isLibraryItemDownloaded: jest.fn().mockResolvedValue(true),
-  getDownloadProgress: jest.fn().mockResolvedValue({ downloaded: 2, total: 3, progress: 2 / 3 }),
-  getDownloadedSize: jest.fn().mockResolvedValue(1024 * 1024),
+  isLibraryItemDownloaded: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
+  getDownloadProgress: jest
+    .fn<() => Promise<{ downloaded: number; total: number; progress: number }>>()
+    .mockResolvedValue({ downloaded: 2, total: 3, progress: 2 / 3 }),
+  getDownloadedSize: jest.fn<() => Promise<number>>().mockResolvedValue(1024 * 1024),
 };
 const mockRepairCollaborator = {
-  repairDownloadStatus: jest.fn().mockResolvedValue(1),
-  deleteDownloadedLibraryItem: jest.fn().mockResolvedValue(undefined),
+  repairDownloadStatus: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+  deleteDownloadedLibraryItem: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
 };
 
 jest.mock("@/services/download/DownloadStatusCollaborator", () => ({
@@ -79,6 +87,7 @@ jest.mock("@/lib/covers", () => ({
 jest.mock("@/lib/fileSystem", () => ({
   constructDownloadUrl: jest.fn(() => "http://localhost:13378/download/item-1/file-1"),
   downloadFileExists: jest.fn(() => false),
+  deleteDownloadFile: jest.fn(),
   ensureDownloadsDirectory: jest.fn(),
   getDownloadPath: jest.fn(
     (libraryItemId: string, filename: string) => `/documents/downloads/${libraryItemId}/${filename}`
@@ -140,6 +149,9 @@ function injectActiveDownload(instance: DownloadService, libraryItemId: string):
     downloadedBytes: 0,
     isPaused: false,
     speedTracker,
+    completedFileIds: new Set(),
+    completedBytes: 0,
+    inFlightBytes: new Map(),
   };
   (instance as any).activeDownloads.set(libraryItemId, downloadInfo);
   return downloadInfo;
@@ -388,15 +400,76 @@ describe("DownloadService facade", () => {
   // ─── rewireProgressCallbacks ─────────────────────────────────────────────────
 
   describe("rewireProgressCallbacks()", () => {
-    it("clears existing callbacks and adds the new one for active download", () => {
+    it("adds the new callback for active download", () => {
       const instance = DownloadService.getInstance();
       const info = injectActiveDownload(instance, "item-1");
-      const oldCb = jest.fn();
-      info.progressCallbacks.add(oldCb);
       const newCb = jest.fn();
       instance.rewireProgressCallbacks("item-1", newCb);
-      expect(info.progressCallbacks.has(oldCb)).toBe(false);
       expect(info.progressCallbacks.has(newCb)).toBe(true);
+    });
+
+    it("removes only the previously rewired callback, leaving independent subscribers intact", () => {
+      // Regression test: the old implementation called progressCallbacks.clear(),
+      // which silently dropped every other subscriber (e.g. a second screen showing
+      // the same download's progress) whenever any view rewired its own callback.
+      const instance = DownloadService.getInstance();
+      const info = injectActiveDownload(instance, "item-1");
+
+      // An independent subscriber, added via subscribeToProgress — not part of any
+      // rewiring relationship.
+      const independentCb = jest.fn();
+      instance.subscribeToProgress("item-1", independentCb);
+
+      const rewireCbA = jest.fn();
+      instance.rewireProgressCallbacks("item-1", rewireCbA);
+      expect(info.progressCallbacks.has(rewireCbA)).toBe(true);
+      expect(info.progressCallbacks.has(independentCb)).toBe(true);
+
+      // A later rewire (e.g. the same view rebuilding) should drop rewireCbA but must
+      // not touch independentCb.
+      const rewireCbB = jest.fn();
+      instance.rewireProgressCallbacks("item-1", rewireCbB);
+      expect(info.progressCallbacks.has(rewireCbA)).toBe(false);
+      expect(info.progressCallbacks.has(rewireCbB)).toBe(true);
+      expect(info.progressCallbacks.has(independentCb)).toBe(true);
+
+      // The untouched subscriber must still receive updates.
+      const progress = {
+        libraryItemId: "item-1",
+        totalFiles: 1,
+        downloadedFiles: 0,
+        currentFile: "ch1.mp3",
+        fileProgress: 0.5,
+        totalProgress: 0.5,
+        bytesDownloaded: 500,
+        totalBytes: 1000,
+        fileBytesDownloaded: 500,
+        fileTotalBytes: 1000,
+        downloadSpeed: 0,
+        speedSampleCount: 0,
+        status: "downloading",
+        canPause: true,
+        canResume: false,
+      } as DownloadProgress;
+      (instance as any).notifyProgressCallbacks(info, progress);
+
+      expect(independentCb).toHaveBeenCalledWith(progress);
+      expect(rewireCbB).toHaveBeenCalledWith(progress);
+      expect(rewireCbA).not.toHaveBeenCalledWith(progress);
+    });
+
+    it("returns an unsubscribe function that removes only the rewired callback", () => {
+      const instance = DownloadService.getInstance();
+      const info = injectActiveDownload(instance, "item-1");
+      const independentCb = jest.fn();
+      instance.subscribeToProgress("item-1", independentCb);
+
+      const newCb = jest.fn();
+      const unsubscribe = instance.rewireProgressCallbacks("item-1", newCb);
+      unsubscribe();
+
+      expect(info.progressCallbacks.has(newCb)).toBe(false);
+      expect(info.progressCallbacks.has(independentCb)).toBe(true);
     });
 
     it("returns no-op function for unknown item", () => {
@@ -523,6 +596,48 @@ describe("DownloadService facade", () => {
     });
   });
 
+  // ─── unified per-file byte accounting (markFileCompleted / updateInFlightBytes / computeAggregateBytes) ──
+
+  describe("per-file byte accounting helpers", () => {
+    it("sums in-flight bytes across two concurrent tasks without double-counting on completion", () => {
+      const instance = DownloadService.getInstance() as any;
+      const downloadInfo: DownloadInfo = {
+        tasks: [],
+        progressCallbacks: new Set(),
+        totalBytes: 3000,
+        downloadedBytes: 0,
+        isPaused: false,
+        speedTracker: createSpeedTracker(),
+        completedFileIds: new Set(),
+        completedBytes: 0,
+        inFlightBytes: new Map(),
+      };
+
+      // Two concurrent in-flight tasks — aggregate must be the sum of both.
+      instance.updateInFlightBytes(downloadInfo, "af-1", 300);
+      instance.updateInFlightBytes(downloadInfo, "af-2", 500);
+      expect(instance.computeAggregateBytes(downloadInfo)).toBe(800);
+
+      // A later update for the same file replaces (not adds to) its own contribution.
+      instance.updateInFlightBytes(downloadInfo, "af-1", 400);
+      expect(instance.computeAggregateBytes(downloadInfo)).toBe(900);
+
+      // Completing af-1 moves its bytes from "in-flight" to "completed" exactly once.
+      instance.markFileCompleted(downloadInfo, "af-1", 1000);
+      expect(downloadInfo.completedFileIds.has("af-1")).toBe(true);
+      expect(downloadInfo.inFlightBytes.has("af-1")).toBe(false);
+      expect(instance.computeAggregateBytes(downloadInfo)).toBe(1500); // 1000 (af-1 completed) + 500 (af-2 in-flight)
+
+      // Marking the same file complete again (e.g. a duplicate event) must not double-count.
+      instance.markFileCompleted(downloadInfo, "af-1", 1000);
+      expect(instance.computeAggregateBytes(downloadInfo)).toBe(1500);
+
+      // A stray in-flight update for an already-completed file must be ignored.
+      instance.updateInFlightBytes(downloadInfo, "af-1", 999);
+      expect(instance.computeAggregateBytes(downloadInfo)).toBe(1500);
+    });
+  });
+
   // ─── startDownload error paths ────────────────────────────────────────────────
 
   describe("startDownload() error paths", () => {
@@ -605,9 +720,11 @@ describe("DownloadService facade", () => {
       const mockTask: any = {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
           // Fire done immediately after a tick to simulate async completion
-          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
           return mockTask;
         }),
         error: jest.fn().mockReturnThis(),
@@ -657,8 +774,10 @@ describe("DownloadService facade", () => {
       const mockTask: any = {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
-          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
           return mockTask;
         }),
         error: jest.fn().mockReturnThis(),
@@ -724,9 +843,11 @@ describe("DownloadService facade", () => {
           handlerRegistrationOrder.push("progress");
           return mockTask;
         }),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
           handlerRegistrationOrder.push("done");
-          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
           return mockTask;
         }),
         error: jest.fn().mockImplementation(() => {
@@ -775,8 +896,10 @@ describe("DownloadService facade", () => {
       const mockTask: any = {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
-          Promise.resolve().then(() => cb({ bytesDownloaded: 1000, bytesTotal: 1000 }));
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
           return mockTask;
         }),
         error: jest.fn().mockReturnThis(),
@@ -816,8 +939,8 @@ describe("DownloadService facade", () => {
         begin: jest.fn().mockReturnThis(),
         progress: jest.fn().mockReturnThis(),
         done: jest.fn().mockReturnThis(),
-        error: jest.fn().mockImplementation((cb: (err: any) => void) => {
-          Promise.resolve().then(() => cb({ error: "Download failed" }));
+        error: jest.fn<(callback: ErrorHandler) => DownloadTask>().mockImplementation((cb) => {
+          Promise.resolve().then(() => cb({ error: "Download failed", errorCode: 0 }));
           return mockTask;
         }),
         start: jest.fn(),
@@ -869,28 +992,148 @@ describe("DownloadService facade", () => {
       expect(markAudioFileAsDownloaded).toHaveBeenCalled();
       expect(instance.isDownloadActive("item-1")).toBe(false);
     });
+
+    it("aggregates bytes across two concurrent in-flight downloads instead of undercounting", async () => {
+      // Regression test: updateProgress used to be called with
+      // `totalBytesDownloaded + fileBytesDownloaded`, where totalBytesDownloaded only
+      // advanced on file *completion*. With two files downloading concurrently, bytes
+      // in flight on the file that isn't currently reporting were invisible — the
+      // aggregate would reflect only the most-recently-reported file, not the sum.
+      const metadata = { id: "meta-1", libraryItemId: "item-concurrent" };
+      mockGetMediaMetadataByLibraryItemId.mockResolvedValue(metadata as any);
+      mockGetAudioFilesWithDownloadInfo.mockResolvedValue([
+        { id: "af-1", ino: "ino-1", filename: "ch1.mp3", size: 1000, downloadInfo: null } as any,
+        { id: "af-2", ino: "ino-2", filename: "ch2.mp3", size: 2000, downloadInfo: null } as any,
+      ]);
+
+      const { cacheCoverIfMissing } = require("@/lib/covers");
+      cacheCoverIfMissing.mockResolvedValue(undefined);
+
+      const progressCallbacks: Record<string, (data: any) => void> = {};
+
+      mockCreateDownloadTask.mockImplementation((config: any) => {
+        const filename = config.metadata.filename as string;
+        const task: any = {
+          begin: jest.fn().mockReturnThis(),
+          progress: jest
+            .fn<(callback: ProgressHandler) => DownloadTask>()
+            .mockImplementation((cb) => {
+              progressCallbacks[filename] = cb;
+              return task;
+            }),
+          done: jest.fn().mockReturnThis(), // never fires — both downloads stay in-flight
+          error: jest.fn().mockReturnThis(),
+          start: jest.fn(),
+          state: "DOWNLOADING",
+          pause: jest.fn(),
+          resume: jest.fn(),
+          stop: jest.fn(),
+        };
+        return task;
+      });
+
+      const instance = DownloadService.getInstance();
+      await instance.initialize();
+
+      // Fire-and-forget: startDownload() won't resolve since neither task's done() fires.
+      void instance.startDownload("item-concurrent").catch(() => {});
+
+      // Let the async downloadAudioFile() chain (map() + the ensureDownloadsDirectory
+      // await inside it) run far enough to register the progress handlers.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(progressCallbacks["ch1.mp3"]).toBeDefined();
+      expect(progressCallbacks["ch2.mp3"]).toBeDefined();
+
+      progressCallbacks["ch1.mp3"]({ bytesDownloaded: 300, bytesTotal: 1000 });
+      progressCallbacks["ch2.mp3"]({ bytesDownloaded: 500, bytesTotal: 2000 });
+
+      const progress = instance.getCurrentProgress("item-concurrent");
+      // Sum of both files' in-flight bytes, not just the most-recently-reported file.
+      expect(progress?.bytesDownloaded).toBe(800);
+    });
+
+    it("forceRedownload deletes the pre-existing file before creating the download task", async () => {
+      const metadata = { id: "meta-1", libraryItemId: "item-1" };
+      mockGetMediaMetadataByLibraryItemId.mockResolvedValue(metadata as any);
+      mockGetAudioFilesWithDownloadInfo.mockResolvedValue([
+        {
+          id: "af-1",
+          ino: "ino-1",
+          filename: "chapter-1.mp3",
+          size: 1000,
+          downloadInfo: null,
+        } as any,
+      ]);
+
+      const { markAudioFileAsDownloaded } = require("@/db/helpers/audioFiles");
+      markAudioFileAsDownloaded.mockResolvedValue(undefined);
+      const { cacheCoverIfMissing } = require("@/lib/covers");
+      cacheCoverIfMissing.mockResolvedValue(undefined);
+      const { setExcludeFromBackup } = require("@/lib/iCloudBackupExclusion");
+      setExcludeFromBackup.mockResolvedValue(undefined);
+
+      const { downloadFileExists, deleteDownloadFile } = require("@/lib/fileSystem");
+      downloadFileExists.mockReturnValueOnce(true); // simulate a corrupt/partial pre-existing file
+
+      const callOrder: string[] = [];
+      (deleteDownloadFile as jest.Mock).mockImplementation(() => {
+        callOrder.push("delete");
+      });
+
+      const mockTask: any = {
+        begin: jest.fn().mockReturnThis(),
+        progress: jest.fn().mockReturnThis(),
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
+          Promise.resolve().then(() =>
+            cb({ location: "", bytesDownloaded: 1000, bytesTotal: 1000 })
+          );
+          return mockTask;
+        }),
+        error: jest.fn().mockReturnThis(),
+        start: jest.fn(),
+        state: "DONE",
+        pause: jest.fn(),
+        resume: jest.fn(),
+        stop: jest.fn(),
+      };
+      mockCreateDownloadTask.mockImplementation(() => {
+        callOrder.push("createTask");
+        return mockTask;
+      });
+
+      const instance = DownloadService.getInstance();
+      await instance.initialize();
+      await instance.startDownload("item-1", undefined, { forceRedownload: true });
+
+      expect(deleteDownloadFile).toHaveBeenCalledWith("item-1", "chapter-1.mp3", "documents");
+      // Deletion must happen before the download task is created, not after.
+      expect(callOrder).toEqual(["delete", "createTask"]);
+    });
   });
 
   // ─── initialize() with existing tasks ────────────────────────────────────────
 
   describe("initialize() with existing background tasks", () => {
     it("re-attaches progress, done, and error handlers to restored tasks", async () => {
-      let progressCallback: ((data: any) => void) | null = null;
-      let doneCallback: ((data: any) => void) | null = null;
-      let errorCallback: ((err: any) => void) | null = null;
+      let progressCallback: ProgressHandler | undefined;
+      let doneCallback: DoneHandler | undefined;
+      let errorCallback: ErrorHandler | undefined;
 
       const mockTask: any = {
         metadata: { libraryItemId: "item-restored", audioFileId: "af-1", filename: "ch1.mp3" },
         state: "DOWNLOADING",
-        progress: jest.fn().mockImplementation((cb: (data: any) => void) => {
-          progressCallback = cb;
-          return mockTask;
-        }),
-        done: jest.fn().mockImplementation((cb: (data: any) => void) => {
+        progress: jest
+          .fn<(callback: ProgressHandler) => DownloadTask>()
+          .mockImplementation((cb) => {
+            progressCallback = cb;
+            return mockTask;
+          }),
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
           doneCallback = cb;
           return mockTask;
         }),
-        error: jest.fn().mockImplementation((cb: (err: any) => void) => {
+        error: jest.fn<(callback: ErrorHandler) => DownloadTask>().mockImplementation((cb) => {
           errorCallback = cb;
           return mockTask;
         }),
@@ -914,15 +1157,15 @@ describe("DownloadService facade", () => {
       expect(mockTask.resume).toHaveBeenCalledTimes(1);
 
       // Fire the progress callback to cover handleTaskProgress
-      if (progressCallback) {
+      if (progressCallback !== undefined) {
         progressCallback({ bytesDownloaded: 500, bytesTotal: 1000 });
         // Allow async operations to complete
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
 
       // Fire the error callback to cover the error handler
-      if (errorCallback) {
-        errorCallback({ error: "Network error" });
+      if (errorCallback !== undefined) {
+        errorCallback({ error: "Network error", errorCode: 0 });
       }
 
       // Item should be removed from activeDownloads after error
@@ -963,6 +1206,93 @@ describe("DownloadService facade", () => {
 
       // After handling, the item should be removed from activeDownloads
       expect(instance.isDownloadActive("item-restored")).toBe(false);
+    });
+
+    it("counts exactly one already-downloaded file when 1-of-3 files were downloaded before restore", async () => {
+      // Regression test: the old handleTaskProgress used
+      // `const isAlreadyCounted = alreadyDownloadedFiles > 0` — a boolean shortcut that,
+      // whenever *any* file was already downloaded, skipped counting *every* DONE task's
+      // bytes. With 1-of-3 files done in the DB and other tasks completing during
+      // restore, this either overcounted (miscounting on error) or, as reproduced here,
+      // undercounted downloadedFiles by treating an unrelated completed task as already
+      // counted.
+      let progressCbForAf3: ((data: any) => void) | null = null;
+      let doneCbForAf2: ((data: any) => void) | null = null;
+
+      const taskAf2: any = {
+        metadata: {
+          libraryItemId: "item-restore-partial",
+          audioFileId: "af-2",
+          filename: "ch2.mp3",
+        },
+        state: "DOWNLOADING",
+        progress: jest.fn().mockReturnThis(),
+        done: jest.fn<(callback: DoneHandler) => DownloadTask>().mockImplementation((cb) => {
+          doneCbForAf2 = cb;
+          return taskAf2;
+        }),
+        error: jest.fn().mockReturnThis(),
+        pause: jest.fn(),
+        resume: jest.fn(),
+        stop: jest.fn(),
+      };
+      const taskAf3: any = {
+        metadata: {
+          libraryItemId: "item-restore-partial",
+          audioFileId: "af-3",
+          filename: "ch3.mp3",
+        },
+        state: "DOWNLOADING",
+        progress: jest
+          .fn<(callback: ProgressHandler) => DownloadTask>()
+          .mockImplementation((cb) => {
+            progressCbForAf3 = cb;
+            return taskAf3;
+          }),
+        done: jest.fn().mockReturnThis(),
+        error: jest.fn().mockReturnThis(),
+        pause: jest.fn(),
+        resume: jest.fn(),
+        stop: jest.fn(),
+      };
+
+      mockGetExistingDownloadTasks.mockResolvedValueOnce([taskAf2, taskAf3] as any);
+      mockGetMediaMetadataByLibraryItemId.mockResolvedValue({ id: "meta-1" } as any);
+      mockGetAudioFilesWithDownloadInfo.mockResolvedValue([
+        { id: "af-1", size: 1000, downloadInfo: { isDownloaded: true } }, // already downloaded, no active task
+        { id: "af-2", size: 2000, downloadInfo: { isDownloaded: false } },
+        { id: "af-3", size: 1500, downloadInfo: { isDownloaded: false } },
+      ] as any);
+
+      const { markAudioFileAsDownloaded } = require("@/db/helpers/audioFiles");
+      markAudioFileAsDownloaded.mockResolvedValue(undefined);
+      const { setExcludeFromBackup } = require("@/lib/iCloudBackupExclusion");
+      setExcludeFromBackup.mockResolvedValue(undefined);
+
+      const instance = DownloadService.getInstance();
+      await instance.initialize();
+
+      expect(progressCbForAf3).toBeDefined();
+
+      // First progress event for af-3 (still downloading). Exactly 1 file (af-1) should
+      // be reported as downloaded — not 0 (DB snapshot ignored) and not 2 (af-3 itself
+      // miscounted).
+      progressCbForAf3!({ bytesDownloaded: 100, bytesTotal: 1500 });
+      let progress = instance.getCurrentProgress("item-restore-partial");
+      expect(progress?.downloadedFiles).toBe(1);
+      expect(progress?.totalFiles).toBe(3);
+
+      // Now af-2 completes while af-3 is still downloading — the exact scenario the old
+      // "Simplified check" got wrong.
+      expect(doneCbForAf2).toBeDefined();
+      taskAf2.state = "DONE";
+      doneCbForAf2!({ bytesDownloaded: 2000, bytesTotal: 2000 });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      progressCbForAf3!({ bytesDownloaded: 300, bytesTotal: 1500 });
+      progress = instance.getCurrentProgress("item-restore-partial");
+      // af-1 (DB) + af-2 (just completed) = 2. Not 1 (old undercount bug) and not 3.
+      expect(progress?.downloadedFiles).toBe(2);
     });
   });
 });

@@ -1,13 +1,14 @@
 import { ErrorBoundary } from "@/components/errors";
+import AppStatusIndicators from "@/components/ui/AppStatusIndicators";
 import FloatingPlayer from "@/components/ui/FloatingPlayer";
-import NetworkIndicator from "@/components/ui/NetworkIndicator";
 import { translate, type TranslationKey } from "@/i18n";
+import { shouldRedirectToLogin } from "@/lib/authNavigation";
 import { useThemedStyles } from "@/lib/theme";
 import { useAuth } from "@/providers/AuthProvider";
 import { DownloadService } from "@/services/DownloadService";
 import { useAppStore } from "@/stores/appStore";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs, useRouter, Stack } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import type { ComponentProps } from "react";
@@ -122,7 +123,7 @@ const TabBarIcon = ({ config, focused, color, size }: TabBarIconProps) => {
 
 export default function TabLayout() {
   const router = useRouter();
-  const { initialized, isAuthenticated, loginMessage } = useAuth();
+  const { authStatus } = useAuth();
   const { tabs, isDark } = useThemedStyles();
   const errorCount = useAppStore((state) => state.logger.errorCount);
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
@@ -142,25 +143,21 @@ export default function TabLayout() {
       .map((name) => TAB_CONFIG.find((tab) => tab.name === name))
       .filter((tab): tab is TabConfig => tab !== undefined && !hiddenTabs.includes(tab.name));
   }, [settingsInitialized, tabOrder, hiddenTabs]);
+
   useEffect(() => {
-    if (initialized && !isAuthenticated) {
+    if (shouldRedirectToLogin(authStatus)) {
       router.replace("/login");
     }
-  }, [initialized, isAuthenticated]);
+  }, [authStatus, router]);
+
   useEffect(() => {
     DownloadService.getInstance().initialize();
   }, []);
-  useEffect(() => {
-    if (loginMessage && !isAuthenticated) {
-      console.log(`[TabIndex] Redirecting to login due to loginMessage: ${loginMessage}`);
-      router.replace("/login");
-    }
-  }, [loginMessage, isAuthenticated]);
 
   if (!tabs.useNativeTabs) {
     return (
       <View style={{ flex: 1 }}>
-        <NetworkIndicator />
+        <AppStatusIndicators />
         <Tabs
           screenOptions={{
             headerShown: false,
@@ -227,7 +224,7 @@ export default function TabLayout() {
   }
   return (
     <View style={{ flex: 1 }}>
-      <NetworkIndicator />
+      <AppStatusIndicators />
       <NativeTabs
         blurEffect={isDark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"}
         backgroundColor={tabs.backgroundColor}

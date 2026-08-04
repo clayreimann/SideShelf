@@ -16,7 +16,7 @@ module.exports = {
     "<rootDir>/src/__tests__/utils/",
   ],
   transformIgnorePatterns: [
-    "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|zustand|@kesha-antonov/react-native-background-downloader|uuid)",
+    "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|zustand|@kesha-antonov/react-native-background-downloader|uuid|@douglowder/expo-av-route-picker-view)",
   ],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",

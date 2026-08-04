@@ -18,8 +18,36 @@ export default function MoreLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ title: translate("tabs.more") }} />
+        <Stack.Screen name="home" options={{ title: translate("tabs.home") }} />
+        <Stack.Screen
+          name="home/item/[itemId]"
+          options={{ headerTitle: "", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen name="library" options={{ title: translate("tabs.library") }} />
+        <Stack.Screen
+          name="library/[item]/index"
+          options={{ headerTitle: "", headerBackButtonDisplayMode: "minimal" }}
+        />
         <Stack.Screen name="series" options={{ title: translate("tabs.series") }} />
         <Stack.Screen name="authors" options={{ title: translate("tabs.authors") }} />
+        <Stack.Screen
+          name="series/[seriesId]/index"
+          options={{ title: translate("tabs.series") }}
+        />
+        <Stack.Screen
+          name="authors/[authorId]/index"
+          options={{ title: translate("tabs.authors") }}
+        />
+        <Stack.Screen
+          name="series/[seriesId]/item/[itemId]"
+          options={{ headerTitle: "", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen
+          name="authors/[authorId]/item/[itemId]"
+          options={{ headerTitle: "", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen name="trace-dumps" options={{ title: "Trace Dumps" }} />
+        <Stack.Screen name="trace-dump-detail" options={{ title: "Trace Dump" }} />
       </Stack>
     </TabErrorBoundary>
   );

@@ -140,15 +140,17 @@ jest.mock("@/services/ApiClientService", () => ({
 }));
 
 jest.mock("@/lib/smartRewind", () => ({
-  applySmartRewind: jest.fn().mockResolvedValue(undefined),
+  applySmartRewind: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
 }));
 
 // Mock coordinator so getCoordinator() returns a mock with resolveCanonicalPosition
 jest.mock("@/services/coordinator/PlayerStateCoordinator", () => {
   const { jest } = require("@jest/globals");
   const mockResolveCanonicalPosition = jest.fn();
+  const mockContext = { isPlaying: false };
   const mockCoordinator = {
     resolveCanonicalPosition: mockResolveCanonicalPosition,
+    getContext: jest.fn(() => mockContext),
   };
   return {
     getCoordinator: jest.fn(() => mockCoordinator),
@@ -157,6 +159,7 @@ jest.mock("@/services/coordinator/PlayerStateCoordinator", () => {
       resetInstance: jest.fn(),
     },
     __mockCoordinator: mockCoordinator,
+    __mockContext: mockContext,
     __mockResolveCanonicalPosition: mockResolveCanonicalPosition,
   };
 });
@@ -179,6 +182,7 @@ describe("PlayerService", () => {
   const { getMediaProgressForLibraryItem } = require("@/db/helpers/mediaProgress");
   const { getItem: getAsyncItem } = require("@/lib/asyncStore");
   const { dispatchPlayerEvent } = require("@/services/coordinator/eventBus");
+  const { applySmartRewind } = require("@/lib/smartRewind");
   const {
     __mockResolveCanonicalPosition,
   } = require("@/services/coordinator/PlayerStateCoordinator");
@@ -265,7 +269,14 @@ describe("PlayerService", () => {
     mockedTrackPlayer.setVolume.mockResolvedValue();
     mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.None });
     mockedTrackPlayer.getQueue.mockResolvedValue([]);
-    mockedTrackPlayer.getProgress.mockResolvedValue({ position: 0, duration: 0, buffered: 0 });
+    // Task 2: executeLoadTrack now polls getProgress() after seeking to wait for
+    // the seek to land (waitForSeekToLand in TrackLoadingCollaborator). Default
+    // to `undefined` (bare jest.fn() behavior) rather than a concrete position —
+    // executeLoadTrack's waitForSeekToLand bails out immediately when getProgress
+    // is unavailable, so tests below that seek to a nonzero resume position don't
+    // each poll for the full 3s real-timer timeout. Nothing in this file asserts
+    // on getProgress's return value.
+    mockedTrackPlayer.getProgress.mockResolvedValue(undefined as any);
     mockedTrackPlayer.getActiveTrackIndex.mockResolvedValue(undefined);
     mockedTrackPlayer.getActiveTrack.mockResolvedValue(undefined);
     mockedTrackPlayer.getRate.mockResolvedValue(1.0);
@@ -363,7 +374,7 @@ describe("PlayerService", () => {
       jest.clearAllMocks();
     });
 
-    it("should load and play a track", async () => {
+    it("should load a track and NOT dispatch PLAY (coordinator handles it)", async () => {
       await playerService.executeLoadTrack("item-1");
 
       expect(getLibraryItemById).toHaveBeenCalledWith("item-1");
@@ -371,54 +382,8 @@ describe("PlayerService", () => {
       expect(getAudioFilesWithDownloadInfo).toHaveBeenCalled();
       expect(mockedTrackPlayer.reset).toHaveBeenCalled();
       expect(mockedTrackPlayer.add).toHaveBeenCalled();
-      // executeLoadTrack dispatches PLAY to coordinator instead of calling TrackPlayer.play() directly
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
-    });
-
-    it("should skip reload and dispatch PLAY if already playing same item", async () => {
-      mockStore.player.currentTrack = {
-        libraryItemId: "item-1",
-        mediaId: "media-1",
-        title: "Test Book",
-        author: "Test Author",
-        coverUri: "http://example.com/cover.jpg",
-        audioFiles: mockAudioFiles,
-        chapters: mockChapters,
-        duration: 3600,
-        isDownloaded: true,
-      };
-      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Playing });
-      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
-
-      await playerService.executeLoadTrack("item-1");
-
-      expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
-      expect(mockedTrackPlayer.add).not.toHaveBeenCalled();
-      // Coordinator must be notified via PLAY event (not direct TrackPlayer.play)
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
-    });
-
-    it("should dispatch PLAY via coordinator if paused on same item", async () => {
-      mockStore.player.currentTrack = {
-        libraryItemId: "item-1",
-        mediaId: "media-1",
-        title: "Test Book",
-        author: "Test Author",
-        coverUri: "http://example.com/cover.jpg",
-        audioFiles: mockAudioFiles,
-        chapters: mockChapters,
-        duration: 3600,
-        isDownloaded: true,
-      };
-      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Paused });
-      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
-
-      await playerService.executeLoadTrack("item-1");
-
-      expect(mockedTrackPlayer.reset).not.toHaveBeenCalled();
-      // Coordinator handles play via executePlay() — no direct TrackPlayer.play() call here
-      expect(mockedTrackPlayer.play).not.toHaveBeenCalled();
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+      // Coordinator handles PLAY dispatch — collaborator must NOT dispatch it
+      expect(dispatchPlayerEvent).not.toHaveBeenCalledWith({ type: "PLAY" });
     });
 
     it("should throw error if library item not found", async () => {
@@ -455,12 +420,18 @@ describe("PlayerService", () => {
       expect(mockedTrackPlayer.seekTo).toHaveBeenCalledWith(300);
     });
 
-    it("should clear loading state on error", async () => {
+    it("rethrows on error without writing to the store directly (Task 3b/3c)", async () => {
+      // Loading-state recovery on a failed load is owned by the coordinator now:
+      // its NATIVE_ERROR handler clears context.isLoadingTrack when this
+      // rejection routes the machine to ERROR, and the store bridge pushes that
+      // to the store afterward. A direct store._setTrackLoading(false) write
+      // here would be dead (re-clobbered by the coordinator's next
+      // syncStateToStore call), so it was removed — see TrackLoadingCollaborator.
       getLibraryItemById.mockRejectedValue(new Error("Database error"));
 
       await expect(playerService.executeLoadTrack("item-1")).rejects.toThrow();
 
-      expect(mockStore._setTrackLoading).toHaveBeenCalledWith(false);
+      expect(mockStore._setTrackLoading).not.toHaveBeenCalled();
     });
 
     it("should call repairDownloadStatus before building track list", async () => {
@@ -482,9 +453,8 @@ describe("PlayerService", () => {
       // Should not throw - should continue with playback
       await expect(playerService.executeLoadTrack("item-1")).resolves.not.toThrow();
 
-      // Verify playback still happened (PLAY dispatched to coordinator)
+      // Verify playback still happened (track added to queue)
       expect(mockedTrackPlayer.add).toHaveBeenCalled();
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
     });
 
     it("should continue playback if ensureItemInDocuments fails", async () => {
@@ -496,9 +466,8 @@ describe("PlayerService", () => {
       // Verify repairDownloadStatus was still called
       expect(downloadService.repairDownloadStatus).toHaveBeenCalledWith("item-1");
 
-      // Verify playback still happened (PLAY dispatched to coordinator)
+      // Verify playback still happened (track added to queue)
       expect(mockedTrackPlayer.add).toHaveBeenCalled();
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
     });
   });
 
@@ -510,32 +479,21 @@ describe("PlayerService", () => {
     });
 
     it("should toggle play/pause when playing", async () => {
-      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Playing });
+      const { __mockContext } = require("@/services/coordinator/PlayerStateCoordinator");
+      __mockContext.isPlaying = true;
 
       await playerService.togglePlayPause();
 
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" }, { source: "ui" });
     });
 
     it("should toggle play/pause when paused", async () => {
-      // Setup current track and queue so play() doesn't exit early
-      mockStore.player.currentTrack = {
-        libraryItemId: "item-1",
-        mediaId: "media-1",
-        title: "Test Book",
-        author: "Test Author",
-        coverUri: "http://example.com/cover.jpg",
-        audioFiles: mockAudioFiles,
-        chapters: mockChapters,
-        duration: 3600,
-        isDownloaded: true,
-      };
-      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
-      mockedTrackPlayer.getPlaybackState.mockResolvedValue({ state: State.Paused });
+      const { __mockContext } = require("@/services/coordinator/PlayerStateCoordinator");
+      __mockContext.isPlaying = false;
 
       await playerService.togglePlayPause();
 
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" }, { source: "ui" });
     });
 
     it("should pause playback", async () => {
@@ -627,49 +585,112 @@ describe("PlayerService", () => {
   describe("Public API (Event Dispatching)", () => {
     it("should dispatch LOAD_TRACK event", async () => {
       await playerService.playTrack("item-1", "ep-1");
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
-        type: "LOAD_TRACK",
-        payload: { libraryItemId: "item-1", episodeId: "ep-1" },
-      });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        {
+          type: "LOAD_TRACK",
+          payload: { libraryItemId: "item-1", episodeId: "ep-1" },
+        },
+        { source: "ui" }
+      );
     });
 
     it("should dispatch PLAY event", async () => {
       await playerService.play();
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PLAY" }, { source: "ui" });
     });
 
     it("should dispatch PAUSE event", async () => {
       await playerService.pause();
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "PAUSE" }, { source: "ui" });
     });
 
     it("should dispatch STOP event", async () => {
       await playerService.stop();
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "STOP" });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith({ type: "STOP" }, { source: "ui" });
     });
 
     it("should dispatch SEEK event", async () => {
       await playerService.seekTo(123);
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
-        type: "SEEK",
-        payload: { position: 123 },
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        {
+          type: "SEEK",
+          payload: { position: 123 },
+        },
+        { source: "ui" }
+      );
+    });
+
+    it("forwards jump metadata with a public seek", async () => {
+      await playerService.seekTo(500, {
+        jump: { surface: "full_screen", category: "scrub" },
       });
+
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        { type: "SEEK", payload: { position: 500 } },
+        {
+          source: "ui",
+          jump: { surface: "full_screen", category: "scrub" },
+        }
+      );
+    });
+
+    it("forwards jump history suppression with a public seek", async () => {
+      await playerService.seekTo(500, { suppressJumpHistory: true });
+
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        { type: "SEEK", payload: { position: 500 } },
+        { source: "ui", suppressJumpHistory: true }
+      );
+    });
+
+    it("dispatches forward skips as relative coordinator commands", async () => {
+      await playerService.jumpForward(30, {
+        jump: { surface: "full_screen", category: "skip_forward" },
+      });
+
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        { type: "JUMP_FORWARD", payload: { seconds: 30 } },
+        {
+          source: "ui",
+          jump: { surface: "full_screen", category: "skip_forward" },
+        }
+      );
+    });
+
+    it("dispatches backward skips as relative coordinator commands", async () => {
+      await playerService.jumpBackward(15, {
+        jump: { surface: "item_detail", category: "skip_backward" },
+      });
+
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        { type: "JUMP_BACKWARD", payload: { seconds: 15 } },
+        {
+          source: "ui",
+          jump: { surface: "item_detail", category: "skip_backward" },
+        }
+      );
     });
 
     it("should dispatch SET_RATE event", async () => {
       await playerService.setRate(1.5);
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
-        type: "SET_RATE",
-        payload: { rate: 1.5 },
-      });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        {
+          type: "SET_RATE",
+          payload: { rate: 1.5 },
+        },
+        { source: "ui" }
+      );
     });
 
     it("should dispatch SET_VOLUME event", async () => {
       await playerService.setVolume(0.5);
-      expect(dispatchPlayerEvent).toHaveBeenCalledWith({
-        type: "SET_VOLUME",
-        payload: { volume: 0.5 },
-      });
+      expect(dispatchPlayerEvent).toHaveBeenCalledWith(
+        {
+          type: "SET_VOLUME",
+          payload: { volume: 0.5 },
+        },
+        { source: "ui" }
+      );
     });
   });
 
@@ -737,9 +758,16 @@ describe("PlayerService", () => {
       };
       mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
 
-      await playerService.executePlay();
+      await playerService.executePlay(0);
 
       expect(mockedTrackPlayer.play).toHaveBeenCalled();
+    });
+
+    it("executePlay returns the exact smart rewind outcome from playback control", async () => {
+      const outcome = { fromPosition: 100, toPosition: 70 };
+      applySmartRewind.mockResolvedValue(outcome);
+
+      await expect(playerService.executePlay(0)).resolves.toEqual(outcome);
     });
 
     it("restorePlayerServiceFromSession delegates to progressRestore collaborator", async () => {
@@ -765,16 +793,6 @@ describe("PlayerService", () => {
       mockStore.player.currentTrack = null;
 
       await expect(playerService.refreshFilePathsAfterContainerChange()).resolves.not.toThrow();
-    });
-
-    it("rebuildCurrentTrackIfNeeded delegates to progressRestore collaborator", async () => {
-      // No current track + no session → returns false
-      mockStore.player.currentTrack = null;
-      getStoredUsername.mockResolvedValue(null);
-
-      const result = await playerService.rebuildCurrentTrackIfNeeded();
-
-      expect(result).toBe(false);
     });
   });
 

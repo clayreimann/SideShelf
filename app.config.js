@@ -1,18 +1,26 @@
 /**
  * Expo app configuration (dynamic)
- *
- * This file allows us to configure expo-updates with custom URLs
- * at build time via environment variables.
  */
 
 const withExcludeFromBackup = require("./plugins/excludeFromBackup/withExcludeFromBackup");
 
-const IS_DEV = process.env.APP_VARIANT === "development";
-const IS_PREVIEW = process.env.APP_VARIANT === "preview";
-
-// Custom update URL can be set via environment variable
-// Example: EXPO_PUBLIC_UPDATE_URL=https://your-domain.com/updates
-const CUSTOM_UPDATE_URL = process.env.EXPO_PUBLIC_UPDATE_URL;
+// Build number: timestamp-style (YYYYmmDDHHMMSS), e.g. 20260717153045.
+// The build script (package.json "build-testflight") exports BUILD_NUMBER once
+// so every config evaluation across the build's processes sees the SAME value —
+// computing new Date() here per-evaluation would drift between prebuild and
+// later steps. The fallback below only applies to ad-hoc local runs.
+// Note: this is iOS-only (CFBundleVersion accepts large numerics). Android's
+// versionCode is a 32-bit int (max ~2.1e9) and CANNOT hold a 14-digit
+// timestamp — if Android builds are added later, derive a shorter code.
+function timestampBuildNumber() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}` +
+    `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+  );
+}
+const BUILD_NUMBER = process.env.BUILD_NUMBER || timestampBuildNumber();
 
 module.exports = ({ config }) => {
   const baseConfig = {
@@ -21,7 +29,7 @@ module.exports = ({ config }) => {
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "side-shelf",
+    scheme: "sideshelf",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     jsEngine: "hermes",
@@ -30,8 +38,51 @@ module.exports = ({ config }) => {
       resizeMode: "cover",
       backgroundColor: "#000000",
     },
+    // --- Transport security (cleartext HTTP) decision ---------------------
+    // SideShelf talks to self-hosted Audiobookshelf servers, and a real
+    // fraction of those are reachable only over plain http:// — LAN IPs
+    // without a cert, or DDNS hostnames (e.g. myhome.duckdns.org) that were
+    // never put behind TLS. Restricting cleartext to RFC1918/.local hosts
+    // only (iOS's NSAllowsLocalNetworking) would silently break that
+    // DDNS-over-HTTP case, which is common enough for this kind of app that
+    // breaking it outright is too aggressive.
+    //
+    // Decision: keep cleartext HTTP allowed to ANY host on both platforms
+    // (NSAllowsArbitraryLoads on iOS, usesCleartextTraffic on Android —
+    // see below), and instead warn the user in the login screen
+    // (src/app/login.tsx, via src/lib/helpers/networkAddress.ts) when the
+    // server URL is http:// AND the host is not private/LAN, before
+    // credentials are submitted. Certificate pinning is deliberately not
+    // used (self-hosted servers use arbitrary/self-signed certs).
+    //
+    // Effective Android behavior before this change: apps targeting API 28+
+    // (this app does, via Expo SDK 54) get cleartext traffic BLOCKED by
+    // default at the OS level unless usesCleartextTraffic/a network security
+    // config says otherwise. Since neither was set here, Android was
+    // actually MORE restrictive than iOS — any http:// request (including
+    // to LAN servers) would already fail with a network security exception.
+    // usesCleartextTraffic: true below restores parity with the iOS
+    // decision above (allow cleartext, warn on login instead of blocking).
+    // --- iPad support decision (v1.0) -------------------------------------
+    // supportsTablet is false for 1.0. This is a deliberate de-scope, not an
+    // oversight.
+    //
+    // App Store Connect makes the 13" iPad screenshot set (2064x2752)
+    // MANDATORY the moment supportsTablet is true, and it subjects the build
+    // to iPad-specific App Review scrutiny. Neither is worth taking on for
+    // 1.0, because there are no tablet layouts: the library grid hardcodes
+    // three columns regardless of width (src/components/library/
+    // LibraryItemList.tsx), and FullScreenPlayer is the only screen that
+    // reads useWindowDimensions at all. On a 13" iPad that renders three
+    // enormous covers across ~2000pt.
+    //
+    // What this does NOT do: remove the app from iPad users. iPhone-only
+    // apps still install and run on iPad in compatibility mode. So this
+    // trades a stretched-but-shipping iPad experience for a smaller launch
+    // surface, and buys time to do tablet layouts properly in 1.1.
     ios: {
-      supportsTablet: true,
+      supportsTablet: false,
+      buildNumber: BUILD_NUMBER,
       infoPlist: {
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: true,
@@ -44,6 +95,7 @@ module.exports = ({ config }) => {
       bundleIdentifier: "cloud.madtown.sideshelf",
     },
     android: {
+      usesCleartextTraffic: true,
       adaptiveIcon: {
         backgroundColor: "#E6F4FE",
         foregroundImage: "./assets/images/android-icon-foreground.png",
@@ -93,14 +145,11 @@ module.exports = ({ config }) => {
       reactCompiler: true,
     },
     updates: {
+      // OTA is intentionally dormant until the Worker + R2 service passes
+      // docs/superpowers/specs/2026-07-28-self-hosted-ota-worker-r2-design.md.
       enabled: true,
       checkAutomatically: "NEVER",
       fallbackToCacheTimeout: 0,
-      // Use custom update URL if provided, otherwise use EAS
-      ...(CUSTOM_UPDATE_URL && { url: CUSTOM_UPDATE_URL }),
-      // Enable dynamic URL switching for preview builds (requires SDK 52+)
-      // WARNING: This disables embedded update fallback. Use for TestFlight/preview only!
-      ...(IS_PREVIEW && { disableAntiBrickingMeasures: true }),
     },
     runtimeVersion: {
       policy: "appVersion",

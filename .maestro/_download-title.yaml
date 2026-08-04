@@ -1,0 +1,41 @@
+appId: cloud.madtown.sideshelf
+---
+# Download ONE title, selected by search rather than by grid index.
+#
+# Callers pass TITLE as a runFlow env var. Selecting by name matters: the
+# capture flow later photographs one of these downloaded titles, so "which
+# books are downloaded" has to be a fact this flow states, not an accident of
+# whatever the library's default sort happens to put at index 0 and 1. Adding
+# a book to demo-server/library.json that sorts earlier would otherwise
+# silently change which titles get downloaded and break the frame that shows
+# one of them.
+#
+# Pass a phrase that matches EXACTLY ONE title, so `library-item index: 0` is
+# unambiguous — the same constraint the main flow documents for its
+# "Adventures of Sherlock" search.
+- tapOn: "Library"
+- waitForAnimationToEnd
+- tapOn: "Library"
+- waitForAnimationToEnd
+- tapOn:
+    id: "library-search-input"
+# The search box keeps its text when you navigate back to the list, so a
+# second call to this flow would otherwise append to the previous query and
+# match nothing. eraseText with an explicit count — Maestro's default is 50
+# characters and `clearText` is not a valid command in 2.x.
+- eraseText: 80
+- inputText: ${TITLE}
+- waitForAnimationToEnd
+# Dismiss the keyboard before tapping the result: with it up, the first tap
+# outside the field is consumed dismissing it rather than opening the tile.
+- hideKeyboard
+- waitForAnimationToEnd
+- tapOn:
+    id: "library-item"
+    index: 0
+- waitForAnimationToEnd
+- tapOn:
+    id: "download-button"
+- waitForAnimationToEnd
+- tapOn: "Download"
+- waitForAnimationToEnd

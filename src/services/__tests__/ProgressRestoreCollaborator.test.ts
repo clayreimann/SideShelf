@@ -22,6 +22,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import TrackPlayer, { State } from "react-native-track-player";
 import type { IPlayerServiceFacade } from "@/services/player/types";
+import type { verifyFileExists } from "@/lib/fileSystem";
 import { ProgressRestoreCollaborator } from "@/services/player/ProgressRestoreCollaborator";
 
 // --- Mocks ---
@@ -93,25 +94,13 @@ jest.mock("@/stores/appStore", () => ({
   },
 }));
 
-jest.mock("@/services/coordinator/PlayerStateCoordinator", () => {
-  const { jest } = require("@jest/globals");
-  const mockResolveCanonicalPosition = jest.fn();
-  const mockCoordinator = {
-    resolveCanonicalPosition: mockResolveCanonicalPosition,
-  };
-  return {
-    getCoordinator: jest.fn(() => mockCoordinator),
-    __mockResolveCanonicalPosition: mockResolveCanonicalPosition,
-  };
-});
-
 jest.mock("@/lib/api/endpoints", () => ({
   startPlaySession: jest.fn(),
 }));
 
 jest.mock("@/lib/fileSystem", () => ({
   resolveAppPath: jest.fn().mockReturnValue("/full/path/test.m4b"),
-  verifyFileExists: jest.fn().mockResolvedValue(true),
+  verifyFileExists: jest.fn<typeof verifyFileExists>().mockResolvedValue(true),
 }));
 
 describe("ProgressRestoreCollaborator", () => {
@@ -125,10 +114,6 @@ describe("ProgressRestoreCollaborator", () => {
   const { getStoredUsername } = require("@/lib/secureStore");
   const { progressService } = require("@/services/ProgressService");
   const { useAppStore } = require("@/stores/appStore");
-  const {
-    __mockResolveCanonicalPosition,
-  } = require("@/services/coordinator/PlayerStateCoordinator");
-
   let collaborator: ProgressRestoreCollaborator;
   let mockFacade: IPlayerServiceFacade;
 
@@ -166,9 +151,15 @@ describe("ProgressRestoreCollaborator", () => {
 
     mockFacade = {
       dispatchEvent: jest.fn(),
-      getApiInfo: jest.fn().mockReturnValue({ baseUrl: "http://test", accessToken: "tok123" }),
-      getInitializationTimestamp: jest.fn().mockReturnValue(Date.now()),
-      rebuildCurrentTrackIfNeeded: jest.fn().mockResolvedValue(true),
+      getApiInfo: jest.fn<IPlayerServiceFacade["getApiInfo"]>().mockReturnValue({
+        baseUrl: "http://test",
+        accessToken: "tok123",
+      }),
+      getInitializationTimestamp: jest
+        .fn<IPlayerServiceFacade["getInitializationTimestamp"]>()
+        .mockReturnValue(Date.now()),
+      executeRebuildQueue: jest.fn<IPlayerServiceFacade["executeRebuildQueue"]>(),
+      resolveCanonicalPosition: jest.fn<IPlayerServiceFacade["resolveCanonicalPosition"]>(),
     };
 
     collaborator = new ProgressRestoreCollaborator(mockFacade);
@@ -199,13 +190,6 @@ describe("ProgressRestoreCollaborator", () => {
     });
     getAudioFilesWithDownloadInfo.mockResolvedValue(mockAudioFiles);
     getChaptersForMedia.mockResolvedValue([]);
-
-    __mockResolveCanonicalPosition.mockResolvedValue({
-      position: 0,
-      source: "store",
-      authoritativePosition: null,
-      asyncStoragePosition: null,
-    });
   });
 
   afterEach(() => {
@@ -326,48 +310,6 @@ describe("ProgressRestoreCollaborator", () => {
 
       expect(mockStore.updatePosition).toHaveBeenCalledWith(500);
       expect(mockedTrackPlayer.seekTo).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("rebuildCurrentTrackIfNeeded", () => {
-    it("returns false when no current track and session restore finds nothing", async () => {
-      mockStore.player.currentTrack = null;
-      getStoredUsername.mockResolvedValue(null);
-
-      const result = await collaborator.rebuildCurrentTrackIfNeeded();
-
-      expect(result).toBe(false);
-    });
-
-    it("returns true when TrackPlayer queue already matches current track", async () => {
-      mockStore.player.currentTrack = {
-        libraryItemId: "item-1",
-        mediaId: "media-1",
-        title: "Test Book",
-        author: "Test Author",
-        coverUri: "http://example.com/cover.jpg",
-        audioFiles: mockAudioFiles,
-        chapters: [],
-        duration: 3600,
-        isDownloaded: true,
-      };
-      mockedTrackPlayer.getQueue.mockResolvedValue([{ id: "file-1", url: "", title: "" }]);
-
-      const result = await collaborator.rebuildCurrentTrackIfNeeded();
-
-      expect(result).toBe(true);
-    });
-
-    it("returns false on unexpected error (does not throw)", async () => {
-      mockStore.player.currentTrack = {
-        libraryItemId: "item-1",
-        audioFiles: mockAudioFiles,
-      };
-      mockedTrackPlayer.getQueue.mockRejectedValue(new Error("TrackPlayer error"));
-
-      const result = await collaborator.rebuildCurrentTrackIfNeeded();
-
-      expect(result).toBe(false);
     });
   });
 

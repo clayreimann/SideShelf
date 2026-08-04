@@ -152,7 +152,15 @@ jest.mock("react-native-track-player", () => ({
   setVolume: jest.fn(),
   getPlaybackState: jest.fn(),
   getQueue: jest.fn(),
-  getProgress: jest.fn(),
+  // Sane default so `.position` is always a finite number for any code that
+  // destructures it (e.g. PlayerService.printDebugInfo, smartRewind's TrackPlayer
+  // fallback) — a bare jest.fn() would resolve `undefined` and throw on
+  // destructuring. No test in this codebase drives TrackLoadingCollaborator's
+  // executeLoadTrack (Task 2's waitForSeekToLand polls this) through this global
+  // mock with a nonzero seek target, so position 0 here can't cause a real-timer
+  // poll-to-timeout hang; files that do exercise executeLoadTrack define their own
+  // local react-native-track-player mock and their own getProgress default.
+  getProgress: jest.fn(() => Promise.resolve({ position: 0, duration: 0, buffered: 0 })),
   getActiveTrackIndex: jest.fn(),
   getActiveTrack: jest.fn(),
   getRate: jest.fn(),
@@ -226,6 +234,10 @@ jest.mock("@/lib/logger", () => ({
       warn: jest.fn(),
       error: jest.fn(),
     })),
+    // Defaults to enabled to preserve prior (unconditional) mock-logging behavior
+    // for tests that don't care about tag gating; tests that do (e.g. api.test.ts's
+    // lazy-detailed-logging tests) override this per-test with mockReturnValueOnce.
+    isTagEnabled: jest.fn(() => true),
   },
 }));
 

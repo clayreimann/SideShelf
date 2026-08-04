@@ -17,7 +17,7 @@ The `DownloadService` is a singleton that manages all download operations for th
 ### Usage
 
 ```typescript
-import { downloadService } from '@/services/DownloadService';
+import { downloadService } from "@/services/DownloadService";
 
 // Initialize once at app startup
 await downloadService.initialize();
@@ -27,7 +27,7 @@ await downloadService.startDownload(libraryItemId, serverUrl, token);
 
 // Subscribe to progress updates
 const unsubscribe = downloadService.subscribeToProgress(libraryItemId, (progress) => {
-  console.log('Download progress:', progress);
+  console.log("Download progress:", progress);
 });
 
 // Control downloads
@@ -61,7 +61,10 @@ When a component is rebuilt (e.g., navigation, state changes), it can reconnect 
 useEffect(() => {
   if (!libraryItemId) return;
 
-  // Rewire to ongoing download (clears old callbacks, adds new one)
+  // Rewire to ongoing download. Removes only the callback registered by the
+  // previous rewireProgressCallbacks() call for this item (if any) and adds the
+  // new one — independent subscribers added via subscribeToProgress() elsewhere
+  // are left untouched.
   const unsubscribe = downloadService.rewireProgressCallbacks(libraryItemId, (progress) => {
     setDownloadProgress(progress);
   });

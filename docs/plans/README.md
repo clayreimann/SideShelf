@@ -4,7 +4,18 @@ This directory contains focused, actionable implementation plans for major featu
 
 ## Active Plans
 
+### [UI Testing](./ui-testing.md)
+
+Phased plan to evolve the Maestro screenshot automation into a full E2E regression suite, covering deep links, self-contained login, testID conventions, flow decomposition, and CI integration.
+
+**Status:** Phase 0 complete (screenshots working); Phase 1–5 pending
+**Timeline:** 2–3 weeks total
+**Risk:** Low (all phases additive, full rollback at each step)
+
+---
+
 ### [State Machine Migration](./state-machine-migration.md)
+
 Phased migration from implicit state flags to event-driven state machine for player synchronization.
 
 **Status:** Phase 1 complete (observer mode)
