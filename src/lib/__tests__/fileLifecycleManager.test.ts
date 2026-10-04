@@ -454,10 +454,10 @@ describe("File Lifecycle Manager", () => {
         },
       ];
       mocks.combinedQueries.getAudioFilesWithDownloadInfo.mockResolvedValue(oldFiles as any);
-
       const result = await fileLifecycleManager.shouldMoveToCache(libraryItemId, userId);
 
       expect(result).toBe(true);
+      expect(mocks.localData.getAudioFileDownloadInfo).not.toHaveBeenCalled();
     });
 
     it("should return false if item active within 2 weeks", async () => {
@@ -482,10 +482,10 @@ describe("File Lifecycle Manager", () => {
         },
       ];
       mocks.combinedQueries.getAudioFilesWithDownloadInfo.mockResolvedValue(recentFiles as any);
-
       const result = await fileLifecycleManager.shouldMoveToCache(libraryItemId, userId);
 
       expect(result).toBe(false);
+      expect(mocks.localData.getAudioFileDownloadInfo).not.toHaveBeenCalled();
     });
 
     it("should return false if no lastAccessedAt timestamp", async () => {
@@ -508,10 +508,10 @@ describe("File Lifecycle Manager", () => {
       mocks.combinedQueries.getAudioFilesWithDownloadInfo.mockResolvedValue(
         noTimestampFiles as any
       );
-
       const result = await fileLifecycleManager.shouldMoveToCache(libraryItemId, userId);
 
       expect(result).toBe(false);
+      expect(mocks.localData.getAudioFileDownloadInfo).not.toHaveBeenCalled();
     });
 
     it("should use most recent access time from multiple files", async () => {
@@ -548,11 +548,11 @@ describe("File Lifecycle Manager", () => {
         },
       ];
       mocks.combinedQueries.getAudioFilesWithDownloadInfo.mockResolvedValue(mixedFiles as any);
-
       const result = await fileLifecycleManager.shouldMoveToCache(libraryItemId, userId);
 
       // Should use most recent (yesterday), so not ready for cache
       expect(result).toBe(false);
+      expect(mocks.localData.getAudioFileDownloadInfo).not.toHaveBeenCalled();
     });
   });
 

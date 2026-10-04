@@ -6,7 +6,7 @@
  *
  * - TrackLoadingCollaborator: executeLoadTrack, buildTrackList, reloadTrackPlayerQueue
  * - PlaybackControlCollaborator: executePlay, executePause, executeStop, executeSeek, setRate, setVolume
- * - ProgressRestoreCollaborator: restorePlayerServiceFromSession, syncPositionFromDatabase, rebuildCurrentTrackIfNeeded
+ * - ProgressRestoreCollaborator: restorePlayerServiceFromSession, syncPositionFromDatabase
  * - BackgroundReconnectCollaborator: reconnectBackgroundService, refreshFilePathsAfterContainerChange
  *
  * Interfaces are defined in src/services/player/types.ts to prevent circular imports.
@@ -16,14 +16,16 @@ import { logger } from "@/lib/logger";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { apiClientService } from "@/services/ApiClientService";
 import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { formatTime } from "@/lib/helpers/formatters";
 import { useAppStore } from "@/stores/appStore";
-import type { PlayerEvent } from "@/types/coordinator";
+import type { SmartRewindOutcome } from "@/lib/smartRewind";
+import type { DispatchMeta, PlayerEvent, ResumePositionInfo } from "@/types/coordinator";
+import type { PlayerTrack } from "@/types/player";
 import TrackPlayer, {
   AndroidAudioContentType,
   IOSCategory,
   IOSCategoryMode,
-  State,
 } from "react-native-track-player";
 import { BackgroundReconnectCollaborator } from "./player/BackgroundReconnectCollaborator";
 import { PlaybackControlCollaborator } from "./player/PlaybackControlCollaborator";
@@ -35,10 +37,14 @@ import type {
   IPlayerServiceFacade,
   IProgressRestoreCollaborator,
   ITrackLoadingCollaborator,
+  LoadTrackResult,
 } from "./player/types";
 
 const log = logger.forTag("PlayerService");
 const diagLog = logger.forDiagnostics("PlayerService");
+
+export type SeekOptions = Pick<DispatchMeta, "jump" | "suppressJumpHistory">;
+export type RelativeJumpOptions = Pick<DispatchMeta, "jump">;
 
 /**
  * Track player service facade.
@@ -138,12 +144,20 @@ export class PlayerService implements IPlayerServiceFacade {
   }
 
   /**
-   * Rebuild currentTrack if it's missing but should exist.
-   * Delegates to ProgressRestoreCollaborator; exposed on facade so
-   * PlaybackControlCollaborator can call it without a direct import.
+   * Rebuild the TrackPlayer queue for the given track.
+   * Delegates to TrackLoadingCollaborator.executeRebuildQueue (pure execution).
+   * Called only by the coordinator from executeTransition.
    */
-  async rebuildCurrentTrackIfNeeded(): Promise<boolean> {
-    return this.progressRestore.rebuildCurrentTrackIfNeeded();
+  async executeRebuildQueue(track: PlayerTrack): Promise<ResumePositionInfo> {
+    return this.trackLoading.executeRebuildQueue(track);
+  }
+
+  /**
+   * Resolve canonical resume position for a library item.
+   * Delegates to coordinator without exposing coordinator to collaborators.
+   */
+  async resolveCanonicalPosition(libraryItemId: string): Promise<ResumePositionInfo> {
+    return getCoordinator().resolveCanonicalPosition(libraryItemId);
   }
 
   // --- Debug ---
@@ -223,23 +237,31 @@ export class PlayerService implements IPlayerServiceFacade {
   /**
    * Load and play a track (Public API - Dispatches Event)
    */
-  async playTrack(libraryItemId: string, episodeId?: string): Promise<void> {
-    dispatchPlayerEvent({
-      type: "LOAD_TRACK",
-      payload: { libraryItemId, episodeId },
-    });
+  async playTrack(
+    libraryItemId: string,
+    episodeId?: string,
+    startPosition?: number
+  ): Promise<void> {
+    dispatchPlayerEvent(
+      {
+        type: "LOAD_TRACK",
+        payload: { libraryItemId, episodeId, startPosition },
+      },
+      { source: "ui" }
+    );
   }
 
   /**
    * Toggle play/pause
    */
   async togglePlayPause(): Promise<void> {
-    const state = await TrackPlayer.getPlaybackState();
-
-    if (state.state === State.Playing) {
-      await this.pause();
+    // Read from coordinator (authoritative state machine) rather than TrackPlayer
+    // to avoid hard lock when native audio stops externally (call, audio focus loss).
+    const coordinator = getCoordinator();
+    if (coordinator.getContext().isPlaying) {
+      dispatchPlayerEvent({ type: "PAUSE" }, { source: "ui" });
     } else {
-      await this.play();
+      dispatchPlayerEvent({ type: "PLAY" }, { source: "ui" });
     }
   }
 
@@ -247,51 +269,86 @@ export class PlayerService implements IPlayerServiceFacade {
    * Pause playback (Public API - Dispatches Event)
    */
   async pause(): Promise<void> {
-    dispatchPlayerEvent({ type: "PAUSE" });
+    dispatchPlayerEvent({ type: "PAUSE" }, { source: "ui" });
   }
 
   /**
    * Resume playback (Public API - Dispatches Event)
    */
   async play(): Promise<void> {
-    dispatchPlayerEvent({ type: "PLAY" });
+    dispatchPlayerEvent({ type: "PLAY" }, { source: "ui" });
   }
 
   /**
    * Seek to position in seconds (Public API - Dispatches Event)
    */
-  async seekTo(position: number): Promise<void> {
-    dispatchPlayerEvent({
-      type: "SEEK",
-      payload: { position },
-    });
+  async seekTo(position: number, options?: SeekOptions): Promise<void> {
+    dispatchPlayerEvent(
+      {
+        type: "SEEK",
+        payload: { position },
+      },
+      { source: "ui", ...options }
+    );
+  }
+
+  /**
+   * Jump forward relative to the coordinator's authoritative position.
+   */
+  async jumpForward(seconds: number, options: RelativeJumpOptions): Promise<void> {
+    dispatchPlayerEvent(
+      {
+        type: "JUMP_FORWARD",
+        payload: { seconds },
+      },
+      { source: "ui", ...options }
+    );
+  }
+
+  /**
+   * Jump backward relative to the coordinator's authoritative position.
+   */
+  async jumpBackward(seconds: number, options: RelativeJumpOptions): Promise<void> {
+    dispatchPlayerEvent(
+      {
+        type: "JUMP_BACKWARD",
+        payload: { seconds },
+      },
+      { source: "ui", ...options }
+    );
   }
 
   /**
    * Set playback rate (Public API - Dispatches Event)
    */
   async setRate(rate: number): Promise<void> {
-    dispatchPlayerEvent({
-      type: "SET_RATE",
-      payload: { rate },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "SET_RATE",
+        payload: { rate },
+      },
+      { source: "ui" }
+    );
   }
 
   /**
    * Set volume (Public API - Dispatches Event)
    */
   async setVolume(volume: number): Promise<void> {
-    dispatchPlayerEvent({
-      type: "SET_VOLUME",
-      payload: { volume },
-    });
+    dispatchPlayerEvent(
+      {
+        type: "SET_VOLUME",
+        payload: { volume },
+      },
+      { source: "ui" }
+    );
   }
 
   /**
    * Stop playback (Public API - Dispatches Event)
    */
   async stop(): Promise<void> {
-    dispatchPlayerEvent({ type: "STOP" });
+    dispatchPlayerEvent({ type: "STOP" }, { source: "ui" });
   }
 
   // --- Internal (Called by Coordinator) — single-line delegates ---
@@ -299,15 +356,19 @@ export class PlayerService implements IPlayerServiceFacade {
   /**
    * Execute track loading (Internal - Called by Coordinator)
    */
-  async executeLoadTrack(libraryItemId: string, episodeId?: string): Promise<void> {
-    return this.trackLoading.executeLoadTrack(libraryItemId, episodeId);
+  async executeLoadTrack(
+    libraryItemId: string,
+    episodeId?: string,
+    startPosition?: number
+  ): Promise<LoadTrackResult> {
+    return this.trackLoading.executeLoadTrack(libraryItemId, episodeId, startPosition);
   }
 
   /**
    * Execute play (Internal - Called by Coordinator)
    */
-  async executePlay(): Promise<void> {
-    return this.playbackControl.executePlay();
+  async executePlay(position: number, meta?: DispatchMeta): Promise<SmartRewindOutcome | null> {
+    return this.playbackControl.executePlay(position, meta);
   }
 
   /**

@@ -1,0 +1,50 @@
+appId: cloud.madtown.sideshelf
+---
+# Idempotent login subflow
+# If already on home/library screen, skip login.
+# Credentials injected via --env flags from .env.maestro.
+#
+# Uses `eraseText: 120` rather than `clearText` — `clearText` is not a valid
+# command in Maestro 2.x and fails syntax validation. eraseText defaults to
+# only 50 characters, so the explicit count is there to cover a long
+# previously-entered server URL.
+# Wait for the app to actually settle before deciding whether to log in.
+#
+# Without this, the condition below is evaluated immediately after launchApp,
+# while the app is still initializing — so on an ALREADY-LOGGED-IN device the
+# check sees no library yet, concludes it must log in, and then fails looking
+# for a login screen that never appears. The bug only shows up on the
+# authenticated path, which is why it survived: a fresh install goes straight
+# to the login screen and happens to work.
+#
+# Gating on the login field rather than on "Library" is also more precise —
+# "Library" is a tab-bar label and a screen title, so it can match in states
+# that aren't "logged in and ready".
+- extendedWaitUntil:
+    visible:
+      id: "login-server-url-input"
+    timeout: 12000
+    optional: true
+
+- runFlow:
+    when:
+      visible:
+        id: "login-server-url-input"
+    commands:
+      - tapOn:
+          id: "login-server-url-input"
+      - eraseText: 120
+      - inputText: ${MAESTRO_SERVER_URL}
+      - tapOn:
+          id: "login-username-input"
+      - waitForAnimationToEnd
+      - eraseText: 120
+      - inputText: ${MAESTRO_USERNAME}
+      - tapOn:
+          id: "login-password-input"
+      - eraseText: 120
+      - inputText: ${MAESTRO_PASSWORD}
+      - waitForAnimationToEnd
+      - tapOn:
+          id: "login-button"
+      - waitForAnimationToEnd

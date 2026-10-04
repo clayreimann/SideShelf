@@ -1,6 +1,7 @@
 import { db } from "@/db/client";
 import { setLocalCoverCached } from "@/db/helpers/localData";
-import { libraryItems } from "@/db/schema/libraryItems";
+import { localCoverCache } from "@/db/schema/localData";
+import { mediaMetadata } from "@/db/schema/mediaMetadata";
 import { apiFetch } from "@/lib/api/api";
 import { fetchLibraryItemCoverHead } from "@/lib/api/endpoints";
 import { eq } from "drizzle-orm";
@@ -17,13 +18,6 @@ export function getCoverUri(libraryItemId: string): string {
   const dir = getCoversDirectory();
   const file = new File(dir, libraryItemId);
   return file.uri;
-}
-
-async function ensureCoversDirectory(): Promise<void> {
-  const dir = getCoversDirectory();
-  try {
-    dir.create();
-  } catch {}
 }
 
 export async function cacheCoverIfMissing(
@@ -59,20 +53,24 @@ export async function cacheCoverIfMissing(
   }
 }
 
-export async function cacheCoversForLibrary(libraryId: string): Promise<void> {
-  await ensureCoversDirectory();
-  const rows = await db
-    .select({ id: libraryItems.id })
-    .from(libraryItems)
-    .where(eq(libraryItems.libraryId, libraryId));
-  for (const row of rows) {
-    if (!row.id) continue;
-    try {
-      await cacheCoverIfMissing(row.id);
-      // update the local cover in the database
-      await setLocalCoverCached(row.id, getCoverUri(row.id));
-    } catch {}
+/**
+ * Download a library item's cover if missing, and persist the local cache record.
+ *
+ * Extracted so both @/db/helpers/mediaMetadata (which resolves mediaId from
+ * libraryItemId via its own DB query) and repairMissingCoverArt below (which already
+ * has both IDs from its own query) can share this logic. Callers pass mediaId
+ * explicitly rather than covers.ts importing back into mediaMetadata.ts to look it up
+ * — that reverse import used to form a circular dependency between the two modules.
+ */
+export async function cacheCoverAndPersist(
+  libraryItemId: string,
+  mediaId: string
+): Promise<{ uri: string; wasDownloaded: boolean }> {
+  const result = await cacheCoverIfMissing(libraryItemId);
+  if (result.uri) {
+    await setLocalCoverCached(mediaId, result.uri);
   }
+  return result;
 }
 
 /**
@@ -119,8 +117,11 @@ export async function clearCoverCache(libraryItemId: string): Promise<void> {
  * Scan all library items in the database and re-download any missing cover art files.
  *
  * Runs fire-and-forget on app startup to fix cover art gaps caused by fresh install
- * or iOS container UUID rotation. Items with a valid cached file are skipped.
- * Downloads are batched (5 concurrent) to avoid overwhelming the server.
+ * or iOS container UUID rotation. An item is repaired when its cover FILE is
+ * missing on disk or its `local_cover_cache` ROW is missing — the two can
+ * diverge, and because every cover-rendering query joins on that row, a
+ * present file with an absent row renders blank permanently. Items with both
+ * are skipped. Work is batched (5 concurrent) to avoid overwhelming the server.
  *
  * Note: Does NOT update the lock screen after download — executeLoadTrack() calls
  * getCoverUri() at track load time, which always returns the current path. Cover art
@@ -128,16 +129,25 @@ export async function clearCoverCache(libraryItemId: string): Promise<void> {
  */
 export async function repairMissingCoverArt(): Promise<void> {
   try {
-    const { db } = await import("@/db/client");
-    const { mediaMetadata } = await import("@/db/schema/mediaMetadata");
-    const { cacheCoverAndUpdateMetadata } = await import("@/db/helpers/mediaMetadata");
-
     const allItems = await db
-      .select({ libraryItemId: mediaMetadata.libraryItemId })
-      .from(mediaMetadata);
+      .select({
+        libraryItemId: mediaMetadata.libraryItemId,
+        mediaId: mediaMetadata.id,
+        cacheRowMediaId: localCoverCache.mediaId,
+      })
+      .from(mediaMetadata)
+      .leftJoin(localCoverCache, eq(mediaMetadata.id, localCoverCache.mediaId));
 
+    // An item needs repair if its cover file is missing on disk OR its
+    // local_cover_cache row is missing — every cover-rendering query joins
+    // against that row, so a missing row blanks the cover forever even when
+    // the file itself downloaded fine. cacheCoverAndPersist below already
+    // skips re-downloading when the file exists, so this only adds a DB
+    // write for the file-present-but-row-missing case, not a new download.
     const itemsNeedingCovers = allItems.filter(
-      (row) => row.libraryItemId !== null && !isCoverCached(row.libraryItemId)
+      (row) =>
+        row.libraryItemId !== null &&
+        (!isCoverCached(row.libraryItemId) || row.cacheRowMediaId === null)
     );
 
     console.log(
@@ -147,21 +157,33 @@ export async function repairMissingCoverArt(): Promise<void> {
     if (itemsNeedingCovers.length === 0) return;
 
     const batchSize = 5;
-    let repairedCount = 0;
+    let downloadedCount = 0;
+    let rowOnlyCount = 0;
 
     for (let i = 0; i < itemsNeedingCovers.length; i += batchSize) {
       const batch = itemsNeedingCovers.slice(i, i + batchSize);
       const results = await Promise.all(
         batch.map((item) =>
           item.libraryItemId
-            ? cacheCoverAndUpdateMetadata(item.libraryItemId).catch(() => false)
-            : Promise.resolve(false)
+            ? cacheCoverAndPersist(item.libraryItemId, item.mediaId)
+                .then((result) => result.wasDownloaded)
+                .catch(() => null)
+            : Promise.resolve(null)
         )
       );
-      repairedCount += results.filter(Boolean).length;
+      downloadedCount += results.filter((r) => r === true).length;
+      rowOnlyCount += results.filter((r) => r === false).length;
     }
 
-    console.log(`[covers] Repair scan complete: ${repairedCount} covers downloaded`);
+    // Report the two repair kinds separately. Counting only downloads would
+    // log "0 covers downloaded" for a run that healed hundreds of missing
+    // local_cover_cache rows — reading as "nothing was wrong" for precisely
+    // the failure this scan was widened to catch (files present, rows absent,
+    // covers blank forever). A null result means the item genuinely failed.
+    console.log(
+      `[covers] Repair scan complete: ${downloadedCount} downloaded, ` +
+        `${rowOnlyCount} cache rows restored without re-downloading`
+    );
   } catch (error) {
     console.error("[covers] Repair scan failed:", error);
     throw error; // re-throw so caller's .catch() receives it for logging

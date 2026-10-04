@@ -5,10 +5,12 @@ export const ASYNC_KEYS = {
   playbackRate: "abs.playbackRate",
   volume: "abs.volume",
   position: "abs.position",
+  positionUpdatedAt: "abs.positionUpdatedAt",
   isPlaying: "abs.isPlaying",
   currentPlaySessionId: "abs.currentPlaySessionId",
   username: "abs.username",
   sleepTimer: "abs.sleepTimer",
+  jumpHistorySession: "abs.jumpHistorySession",
 };
 
 export async function saveItem(key: string, value: any): Promise<void> {

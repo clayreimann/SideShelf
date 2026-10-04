@@ -1,8 +1,11 @@
+import { useState, useEffect, useCallback } from "react";
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import { usePlayerState } from "@/stores";
+import IconButton from "@/components/ui/IconButton";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SymbolView } from "expo-symbols";
-import { ActivityIndicator, Platform, Pressable, View } from "react-native";
+import { ActivityIndicator, Platform, View } from "react-native";
 
 /**
  * PlayPauseButton component
@@ -12,50 +15,98 @@ import { ActivityIndicator, Platform, Pressable, View } from "react-native";
  * - Android: Uses Material Icons (play-arrow, pause)
  *
  * Shows an activity indicator while a track is loading.
+ *
+ * Implements optimistic state (D-13): icon flips immediately on press without
+ * waiting for the coordinator's async lock to resolve. The pending state is
+ * reconciled once the store catches up.
+ *
+ * Implements flicker prevention (D-14): the pending state is not cleared while
+ * isLoadingTrack is true, preventing the icon from reverting to "play" during
+ * coordinator LOADING/BUFFERING intermediate state transitions.
  */
 export interface PlayPauseButtonProps {
-    hitBoxSize?: number;
-    iconSize?: number;
-    onPress: () => void;
+  hitBoxSize?: number;
+  iconSize?: number;
+  onPress: () => void;
+  onLongPress?: () => void;
+  testID?: string;
 }
 
-export default function PlayPauseButton({ onPress, hitBoxSize = 44, iconSize = 24 }: PlayPauseButtonProps) {
-    const { colors } = useThemedStyles();
-    const isLoadingTrack = usePlayerState(state => state.player.loading.isLoadingTrack);
-    const isPlaying = usePlayerState(state => state.player.isPlaying);
+export default function PlayPauseButton({
+  onPress,
+  onLongPress,
+  hitBoxSize = 44,
+  iconSize = 24,
+  testID,
+}: PlayPauseButtonProps) {
+  const { colors } = useThemedStyles();
+  const isLoadingTrack = usePlayerState((state) => state.player.loading.isLoadingTrack);
+  const isPlaying = usePlayerState((state) => state.player.isPlaying);
 
-    if (isLoadingTrack) {
-        return (
-            <View style={{width: hitBoxSize, height: hitBoxSize, justifyContent: 'center', alignItems: 'center'}}>
-                <ActivityIndicator size="small" color={colors.textPrimary} />
-            </View>
-        );
+  // D-13: Local optimistic state — set immediately on press, cleared when store catches up
+  const [pendingIsPlaying, setPendingIsPlaying] = useState<boolean | null>(null);
+
+  // D-13: Display state — prefer pending (optimistic) over store value
+  const displayIsPlaying = pendingIsPlaying ?? isPlaying;
+
+  // D-13 + D-14: Reconcile pending state with store once settled.
+  // Guard with !isLoadingTrack to prevent clearing optimistic state during
+  // coordinator LOADING/BUFFERING transitions (where isPlaying briefly returns false).
+  useEffect(() => {
+    if (pendingIsPlaying !== null && isPlaying === pendingIsPlaying && !isLoadingTrack) {
+      setPendingIsPlaying(null);
     }
+  }, [isPlaying, pendingIsPlaying, isLoadingTrack]);
 
+  // D-13: Set optimistic state immediately on press, then invoke the action
+  const handlePress = useCallback(() => {
+    setPendingIsPlaying(!displayIsPlaying);
+    onPress();
+  }, [displayIsPlaying, onPress]);
+
+  if (isLoadingTrack && pendingIsPlaying === null) {
+    // Only show spinner when truly in initial loading with no pending action
     return (
-        <Pressable
-            onPress={onPress}
-            style={({pressed}) => ({
-                width: hitBoxSize,
-                height: hitBoxSize,
-                justifyContent: 'center',
-                alignItems: 'center',
-                opacity: pressed ? 0.5 : 1,
-            })}
-        >
-            {Platform.OS === 'ios' ? (
-                <SymbolView
-                    name={isPlaying ? 'pause.circle.fill' : 'play.circle.fill'}
-                    size={iconSize}
-                    tintColor={colors.textPrimary}
-                />
-            ) : (
-                <MaterialIcons
-                    name={isPlaying ? 'pause' : 'play-arrow'}
-                    size={iconSize}
-                    color={colors.textPrimary}
-                />
-            )}
-        </Pressable>
+      <View
+        style={{
+          width: hitBoxSize,
+          height: hitBoxSize,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={translate("accessibility.loading")}
+        accessibilityState={{ busy: true }}
+      >
+        <ActivityIndicator size="small" color={colors.textPrimary} />
+      </View>
     );
+  }
+
+  return (
+    <IconButton
+      testID={testID}
+      onPress={handlePress}
+      onLongPress={onLongPress}
+      hitBoxSize={hitBoxSize}
+      accessibilityLabel={
+        displayIsPlaying ? translate("accessibility.pause") : translate("accessibility.play")
+      }
+      selected={displayIsPlaying}
+    >
+      {Platform.OS === "ios" ? (
+        <SymbolView
+          name={displayIsPlaying ? "pause.circle.fill" : "play.circle.fill"}
+          size={iconSize}
+          tintColor={colors.textPrimary}
+        />
+      ) : (
+        <MaterialIcons
+          name={displayIsPlaying ? "pause" : "play-arrow"}
+          size={iconSize}
+          color={colors.textPrimary}
+        />
+      )}
+    </IconButton>
+  );
 }

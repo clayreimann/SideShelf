@@ -32,6 +32,7 @@ logs/
 
 # local env files
 .env*.local
+.env.maestro
 
 # typescript
 *.tsbuildinfo
@@ -50,3 +51,14 @@ app-example
 /android
 
 prompt.md
+.claude/settings.local.json
+.worktrees/
+
+# screenshot pipeline scratch output (scripts/screenshots/)
+.screenshots/
+
+# demo Audiobookshelf server (demo-server/) — downloaded media, container
+# config/metadata, and real credentials never belong in git
+demo-server/media/
+demo-server/data/
+demo-server/.env

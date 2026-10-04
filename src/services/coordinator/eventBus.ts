@@ -11,12 +11,12 @@
  * - NO circular dependency!
  */
 
-import { PlayerEvent } from "@/types/coordinator";
+import type { DispatchMeta, PlayerEvent } from "@/types/coordinator";
 import { logger } from "@/lib/logger";
 
 const log = logger.forTag("PlayerEventBus");
 
-type EventListener = (event: PlayerEvent) => void | Promise<void>;
+type EventListener = (event: PlayerEvent, meta?: DispatchMeta) => void | Promise<void>;
 
 /**
  * Simple event bus for player events.
@@ -24,19 +24,20 @@ type EventListener = (event: PlayerEvent) => void | Promise<void>;
  */
 export class PlayerEventBus {
   private listeners: EventListener[] = [];
-  private eventHistory: Array<{ event: PlayerEvent; timestamp: number }> = [];
+  private eventHistory: Array<{ event: PlayerEvent; meta?: DispatchMeta; timestamp: number }> = [];
   private readonly MAX_HISTORY = 100;
 
   /**
    * Dispatch an event to all listeners
    */
-  dispatch(event: PlayerEvent): void {
+  dispatch(event: PlayerEvent, meta?: DispatchMeta): void {
     // Log event
     log.debug(`Event dispatched: ${event.type}`);
 
     // Add to history
     this.eventHistory.push({
       event,
+      meta,
       timestamp: Date.now(),
     });
 
@@ -48,7 +49,7 @@ export class PlayerEventBus {
     // Notify all listeners (async, non-blocking)
     this.listeners.forEach((listener) => {
       try {
-        const result = listener(event);
+        const result = listener(event, meta);
         // Handle both sync and async listeners
         if (result instanceof Promise) {
           result.catch((err) => {
@@ -80,7 +81,7 @@ export class PlayerEventBus {
   /**
    * Get event history (for diagnostics)
    */
-  getEventHistory(): ReadonlyArray<{ event: PlayerEvent; timestamp: number }> {
+  getEventHistory(): ReadonlyArray<{ event: PlayerEvent; meta?: DispatchMeta; timestamp: number }> {
     return [...this.eventHistory];
   }
 
@@ -101,7 +102,8 @@ export const playerEventBus = new PlayerEventBus();
  * Convenience function to dispatch events
  *
  * Use this in services instead of importing coordinator directly.
+ * Pass optional meta to attach source and restoreSessionId for tracing.
  */
-export function dispatchPlayerEvent(event: PlayerEvent): void {
-  playerEventBus.dispatch(event);
+export function dispatchPlayerEvent(event: PlayerEvent, meta?: DispatchMeta): void {
+  playerEventBus.dispatch(event, meta);
 }

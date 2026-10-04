@@ -20,6 +20,7 @@ import {
 import {
   checkLibraryItemExists,
   getLibraryItemsForList,
+  getLibraryItemsNeedingRefresh,
   marshalLibraryItemFromApi,
   transformItemsToDisplayFormat,
   upsertLibraryItems,
@@ -107,6 +108,14 @@ export interface LibrarySliceActions {
   // Internal actions (prefixed with underscore)
   /** Load data from AsyncStorage */
   _loadLibrarySettingsFromStorage: () => Promise<void>;
+  /**
+   * Backfill full details (authors, series, audio files) for any library items
+   * that still only have minified data — e.g. because a previous background
+   * sync was interrupted (app reload, crash, network failure) before it
+   * finished. Self-healing: safe to call repeatedly, processes one bounded
+   * batch per call.
+   */
+  _backfillIncompleteItems: () => Promise<void>;
 
   // State machine transitions
   /** Update readiness state based on API/DB availability */
@@ -227,18 +236,44 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
           );
         }
 
-        // Update state with loaded data
-        set((state: LibrarySlice) => ({
-          ...state,
-          library: {
-            ...state.library,
-            selectedLibraryId: finalSelectedLibraryId,
-            selectedLibrary: finalSelectedLibrary,
-            libraries,
-            rawItems,
-            items: sortLibraryItems(rawItems, state.library.sortConfig),
-          },
-        }));
+        // Update state with loaded data.
+        //
+        // This runs after the awaits above, using values computed from a snapshot taken
+        // before them. On a fresh login, this function is first called with
+        // apiConfigured=false (StoreProvider fires it as soon as the DB is ready, before
+        // auth resolves) — so `libraries`/`finalSelectedLibraryId` reflect an empty,
+        // pre-sync cache. If login completes while this call is still awaiting its local
+        // DB reads, _updateReadiness's transition to READY (see _onTransitionToReady)
+        // can race ahead, fetch from the API, and populate a real selection *before*
+        // this call reaches this point. Blindly overwriting selectedLibraryId/libraries
+        // here would then wipe that real selection back out — permanently, since nothing
+        // re-runs _onTransitionToReady afterward.
+        //
+        // readinessState only reaches "READY" via _updateReadiness, which this function
+        // itself only calls *after* this block (see below). So if readinessState is
+        // already "READY" by the time we get here, that can only mean a concurrent
+        // _updateReadiness call already ran _onTransitionToReady — skip applying this
+        // stale snapshot rather than clobbering what it wrote.
+        set((state: LibrarySlice) => {
+          if (state.library.readinessState === "READY") {
+            log.info(
+              " Skipping stale pre-auth cache snapshot — a concurrent readiness transition already populated library state"
+            );
+            return state;
+          }
+
+          return {
+            ...state,
+            library: {
+              ...state.library,
+              selectedLibraryId: finalSelectedLibraryId,
+              selectedLibrary: finalSelectedLibrary,
+              libraries,
+              rawItems,
+              items: sortLibraryItems(rawItems, state.library.sortConfig),
+            },
+          };
+        });
       }
 
       log.info(" Slice initialized successfully");
@@ -667,6 +702,32 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
           log.info(
             `[Background] Finished processing all ${processedCount} items with full details and covers`
           );
+
+          // Reconcile authors, series, and home now that full item details — including
+          // author/series links — have been synced for the first time. Mirrors the same
+          // reconciliation _backfillIncompleteItems() already performs after a backfill
+          // pass, applied here to the first-time sync path: without this, a fresh login's
+          // authors/series slices (which ran their own one-shot init earlier against an
+          // empty DB) and the home shelves (which cached an empty result racing ahead of
+          // this sync) never learn that real data has landed.
+          const reconcileUserId = get().userProfile?.activeUserId;
+          await Promise.all([
+            get()
+              .refetchSeries()
+              .catch((error: Error) => log.error(" [Background] Failed to refresh series:", error)),
+            get()
+              .refetchAuthors()
+              .catch((error: Error) =>
+                log.error(" [Background] Failed to refresh authors:", error)
+              ),
+            reconcileUserId
+              ? get()
+                  .refreshHome(reconcileUserId, true)
+                  .catch((error: Error) =>
+                    log.error(" [Background] Failed to refresh home:", error)
+                  )
+              : Promise.resolve(),
+          ]);
         } catch (error) {
           log.error(" [Background] Batch fetch failed:", error as Error);
         }
@@ -821,6 +882,63 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
           operationState: "IDLE",
         },
       }));
+
+      // Self-heal: pick up any items left with only minified data by a
+      // previously-interrupted sync. Fire-and-forget — must not block the
+      // IDLE transition or the caller.
+      get()._backfillIncompleteItems();
+    }
+  },
+
+  /**
+   * Backfill full details (authors, series, audio files) for library items
+   * that still only have minified data. Runs one bounded batch; safe to call
+   * repeatedly (e.g. on every app-ready transition) to make further progress
+   * if more incomplete items remain than fit in a single batch.
+   */
+  _backfillIncompleteItems: async () => {
+    const state: LibrarySliceState = get();
+    if (!isReady(state)) return;
+
+    try {
+      const BACKFILL_BATCH_SIZE = 50;
+      const staleItemIds = await getLibraryItemsNeedingRefresh(BACKFILL_BATCH_SIZE);
+      if (staleItemIds.length === 0) return;
+
+      log.info(
+        `[Backfill] Found ${staleItemIds.length} item(s) with incomplete details, fetching full data...`
+      );
+      const fullItems = await fetchLibraryItemsBatch(staleItemIds);
+      await processFullLibraryItems(fullItems);
+      log.info(`[Backfill] Backfilled ${fullItems.length} item(s)`);
+
+      // Refresh series/authors so any newly-linked data shows up without
+      // requiring the user to know to manually refresh.
+      await Promise.all([
+        get()
+          .refetchSeries()
+          .catch((error: Error) => log.error("[Backfill] Failed to refresh series:", error)),
+        get()
+          .refetchAuthors()
+          .catch((error: Error) => log.error("[Backfill] Failed to refresh authors:", error)),
+      ]);
+
+      const currentState: LibrarySliceState = get();
+      const selectedLibraryId = currentState.library.selectedLibraryId;
+      if (selectedLibraryId) {
+        const updatedDbItems = await getLibraryItemsForList(selectedLibraryId);
+        const updatedDisplayItems = transformItemsToDisplayFormat(updatedDbItems);
+        set((state: LibrarySlice) => ({
+          ...state,
+          library: {
+            ...state.library,
+            rawItems: updatedDisplayItems,
+            items: sortLibraryItems(updatedDisplayItems, state.library.sortConfig),
+          },
+        }));
+      }
+    } catch (error) {
+      log.error("[Backfill] Failed to backfill incomplete items:", error as Error);
     }
   },
 

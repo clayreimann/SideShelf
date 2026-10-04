@@ -225,6 +225,7 @@ describe("Foreground Playing Restoration Integration", () => {
           downloadPath: "/downloads/test.m4b",
           downloadedAt: new Date(),
           updatedAt: new Date(),
+          lastAccessedAt: null,
         },
       },
     ],

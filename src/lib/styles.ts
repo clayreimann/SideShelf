@@ -5,7 +5,7 @@
  * and promote consistency across the application.
  */
 
-import { StyleSheet } from "react-native";
+import { PixelRatio, StyleSheet } from "react-native";
 
 /**
  * Common spacing values
@@ -24,13 +24,19 @@ export const spacing = {
  * Floating player dimensions and offsets
  * Centralized values for the mini player at the bottom of the screen
  */
+// Cap chrome scaling at 1.5x: below this, text scales with the OS setting;
+// above it, the mini player would collide with the tab bar.
+// PixelRatio.getFontScale() is fixed for an app session on iOS, so a
+// module-level constant is fine here.
+const chromeFontScale = Math.min(PixelRatio.getFontScale(), 1.5);
+
 export const floatingPlayer = {
-  /** Height of the floating mini player */
-  height: 64,
+  /** Height of the floating mini player (grows with OS font scale, capped) */
+  height: Math.round(64 * Math.max(1, chromeFontScale * 0.85)),
   /** Bottom offset above tab bar */
   bottomOffset: 100,
   /** Padding to add to scrollable lists when player is visible */
-  listPadding: 84,
+  listPadding: Math.round(84 * Math.max(1, chromeFontScale * 0.85)),
 } as const;
 
 /**

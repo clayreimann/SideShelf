@@ -22,6 +22,46 @@ import type { SliceCreator } from "@/types/store";
 const log = logger.forTag("DownloadSlice");
 
 /**
+ * Tell homeSlice that a download just completed so its "Downloaded" shelf picks it up.
+ *
+ * homeSlice caches its own DB read (`home.downloaded`, valid for 5 minutes) and has no
+ * way to learn a download finished elsewhere — completeDownload() only ever updated this
+ * slice's own downloadedItems set. Without this, only a fresh app launch (which
+ * re-initializes homeSlice from scratch) ever picked up newly completed downloads;
+ * returning to the Home tab or pulling to refresh left the shelf stale until the cache
+ * window lapsed. refreshSection's "downloaded" branch reads straight from local download
+ * records and doesn't use its userId parameter (see homeSlice.ts — the "downloaded" case
+ * calls getFullyDownloadedItems(getDownloadedItems()), never touching userId), so an
+ * empty string is safe here.
+ *
+ * `get` is typed structurally rather than as the combined store: downloadSlice must not
+ * import HomeSlice's type, since slices are assembled in appStore.ts and reaching across
+ * would invert that dependency. The optional property models the real runtime contract —
+ * refreshSection exists only when homeSlice is combined in, which a slice-only test store
+ * skips.
+ */
+function notifyHomeDownloadedShelfChanged(
+  get: () => {
+    refreshSection?: (
+      section: "continueListening" | "downloaded" | "listenAgain",
+      userId: string
+    ) => Promise<void>;
+  }
+): void {
+  const refreshSection = get().refreshSection;
+  if (typeof refreshSection !== "function") {
+    // Standalone (e.g. slice-only test) store without homeSlice combined in — nothing to notify.
+    return;
+  }
+  refreshSection("downloaded", "").catch((error: unknown) => {
+    log.error(
+      "Failed to refresh home downloaded section after download completed:",
+      error as Error
+    );
+  });
+}
+
+/**
  * Download slice state interface - scoped under 'downloads' to avoid conflicts
  */
 export interface DownloadSliceState {
@@ -130,6 +170,7 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
             get().updateDownloadProgress(itemId, progress);
             if (progress.status === "completed") {
               get().completeDownload(itemId);
+              notifyHomeDownloadedShelfChanged(get);
             } else if (progress.status === "error" || progress.status === "cancelled") {
               get().removeActiveDownload(itemId);
             }
@@ -272,6 +313,7 @@ export const createDownloadSlice: SliceCreator<DownloadSlice> = (set, get) => ({
         if (progress.status === "completed") {
           log.info(`[DownloadSlice] Download completed for ${itemId}`);
           get().completeDownload(itemId);
+          notifyHomeDownloadedShelfChanged(get);
         } else if (progress.status === "error" || progress.status === "cancelled") {
           log.warn(`[DownloadSlice] Download ${progress.status} for ${itemId}`);
           get().removeActiveDownload(itemId);

@@ -2,12 +2,15 @@ import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { getPlayedChapters, getUpcomingChapters } from "@/db/helpers/chapters";
 import { translate } from "@/i18n";
 import { formatTime } from "@/lib/helpers/formatters";
+import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
-import { playerService } from "@/services/PlayerService";
+import { dispatchPlayerEvent } from "@/services/coordinator/eventBus";
 import { ApiBookChapter } from "@/types/api";
 import { ChapterRow } from "@/types/database";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
+
+const log = logger.forTag("ChapterList");
 
 type ChapterListProps = {
   chapters: ApiBookChapter[];
@@ -65,6 +68,26 @@ export default function ChapterList({
     return (chapterId: number) => playedIds.has(chapterId);
   }, [playedChapters]);
 
+  const handleChapterPress = useCallback(
+    (chapterStart: number) => {
+      if (!libraryItemId) return;
+      // Dispatch LOAD_TRACK with skipSmartRewind=true for all chapter taps.
+      // The coordinator short-circuit handles the paused/already-playing case
+      // (dispatches SEEK then PLAY without re-loading the track).
+      // skipSmartRewind prevents the smart rewind phase after an intentional seek.
+      log.info(`[handleChapterPress] Jumping to chapter at ${chapterStart.toFixed(1)}s`);
+      dispatchPlayerEvent(
+        { type: "LOAD_TRACK", payload: { libraryItemId, startPosition: chapterStart } },
+        {
+          source: "ui",
+          skipSmartRewind: true,
+          jump: { surface: "item_detail", category: "chapter" },
+        }
+      );
+    },
+    [libraryItemId]
+  );
+
   if (chapters.length === 0) {
     return (
       <View>
@@ -75,28 +98,13 @@ export default function ChapterList({
     );
   }
 
-  const handleChapterPress = async (chapterStart: number) => {
-    if (!libraryItemId) return;
-
-    try {
-      // If not currently playing this item, start playback
-      if (!isCurrentlyPlaying) {
-        await playerService.playTrack(libraryItemId);
-        // Small delay to ensure track is loaded before seeking
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-      await playerService.seekTo(chapterStart);
-    } catch (error) {
-      console.error("[ChapterList] Failed to jump to chapter:", error);
-    }
-  };
-
   return (
     <CollapsibleSection title={translate("libraryItem.chapters", { count: chapters.length })}>
       {/* Show expand button if there are played chapters hidden */}
       {playedChapters.length > 0 && !showPlayedChapters && (
         <TouchableOpacity
           onPress={() => setShowPlayedChapters(true)}
+          accessibilityRole="button"
           style={{
             paddingVertical: 12,
             paddingHorizontal: 16,
@@ -117,6 +125,7 @@ export default function ChapterList({
       {playedChapters.length > 0 && showPlayedChapters && (
         <TouchableOpacity
           onPress={() => setShowPlayedChapters(false)}
+          accessibilityRole="button"
           style={{
             paddingVertical: 12,
             paddingHorizontal: 16,
@@ -134,11 +143,22 @@ export default function ChapterList({
       {displayedChapters.map((chapter, index) => {
         const isPlayed = isChapterPlayed(chapter.id);
         const chapterDuration = chapter.end - chapter.start;
+        const isCurrentChapter =
+          isCurrentlyPlaying && currentPosition >= chapter.start && currentPosition < chapter.end;
 
         return (
           <TouchableOpacity
             key={chapter.id}
             onPress={() => handleChapterPress(chapter.start)}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isCurrentChapter }}
+            accessibilityLabel={
+              translate("accessibility.chapterRow", {
+                title: chapter.title,
+                duration: formatTime(chapterDuration),
+              }) + (isCurrentChapter ? `, ${translate("accessibility.currentChapter")}` : "")
+            }
             style={{
               paddingVertical: 8,
               borderBottomWidth: index < displayedChapters.length - 1 ? 1 : 0,

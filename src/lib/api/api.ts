@@ -1,10 +1,12 @@
 import { formatBytes } from "@/lib/helpers/formatters";
 import { logger } from "@/lib/logger";
+import { redactBody } from "@/lib/api/redact";
 import { apiClientService } from "@/services/ApiClientService";
 import DeviceInfo from "react-native-device-info";
 
+const DETAILED_LOG_TAG = "api:fetch:detailed";
 const log = logger.forTag("api:fetch");
-const detailedLog = logger.forTag("api:fetch:detailed");
+const detailedLog = logger.forTag(DETAILED_LOG_TAG);
 
 let cachedUserAgent: string | null = null;
 
@@ -27,6 +29,24 @@ export type ApiFetchOptions = Omit<RequestInit, "signal"> & {
 };
 
 export async function apiFetch(pathOrUrl: string, init?: ApiFetchOptions): Promise<Response> {
+  return apiFetchWithRetryGuard(pathOrUrl, init, /* isRetry */ false);
+}
+
+/**
+ * Internal implementation with a one-retry guard on 401s.
+ *
+ * A 401 triggers at most one refresh + retry cycle. If the retried request
+ * also comes back 401 (e.g. a revoked user, a permission-scoped endpoint, or
+ * a reverse-proxy auth mismatch where /auth/refresh keeps succeeding but the
+ * resource keeps rejecting), that second 401 is returned to the caller as-is
+ * instead of recursing again — otherwise a misbehaving server can drive an
+ * unbounded refresh/retry loop.
+ */
+async function apiFetchWithRetryGuard(
+  pathOrUrl: string,
+  init: ApiFetchOptions | undefined,
+  isRetry: boolean
+): Promise<Response> {
   const url = resolveUrl(pathOrUrl);
   const { auth = true, timeout, headers, ...rest } = init || {};
   const token = apiClientService.getAccessToken();
@@ -49,9 +69,7 @@ export async function apiFetch(pathOrUrl: string, init?: ApiFetchOptions): Promi
   const method = (rest.method || "GET").toUpperCase();
   const startTime = Date.now();
   log.info(`-> ${method} ${scrubUrl(url)}`);
-  detailedLog.info(
-    `-> ${method} ${scrubUrl(url)} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${rest.body}`
-  );
+  logDetailedRequest(method, url, headerObj, rest.body);
 
   try {
     const res = await fetch(url, { ...rest, headers: headerObj, signal: controller.signal });
@@ -60,27 +78,87 @@ export async function apiFetch(pathOrUrl: string, init?: ApiFetchOptions): Promi
     log.info(
       `<- ${res.status} ${method} ${scrubUrl(url)} [${formatBytes(Number(res.headers.get("content-length")))}] [${duration}ms] [${res.headers.get("content-type")}]`
     );
-    detailedLog.info(
-      `<- ${res.status} ${method} ${scrubUrl(url)} headers: ${JSON.stringify(res.headers)} body: ${await res.clone().text()} [${duration}ms]`
-    );
-    if (res.status === 401) {
+    await logDetailedResponse(res, method, url, duration);
+    if (res.status === 401 && !isRetry) {
       log.info("access token expired, refreshing token...");
-      const success = await apiClientService.handleUnauthorized();
-      if (success) {
-        // Retry with fresh token (recursive call will have its own timing)
-        return await apiFetch(pathOrUrl, init);
+      const refreshResult = await apiClientService.handleUnauthorized();
+      if (refreshResult.status === "refreshed") {
+        // Retry once with fresh token. isRetry=true ensures a second 401 is
+        // returned as-is rather than triggering another refresh cycle.
+        return await apiFetchWithRetryGuard(pathOrUrl, init, /* isRetry */ true);
+      }
+      if (refreshResult.status === "transient") {
+        throw refreshResult.error;
+      }
+      if (refreshResult.status === "stale") {
+        throw refreshResult.error;
       }
     }
     if (!res.ok) {
       try {
         const text = await res.clone().text();
-        log.warn(`Response body:\n${text}`);
+        log.warn(`Response body:\n${redactBody(text)}`);
       } catch {}
     }
     return res;
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+/** Stringify a request body for logging, redacting credential fields. Only string
+ * bodies (the only kind this app sends — always JSON.stringify'd) are inspected;
+ * other BodyInit shapes (FormData, Blob, etc.) are never seen by this app but are
+ * logged as a placeholder rather than risking an unredacted dump. */
+function bodyForLog(body: unknown): string {
+  if (typeof body === "string") return redactBody(body);
+  if (body == null) return String(body);
+  return "<non-string body>";
+}
+
+/**
+ * Log the outgoing request at the "api:fetch:detailed" tag, if enabled.
+ *
+ * Guards on logger.isTagEnabled() up front — not just the sublogger's own
+ * internal check — so that when the tag is disabled (the default; see
+ * DEFAULT_DISABLED_TAGS in src/lib/logger/index.ts) we never even construct
+ * the log string, headers, or redacted body.
+ */
+function logDetailedRequest(
+  method: string,
+  url: string,
+  headerObj: Record<string, string>,
+  body: unknown
+): void {
+  if (!logger.isTagEnabled(DETAILED_LOG_TAG)) return;
+  detailedLog.info(
+    `-> ${method} ${scrubUrl(url)} headers: ${JSON.stringify(redactHeaders(headerObj))} body: ${bodyForLog(body)}`
+  );
+}
+
+/**
+ * Log the incoming response at the "api:fetch:detailed" tag, if enabled.
+ *
+ * Guarded the same way as logDetailedRequest — when disabled, this never
+ * clones or reads the response body, which otherwise happens on every single
+ * API response in the app (see Brief D: this used to run unconditionally,
+ * doubling parsing work and briefly holding multi-MB strings during a
+ * full-library sync).
+ */
+async function logDetailedResponse(
+  res: Response,
+  method: string,
+  url: string,
+  duration: number
+): Promise<void> {
+  if (!logger.isTagEnabled(DETAILED_LOG_TAG)) return;
+  // res.headers is RN's fetch Headers object — JSON.stringify(res.headers) yields
+  // "{}" (a no-op), so iterate it into a plain record before logging/redacting.
+  const responseHeaders = redactHeaders(headersToRecord(res.headers));
+  const responseBody = await res.clone().text();
+  detailedLog.info(
+    `<- ${res.status} ${method} ${scrubUrl(url)} headers: ${JSON.stringify(responseHeaders)} body: ${redactBody(responseBody)} [${duration}ms]`
+  );
 }
 
 function mergeHeaders(target: Record<string, string>, source?: HeadersInit): void {
@@ -100,10 +178,12 @@ function mergeHeaders(target: Record<string, string>, source?: HeadersInit): voi
   Object.assign(target, source as Record<string, string>);
 }
 
+const SENSITIVE_HEADERS = ["authorization", "x-refresh-token"];
+
 function redactHeaders(headers: Record<string, string>): Record<string, string> {
   const redacted: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === "authorization") {
+    if (SENSITIVE_HEADERS.includes(key.toLowerCase())) {
       redacted[key] = "<redacted>";
     } else if (key.toLowerCase() === "user-agent" && value === getCustomUserAgent()) {
       redacted[key] = "STD_USER_AGENT";
@@ -112,6 +192,16 @@ function redactHeaders(headers: Record<string, string>): Record<string, string> 
     }
   }
   return redacted;
+}
+
+/** RN's fetch Headers object doesn't JSON.stringify usefully (yields "{}") — iterate
+ * it into a plain record so it can actually be logged (and redacted). */
+function headersToRecord(headers: Headers): Record<string, string> {
+  const record: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    record[key] = value;
+  });
+  return record;
 }
 
 function scrubUrl(url: string): string {

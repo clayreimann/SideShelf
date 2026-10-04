@@ -1,8 +1,10 @@
-import CoverImage from "@/components/ui/CoverImange";
+import CoverImage from "@/components/ui/CoverImage";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { type HomeScreenItem } from "@/db/helpers/homeScreen";
+import { translate } from "@/i18n";
+import { getHomeItemRoute } from "@/lib/tabNavigation";
 import { useThemedStyles } from "@/lib/theme";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
 interface HomeItemProps {
@@ -11,12 +13,24 @@ interface HomeItemProps {
 
 export default function HomeItem({ item }: HomeItemProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { styles, colors } = useThemedStyles();
   return (
     <Pressable
-      onPress={() => router.push(`/home/item/${item.id}`)}
+      onPress={() => router.push(getHomeItemRoute(pathname, item.id))}
+      accessible={true}
       accessibilityRole="button"
-      accessibilityHint={`Open details for ${item.title}`}
+      accessibilityLabel={[
+        item.title,
+        item.authorName,
+        item.seriesName,
+        item.progress !== undefined && item.progress > 0
+          ? translate("accessibility.percentFinished", { percent: Math.round(item.progress * 100) })
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(", ")}
+      accessibilityHint={translate("accessibility.openItemDetails")}
     >
       <View
         style={{
@@ -32,13 +46,11 @@ export default function HomeItem({ item }: HomeItemProps) {
             uri={item.imageUrl ?? null}
             title={item.title}
             fontSize={12}
+            libraryItemId={item.id}
           />
         </View>
         <View style={{ flex: 1, marginLeft: 12, flexDirection: "column" }}>
-          <Text
-            style={[styles.text, { fontWeight: "600", fontSize: 16 }]}
-            numberOfLines={1}
-          >
+          <Text style={[styles.text, { fontWeight: "600", fontSize: 16 }]} numberOfLines={1}>
             {item.title}
           </Text>
           <Text
@@ -49,10 +61,7 @@ export default function HomeItem({ item }: HomeItemProps) {
           </Text>
           {item.seriesName && (
             <Text
-              style={[
-                styles.text,
-                { opacity: 0.6, fontSize: 12, marginTop: 2 },
-              ]}
+              style={[styles.text, { opacity: 0.6, fontSize: 12, marginTop: 2 }]}
               numberOfLines={1}
             >
               {item.seriesName}
@@ -60,11 +69,7 @@ export default function HomeItem({ item }: HomeItemProps) {
           )}
           {item.progress !== undefined && item.progress > 0 && (
             <View style={{ marginTop: 8 }}>
-              <ProgressBar
-                progress={item.progress}
-                variant="small"
-                showPercentage={true}
-              />
+              <ProgressBar progress={item.progress} variant="small" showPercentage={true} />
             </View>
           )}
         </View>

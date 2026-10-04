@@ -1,15 +1,61 @@
 // https://docs.expo.dev/guides/using-eslint/
-const { defineConfig } = require('eslint/config');
-const expoConfig = require('eslint-config-expo/flat');
+const { defineConfig } = require("eslint/config");
+const expoConfig = require("eslint-config-expo/flat");
+const reactNativeA11y = require("eslint-plugin-react-native-a11y");
 
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['dist/*'],
+    ignores: [
+      "coverage/**",
+      "dist/**",
+      ".expo/**",
+      ".claude/**",
+      ".worktrees/**",
+      // Audiobookshelf's own container-generated runtime data and downloaded
+      // demo media. Both are gitignored, but ESLint's flat config does not read
+      // .gitignore — without these, `eslint .` lints ABS's bundled migration
+      // scripts, and whatever a future ABS version ships there could break
+      // `npm run static-analysis`. Our own demo-server source is NOT ignored.
+      "demo-server/data/**",
+      "demo-server/media/**",
+    ],
+  },
+  {
+    files: ["src/__tests__/setup-before.js"],
+    languageOptions: {
+      globals: {
+        jest: "readonly",
+      },
+    },
   },
   {
     rules: {
-      complexity: ['warn', { max: 10 }],
+      complexity: ["warn", { max: 10 }],
+    },
+  },
+  {
+    // Guards against unlabeled touchables shipping after the a11y remediation.
+    // Presence/validity rules are errors; subjective/noisy rules are warn or off.
+    files: ["src/**/*.tsx"],
+    plugins: { "react-native-a11y": reactNativeA11y },
+    rules: {
+      // Requiring an accessibilityHint on every touchable is overly prescriptive
+      // (a good accessibilityLabel is often sufficient) — keep as a nudge only.
+      "react-native-a11y/has-accessibility-hint": "off",
+      "react-native-a11y/has-accessibility-props": "error",
+      "react-native-a11y/has-valid-accessibility-actions": "error",
+      "react-native-a11y/has-valid-accessibility-component-type": "error",
+      "react-native-a11y/has-valid-accessibility-descriptors": "warn",
+      "react-native-a11y/has-valid-accessibility-ignores-invert-colors": "off",
+      "react-native-a11y/has-valid-accessibility-role": "error",
+      "react-native-a11y/has-valid-accessibility-state": "error",
+      "react-native-a11y/has-valid-accessibility-states": "off",
+      "react-native-a11y/has-valid-accessibility-traits": "off",
+      "react-native-a11y/has-valid-accessibility-value": "error",
+      "react-native-a11y/has-valid-important-for-accessibility": "off",
+      // One known pre-existing case in TraceDumps.tsx is tracked separately.
+      "react-native-a11y/no-nested-touchables": "warn",
     },
   },
 ]);

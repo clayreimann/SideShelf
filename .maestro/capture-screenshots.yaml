@@ -1,0 +1,360 @@
+appId: cloud.madtown.sideshelf
+---
+
+# ── Launch + sign in ─────────────────────────────────
+# Paths in runFlow/runScript are relative to THIS file's directory, not the
+# repo root — ".maestro/_login.yaml" would resolve to ".maestro/.maestro/...".
+#
+# clearState wipes the app's stored token, local database, and downloads on
+# every pass, so a capture run never depends on state left by a previous run.
+#
+# This is not belt-and-braces: re-seeding the demo server (or `demo:reset`)
+# rebuilds ABS's user database, which invalidates the token the app has
+# cached. The app then shows Home with a "Session expired" banner and a
+# "Failed to load home screen data" alert — and because it is NOT showing the
+# login screen, _login.yaml correctly skips itself and every later step fails
+# on stale, empty data. Starting clean makes the run hermetic and immune to
+# whatever the server did since last time.
+#
+# The download-seeding block below is gated on the Downloaded shelf, so
+# clearing state simply means it seeds again — which is what we want.
+- launchApp:
+    clearState: true
+- runFlow: _login.yaml
+
+# There used to be a `stopApp` + `launchApp` here, working around issue #11:
+# after a first-ever login the Home screen sat on skeleton placeholders
+# indefinitely, and only quitting and reopening the app made it initialize
+# from the persisted session.
+#
+# REMOVED 2026-08-01, when #11 was fixed. The flow now exercises the real
+# first-login path an App Reviewer will take, which is the whole point — with
+# the restart in place this run could not have told us whether the fix worked.
+# If Home ever goes back to sitting on skeletons here, that is #11 regressing,
+# not a flaky flow: fix the app rather than re-adding the restart.
+#
+# Wait for the app SHELL, not for data. On a cold start the tab bar takes a
+# moment to mount, and the very next step taps "Home" — matching the tab bar
+# label proves navigation is usable without depending on any library or
+# progress sync having finished. (Waiting on synced *data* here is what made
+# earlier revisions of this flow fragile.)
+- extendedWaitUntil:
+    visible: "Library"
+    timeout: 60000
+- waitForAnimationToEnd
+
+# ── Seed downloads (first pass only) ─────────────────
+# Two distinct titles, so the Downloaded shelf photographs as a real shelf
+# rather than one lonely cover.
+#
+# The whole block is gated on the Downloaded shelf being absent, because this
+# flow runs TWICE per pipeline invocation (dark, then light) and downloads
+# persist between passes. Without the gate, the second pass re-opens the
+# action menu on an already-downloaded item, where there is no "Download"
+# entry — and an `optional: true` tap that finds nothing leaves the native
+# menu OPEN, covering the tab bar and breaking every step after it.
+#
+# Deliberately NOT `runFlow: download.yaml`: that file is shared with the
+# regression suite (run-maestro-tests.sh), where its strict, non-optional
+# "Download" tap is the point. Inlining keeps this flow idempotent without
+# weakening that test.
+- tapOn: "Home"
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      notVisible: "Downloaded"
+    commands:
+      # Named titles, not grid indices — see the header comment in
+      # _download-title.yaml. Frame 4 photographs "A Christmas Carol"'s detail
+      # page, so that title being downloaded has to be guaranteed rather than
+      # inherited from the default sort order.
+      - runFlow:
+          file: _download-title.yaml
+          env:
+            TITLE: "Christmas Carol"
+      - runFlow:
+          file: _download-title.yaml
+          env:
+            TITLE: "Princess of Mars"
+
+# ── Home: wait for sync (screenshot happens LATER) ───
+# The Home frame (screenshot-home, frame 1) is captured near the END of this
+# flow, after the app restart below — not here.
+#
+# It used to be captured here, and it came out nearly empty: a single
+# Continue Listening cover on a field of blank space, with no Downloaded and
+# no Listen Again. At this point in a cold run the server progress has only
+# partly synced and the just-triggered downloads have not registered. Frame 1
+# is the most-viewed image in the whole listing, so it has to be shot when the
+# shelves are actually full.
+#
+# Deliberately NO "wait for Continue Listening" here.
+#
+# There used to be one, left over from when frame 1 was captured at this point.
+# It is not just redundant now, it is actively wrong: nothing between here and
+# the Library steps needs Home's shelves, and gating on them made the whole run
+# depend on user PROGRESS having synced — which after a fresh login is exactly
+# what issue #11 makes unreliable. Observed: the dark pass got its progress in
+# time and the light pass did not, so the run failed halfway through with five
+# good frames already captured, while the server had all 6 progress records.
+#
+# The strict shelf assertions live where they matter — immediately before the
+# Home screenshot near the end of this flow, after the app restart and after
+# downloads have settled.
+#
+# The Library steps below wait on `library-item`, which is the real
+# precondition for everything up to the player frames.
+
+# ── Library: grid view ───────────────────────────────
+- tapOn: "Library"
+- waitForAnimationToEnd
+- tapOn: "Library"
+- waitForAnimationToEnd
+# Normalize to grid mode. The toggle button shows the OTHER mode's name.
+# If we're in list mode, "Grid" is visible and tapping it switches to grid.
+# If we're already in grid mode, "Grid" is not in the tree — optional skips it.
+- tapOn:
+    text: "Grid"
+    optional: true
+- waitForAnimationToEnd
+# Clear the search box before photographing the grid.
+#
+# The download-seeding block above reaches its titles through this same box and
+# leaves its last query ("Princess of Mars") sitting in it — the box keeps its
+# text across navigation. Without this, frame 3 photographs a library FILTERED
+# TO ONE BOOK under the caption "Your whole shelf, beautifully browsable",
+# which is the exact opposite of what that frame is selling. Observed on the
+# 2026-08-02 run.
+- tapOn:
+    id: "library-search-input"
+- eraseText: 80
+- hideKeyboard
+- waitForAnimationToEnd
+# Same cold-start reasoning as the Home shelf above: wait for real covers
+# before photographing the grid, or this captures skeleton tiles. Waiting on
+# library-item (a real row) rather than on the search box, since the search
+# box is a list header that can render before any items arrive.
+- extendedWaitUntil:
+    visible:
+      id: "library-item"
+    timeout: 150000
+# Prove the grid is actually FULL, not filtered. Waiting on `library-item`
+# alone is satisfied by a single tile, which is exactly how a leftover search
+# query shipped a one-book "whole shelf" frame. A 6th tile cannot exist in any
+# single-result view, so this assertion distinguishes the two states that the
+# plain wait above cannot tell apart.
+- assertVisible:
+    id: "library-item"
+    index: 5
+- takeScreenshot: screenshot-library-grid
+- runScript: wait.js
+
+# ── Initiate playback ────────────────────────────────
+# No "switch back to grid" step here: the normalization above already left us
+# in grid mode, and the toggle button is labelled with the OTHER mode's name,
+# so "Grid" is not in the tree at this point. (An earlier version of this flow
+# captured a list-view screenshot in between and genuinely needed to switch
+# back; that capture is no longer part of the store set.)
+#
+# Play a MULTI-CHAPTER title, selected by name rather than by index.
+#
+# The player's chapter title is `currentChapter?.chapter.title || "Loading..."`
+# (src/app/FullScreenPlayer/index.tsx), so an item with no chapters shows
+# "Loading..." forever — not a slow load, a permanent state no wait can fix.
+#
+# The Adventures of Sherlock Holmes is the hero book for frames 2 and 5: it is
+# `mode: "full"` in demo-server/library.json (12 chapters), and archive.org
+# gives it real chapter titles — "A Scandal in Bohemia", "The Red-Headed
+# League" — which is what makes the player frame show a genuine chapter name
+# and "Show Chapters (12)" rather than a bare "Chapter 1".
+#
+# Reached via the library search box rather than by scrolling to the title:
+# grid tiles truncate their labels (`numberOfLines` in
+# src/components/library/LibraryItem.tsx), so scrollUntilVisible on the full
+# title never matches. Searching filters the list to a single result, which
+# makes `library-item index: 0` unambiguous — no dependence on sort order or
+# how far down the grid the book happens to sit.
+#
+# "Alice" is locale-safe: it comes from library content, not translated UI.
+- tapOn:
+    id: "library-search-input"
+# Clear first. The download-seeding block above now reaches its titles through
+# this same search box (_download-title.yaml), and the box KEEPS its text when
+# you navigate away and back — so without this erase, "Adventures of Sherlock"
+# is appended to whatever that block last typed ("Princess of Mars"), matches
+# nothing, and the flow dies here on `library-item` not being found. That is
+# exactly how this broke on 2026-08-01.
+- eraseText: 80
+# "Adventures of Sherlock" rather than "Sherlock": the demo library holds
+# three Holmes volumes (Adventures / Memoirs / Return), and a search matching
+# more than one would make `library-item index: 0` ambiguous. This phrase
+# matches exactly one title.
+- inputText: "Adventures of Sherlock"
+- waitForAnimationToEnd
+# Dismiss the keyboard before tapping the result. With the keyboard up, the
+# first tap outside the text field is consumed dismissing it rather than
+# activating the tile — the flow then sat on the filtered library list
+# waiting for a detail page it never opened.
+- hideKeyboard
+- waitForAnimationToEnd
+- tapOn:
+    id: "library-item"
+    index: 0
+- waitForAnimationToEnd
+# Start playback via the button's stable testID, not its label.
+#
+# getPlayButtonState (src/lib/helpers/playbackAvailability.ts) returns FOUR
+# variants for this one button: "Loading..." / "Sign in to stream" /
+# "Offline" — all DISABLED — and "Play" when it is finally usable. On a
+# freshly-opened detail page it starts disabled and reads "Loading...", so the
+# old `tapOn: text "Play", optional: true` matched nothing, silently skipped,
+# and playback never started — leaving no floating player for the next step.
+#
+# So: wait for the enabled state, then tap by testID. Waiting on the visible
+# text "Play" is the one locale-dependent matcher kept in this flow — Maestro
+# cannot express "wait until this element is not disabled", and the label is
+# the only observable signal of the enabled state. The store set is captured
+# in English, so this is acceptable; the TAP itself uses the testID so it
+# stays correct regardless.
+- extendedWaitUntil:
+    visible: "Play"
+    timeout: 30000
+- tapOn:
+    id: "play-resume-button"
+- waitForAnimationToEnd
+
+# ── Full-screen player ───────────────────────────────
+# FloatingPlayer hides itself on the item detail page (/library/[item]).
+# Navigate to Home first so the component mounts before we tap it.
+- tapOn: "Home"
+- waitForAnimationToEnd
+- tapOn:
+    id: "floating-player"
+- waitForAnimationToEnd
+# Wait out the track-loading state before photographing the player. The
+# chapter title falls back to the literal "Loading..." until the track
+# resolves (src/app/FullScreenPlayer/index.tsx: `currentChapter?.chapter.title
+# || "Loading..."`), and a store screenshot showing "Loading..." instead of a
+# real chapter title is useless. Bounded, and optional so a fast load that
+# never renders the placeholder doesn't stall the flow.
+- extendedWaitUntil:
+    notVisible: "Loading..."
+    timeout: 20000
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: screenshot-player
+- runScript: wait.js
+
+# ── Sleep timer ───────────────────────────────────────
+# SleepTimerControl carries a stable testID so this match survives a
+# Spanish locale -- the "Sleep Timer" section header above it is a
+# hardcoded English string we deliberately do NOT match against.
+- tapOn:
+    id: "sleep-timer-control"
+- waitForAnimationToEnd
+- tapOn:
+    text: "15 minutes"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: screenshot-sleep-timer
+- runScript: wait.js
+
+# ── Home / Downloads (scrolled, not navigated) ───────
+# Dismiss the full-screen player modal, then navigate to the Home tab (the
+# tab bar is hidden while the modal is open).
+#
+# Matched by testID, not text: the dismiss control is a chevron-down ICON with
+# no visible label (src/app/FullScreenPlayer/index.tsx: testID
+# "player-done-button"). The old `tapOn: "Done"` described a header button
+# that no longer exists in this UI.
+- tapOn:
+    id: "player-done-button"
+- waitForAnimationToEnd
+# There used to be a `stopApp` + `launchApp` here too, working around a bug
+# distinct from #11: downloads that finished DURING a session never appeared
+# in Home's "Downloaded" shelf — the files were genuinely on disk while the
+# shelf stayed absent, and a tab round-trip did not refresh it. homeSlice
+# cached its own DB read for 5 minutes and nothing told it a download had
+# completed, so only a fresh launch (which re-initializes homeSlice) picked
+# them up.
+#
+# REMOVED 2026-08-01, when downloadSlice started notifying homeSlice on
+# completion. As above, this flow now proves the fix rather than hiding it:
+# the non-optional wait below fails loudly if the shelf goes stale again.
+- tapOn: "Home"
+- waitForAnimationToEnd
+# Poll for the shelf rather than scrolling straight away: on a cleared
+# install the downloads were only kicked off at the start of this run, so
+# they may still be in flight. Non-optional — a missing Downloaded shelf
+# means frame 4 would be wrong, and that must fail loudly.
+- extendedWaitUntil:
+    visible: "Downloaded"
+    timeout: 90000
+
+# Frame 1 (hero): Home at the TOP of the shelf list, captured here rather than
+# earlier in the flow so Continue Listening, Downloaded and Listen Again are
+# all populated. Assert two distinct shelves first — one lonely cover on an
+# empty screen is exactly what this frame looked like when it was captured too
+# early, and that would still have passed a single-shelf assertion.
+- assertVisible: "Continue Listening"
+- assertVisible: "Downloaded"
+- takeScreenshot: screenshot-home
+- runScript: wait.js
+
+# ── Frame 4: offline / downloaded ─────────────────────
+# This used to be "the same Home screen, scrolled down to the Downloaded
+# shelf". It produced an image PIXEL-IDENTICAL to frame 1: the assertion
+# above already proves "Downloaded" is on screen, so scrollUntilVisible
+# matched immediately and scrolled nothing. Home renders at most three
+# shelves (continueListening / downloaded / listenAgain — see
+# home.sections.* in src/i18n/locales/en.ts), so with this demo library it
+# never overflows one screen and there is nothing to scroll to. The store
+# gallery would have shipped the same picture twice under two captions.
+#
+# The item detail page is the better home for "Take your library offline"
+# anyway: MetadataSection renders an explicit "⬇ Downloaded" badge
+# (src/components/library/LibraryItemDetail/MetadataSection.tsx, the
+# libraryItem.downloaded key), so the frame SHOWS the offline state as text
+# rather than implying it. It is also a surface no other frame uses.
+#
+# Reached by search for the same reason the player frames are: grid tiles
+# truncate their labels, so scrollUntilVisible on a full title never matches.
+- tapOn: "Library"
+- waitForAnimationToEnd
+- tapOn: "Library"
+- waitForAnimationToEnd
+- tapOn:
+    id: "library-search-input"
+- eraseText: 80
+- inputText: "Christmas Carol"
+- waitForAnimationToEnd
+- hideKeyboard
+- waitForAnimationToEnd
+- tapOn:
+    id: "library-item"
+    index: 0
+- waitForAnimationToEnd
+# Non-optional: if this title is not actually downloaded the frame is wrong,
+# and wrong must fail loudly rather than quietly shipping a generic detail
+# page under an offline caption.
+- extendedWaitUntil:
+    visible: "⬇ Downloaded"
+    timeout: 30000
+- takeScreenshot: screenshot-downloads
+- runScript: wait.js
+
+# ── Series ────────────────────────────────────────────
+- tapOn: "Series"
+- waitForAnimationToEnd
+- tapOn: "Series"
+- waitForAnimationToEnd
+# Series is populated by its own fetch, separate from Home and Library, so it
+# needs its own cold-start wait before the assertion below.
+- extendedWaitUntil:
+    visible:
+      id: "series-item"
+    timeout: 150000
+- assertVisible:
+    id: "series-item"
+- takeScreenshot: screenshot-series
+- runScript: wait.js

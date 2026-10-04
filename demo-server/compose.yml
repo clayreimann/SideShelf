@@ -1,0 +1,24 @@
+# Demo Audiobookshelf server for SideShelf: screenshots, manual compatibility
+# testing against pinned ABS versions, and the instance App Review logs into.
+#
+# ABS_VERSION defaults come from the compatibility manifest at
+# docs/superpowers/plans/2026-07-27-audiobookshelf-api-compatibility.md
+# (Task 1 JSON block): minimumServerVersion "2.28.0" is the oldest supported
+# server, releaseTestVersions ["2.28.0", "2.35.1"] are the two versions CI
+# proves compatibility against. Pin ABS_VERSION to one of those two when
+# testing compatibility; see demo-server/.env.example.
+#
+# Binds to 127.0.0.1 by default — this is a LOCAL-ONLY demo server. Publicly
+# exposing it (e.g. for App Review) is a separate, deliberate hosting step;
+# see demo-server/README.md.
+
+services:
+  audiobookshelf:
+    image: ghcr.io/advplyr/audiobookshelf:${ABS_VERSION:?Set ABS_VERSION in demo-server/.env, e.g. 2.35.1}
+    ports:
+      - "127.0.0.1:${ABS_PORT:-13378}:80"
+    volumes:
+      - ./media/audiobooks:/audiobooks
+      - ./data/config:/config
+      - ./data/metadata:/metadata
+    restart: unless-stopped
