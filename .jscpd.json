@@ -1,0 +1,11 @@
+{
+  "path": ["src"],
+  "format": ["typescript", "tsx", "javascript"],
+  "ignore": ["**/__tests__/**", "**/db/migrations/**"],
+  "minTokens": 50,
+  "threshold": 3.6,
+  "reporters": ["console", "html", "markdown"],
+  "output": "reports/jscpd",
+  "absolute": false,
+  "gitignore": true
+}

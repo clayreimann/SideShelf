@@ -1,0 +1,400 @@
+{
+  "src/app/(tabs)/more/bundle-loader.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 33
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 504
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 454
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 19
+    }
+  },
+  "src/app/(tabs)/more/index.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 268
+    }
+  },
+  "src/app/(tabs)/more/logger-settings.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 348
+    }
+  },
+  "src/app/(tabs)/more/logs.tsx": {
+    "max-lines": {
+      "count": 1,
+      "worst": 671
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 313
+    }
+  },
+  "src/app/(tabs)/more/me.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 23
+    }
+  },
+  "src/app/(tabs)/more/settings.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 385
+    }
+  },
+  "src/app/(tabs)/more/storage.tsx": {
+    "max-lines": {
+      "count": 1,
+      "worst": 609
+    },
+    "max-lines-per-function": {
+      "count": 2,
+      "worst": 471
+    }
+  },
+  "src/app/(tabs)/more/tab-bar-settings.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 241
+    }
+  },
+  "src/app/(tabs)/series/[seriesId]/index.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 263
+    }
+  },
+  "src/app/FullScreenPlayer/index.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 17
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 363
+    }
+  },
+  "src/app/_layout.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 242
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 2,
+      "worst": 20
+    }
+  },
+  "src/components/diagnostics/CoordinatorDiagnostics.tsx": {
+    "max-lines": {
+      "count": 1,
+      "worst": 531
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 284
+    }
+  },
+  "src/components/library/LibraryItemDetail.tsx": {
+    "complexity": {
+      "count": 2,
+      "worst": 50
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 441
+    }
+  },
+  "src/components/library/LibraryItemDetail/ConsolidatedPlayerControls.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 17
+    }
+  },
+  "src/components/library/LibraryItemDetail/DownloadProgressView.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 41
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 208
+    }
+  },
+  "src/components/library/LibraryItemList.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 19
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 18
+    }
+  },
+  "src/components/ui/FloatingPlayer.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/components/ui/ProgressBar.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 33
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 228
+    }
+  },
+  "src/db/helpers/fullLibraryItems.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 17
+    }
+  },
+  "src/db/helpers/libraryItems.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/db/helpers/localListeningSessions.ts": {
+    "max-params": {
+      "count": 2,
+      "worst": 7
+    }
+  },
+  "src/db/helpers/users.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 24
+    }
+  },
+  "src/lib/api/api.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 17
+    }
+  },
+  "src/lib/api/endpoints.ts": {
+    "max-params": {
+      "count": 1,
+      "worst": 5
+    }
+  },
+  "src/lib/fileLifecycleManager.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 20
+    },
+    "max-depth": {
+      "count": 4,
+      "worst": 5
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 2,
+      "worst": 36
+    }
+  },
+  "src/lib/logger/index.ts": {
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 18
+    }
+  },
+  "src/lib/orphanScanner.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 18
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 31
+    }
+  },
+  "src/lib/smartRewind.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 18
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 23
+    }
+  },
+  "src/lib/theme.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 20
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 19
+    }
+  },
+  "src/services/DownloadService.ts": {
+    "max-lines": {
+      "count": 1,
+      "worst": 790
+    },
+    "max-params": {
+      "count": 1,
+      "worst": 9
+    }
+  },
+  "src/services/PlayerBackgroundService.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 42
+    },
+    "max-depth": {
+      "count": 4,
+      "worst": 5
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 718
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 77
+    }
+  },
+  "src/services/ProgressService.ts": {
+    "complexity": {
+      "count": 3,
+      "worst": 31
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 835
+    },
+    "max-params": {
+      "count": 2,
+      "worst": 8
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 3,
+      "worst": 35
+    }
+  },
+  "src/services/coordinator/PlayerStateCoordinator.ts": {
+    "complexity": {
+      "count": 3,
+      "worst": 34
+    },
+    "max-depth": {
+      "count": 4,
+      "worst": 7
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 653
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 2,
+      "worst": 71
+    }
+  },
+  "src/services/download/DownloadRepairCollaborator.ts": {
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/services/player/BackgroundReconnectCollaborator.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 20
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 22
+    }
+  },
+  "src/services/player/ProgressRestoreCollaborator.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 21
+    }
+  },
+  "src/services/player/TrackLoadingCollaborator.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 30
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 2,
+      "worst": 38
+    }
+  },
+  "src/stores/appStore.ts": {
+    "max-lines": {
+      "count": 1,
+      "worst": 705
+    }
+  },
+  "src/stores/slices/downloadSlice.ts": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 253
+    }
+  },
+  "src/stores/slices/libraryItemDetailsSlice.ts": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 261
+    }
+  },
+  "src/stores/slices/librarySlice.ts": {
+    "max-lines": {
+      "count": 1,
+      "worst": 695
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 615
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/stores/slices/playerSlice.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 36
+    },
+    "max-depth": {
+      "count": 3,
+      "worst": 6
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 527
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 471
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 71
+    }
+  },
+  "src/stores/slices/settingsSlice.ts": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 308
+    }
+  }
+}
