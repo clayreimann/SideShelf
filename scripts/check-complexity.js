@@ -36,7 +36,8 @@ async function collect() {
   const results = await eslint.lintFiles(["src"]);
   const violations = [];
   for (const result of results) {
-    const file = path.relative(ROOT, result.filePath);
+    // Baseline keys use "/" so they match across Windows and POSIX.
+    const file = path.relative(ROOT, result.filePath).split(path.sep).join("/");
     for (const msg of result.messages) {
       if (msg.fatal) throw new Error(`${file}:${msg.line} ${msg.message}`);
       if (!CHECKED_RULES.has(msg.ruleId)) continue;
