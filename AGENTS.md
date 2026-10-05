@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Guidance for AI coding agents (Claude Code, Codex, etc.) working in this repository. `CLAUDE.md` imports this file — edit here, not there.
 
 ## Project Overview
 
@@ -10,11 +10,14 @@ React Native app built with Expo for Audiobookshelf — a self-hosted audiobook/
 
 ```bash
 npm test                                    # Run all tests
-jest path/to/file.test.ts                  # Run single test file
-jest --findRelatedTests path/to/file.ts    # Run tests related to a file
+npx jest path/to/file.test.ts              # Run single test file
+npx jest --findRelatedTests path/to/file.ts # Run tests related to a file
+npm run lint                               # ESLint
+npm run typecheck                          # tsc --noEmit (regenerates Expo types first)
+npm run check:circular                     # dpdm circular-import check with the documented allowlist
+npm run static-analysis                    # typecheck + lint + check:circular — what CI runs on every PR
 npm run drizzle:generate                   # Generate migrations after schema changes
-npm run lint                               # Run ESLint
-npx dpdm --circular src/services/X.ts     # Check for circular import cycles
+npx dpdm --circular src/services/X.ts     # Ad-hoc cycle check for a single file
 
 # Log analysis (queries logs/ directory — all .txt + trace-dump-*.json files)
 uv run scripts/query-logs.py --schema                        # Show tables and columns
@@ -22,6 +25,8 @@ uv run scripts/query-logs.py --list                          # List available lo
 uv run scripts/query-logs.py "SELECT ..."                    # SQL against logs, spans, trace_events
 uv run scripts/query-logs.py --dir /path "SELECT ..."        # Use a different directory
 ```
+
+Before finishing a change, run `npm run static-analysis` and the related tests. The pre-commit hook (husky + lint-staged) runs Prettier and `jest --findRelatedTests` on staged files, so commits fail if related tests fail.
 
 ## Architecture
 
@@ -69,7 +74,7 @@ Circular imports cause uninitialized values at runtime. Never allow them:
 
 - **Never import from `@/db/helpers` barrel inside `src/services/`** — import from the specific file (e.g., `@/db/helpers/tokens`)
 - When splitting a service, helpers must take explicit arguments — never call `ServiceClass.getInstance()` inside a helper (creates a hidden singleton cycle)
-- Verify with `npx dpdm --circular src/services/PlayerService.ts` before and after any service file split
+- Verify with `npm run check:circular` before and after any service file split
 - Use `await import()` only as a last resort for mutual service dependencies; document the reason
 
 ### Zustand Slices
@@ -99,11 +104,20 @@ Circular imports cause uninitialized values at runtime. Never allow them:
 ### TypeScript & Imports
 
 - Use `@/` for all imports (maps to `src/`) — never relative paths
+- Imports go at the top of the file as static `import` statements — no `await require()` / inline `require()` except as a documented circular-import workaround
+- Document exported types with JSDoc
 - Strict mode enabled — no `any` without a comment explaining why
 - File naming: Services → PascalCase + `Service.ts`; slices → camelCase + `Slice.ts`; DB helpers → camelCase plural; components → PascalCase
 - Type naming: `{Domain}SliceState`, `{Domain}SliceActions`, `{Entity}Row`, `Api{Action}{Entity}`
 - Private service methods: underscore prefix (`_setCurrentTrack`)
 - Constants: `UPPER_SNAKE_CASE`
+
+### Accessibility
+
+- **Icon-only buttons: use `IconButton`** (`@/components/ui/IconButton`) — never a raw `Pressable`. Its required `accessibilityLabel` prop makes unlabeled buttons a compile error; pass platform icons as children
+- **Selection/option rows: use `OptionRow`** (`@/components/ui/OptionRow`) — its `selected` prop drives the checkmark and `accessibilityState.selected` together
+- ESLint enforces a11y props on all touchables (`eslint-plugin-react-native-a11y`); label strings live in the `accessibility.*` i18n namespace (en + es key sets must match or tsc fails)
+- Collapsing a row with `accessible={true}` swallows interactive descendants — never collapse a container that has buttons inside it
 
 ### Logging
 
@@ -118,7 +132,8 @@ log.info("[functionName] description");
 
 - Define typed endpoint functions in `src/lib/api/endpoints.ts` using `apiFetch()`
 - All authenticated requests go through `ApiClientService`
-- API docs: https://api.audiobookshelf.org/
+- API docs: https://api.audiobookshelf.org/ — consult these when asked about "the API", "ABS docs", or "the audiobookshelf API"
+- Real response samples live in `api-response-samples/` — use them for fixtures and to check field shapes
 
 ## Testing
 

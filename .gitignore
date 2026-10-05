@@ -62,3 +62,6 @@ prompt.md
 demo-server/media/
 demo-server/data/
 demo-server/.env
+
+# per-developer editor/agent config
+.cursor/

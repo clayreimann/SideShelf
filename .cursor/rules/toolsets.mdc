@@ -1,7 +1,0 @@
----
-description: How to get node tooling
-globs:
-alwaysApply: true
----
-
-Use `mise` to get development tooling.
