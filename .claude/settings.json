@@ -8,6 +8,7 @@
       "Bash(npm run typecheck:*)",
       "Bash(npm run check:circular:*)",
       "Bash(npm run static-analysis:*)",
+      "Bash(npm run quality:*)",
       "Bash(npm run drizzle:generate:*)",
       "Bash(npx jest:*)",
       "Bash(npx eslint:*)",

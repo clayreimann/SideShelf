@@ -16,6 +16,7 @@ npm run lint                               # ESLint
 npm run typecheck                          # tsc --noEmit (regenerates Expo types first)
 npm run check:circular                     # dpdm circular-import check with the documented allowlist
 npm run static-analysis                    # typecheck + lint + check:circular — what CI runs on every PR
+npm run quality                            # complexity (vs .github/quality baseline) + duplication (jscpd) — also a CI gate
 npm run drizzle:generate                   # Generate migrations after schema changes
 npx dpdm --circular src/services/X.ts     # Ad-hoc cycle check for a single file
 

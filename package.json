@@ -28,7 +28,6 @@
     "ios:device": "bash scripts/build-device.sh",
     "web": "expo start --web",
     "lint": "eslint .",
-    "lint:complexity": "npx eslint . --ext .ts,.tsx,.js,.jsx --format json --output-file eslint-report.json || true",
     "test": "jest --watchAll=false",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -44,7 +43,11 @@
     "demo:up": "docker compose -f demo-server/compose.yml up -d",
     "demo:seed": "node demo-server/seed.mjs",
     "demo:down": "docker compose -f demo-server/compose.yml down",
-    "demo:reset": "docker compose -f demo-server/compose.yml down --volumes"
+    "demo:reset": "docker compose -f demo-server/compose.yml down --volumes",
+    "quality": "npm run quality:complexity && npm run quality:duplication",
+    "quality:complexity": "node scripts/check-complexity.js",
+    "quality:baseline": "node scripts/check-complexity.js --update",
+    "quality:duplication": "jscpd"
   },
   "dependencies": {
     "@douglowder/expo-av-route-picker-view": "^0.0.5",
@@ -116,10 +119,12 @@
     "eslint-config-expo": "~10.0.0",
     "eslint-plugin-prettier": "^5.5.4",
     "eslint-plugin-react-native-a11y": "^3.5.1",
+    "eslint-plugin-sonarjs": "^4.2.2",
     "expo-sqlite-mock": "^3.0.0",
     "jest": "~29.7.0",
     "jest-expo": "~54.0.13",
     "jest-html-reporter": "^4.3.0",
+    "jscpd": "^5.4.0",
     "lint-staged": "^16.2.6",
     "prettier": "^3.6.2",
     "typescript": "~5.9.2"

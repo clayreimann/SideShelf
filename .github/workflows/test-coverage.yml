@@ -36,10 +36,6 @@ jobs:
           npm run test:coverage 2>&1 | tee coverage-output.txt
           exit ${PIPESTATUS[0]}
 
-      - name: Run complexity check
-        run: npm run lint:complexity
-        continue-on-error: true
-
       - name: Extract coverage summary
         id: coverage
         if: always()
@@ -206,7 +202,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: |
-            coverage/
-            eslint-report.json
+          path: coverage/
           retention-days: 30

@@ -2,12 +2,14 @@
 const { defineConfig } = require("eslint/config");
 const expoConfig = require("eslint-config-expo/flat");
 const reactNativeA11y = require("eslint-plugin-react-native-a11y");
+const globals = require("globals");
 
 module.exports = defineConfig([
   expoConfig,
   {
     ignores: [
       "coverage/**",
+      "reports/**",
       "dist/**",
       ".expo/**",
       ".claude/**",
@@ -28,6 +30,10 @@ module.exports = defineConfig([
         jest: "readonly",
       },
     },
+  },
+  {
+    files: ["scripts/**/*.js"],
+    languageOptions: { globals: globals.node },
   },
   {
     rules: {
