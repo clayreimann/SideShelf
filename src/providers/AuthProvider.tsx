@@ -146,14 +146,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAuthenticated = authStatus === "authenticated";
 
   const clearUserData = useCallback(async () => {
-    const store = useAppStore.getState();
-    store.resetLibrary();
-    store.resetSeries();
-    store.resetAuthors();
-    store.resetItemDetails();
-    store.resetUserProfile();
-    store.resetHome();
-    await wipeUserData();
+    // Wipe before resetting slices: a reset slice re-initializes from the DB immediately,
+    // so resetting first would reload the previous session's rows (e.g. its libraries).
+    try {
+      await wipeUserData();
+    } finally {
+      const store = useAppStore.getState();
+      store.resetLibrary();
+      store.resetSeries();
+      store.resetAuthors();
+      store.resetItemDetails();
+      store.resetUserProfile();
+      store.resetHome();
+    }
   }, []);
 
   const clearCredentials = useCallback(async () => {

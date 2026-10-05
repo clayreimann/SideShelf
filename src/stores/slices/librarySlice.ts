@@ -11,6 +11,7 @@
 
 import { processFullLibraryItems } from "@/db/helpers/fullLibraryItems";
 import {
+  deleteLibrariesNotIn,
   getAllLibraries,
   getLibraryById,
   LibraryRow,
@@ -203,10 +204,16 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
           libraries = await get()._refetchLibraries();
         }
 
-        // If no library is selected but we have libraries, select the first one by display order
-        let finalSelectedLibraryId = selectedLibraryId;
+        // A persisted selection that is not in the cached library list is stale (e.g. it
+        // belongs to a previous server) — discard it rather than leaving an unusable selection.
         let finalSelectedLibrary = libraries.find((l) => l.id == selectedLibraryId);
-        if (!selectedLibraryId && libraries.length > 0) {
+        let finalSelectedLibraryId = finalSelectedLibrary ? selectedLibraryId : null;
+        if (selectedLibraryId && !finalSelectedLibrary) {
+          log.info(` Discarding stale persisted library selection: ${selectedLibraryId}`);
+        }
+
+        // If no library is selected but we have libraries, select the first one by display order
+        if (!finalSelectedLibraryId && libraries.length > 0) {
           // Sort by display order and select first
           const sortedLibraries = [...libraries].sort((a, b) => {
             const orderA = a.displayOrder ?? Number.MAX_SAFE_INTEGER;
@@ -493,15 +500,45 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
       // Marshal and store in database
       const libraryRows = marshalLibrariesFromResponse(response);
       await upsertLibraries(libraryRows);
+      // Drop libraries the server no longer reports (deleted, or left over from another server)
+      await deleteLibrariesNotIn(libraryRows.map((row) => row.id));
 
       // Get updated libraries from database
       const libraries = await getAllLibraries();
+      const currentSelectedId = get().library.selectedLibraryId;
+      const currentSelected = currentSelectedId
+        ? libraries.find((l) => l.id === currentSelectedId)
+        : undefined;
       set((state: LibrarySlice) => ({
         ...state,
-        library: { ...state.library, libraries },
+        library: {
+          ...state.library,
+          libraries,
+          // Keep the selected row in sync with the refreshed data (e.g. renamed library)
+          ...(currentSelected ? { selectedLibrary: currentSelected } : {}),
+        },
       }));
 
-      if (!state.library.selectedLibraryId && libraries.length > 0) {
+      if (currentSelectedId && !currentSelected) {
+        log.info(` Selected library ${currentSelectedId} no longer exists on server`);
+        set((state: LibrarySlice) => ({
+          ...state,
+          library: {
+            ...state.library,
+            selectedLibraryId: null,
+            selectedLibrary: null,
+            rawItems: [],
+            items: [],
+          },
+        }));
+        try {
+          await AsyncStorage.removeItem(STORAGE_KEYS.selectedLibraryId);
+        } catch (error) {
+          log.error(" Failed to clear persisted library selection:", error as Error);
+        }
+      }
+
+      if (!currentSelected && libraries.length > 0) {
         // If no library is selected but we have libraries, select the first one by display order
         log.info(" Defaulting to first library by display order");
         const sortedLibraries = [...libraries].sort((a, b) => {
@@ -518,6 +555,12 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
             selectedLibrary,
           },
         }));
+
+        try {
+          await AsyncStorage.setItem(STORAGE_KEYS.selectedLibraryId, selectedLibrary.id);
+        } catch (error) {
+          log.error(" Failed to persist auto-selected library:", error as Error);
+        }
 
         await get()._loadCachedItems();
       }
@@ -973,6 +1016,11 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
       ...state,
       ...initialLibraryState,
     }));
+    // The persisted selection belongs to the session being reset; initializeLibrarySlice
+    // also discards a selection that is missing from the library cache.
+    AsyncStorage.removeItem(STORAGE_KEYS.selectedLibraryId).catch((error: unknown) => {
+      log.error(" Failed to clear persisted library selection:", error as Error);
+    });
   },
 
   /**

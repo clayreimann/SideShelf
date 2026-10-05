@@ -33,6 +33,7 @@ jest.mock("@/lib/api/endpoints", () => ({
 
 // Mock database helpers
 jest.mock("@/db/helpers/libraries", () => ({
+  deleteLibrariesNotIn: jest.fn(),
   getAllLibraries: jest.fn(),
   getLibraryById: jest.fn(),
   marshalLibrariesFromResponse: jest.fn(),
@@ -75,6 +76,7 @@ describe("LibrarySlice", () => {
     fetchLibraryItemsBatch,
   } = require("@/lib/api/endpoints");
   const {
+    deleteLibrariesNotIn,
     getAllLibraries,
     getLibraryById,
     marshalLibrariesFromResponse,
@@ -117,6 +119,8 @@ describe("LibrarySlice", () => {
     getLibraryById.mockResolvedValue(null);
     marshalLibrariesFromResponse.mockReturnValue([]);
     upsertLibraries.mockResolvedValue();
+    deleteLibrariesNotIn.mockResolvedValue();
+    mockedAsyncStorage.removeItem.mockResolvedValue();
 
     getLibraryItemsForList.mockResolvedValue([]);
     getLibraryItemsNeedingRefresh.mockResolvedValue([]);
@@ -240,6 +244,19 @@ describe("LibrarySlice", () => {
    * _onTransitionToReady afterward. This is what produces "no library is selected by
    * default" after a first-ever login.
    */
+  describe("initializeLibrarySlice — stale persisted selection", () => {
+    it("leaves nothing selected when the stored library ID is stale and the cache is empty", async () => {
+      mockedAsyncStorage.getItem.mockImplementation(async (key: string) =>
+        key === STORAGE_KEYS.selectedLibraryId ? "old-server-lib" : null
+      );
+      getAllLibraries.mockResolvedValue([]);
+
+      await store.getState().initializeLibrarySlice(false, true);
+
+      expect(store.getState().library.selectedLibraryId).toBeNull();
+    });
+  });
+
   describe("initializeLibrarySlice — fresh-login race", () => {
     it("does not let a slow pre-auth cache load clobber a selection made by a concurrent login", async () => {
       // Simulate the pre-auth initializeLibrarySlice(false, true) call's local DB read
@@ -439,6 +456,7 @@ describe("LibrarySlice", () => {
       expect(state.library.libraries).toEqual([]);
       expect(state.library.readinessState).toBe("UNINITIALIZED");
       expect(state.library.operationState).toBe("IDLE");
+      expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith(STORAGE_KEYS.selectedLibraryId);
     });
   });
 
@@ -711,6 +729,64 @@ describe("LibrarySlice", () => {
       const state = store.getState();
       expect(state.library.selectedLibraryId).toBe("lib-1");
       expect(state.library.selectedLibrary).toEqual(mockLibraryRow);
+    });
+
+    it("removes libraries the server no longer reports", async () => {
+      marshalLibrariesFromResponse.mockReturnValue([mockPodcastLibraryRow]);
+      getAllLibraries.mockResolvedValue([mockPodcastLibraryRow]);
+
+      await (store.getState() as any)._refetchLibraries();
+
+      expect(deleteLibrariesNotIn).toHaveBeenCalledWith(["lib-2"]);
+      expect(store.getState().library.libraries).toEqual([mockPodcastLibraryRow]);
+    });
+
+    it("replaces a selection that no longer exists on the server and persists the new one", async () => {
+      store.setState((state) => ({
+        ...state,
+        library: {
+          ...state.library,
+          selectedLibraryId: "old-server-lib",
+          selectedLibrary: { ...mockLibraryRow, id: "old-server-lib" },
+        },
+      }));
+      marshalLibrariesFromResponse.mockReturnValue([mockPodcastLibraryRow]);
+      getAllLibraries.mockResolvedValue([mockPodcastLibraryRow]);
+
+      await (store.getState() as any)._refetchLibraries();
+
+      const state = store.getState();
+      expect(state.library.selectedLibraryId).toBe("lib-2");
+      expect(state.library.selectedLibrary).toEqual(mockPodcastLibraryRow);
+      expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
+        STORAGE_KEYS.selectedLibraryId,
+        "lib-2"
+      );
+    });
+
+    it("clears the selection when the server reports no libraries", async () => {
+      marshalLibrariesFromResponse.mockReturnValue([]);
+      getAllLibraries.mockResolvedValue([]);
+
+      await (store.getState() as any)._refetchLibraries();
+
+      const state = store.getState();
+      expect(state.library.selectedLibraryId).toBeNull();
+      expect(state.library.selectedLibrary).toBeNull();
+      expect(state.library.items).toEqual([]);
+      expect(mockedAsyncStorage.removeItem).toHaveBeenCalledWith(STORAGE_KEYS.selectedLibraryId);
+    });
+
+    it("keeps the selected library row in sync with refreshed data", async () => {
+      const renamed = { ...mockLibraryRow, name: "Renamed" };
+      marshalLibrariesFromResponse.mockReturnValue([renamed]);
+      getAllLibraries.mockResolvedValue([renamed]);
+
+      await (store.getState() as any)._refetchLibraries();
+
+      const state = store.getState();
+      expect(state.library.selectedLibraryId).toBe("lib-1");
+      expect(state.library.selectedLibrary).toEqual(renamed);
     });
 
     it("should not fetch if not ready", async () => {
@@ -1131,9 +1207,9 @@ describe("LibrarySlice", () => {
       await store.getState().initializeLibrarySlice(true, true);
 
       const state = store.getState();
-      // Should have the non-existent ID from storage but no selectedLibrary object
-      expect(state.library.selectedLibraryId).toBe("non-existent-lib");
-      expect(state.library.selectedLibrary).toBeUndefined();
+      // A stale stored ID is discarded in favor of the first library by display order
+      expect(state.library.selectedLibraryId).toBe("lib-1");
+      expect(state.library.selectedLibrary).toEqual(mockLibraryRow);
     });
 
     it("should refresh libraries and items during refresh", async () => {

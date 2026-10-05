@@ -9,7 +9,7 @@
  *   media_progress, local_progress_snapshots, local_listening_sessions,
  *   progress_sync_outbox, library_items, media_metadata, audio_files, chapters,
  *   authors, series, media_genres, media_tags, media_authors, media_series,
- *   media_narrators
+ *   media_narrators, library_files, languages, libraries
  *
  * Tables intentionally kept:
  *   users     — needed for re-login matching
@@ -22,6 +22,9 @@ import { bookmarks, pendingBookmarkOps } from "../schema/bookmarks";
 import { authors } from "../schema/authors";
 import { chapters } from "../schema/chapters";
 import { genres } from "../schema/genres";
+import { languages } from "../schema/languages";
+import { libraries } from "../schema/libraries";
+import { libraryFiles } from "../schema/libraryFiles";
 import { libraryItems } from "../schema/libraryItems";
 import {
   mediaAuthors,
@@ -69,6 +72,7 @@ export async function wipeUserData(): Promise<void> {
   // Child content tables
   await db.delete(audioFiles);
   await db.delete(chapters);
+  await db.delete(libraryFiles);
   await db.delete(mediaProgress);
 
   // Parent content tables
@@ -79,4 +83,9 @@ export async function wipeUserData(): Promise<void> {
   await db.delete(genres);
   await db.delete(tags);
   await db.delete(narrators);
+  await db.delete(languages);
+
+  // Libraries last — library_items reference them. Leaving them behind made the
+  // previous server's libraries appear alongside the new server's after re-login.
+  await db.delete(libraries);
 }

@@ -14,6 +14,31 @@ This is the lightweight backlog for unresolved work with enough context to act o
 
 See [the complete multi-server and alias design](plans/multi-server-sync-and-aliases.md).
 
+## Session Boundaries
+
+### Clear remaining session state on logout and server switch
+
+**Context:** Logging out and into a different server showed the previous server's libraries with a stale, unusable selection. That was fixed by wiping `libraries`, `library_files`, and `languages`, clearing `abs.selectedLibraryId`, pruning libraries the server no longer reports, and wiping before resetting slices in `clearUserData()`. A code review of the same paths found the leftovers below. Line references are from that review; re-verify before acting.
+
+**Remaining problems:**
+
+- **Playback continues after logout.** Neither `logout()` nor `clearUserData()` (`src/providers/AuthProvider.tsx`) stops the player. The previous account's track keeps playing with its already-issued credentials, and lock-screen controls still work.
+- **Persisted player state survives logout.** `abs.currentTrack`, `abs.position`, `abs.positionUpdatedAt`, `abs.isPlaying`, `abs.currentPlaySessionId`, `abs.sleepTimer`, and `abs.jumpHistorySession` (`src/lib/asyncStore.ts`) are only removed by Reset App. `restorePersistedState()` (`playerSlice.ts`) runs on cold start (`src/index.ts`) and on long resume (`src/app/_layout.tsx`) without checking identity, so the next account sees the previous user's book in the mini-player. Pressing play starts a session for the old item ID on the new server, or plays the old account's downloaded files.
+- **Downloads are not scoped to the session.**
+  - `local_audio_file_downloads`, `local_library_file_downloads`, and the files under `downloads/<libraryItemId>` survive logout.
+  - The storage screen's inner joins hide them, and `orphanScanner` treats rows that still exist as owned, so the space cannot be reclaimed from the UI.
+  - Active downloads are not cancelled.
+  - `downloads.initialized` stays true, so stale "downloaded" badges remain in memory.
+  - Product decision needed: delete downloads on server switch, or retain them for the same server. Audio and library file IDs are deterministic, so downloads reattach after re-login to the same server.
+- **Cover cache is not cleared.** `local_cover_cache` rows and `Paths.cache/covers/<libraryItemId>` files are kept. The cache is keyed only by item ID, which assumes IDs are unique across servers.
+- **Slices are not reset.** `resetDownloads`, `resetStatistics`, and `resetNetwork` exist but `clearUserData()` does not call them. Statistics counts go stale, and network reachability keeps polling the old base URL until login sets the new one.
+- **Pruned libraries leave orphan items.** `_refetchLibraries` now deletes libraries the server no longer reports, but their `library_items` (and descendants) remain until the next logout, because foreign-key cascades are not enforced (see [Audit SQLite foreign-key enablement](#audit-sqlite-foreign-key-enablement)).
+- **Reset App gaps.** `src/app/(tabs)/more/actions.tsx` deletes the DB but leaves downloaded files on disk, calls `clearAllLocalCovers()` twice, and does not cancel downloads or reset the player and download slices.
+
+**Suggested direction:** Make one awaited session-teardown path in `AuthProvider` serve logout, server switch, and a different-user login. It should stop the player and clear its persisted keys, cancel downloads, apply the chosen download policy, clear covers, wipe the DB, and only then reset every user-scoped slice. Gate `restorePersistedState()` on a matching identity.
+
+**Acceptance:** A test-backed teardown in which logging out and into a different server shows no previous-server libraries, items, covers, player state, download badges, or statistics, and stops playback. The download policy is documented, and a Maestro flow covers logout → login to a second server.
+
 ## Localization
 
 ### Add Spanish progress-toast translations

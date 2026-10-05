@@ -86,6 +86,7 @@ import {
 } from "@/db/helpers/mediaProgress";
 import { login as doLogin } from "@/lib/api/endpoints";
 import { wipeUserData } from "@/db/helpers/wipeUserData";
+import { useAppStore } from "@/stores/appStore";
 function makeUserRow(id: string, username: string): UserRow {
   return {
     id,
@@ -621,6 +622,40 @@ describe("AuthProvider", () => {
     resolveWipe();
     await act(async () => switchPromise);
     expect(mockSetBaseUrl).toHaveBeenCalledWith("http://new.example.com");
+  });
+
+  it("wipes the database before resetting slices on logout so they cannot reload old rows", async () => {
+    mockGetStoredUsername.mockResolvedValue("alice");
+    mockGetUserByUsername.mockResolvedValue(makeUserRow("user-1", "alice"));
+    mockGetBaseUrl.mockReturnValue("http://example.com");
+    mockGetAccessToken.mockReturnValue("access-1");
+
+    const calls: string[] = [];
+    mockWipeUserData.mockImplementation(async () => {
+      calls.push("wipe");
+    });
+    const record = (name: string) => jest.fn(() => calls.push(name));
+    (useAppStore.getState as jest.Mock).mockReturnValue({
+      resetLibrary: record("resetLibrary"),
+      resetSeries: record("resetSeries"),
+      resetAuthors: record("resetAuthors"),
+      resetItemDetails: record("resetItemDetails"),
+      resetUserProfile: record("resetUserProfile"),
+      resetHome: record("resetHome"),
+    });
+
+    let ctx: ReturnType<typeof useAuth> | undefined;
+    render(
+      <AuthProvider>
+        <AuthConsumer onReady={(value) => (ctx = value)} />
+      </AuthProvider>
+    );
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    await act(async () => ctx!.logout());
+
+    expect(calls[0]).toBe("wipe");
+    expect(calls).toContain("resetLibrary");
   });
 
   it("still wipes local data when secure credential deletion fails during logout", async () => {
