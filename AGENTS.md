@@ -28,6 +28,10 @@ uv run scripts/query-logs.py --dir /path "SELECT ..."        # Use a different d
 
 Before finishing a change, run `npm run static-analysis` and the related tests. The pre-commit hook (husky + lint-staged) runs Prettier and `jest --findRelatedTests` on staged files, so commits fail if related tests fail.
 
+### Cloud sessions
+
+In Claude Code cloud sessions, `.claude/hooks/session-start.sh` runs `npm install` in the background (about 30s on a fresh container) so the session starts right away. Before running `npm`/`npx` commands that need `node_modules`, check that `node_modules/.session-install-done` exists. If it doesn't, the install is still running — do other work (reading code, planning) and check again rather than starting a second `npm install`. Install output goes to `/tmp/session-start-npm-install.log`; check it if the marker never appears.
+
 ## Architecture
 
 ### Layers (top → bottom, no reverse imports)
