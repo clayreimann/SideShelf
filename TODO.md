@@ -1,5 +1,16 @@
 # Audiobookshelf React Native - TODO
 
+## 🧹 Code Quality (2026-10-05)
+
+- [ ] **Reduce complexity hotspots** — CI now gates complexity (ratchet against
+      `.github/quality/complexity-baseline.json`) and duplication (jscpd, 3.6% ceiling).
+      The analysis and a prioritized refactor checklist are in
+      `docs/investigation/code-quality-baseline.md`. Highest payoff: break up
+      `PlayerStateCoordinator.handleEvent` (complexity 107) and merge the duplicated
+      More-tab series/authors screens. After each refactor, run `npm run quality:baseline`
+      and commit the result. **When the checklist is done, delete
+      `docs/investigation/code-quality-baseline.md` and tick this item.**
+
 ## 📋 v1 Launch Review Findings (2026-07-29)
 
 Full-app review ahead of v1 public launch. Verification at time of review: 93 test suites /

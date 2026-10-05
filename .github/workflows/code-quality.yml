@@ -1,0 +1,70 @@
+name: Code Quality
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  complexity:
+    name: Complexity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fails on new or worsened violations relative to
+      # .github/quality/complexity-baseline.json
+      - name: Check complexity
+        run: npm run quality:complexity
+
+  duplication:
+    name: Duplication
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fails when duplicated lines exceed the threshold in .jscpd.json
+      - name: Check duplication
+        run: npm run quality:duplication
+
+      - name: Add duplication report to job summary
+        if: always()
+        run: |
+          if [ -f reports/jscpd/jscpd-report.md ]; then
+            cat reports/jscpd/jscpd-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload duplication report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duplication-report
+          path: reports/jscpd/
+          retention-days: 14

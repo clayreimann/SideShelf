@@ -1,0 +1,524 @@
+{
+  "src/app/(tabs)/home/index.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 244
+    }
+  },
+  "src/app/(tabs)/more/index.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 323
+    }
+  },
+  "src/app/(tabs)/more/logger-settings.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 356
+    }
+  },
+  "src/app/(tabs)/more/logs.tsx": {
+    "max-lines": {
+      "count": 1,
+      "worst": 689
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 320
+    }
+  },
+  "src/app/(tabs)/more/me.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 23
+    }
+  },
+  "src/app/(tabs)/more/settings.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 453
+    }
+  },
+  "src/app/(tabs)/more/storage.tsx": {
+    "max-lines": {
+      "count": 1,
+      "worst": 635
+    },
+    "max-lines-per-function": {
+      "count": 2,
+      "worst": 494
+    }
+  },
+  "src/app/(tabs)/more/tab-bar-settings.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 243
+    }
+  },
+  "src/app/(tabs)/more/trace-dump-detail.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 23
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 28
+    }
+  },
+  "src/app/(tabs)/more/track-player.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 204
+    }
+  },
+  "src/app/(tabs)/series/[seriesId]/index.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 281
+    }
+  },
+  "src/app/FullScreenPlayer/index.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 27
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 733
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 681
+    }
+  },
+  "src/app/_layout.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 223
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 22
+    }
+  },
+  "src/components/diagnostics/CoordinatorDiagnostics.tsx": {
+    "max-lines": {
+      "count": 1,
+      "worst": 543
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 296
+    }
+  },
+  "src/components/library/LibraryItemDetail.tsx": {
+    "complexity": {
+      "count": 2,
+      "worst": 58
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 535
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 472
+    }
+  },
+  "src/components/library/LibraryItemDetail/BookmarksSection.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 216
+    }
+  },
+  "src/components/library/LibraryItemDetail/ConsolidatedPlayerControls.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 234
+    }
+  },
+  "src/components/library/LibraryItemDetail/DownloadProgressView.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 41
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 211
+    }
+  },
+  "src/components/library/LibraryItemDetail/MetadataSection.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 28
+    }
+  },
+  "src/components/ui/CoverImage.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/components/ui/FloatingPlayer.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 22
+    }
+  },
+  "src/components/ui/ProgressBar.tsx": {
+    "complexity": {
+      "count": 1,
+      "worst": 39
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 243
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 21
+    }
+  },
+  "src/db/helpers/fullLibraryItems.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 17
+    }
+  },
+  "src/db/helpers/libraryItems.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/db/helpers/localListeningSessions.ts": {
+    "max-params": {
+      "count": 2,
+      "worst": 8
+    }
+  },
+  "src/db/helpers/progressSyncOutbox.ts": {
+    "max-params": {
+      "count": 1,
+      "worst": 5
+    }
+  },
+  "src/db/helpers/users.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 24
+    }
+  },
+  "src/lib/api/api.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 17
+    }
+  },
+  "src/lib/api/endpoints.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 22
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 557
+    },
+    "max-params": {
+      "count": 1,
+      "worst": 5
+    }
+  },
+  "src/lib/deepLinkHandler.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 23
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/lib/fileLifecycleManager.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 20
+    },
+    "max-depth": {
+      "count": 4,
+      "worst": 5
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 2,
+      "worst": 36
+    }
+  },
+  "src/lib/logger/index.ts": {
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 18
+    }
+  },
+  "src/lib/orphanScanner.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 18
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 31
+    }
+  },
+  "src/lib/smartRewind.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 18
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 23
+    }
+  },
+  "src/lib/theme.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 20
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 19
+    }
+  },
+  "src/lib/trace.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/providers/AuthProvider.tsx": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 234
+    }
+  },
+  "src/services/ApiClientService.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/services/DownloadService.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 18
+    },
+    "max-depth": {
+      "count": 1,
+      "worst": 5
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 810
+    },
+    "max-params": {
+      "count": 1,
+      "worst": 9
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 22
+    }
+  },
+  "src/services/PlayerBackgroundService.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 46
+    },
+    "max-depth": {
+      "count": 2,
+      "worst": 5
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 768
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 225
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 80
+    }
+  },
+  "src/services/ProgressService.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 35
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 568
+    },
+    "max-params": {
+      "count": 2,
+      "worst": 9
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 2,
+      "worst": 34
+    }
+  },
+  "src/services/ProgressSyncWorker.ts": {
+    "max-lines": {
+      "count": 1,
+      "worst": 637
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 20
+    }
+  },
+  "src/services/coordinator/PlayerStateCoordinator.ts": {
+    "complexity": {
+      "count": 4,
+      "worst": 107
+    },
+    "max-depth": {
+      "count": 12,
+      "worst": 8
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 1248
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 289
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 3,
+      "worst": 85
+    }
+  },
+  "src/services/download/DownloadRepairCollaborator.ts": {
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/services/player/BackgroundReconnectCollaborator.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 20
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 22
+    }
+  },
+  "src/services/player/ProgressRestoreCollaborator.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 27
+    }
+  },
+  "src/services/player/TrackLoadingCollaborator.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 34
+    },
+    "max-depth": {
+      "count": 2,
+      "worst": 5
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 2,
+      "worst": 51
+    }
+  },
+  "src/stores/appStore.ts": {
+    "max-lines": {
+      "count": 1,
+      "worst": 735
+    }
+  },
+  "src/stores/slices/authorsSlice.ts": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 202
+    }
+  },
+  "src/stores/slices/downloadSlice.ts": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 255
+    }
+  },
+  "src/stores/slices/libraryItemDetailsSlice.ts": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 261
+    }
+  },
+  "src/stores/slices/librarySlice.ts": {
+    "max-lines": {
+      "count": 1,
+      "worst": 763
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 681
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 16
+    }
+  },
+  "src/stores/slices/playerSlice.ts": {
+    "complexity": {
+      "count": 2,
+      "worst": 36
+    },
+    "max-depth": {
+      "count": 3,
+      "worst": 6
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 638
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 539
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 71
+    }
+  },
+  "src/stores/slices/settingsSlice.ts": {
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 392
+    }
+  },
+  "src/stores/slices/userProfileSlice.ts": {
+    "complexity": {
+      "count": 1,
+      "worst": 23
+    },
+    "max-lines": {
+      "count": 1,
+      "worst": 593
+    },
+    "max-lines-per-function": {
+      "count": 1,
+      "worst": 324
+    },
+    "sonarjs/cognitive-complexity": {
+      "count": 1,
+      "worst": 43
+    }
+  }
+}
