@@ -5,22 +5,27 @@
  * and used throughout the application for database operations.
  */
 
-import type { LibraryItemDisplayRow } from './components';
-import { audioFiles } from '@/db/schema/audioFiles';
-import { authors } from '@/db/schema/authors';
-import { chapters } from '@/db/schema/chapters';
-import { genres } from '@/db/schema/genres';
-import { languages } from '@/db/schema/languages';
-import { libraries } from '@/db/schema/libraries';
-import { libraryFiles } from '@/db/schema/libraryFiles';
-import { libraryItems } from '@/db/schema/libraryItems';
-import { mediaAuthors, mediaGenres, mediaNarrators, mediaSeries, mediaTags } from '@/db/schema/mediaJoins';
-import { mediaMetadata } from '@/db/schema/mediaMetadata';
-import { mediaProgress } from '@/db/schema/mediaProgress';
-import { narrators } from '@/db/schema/narrators';
-import { series } from '@/db/schema/series';
-import { tags } from '@/db/schema/tags';
-import { users } from '@/db/schema/users';
+import { audioFiles } from "@/db/schema/audioFiles";
+import { authors } from "@/db/schema/authors";
+import { chapters } from "@/db/schema/chapters";
+import { genres } from "@/db/schema/genres";
+import { languages } from "@/db/schema/languages";
+import { libraries } from "@/db/schema/libraries";
+import { libraryFiles } from "@/db/schema/libraryFiles";
+import { libraryItems } from "@/db/schema/libraryItems";
+import {
+  mediaAuthors,
+  mediaGenres,
+  mediaNarrators,
+  mediaSeries,
+  mediaTags,
+} from "@/db/schema/mediaJoins";
+import { mediaMetadata } from "@/db/schema/mediaMetadata";
+import { mediaProgress } from "@/db/schema/mediaProgress";
+import { narrators } from "@/db/schema/narrators";
+import { series } from "@/db/schema/series";
+import { tags } from "@/db/schema/tags";
+import { users } from "@/db/schema/users";
 
 // Core table row types (inferred from schema)
 export type UserRow = typeof users.$inferSelect;
@@ -69,6 +74,29 @@ export type NewMediaTagRow = typeof mediaTags.$inferInsert;
 export type NewMediaNarratorRow = typeof mediaNarrators.$inferInsert;
 
 // Specialized types for database operations
+
+/**
+ * Flattened library item shape used for list/grid display.
+ *
+ * Lives here (not in types/components.ts) so that types/components.ts can import it
+ * from database.ts without database.ts needing to import back from components.ts —
+ * that mutual import used to form a circular dependency.
+ */
+export interface LibraryItemDisplayRow {
+  id: string;
+  mediaType: string | null;
+  title: string | null;
+  author: string | null;
+  authorName: string | null;
+  authorNameLF: string | null;
+  narrator: string | null;
+  releaseDate: string | null;
+  publishedYear: string | null;
+  addedAt: number | null;
+  duration: number | null;
+  coverUri: string | null;
+  seriesName: string | null;
+}
 
 /**
  * Library item list row type alias for sorting operations

@@ -17,6 +17,7 @@ import {
     type HomeScreenItem
 } from '@/db/helpers/homeScreen';
 import { logger } from '@/lib/logger';
+import { downloadService } from '@/services/DownloadService';
 import type { SliceCreator } from '@/types/store';
 
 // Create cached sublogger for this slice
@@ -107,6 +108,15 @@ const initialHomeState: HomeSliceState = {
  */
 const CACHE_VALID_DURATION = 5 * 60 * 1000;
 
+async function getFullyDownloadedItems(items: HomeScreenItem[]): Promise<HomeScreenItem[]> {
+    const verifiedItems = await Promise.all(
+        items.map(async (item) =>
+            (await downloadService.isLibraryItemDownloaded(item.id)) ? item : null
+        )
+    );
+    return verifiedItems.filter((item): item is HomeScreenItem => item !== null);
+}
+
 /**
  * Create the home slice
  */
@@ -139,13 +149,14 @@ export const createHomeSlice: SliceCreator<HomeSlice> = (set, get) => ({
         try {
             // Fetch all home screen data
             const data = await getHomeScreenData(userId);
+            const downloaded = await getFullyDownloadedItems(data.downloaded);
 
             set((state: HomeSlice) => ({
                 ...state,
                 home: {
                     ...state.home,
                     continueListening: data.continueListening,
-                    downloaded: data.downloaded,
+                    downloaded,
                     listenAgain: data.listenAgain,
                     loading: { ...state.home.loading, isLoadingHome: false },
                     initialized: true,
@@ -154,7 +165,7 @@ export const createHomeSlice: SliceCreator<HomeSlice> = (set, get) => ({
                 },
             }));
 
-            log.info(`Home slice initialized successfully: continueListening=${data.continueListening.length}, downloaded=${data.downloaded.length}, listenAgain=${data.listenAgain.length}`);
+            log.info(`Home slice initialized successfully: continueListening=${data.continueListening.length}, downloaded=${downloaded.length}, listenAgain=${data.listenAgain.length}`);
         } catch (error) {
             log.error('Failed to initialize home slice', error as Error);
             set((state: HomeSlice) => ({
@@ -193,13 +204,14 @@ export const createHomeSlice: SliceCreator<HomeSlice> = (set, get) => ({
         try {
             // Fetch all home screen data
             const data = await getHomeScreenData(userId);
+            const downloaded = await getFullyDownloadedItems(data.downloaded);
 
             set((state: HomeSlice) => ({
                 ...state,
                 home: {
                     ...state.home,
                     continueListening: data.continueListening,
-                    downloaded: data.downloaded,
+                    downloaded,
                     listenAgain: data.listenAgain,
                     loading: { ...state.home.loading, isLoadingHome: false },
                     lastFetchTime: Date.now(),
@@ -244,7 +256,7 @@ export const createHomeSlice: SliceCreator<HomeSlice> = (set, get) => ({
                     data = await getContinueListeningItems(userId);
                     break;
                 case 'downloaded':
-                    data = await getDownloadedItems();
+                    data = await getFullyDownloadedItems(await getDownloadedItems());
                     break;
                 case 'listenAgain':
                     data = await getListenAgainItems(userId);

@@ -1,6 +1,6 @@
-import { translate } from '@/i18n';
-import React from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { translate } from "@/i18n";
+import React from "react";
+import { Modal, Pressable, Text, View } from "react-native";
 
 // Generic sort option type
 export interface SortOption<T extends string | number = string> {
@@ -11,7 +11,7 @@ export interface SortOption<T extends string | number = string> {
 // Generic sort config type
 export interface GenericSortConfig<T extends string | number = string> {
   field: T;
-  direction: 'asc' | 'desc';
+  direction: "asc" | "desc";
 }
 
 interface SortMenuProps<T extends string | number = string> {
@@ -31,53 +31,52 @@ export default function SortMenu<T extends string | number = string>({
   onSortChange,
   sortOptions,
   isDark,
-  title
+  title,
 }: SortMenuProps<T>) {
-  const headerTitle = title ?? translate('sortMenu.title');
+  const headerTitle = title ?? translate("sortMenu.title");
   const handleSortChange = (field: T) => {
-    const direction: 'asc' | 'desc' =
-      sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc';
+    const direction: "asc" | "desc" =
+      sortConfig.field === field && sortConfig.direction === "asc" ? "desc" : "asc";
     onSortChange({ field, direction });
     onClose();
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
         style={{
           flex: 1,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          justifyContent: 'center',
-          alignItems: 'center',
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          justifyContent: "center",
+          alignItems: "center",
         }}
         onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel={translate("accessibility.closeMenu")}
       >
         <View
           style={{
-            backgroundColor: isDark ? '#333' : '#fff',
+            backgroundColor: isDark ? "#333" : "#fff",
             borderRadius: 12,
             padding: 16,
             minWidth: 200,
             maxWidth: 300,
-            shadowColor: '#000',
+            shadowColor: "#000",
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.25,
             shadowRadius: 8,
             elevation: 8,
           }}
         >
-          <Text style={{
-            fontSize: 18,
-            fontWeight: 'bold',
-            marginBottom: 16,
-            color: isDark ? '#fff' : '#000',
-            textAlign: 'center',
-          }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "bold",
+              marginBottom: 16,
+              color: isDark ? "#fff" : "#000",
+              textAlign: "center",
+            }}
+          >
             {headerTitle}
           </Text>
           {sortOptions.map((option) => {
@@ -91,16 +90,14 @@ export default function SortMenu<T extends string | number = string>({
               <Pressable
                 key={option.field}
                 onPress={() => handleSortChange(option.field)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
                 style={{
                   paddingVertical: 12,
                   paddingHorizontal: 16,
                   borderRadius: 8,
                   marginBottom: 4,
-                  backgroundColor: isActive
-                    ? isDark
-                      ? "#555"
-                      : "#f0f0f0"
-                    : "transparent",
+                  backgroundColor: isActive ? (isDark ? "#555" : "#f0f0f0") : "transparent",
                 }}
               >
                 <Text

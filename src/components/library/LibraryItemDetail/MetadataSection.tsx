@@ -47,6 +47,8 @@ interface MetadataSectionProps {
   isDownloaded: boolean;
   authorId: string | null;
   seriesId: string | null;
+  progressCurrentTime?: number | null;
+  progressDuration?: number | null;
 }
 
 export default function MetadataSection({
@@ -58,6 +60,8 @@ export default function MetadataSection({
   isDownloaded,
   authorId,
   seriesId,
+  progressCurrentTime,
+  progressDuration,
 }: MetadataSectionProps) {
   const { styles, isDark } = useThemedStyles();
   const router = useRouter();
@@ -93,6 +97,11 @@ export default function MetadataSection({
             }
           }}
           disabled={!authorId}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={author}
+          accessibilityHint={authorId ? translate("accessibility.openAuthor") : undefined}
+          accessibilityState={{ disabled: !authorId }}
         >
           <AuthorIcon style={{ marginRight: 8 }} />
           <Text
@@ -137,6 +146,11 @@ export default function MetadataSection({
             }
           }}
           disabled={!seriesId}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={series ?? undefined}
+          accessibilityHint={seriesId ? translate("accessibility.openSeries") : undefined}
+          accessibilityState={{ disabled: !seriesId }}
         >
           <SeriesIcon />
           <Text
@@ -155,8 +169,14 @@ export default function MetadataSection({
           </Text>
         </TouchableOpacity>
       ) : null}
-      {/* Duration, Year, and Download Status */}
-      {(duration || publishedYear || isDownloaded) && (
+      {/* Duration, Year, Download Status, and Inline Progress */}
+      {(duration ||
+        publishedYear ||
+        isDownloaded ||
+        (progressCurrentTime &&
+          progressCurrentTime > 0 &&
+          progressDuration &&
+          progressDuration > 0)) && (
         <View
           style={{
             flexDirection: "row",
@@ -185,6 +205,17 @@ export default function MetadataSection({
               </Text>
             </>
           )}
+          {progressCurrentTime &&
+            progressCurrentTime > 0 &&
+            progressDuration &&
+            progressDuration > 0 && (
+              <>
+                {(duration || publishedYear || isDownloaded) && <Separator />}
+                <Text style={[styles.text, { fontSize: 14, opacity: 0.7 }]}>
+                  {formatDuration(progressCurrentTime)} / {formatDuration(progressDuration)}
+                </Text>
+              </>
+            )}
         </View>
       )}
     </View>

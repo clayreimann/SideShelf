@@ -18,12 +18,34 @@ const log = logger.forTag("api:client");
 
 type AuthStateListener = () => void;
 
+export type UnauthorizedResult =
+  | { status: "refreshed" }
+  | { status: "rejected" }
+  | { status: "stale"; error: Error }
+  | { status: "transient"; error: Error };
+
+export class TransientTokenRefreshError extends Error {
+  constructor(message = "Token refresh temporarily unavailable") {
+    super(message);
+    this.name = "TransientTokenRefreshError";
+  }
+}
+
+export class StaleTokenRefreshError extends Error {
+  constructor() {
+    super("Request cancelled after authentication changed");
+    this.name = "StaleTokenRefreshError";
+  }
+}
+
 class ApiClientService {
   private baseUrl: string | null = null;
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private username: string | null = null;
-  private refreshPromise: Promise<boolean> | null = null;
+  private refreshPromise: Promise<UnauthorizedResult> | null = null;
+  private authGeneration = 0;
+  private credentialPersistenceTail: Promise<void> = Promise.resolve();
   private listeners: Set<AuthStateListener> = new Set();
   private timeout: number = 30000; // default 30 seconds
 
@@ -41,6 +63,7 @@ class ApiClientService {
     this.baseUrl = serverUrl;
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
+    this.authGeneration += 1;
 
     log.info(
       `Loaded credentials: baseUrl=${!!this.baseUrl}, accessToken=${!!this.accessToken}, refreshToken=${!!this.refreshToken}`
@@ -91,6 +114,11 @@ class ApiClientService {
     return this.username;
   }
 
+  /** Monotonic boundary for server/account credential lifetimes. */
+  getAuthGeneration(): number {
+    return this.authGeneration;
+  }
+
   /**
    * Check if authenticated (has both baseUrl and accessToken)
    */
@@ -104,25 +132,48 @@ class ApiClientService {
   async setBaseUrl(url: string): Promise<void> {
     const normalized = url.trim().replace(/\/$/, "");
     this.baseUrl = normalized;
-    await saveItem(SECURE_KEYS.serverUrl, normalized);
+    this.authGeneration += 1;
+    const currentAccessToken = this.accessToken;
+    const currentRefreshToken = this.refreshToken;
+    await this.enqueueCredentialPersistence(() =>
+      Promise.all([
+        saveItem(SECURE_KEYS.serverUrl, normalized),
+        saveItem(SECURE_KEYS.accessToken, currentAccessToken),
+        saveItem(SECURE_KEYS.refreshToken, currentRefreshToken),
+      ]).then(() => undefined)
+    );
     this.notifyListeners();
   }
 
   /**
-   * Set tokens and persist to secure storage
+   * Set tokens and persist to secure storage.
+   *
+   * `refreshToken` may be null for servers older than Audiobookshelf v2.26,
+   * which return only an access token from /login (see
+   * extractTokensFromAuthResponse in src/db/helpers/tokens.ts). We support
+   * this token-only auth mode rather than rejecting the login: a later 401
+   * will find no refresh token in performTokenRefresh and terminate the
+   * session instead of attempting to refresh.
    */
-  async setTokens(accessToken: string, refreshToken: string, username?: string): Promise<void> {
+  async setTokens(
+    accessToken: string,
+    refreshToken: string | null,
+    username?: string
+  ): Promise<void> {
     log.info("Updating tokens");
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
+    this.authGeneration += 1;
     if (username !== undefined) {
       this.username = username;
     }
 
-    await Promise.all([
-      saveItem(SECURE_KEYS.accessToken, accessToken),
-      saveItem(SECURE_KEYS.refreshToken, refreshToken),
-    ]);
+    await this.enqueueCredentialPersistence(() =>
+      Promise.all([
+        saveItem(SECURE_KEYS.accessToken, accessToken),
+        saveItem(SECURE_KEYS.refreshToken, refreshToken),
+      ]).then(() => undefined)
+    );
 
     this.notifyListeners();
   }
@@ -135,13 +186,17 @@ class ApiClientService {
     this.accessToken = null;
     this.refreshToken = null;
     this.username = null;
-
-    await Promise.all([
-      saveItem(SECURE_KEYS.accessToken, null),
-      saveItem(SECURE_KEYS.refreshToken, null),
-    ]);
-
+    this.authGeneration += 1;
+    // Auth state is an in-memory safety boundary. Notify before best-effort
+    // persistence so a secure-store failure cannot leave subscribers authenticated.
     this.notifyListeners();
+
+    await this.enqueueCredentialPersistence(() =>
+      Promise.all([
+        saveItem(SECURE_KEYS.accessToken, null),
+        saveItem(SECURE_KEYS.refreshToken, null),
+      ]).then(() => undefined)
+    );
   }
 
   /**
@@ -152,7 +207,7 @@ class ApiClientService {
    * - Subsequent requests await the same refresh promise
    * - All requests retry after refresh completes
    */
-  async handleUnauthorized(): Promise<boolean> {
+  async handleUnauthorized(): Promise<UnauthorizedResult> {
     // If a refresh is already in progress, await it
     if (this.refreshPromise) {
       log.info("Token refresh already in progress, waiting...");
@@ -164,8 +219,8 @@ class ApiClientService {
     this.refreshPromise = this.performTokenRefresh();
 
     try {
-      const success = await this.refreshPromise;
-      return success;
+      const result = await this.refreshPromise;
+      return result;
     } finally {
       this.refreshPromise = null;
     }
@@ -173,55 +228,146 @@ class ApiClientService {
 
   /**
    * Perform the actual token refresh by calling the /auth/refresh endpoint
+   *
+   * Failure discrimination (see review brief "auth resilience"):
+   * - No refresh token available (e.g. legacy/token-only session): terminal —
+   *   clear tokens, nothing to refresh with.
+   * - Server definitively rejects the refresh (401/403): terminal — the
+   *   refresh token itself is invalid/revoked, clear tokens.
+   * - 5xx responses and network-level failures (fetch throw/abort/timeout):
+   *   transient — return a retryable result WITHOUT clearing tokens, so a flaky network
+   *   blip or a momentarily-down server doesn't force-log-out a user with a
+   *   still-valid refresh token. The current request fails, but the session
+   *   survives for a later retry.
    */
-  private async performTokenRefresh(): Promise<boolean> {
+  private async performTokenRefresh(): Promise<UnauthorizedResult> {
+    const refreshGeneration = this.authGeneration;
     if (!this.baseUrl || !this.refreshToken) {
       log.error("Missing base URL or refresh token");
-      await this.clearTokens();
-      return false;
+      return this.clearRejectedTokens("missing refresh credentials", refreshGeneration);
     }
+    const refreshBaseUrl = this.baseUrl;
+    const refreshCredential = this.refreshToken;
 
     // Create abort controller with timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+    let response: Response;
     try {
-      const response = await fetch(`${this.baseUrl}/auth/refresh`, {
+      response = await fetch(`${refreshBaseUrl}/auth/refresh`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-refresh-token": this.refreshToken,
+          "x-refresh-token": refreshCredential,
         },
         signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
-      log.info(`Token refresh response: ${response.status}`);
-
-      if (!response.ok) {
-        log.error(`Token refresh failed with status ${response.status}`);
-        await this.clearTokens();
-        return false;
-      }
-
-      const data = await response.json();
-      const tokens = extractTokensFromAuthResponse(data);
-
-      if (!tokens.accessToken || !tokens.refreshToken) {
-        log.error("Token refresh response missing tokens");
-        await this.clearTokens();
-        return false;
-      }
-
-      await this.setTokens(tokens.accessToken, tokens.refreshToken);
-      log.info("Token refresh succeeded");
-      return true;
     } catch (error) {
+      if (this.authGeneration !== refreshGeneration) {
+        log.info("Discarding token refresh failure for stale auth generation");
+        return this.staleRefreshResult();
+      }
+      // Network-level failure (offline, timeout/abort, DNS, etc.) — not a
+      // rejection of the refresh token. Do not clear tokens.
+      log.error("Token refresh network error (session preserved):", error as Error);
+      return {
+        status: "transient",
+        error: new TransientTokenRefreshError(),
+      };
+    } finally {
       clearTimeout(timeoutId);
-      log.error("Token refresh error:", error as Error);
-      await this.clearTokens();
-      return false;
     }
+
+    if (this.authGeneration !== refreshGeneration) {
+      log.info("Discarding token refresh response for stale auth generation");
+      return this.staleRefreshResult();
+    }
+    log.info(`Token refresh response: ${response.status}`);
+    if (response.status === 401 || response.status === 403) {
+      log.error(`Token refresh rejected by server with status ${response.status}`);
+      return this.clearRejectedTokens(`server rejection ${response.status}`, refreshGeneration);
+    }
+    if (!response.ok) {
+      log.error(`Token refresh failed with status ${response.status} (session preserved)`);
+      return {
+        status: "transient",
+        error: new TransientTokenRefreshError(
+          `Token refresh failed with status ${response.status}`
+        ),
+      };
+    }
+
+    let tokens: ReturnType<typeof extractTokensFromAuthResponse>;
+    try {
+      tokens = extractTokensFromAuthResponse(await response.json());
+    } catch (error) {
+      log.error("Token refresh response was invalid", error as Error);
+      return this.clearRejectedTokens("invalid refresh response", refreshGeneration);
+    }
+    if (!tokens.accessToken || !tokens.refreshToken) {
+      log.error("Token refresh response missing tokens");
+      return this.clearRejectedTokens("invalid refresh response", refreshGeneration);
+    }
+    if (this.authGeneration !== refreshGeneration) {
+      log.info("Discarding token refresh response for stale auth generation");
+      return this.staleRefreshResult();
+    }
+
+    let staleDuringPersistence = false;
+    try {
+      await this.enqueueCredentialPersistence(async () => {
+        if (this.authGeneration !== refreshGeneration) {
+          staleDuringPersistence = true;
+          return;
+        }
+        await Promise.all([
+          saveItem(SECURE_KEYS.accessToken, tokens.accessToken),
+          saveItem(SECURE_KEYS.refreshToken, tokens.refreshToken),
+        ]);
+        staleDuringPersistence = this.authGeneration !== refreshGeneration;
+      });
+    } catch (error) {
+      log.error("Failed to persist refreshed tokens", error as Error);
+      return { status: "transient", error: new TransientTokenRefreshError() };
+    }
+    if (staleDuringPersistence || this.authGeneration !== refreshGeneration) {
+      log.info("Discarding persisted token refresh for stale auth generation");
+      return this.staleRefreshResult();
+    }
+    // Access-token rotation continues the same authenticated identity.
+    this.accessToken = tokens.accessToken;
+    this.refreshToken = tokens.refreshToken;
+    this.notifyListeners();
+    log.info("Token refresh succeeded");
+    return { status: "refreshed" };
+  }
+
+  private async clearRejectedTokens(
+    reason: string,
+    expectedGeneration: number
+  ): Promise<UnauthorizedResult> {
+    if (this.authGeneration !== expectedGeneration) {
+      log.info(`Discarding ${reason} for stale auth generation`);
+      return this.staleRefreshResult();
+    }
+    try {
+      await this.clearTokens();
+    } catch (error) {
+      log.error(`Failed to persist cleared tokens after ${reason}`, error as Error);
+    }
+    return { status: "rejected" };
+  }
+
+  private staleRefreshResult(): UnauthorizedResult {
+    return { status: "stale", error: new StaleTokenRefreshError() };
+  }
+
+  /** Serialize secure-store writes so later credential mutations always win on disk. */
+  private enqueueCredentialPersistence(operation: () => Promise<void>): Promise<void> {
+    const result = this.credentialPersistenceTail.then(operation);
+    this.credentialPersistenceTail = result.catch(() => undefined);
+    return result;
   }
 
   /**

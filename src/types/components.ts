@@ -5,7 +5,11 @@
  * throughout the application.
  */
 
-import type { LibraryRow } from './database';
+import type { LibraryItemDisplayRow, LibraryRow } from "./database";
+
+// Re-exported for backward compatibility — LibraryItemDisplayRow now lives in
+// types/database.ts (see there for why) but existing call sites still import it from here.
+export type { LibraryItemDisplayRow } from "./database";
 
 // Library component types
 export interface LibraryItemDetailProps {
@@ -16,26 +20,10 @@ export interface LibraryItemDetailProps {
 export interface LibraryItemProps {
   item: LibraryItemDisplayRow;
   isDark: boolean;
-  variant?: 'grid' | 'list';
+  variant?: "grid" | "list";
 }
 
-export interface LibraryItemDisplayRow {
-  id: string;
-  mediaType: string | null;
-  title: string | null;
-  author: string | null;
-  authorName: string | null;
-  authorNameLF: string | null;
-  narrator: string | null;
-  releaseDate: string | null;
-  publishedYear: string | null;
-  addedAt: number | null;
-  duration: number | null;
-  coverUri: string | null;
-  seriesName: string | null;
-}
-
-export type ViewMode = 'grid' | 'list';
+export type ViewMode = "grid" | "list";
 
 export interface LibraryItemListProps {
   items: LibraryItemDisplayRow[];
@@ -61,7 +49,7 @@ export interface CollapsibleSectionProps {
 
 export interface HeaderControlsProps {
   isDark: boolean;
-  viewMode?: 'grid' | 'list';
+  viewMode?: "grid" | "list";
   onToggleViewMode?: () => void;
   onSort: () => void;
   showViewToggle?: boolean;
@@ -78,7 +66,7 @@ export interface SortOption<T = string> {
 // Generic sort config type
 export interface GenericSortConfig<T = string> {
   field: T;
-  direction: 'asc' | 'desc';
+  direction: "asc" | "desc";
 }
 
 export interface SortMenuProps<T = string> {

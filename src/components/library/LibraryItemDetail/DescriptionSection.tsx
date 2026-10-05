@@ -1,5 +1,4 @@
 import { CollapsibleSection } from "@/components/ui";
-import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
 import React, { useMemo } from "react";
 import { useWindowDimensions } from "react-native";
@@ -30,7 +29,7 @@ export default function DescriptionSection({ description }: DescriptionSectionPr
   }
 
   return (
-    <CollapsibleSection title={translate("libraryItem.description")} defaultExpanded={true}>
+    <CollapsibleSection defaultExpanded={false}>
       <RenderHtml
         contentWidth={width - 64}
         source={htmlSource}

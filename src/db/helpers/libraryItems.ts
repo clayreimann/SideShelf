@@ -6,7 +6,7 @@ import { resolveAppPath } from "@/lib/fileSystem";
 import type { ApiLibraryItem, ApiLibraryItemsResponse } from "@/types/api";
 import type { LibraryItemDisplayRow } from "@/types/components";
 import type { LibraryItemRow, NewLibraryItemRow } from "@/types/database";
-import { and, eq, inArray, not, sql } from "drizzle-orm";
+import { and, eq, inArray, not, notExists, or, sql } from "drizzle-orm";
 import { audioFiles } from "../schema/audioFiles";
 import { mediaAuthors, mediaNarrators, mediaSeries } from "../schema/mediaJoins";
 import { series } from "../schema/series";
@@ -163,27 +163,49 @@ export async function getLibraryItemsNeedingFullData(limit: number = 50): Promis
 }
 
 // Get library items that might need full data refresh (alternative approach)
+//
+// Uses NOT EXISTS subqueries rather than LEFT JOINs against mediaAuthors and
+// audioFiles. Those are one-to-many relations (a book can have many authors
+// or many audio files), so a plain LEFT JOIN chain fans a single already-complete
+// item out into one row per author/audio-file combination. That fan-out can
+// crowd genuinely-incomplete items out of the `.limit()` window entirely once
+// a library has several fully-synced multi-file audiobooks — the caller would
+// see fewer stale items than actually exist. NOT EXISTS keeps the query at
+// exactly one row per library item, so `.limit()` means what it says.
 export async function getLibraryItemsNeedingRefresh(limit: number = 50): Promise<string[]> {
   const results = await db
-    .select({
-      id: libraryItems.id,
-      hasMetadata: mediaMetadata.id,
-      hasAuthors: mediaAuthors.authorId,
-      hasAudioFiles: audioFiles.id,
-    })
+    .select({ id: libraryItems.id })
     .from(libraryItems)
-    .leftJoin(mediaMetadata, eq(libraryItems.id, mediaMetadata.libraryItemId))
-    .leftJoin(mediaAuthors, eq(mediaMetadata.id, mediaAuthors.mediaId))
-    .leftJoin(audioFiles, eq(audioFiles.mediaId, mediaMetadata.id))
-    .where(eq(libraryItems.mediaType, "book")) // Focus on books for now
-    .limit(limit * 2); // Get more to filter from
+    .where(
+      and(
+        eq(libraryItems.mediaType, "book"), // Focus on books for now
+        or(
+          notExists(
+            db
+              .select({ id: mediaMetadata.id })
+              .from(mediaMetadata)
+              .where(eq(mediaMetadata.libraryItemId, libraryItems.id))
+          ),
+          notExists(
+            db
+              .select({ mediaId: mediaAuthors.mediaId })
+              .from(mediaAuthors)
+              .innerJoin(mediaMetadata, eq(mediaAuthors.mediaId, mediaMetadata.id))
+              .where(eq(mediaMetadata.libraryItemId, libraryItems.id))
+          ),
+          notExists(
+            db
+              .select({ id: audioFiles.id })
+              .from(audioFiles)
+              .innerJoin(mediaMetadata, eq(audioFiles.mediaId, mediaMetadata.id))
+              .where(eq(mediaMetadata.libraryItemId, libraryItems.id))
+          )
+        )
+      )
+    )
+    .limit(limit);
 
-  // Filter to items that need processing
-  const needsProcessing = results.filter(
-    (item) => !item.hasMetadata || !item.hasAuthors || !item.hasAudioFiles
-  );
-
-  return needsProcessing.slice(0, limit).map((r) => r.id);
+  return results.map((r) => r.id);
 }
 
 /**

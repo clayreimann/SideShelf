@@ -520,12 +520,15 @@ export function usePlayer() {
   const playbackRate = useAppStore((state) => state.player.playbackRate);
   const volume = useAppStore((state) => state.player.volume);
   const isModalVisible = useAppStore((state) => state.player.isModalVisible);
+  const jumpHistory = useAppStore((state) => state.player.jumpHistory);
+  const isJumpHistoryModalVisible = useAppStore((state) => state.player.isJumpHistoryModalVisible);
   const isLoadingTrack = useAppStore((state) => state.player.loading.isLoadingTrack);
   const isSeeking = useAppStore((state) => state.player.loading.isSeeking);
   const initialized = useAppStore((state) => state.player.initialized);
 
   // Only UI-only action
   const setModalVisible = useAppStore((state) => state.setModalVisible);
+  const setJumpHistoryModalVisible = useAppStore((state) => state.setJumpHistoryModalVisible);
 
   return React.useMemo(
     () => ({
@@ -536,10 +539,13 @@ export function usePlayer() {
       playbackRate,
       volume,
       isModalVisible,
+      jumpHistory,
+      isJumpHistoryModalVisible,
       isLoadingTrack,
       isSeeking,
       initialized,
       setModalVisible,
+      setJumpHistoryModalVisible,
     }),
     [
       currentTrack,
@@ -549,10 +555,13 @@ export function usePlayer() {
       playbackRate,
       volume,
       isModalVisible,
+      jumpHistory,
+      isJumpHistoryModalVisible,
       isLoadingTrack,
       isSeeking,
       initialized,
       setModalVisible,
+      setJumpHistoryModalVisible,
     ]
   );
 }
@@ -812,8 +821,11 @@ export function useSettings() {
   const diagnosticsEnabled = useAppStore((state) => state.settings.diagnosticsEnabled);
   const tabOrder = useAppStore((state) => state.settings.tabOrder);
   const hiddenTabs = useAppStore((state) => state.settings.hiddenTabs);
-  const customUpdateUrl = useAppStore((state) => state.settings.customUpdateUrl);
   const viewMode = useAppStore((state) => state.settings.viewMode);
+  const progressFormat = useAppStore((state) => state.settings.progressFormat);
+  const chapterBarShowRemaining = useAppStore((state) => state.settings.chapterBarShowRemaining);
+  const keepScreenAwake = useAppStore((state) => state.settings.keepScreenAwake);
+  const bookmarkTitleMode = useAppStore((state) => state.settings.bookmarkTitleMode);
   const initialized = useAppStore((state) => state.settings.initialized);
   const isLoading = useAppStore((state) => state.settings.isLoading);
 
@@ -826,8 +838,11 @@ export function useSettings() {
   const updateDiagnosticsEnabled = useAppStore((state) => state.updateDiagnosticsEnabled);
   const updateTabOrder = useAppStore((state) => state.updateTabOrder);
   const updateHiddenTabs = useAppStore((state) => state.updateHiddenTabs);
-  const updateCustomUpdateUrl = useAppStore((state) => state.updateCustomUpdateUrl);
   const updateViewMode = useAppStore((state) => state.updateViewMode);
+  const updateProgressFormat = useAppStore((state) => state.updateProgressFormat);
+  const updateChapterBarShowRemaining = useAppStore((state) => state.updateChapterBarShowRemaining);
+  const updateKeepScreenAwake = useAppStore((state) => state.updateKeepScreenAwake);
+  const updateBookmarkTitleMode = useAppStore((state) => state.updateBookmarkTitleMode);
   const resetSettings = useAppStore((state) => state.resetSettings);
 
   return React.useMemo(
@@ -839,8 +854,11 @@ export function useSettings() {
       diagnosticsEnabled,
       tabOrder,
       hiddenTabs,
-      customUpdateUrl,
       viewMode,
+      progressFormat,
+      chapterBarShowRemaining,
+      keepScreenAwake,
+      bookmarkTitleMode,
       initialized,
       isLoading,
       initializeSettings,
@@ -851,8 +869,11 @@ export function useSettings() {
       updateDiagnosticsEnabled,
       updateTabOrder,
       updateHiddenTabs,
-      updateCustomUpdateUrl,
       updateViewMode,
+      updateProgressFormat,
+      updateChapterBarShowRemaining,
+      updateKeepScreenAwake,
+      updateBookmarkTitleMode,
       resetSettings,
     }),
     [
@@ -863,8 +884,11 @@ export function useSettings() {
       diagnosticsEnabled,
       tabOrder,
       hiddenTabs,
-      customUpdateUrl,
       viewMode,
+      progressFormat,
+      chapterBarShowRemaining,
+      keepScreenAwake,
+      bookmarkTitleMode,
       initialized,
       isLoading,
       initializeSettings,
@@ -875,8 +899,11 @@ export function useSettings() {
       updateDiagnosticsEnabled,
       updateTabOrder,
       updateHiddenTabs,
-      updateCustomUpdateUrl,
       updateViewMode,
+      updateProgressFormat,
+      updateChapterBarShowRemaining,
+      updateKeepScreenAwake,
+      updateBookmarkTitleMode,
       resetSettings,
     ]
   );
@@ -910,6 +937,7 @@ export function useUserProfile() {
   const refreshBookmarks = useAppStore((state) => state.refreshBookmarks);
   const createBookmark = useAppStore((state) => state.createBookmark);
   const deleteBookmark = useAppStore((state) => state.deleteBookmark);
+  const renameBookmark = useAppStore((state) => state.renameBookmark);
   const getItemBookmarks = useAppStore((state) => state.getItemBookmarks);
   const resetUserProfile = useAppStore((state) => state.resetUserProfile);
 
@@ -928,6 +956,7 @@ export function useUserProfile() {
       refreshBookmarks,
       createBookmark,
       deleteBookmark,
+      renameBookmark,
       getItemBookmarks,
       resetUserProfile,
     }),
@@ -945,6 +974,7 @@ export function useUserProfile() {
       refreshBookmarks,
       createBookmark,
       deleteBookmark,
+      renameBookmark,
       getItemBookmarks,
       resetUserProfile,
     ]

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+output=""
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "-o" ]]; then
+    output="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+
+if [[ -z "${output}" ]]; then
+  echo "fake cwebp: missing -o argument" >&2
+  exit 1
+fi
+
+printf 'converted' >"${output}"

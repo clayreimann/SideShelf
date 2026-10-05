@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Curated manifest of public-domain LibriVox audiobooks used to seed the SideShelf demo Audiobookshelf server. Every 'identifier' is a verified archive.org identifier (see README.md for how verification is run). Do not add an identifier that has not been confirmed to resolve at https://archive.org/metadata/<identifier> with a non-empty MP3 file list. 'mode' controls how many audio files are downloaded per entry, which in turn controls how many chapters the item ends up with (Audiobookshelf derives one chapter per audio file): 'full' downloads every chapter file archive.org publishes (used for the handful of titles that anchor chapter-list / chapter-jump / sleep-timer screenshots); 'sample' downloads the first SAMPLE_CHAPTER_COUNT (4, see src/fetch-media.mjs) chapter files, so every other title still gets a real, presentable multi-chapter list instead of a single track; 'first-chapter' (one file) is kept working as a legacy alias for old manifests but is no longer used by any entry below — a single-file item has zero derivable chapters, which is unusable for screenshots. Chapter titles are set from archive.org's per-file 'title' metadata by demo-server/seed.mjs, not left as the raw filename.",
+  "entries": [
+    {
+      "identifier": "adventures_holmes",
+      "author": "Arthur Conan Doyle",
+      "title": "The Adventures of Sherlock Holmes",
+      "series": "Sherlock Holmes",
+      "sequence": 1,
+      "narrator": "LibriVox Volunteers",
+      "description": "Twelve early cases narrated by Dr. Watson, including \"A Scandal in Bohemia\" and \"The Red-Headed League\", that introduced Holmes's methods to the reading public.",
+      "mode": "full"
+    },
+    {
+      "identifier": "memoirs_sherlock_holmes_1007_librivox",
+      "author": "Arthur Conan Doyle",
+      "title": "The Memoirs of Sherlock Holmes",
+      "series": "Sherlock Holmes",
+      "sequence": 2,
+      "narrator": "LibriVox Volunteers",
+      "description": "A further set of Holmes investigations, first published in 1893, that ends with the detective's fateful encounter at the Reichenbach Falls.",
+      "mode": "sample",
+      "progress": 0.45
+    },
+    {
+      "identifier": "return_holmes_0708_librivox",
+      "author": "Arthur Conan Doyle",
+      "title": "The Return of Sherlock Holmes",
+      "series": "Sherlock Holmes",
+      "sequence": 3,
+      "narrator": "LibriVox Volunteers",
+      "description": "Holmes reappears after his presumed death to resume his practice, in thirteen stories collected in 1905.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "wizard_of_oz",
+      "author": "L. Frank Baum",
+      "title": "The Wonderful Wizard of Oz",
+      "series": "Oz",
+      "sequence": 1,
+      "narrator": "LibriVox Volunteers",
+      "description": "Dorothy and her dog Toto are swept from Kansas to the magical land of Oz, where they set off down a road of yellow brick to find a way home.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "marvelous_land_of_oz_librivox",
+      "author": "L. Frank Baum",
+      "title": "The Marvelous Land of Oz",
+      "series": "Oz",
+      "sequence": 2,
+      "narrator": "LibriVox Volunteers",
+      "description": "The 1904 sequel to the Wizard of Oz, in which the boy Tip and his companions journey to the Emerald City amid a rebellion against the Scarecrow's rule.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "ozma_of_oz_librivox",
+      "author": "L. Frank Baum",
+      "title": "Ozma of Oz",
+      "series": "Oz",
+      "sequence": 3,
+      "narrator": "LibriVox Volunteers",
+      "description": "Dorothy is swept overboard in a storm and washes up in Ev, a land bordering Oz, where she meets Princess Ozma and the Nome King.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "anne_of_green_gables_librivox",
+      "author": "Lucy Maud Montgomery",
+      "title": "Anne of Green Gables",
+      "series": "Anne of Green Gables",
+      "sequence": 1,
+      "narrator": "LibriVox Volunteers",
+      "description": "An orphan girl is sent by mistake to a middle-aged brother and sister on Prince Edward Island who wanted a boy to help on their farm.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "anne_avonlea",
+      "author": "Lucy Maud Montgomery",
+      "title": "Anne of Avonlea",
+      "series": "Anne of Green Gables",
+      "sequence": 2,
+      "narrator": "LibriVox Volunteers",
+      "description": "Anne Shirley, now sixteen, takes up a teaching post in her home village of Avonlea in this 1909 sequel.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "anne_island",
+      "author": "Lucy Maud Montgomery",
+      "title": "Anne of the Island",
+      "series": "Anne of Green Gables",
+      "sequence": 3,
+      "narrator": "LibriVox Volunteers",
+      "description": "Anne leaves Prince Edward Island for college, navigating friendship, ambition, and romance in this 1915 installment.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "tom_sawyer_librivox",
+      "author": "Mark Twain",
+      "title": "The Adventures of Tom Sawyer",
+      "series": "Tom Sawyer",
+      "sequence": 1,
+      "narrator": "LibriVox Volunteers",
+      "description": "A boy's adventures along the Mississippi River, including a whitewashed fence, a graveyard oath, and a hunt for buried treasure.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "huck_finn_librivox",
+      "author": "Mark Twain",
+      "title": "Adventures of Huckleberry Finn",
+      "series": "Tom Sawyer",
+      "sequence": 2,
+      "narrator": "LibriVox Volunteers",
+      "description": "Huck Finn escapes his abusive father and rafts down the Mississippi with Jim, an enslaved man fleeing for his freedom.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "pride_and_prejudice_librivox",
+      "author": "Jane Austen",
+      "title": "Pride and Prejudice",
+      "narrator": "LibriVox Volunteers",
+      "description": "Elizabeth Bennet navigates manners, marriage, and misjudgment as she comes to reconsider the proud Mr. Darcy.",
+      "mode": "sample",
+      "progress": 0.35
+    },
+    {
+      "identifier": "dracula_librivox",
+      "author": "Bram Stoker",
+      "title": "Dracula",
+      "narrator": "LibriVox Volunteers",
+      "description": "Told through letters and diaries, a Transylvanian count's journey to England pits Jonathan Harker and Van Helsing against an ancient evil.",
+      "mode": "sample",
+      "progress": 0.6
+    },
+    {
+      "identifier": "frankenstein_1107_librivox",
+      "author": "Mary Shelley",
+      "title": "Frankenstein",
+      "narrator": "LibriVox Volunteers",
+      "description": "Victor Frankenstein's creation of life from dead matter leads to tragedy for both creator and creature in this 1818 novel.",
+      "mode": "sample",
+      "finished": true
+    },
+    {
+      "identifier": "treasureisland_librivox",
+      "author": "Robert Louis Stevenson",
+      "title": "Treasure Island",
+      "narrator": "LibriVox Volunteers",
+      "description": "Young Jim Hawkins sets sail with a map, a sea cook named Long John Silver, and a crew that turns out to be pirates.",
+      "mode": "sample",
+      "progress": 0.8
+    },
+    {
+      "identifier": "jekyll_hyde_1111_librivox",
+      "author": "Robert Louis Stevenson",
+      "title": "The Strange Case of Dr. Jekyll and Mr. Hyde",
+      "narrator": "LibriVox Volunteers",
+      "description": "A London lawyer investigates the disturbing connection between the respectable Dr. Jekyll and the violent Mr. Hyde.",
+      "mode": "full"
+    },
+    {
+      "identifier": "time_machine_0805_librivox",
+      "author": "H. G. Wells",
+      "title": "The Time Machine",
+      "narrator": "LibriVox Volunteers",
+      "description": "A Victorian inventor travels far into the future, finding a world divided between the gentle Eloi and the subterranean Morlocks.",
+      "mode": "full"
+    },
+    {
+      "identifier": "war_of_the_worlds_librivox",
+      "author": "H. G. Wells",
+      "title": "The War of the Worlds",
+      "narrator": "LibriVox Volunteers",
+      "description": "Martian tripods lay waste to the English countryside in one of the earliest and most influential alien-invasion stories.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "alice_in_wonderland_librivox",
+      "author": "Lewis Carroll",
+      "title": "Alice's Adventures in Wonderland",
+      "narrator": "LibriVox Volunteers",
+      "description": "Alice follows a White Rabbit down a hole into a world of nonsensical logic, a Mad Hatter, and a bad-tempered Queen of Hearts.",
+      "mode": "full"
+    },
+    {
+      "identifier": "moby_dick_librivox",
+      "author": "Herman Melville",
+      "title": "Moby Dick",
+      "narrator": "LibriVox Volunteers",
+      "description": "Sailor Ishmael joins Captain Ahab's obsessive hunt for the white whale that took his leg.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "A_Christmas_Carol",
+      "author": "Charles Dickens",
+      "title": "A Christmas Carol",
+      "narrator": "LibriVox Volunteers",
+      "description": "The miser Ebenezer Scrooge is visited by three spirits on Christmas Eve who show him his past, present, and possible future.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "great_expectations_mfs_0812_librivox",
+      "author": "Charles Dickens",
+      "title": "Great Expectations",
+      "narrator": "LibriVox Volunteers",
+      "description": "An orphan named Pip comes into an unexpected fortune and must reckon with who it has made him become.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "dorian_gray_librivox",
+      "author": "Oscar Wilde",
+      "title": "The Picture of Dorian Gray",
+      "narrator": "LibriVox Volunteers",
+      "description": "A young man's portrait ages and bears the marks of his sins while he himself remains unchanged, in Wilde's only novel.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "call_of_the_wild",
+      "author": "Jack London",
+      "title": "The Call of the Wild",
+      "narrator": "LibriVox Volunteers",
+      "description": "A domesticated dog named Buck is stolen and sold into the brutal life of an Alaskan sled team during the Klondike Gold Rush.",
+      "mode": "full"
+    },
+    {
+      "identifier": "princess_mars_tc_librivox",
+      "author": "Edgar Rice Burroughs",
+      "title": "A Princess of Mars",
+      "series": "Barsoom",
+      "sequence": 1,
+      "narrator": "LibriVox Volunteers",
+      "description": "Civil War veteran John Carter wakes on Mars, where lesser gravity makes him formidable and a dying world is at war.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "gofmars_tc_1302_librivox",
+      "author": "Edgar Rice Burroughs",
+      "title": "The Gods of Mars",
+      "series": "Barsoom",
+      "sequence": 2,
+      "narrator": "LibriVox Volunteers",
+      "description": "John Carter returns to Barsoom and lands in the Valley Dor, a supposed paradise that guards a murderous secret.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "warlordmars3_1409_librivox",
+      "author": "Edgar Rice Burroughs",
+      "title": "The Warlord of Mars",
+      "series": "Barsoom",
+      "sequence": 3,
+      "narrator": "LibriVox Volunteers",
+      "description": "A pursuit across the frozen north of Mars to rescue Dejah Thoris and settle the fate of a divided planet.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "tarzan_apes_mfs",
+      "author": "Edgar Rice Burroughs",
+      "title": "Tarzan of the Apes",
+      "series": "Tarzan",
+      "sequence": 1,
+      "narrator": "LibriVox Volunteers",
+      "description": "Orphaned on the African coast and raised by apes, a nobleman's son grows up between two worlds.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "return_of_tarzan_rs_librivox",
+      "author": "Edgar Rice Burroughs",
+      "title": "The Return of Tarzan",
+      "series": "Tarzan",
+      "sequence": 2,
+      "narrator": "LibriVox Volunteers",
+      "description": "Tarzan tries life among Parisian society, then finds his way back to the jungle and a lost city of gold.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "little_women_1212_librivox",
+      "author": "Louisa May Alcott",
+      "title": "Little Women",
+      "series": "Little Women",
+      "sequence": 1,
+      "narrator": "LibriVox Volunteers",
+      "description": "The four March sisters grow up in genteel poverty during the Civil War, sustained by each other and their ambitions.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "littlemen_dr_2108_librivox",
+      "author": "Louisa May Alcott",
+      "title": "Little Men",
+      "series": "Little Women",
+      "sequence": 2,
+      "narrator": "LibriVox Volunteers",
+      "description": "Jo and her husband run Plumfield, a school where a dozen boys are educated as much by kindness as by lessons.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "josboys_1804_librivox",
+      "author": "Louisa May Alcott",
+      "title": "Jo's Boys",
+      "series": "Little Women",
+      "sequence": 3,
+      "narrator": "LibriVox Volunteers",
+      "description": "The Plumfield boys are grown, and Jo watches them make their way in a world that has moved on without her.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "junglebook_1504_librivox",
+      "author": "Rudyard Kipling",
+      "title": "The Jungle Book",
+      "series": "The Jungle Book",
+      "sequence": 1,
+      "narrator": "LibriVox Volunteers",
+      "description": "Mowgli is raised by wolves and taught the Law of the Jungle by a bear and a panther, with a tiger waiting.",
+      "mode": "sample"
+    },
+    {
+      "identifier": "second_jungle_0902_librivox",
+      "author": "Rudyard Kipling",
+      "title": "The Second Jungle Book",
+      "series": "The Jungle Book",
+      "sequence": 2,
+      "narrator": "LibriVox Volunteers",
+      "description": "More of Mowgli's life among the wolves, and further tales from the jungle and the frozen north.",
+      "mode": "sample"
+    }
+  ]
+}

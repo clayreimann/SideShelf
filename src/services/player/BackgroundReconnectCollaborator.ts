@@ -14,6 +14,7 @@
 import { getCoverUri } from "@/lib/covers";
 import { configureTrackPlayer } from "@/lib/trackPlayerConfig";
 import { logger } from "@/lib/logger";
+import { updateNowPlayingMetadata } from "@/lib/nowPlayingMetadata";
 import { useAppStore } from "@/stores/appStore";
 import type { PlayerTrack } from "@/types/player";
 import { AppState } from "react-native";
@@ -160,9 +161,10 @@ export class BackgroundReconnectCollaborator implements IBackgroundReconnectColl
 
         store._setCurrentTrack(updatedTrack);
 
-        // Update TrackPlayer's now playing metadata with the new cover URI
-        // This ensures the lock screen and notification show the correct cover
-        await useAppStore.getState().updateNowPlayingMetadata();
+        // Update TrackPlayer's now playing metadata with the new cover URI so
+        // the lock screen and notification show the correct cover.
+        const position = useAppStore.getState().player.position;
+        await updateNowPlayingMetadata(updatedTrack, position);
 
         log.info("[PlayerService] Track metadata refreshed with new cover URI");
       } else {

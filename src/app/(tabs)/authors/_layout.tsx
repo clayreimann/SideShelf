@@ -16,6 +16,8 @@ export default function AuthorsLayout() {
         headerShadowVisible: false,
       }}>
         <Stack.Screen name="index" options={{ title: translate('tabs.authors') }} />
+        <Stack.Screen name="[authorId]/index" options={{ headerTitle: '' }} />
+        <Stack.Screen name="[authorId]/item/[itemId]" options={{ headerTitle: '', headerBackButtonDisplayMode: 'minimal' }} />
       </Stack>
     </TabErrorBoundary>
   );

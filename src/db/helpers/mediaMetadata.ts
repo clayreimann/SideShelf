@@ -1,4 +1,4 @@
-import { cacheCoverIfMissing, getCoverUri, isCoverCached } from "@/lib/covers";
+import { cacheCoverAndPersist, getCoverUri, isCoverCached } from "@/lib/covers";
 import type { ApiBook, ApiBookMinified, ApiPodcast, ApiPodcastMinified } from "@/types/api";
 import { eq } from "drizzle-orm";
 import { db } from "../client";
@@ -323,12 +323,10 @@ export async function cacheCoverAndUpdateMetadata(libraryItemId: string): Promis
 
     const mediaId = mediaResult[0].mediaId;
 
-    // Cache the cover
-    const result = await cacheCoverIfMissing(libraryItemId);
+    // Cache the cover and persist it in the local cache table
+    const result = await cacheCoverAndPersist(libraryItemId, mediaId);
 
-    // Only update the local cache if the cover was actually downloaded or if it already exists
     if (result.uri) {
-      await setLocalCoverCached(mediaId, result.uri);
       console.log(
         `[mediaMetadata] Cached cover for ${libraryItemId} (media: ${mediaId}): ${result.uri} (downloaded: ${result.wasDownloaded})`
       );

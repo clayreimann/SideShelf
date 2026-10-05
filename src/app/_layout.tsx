@@ -1,21 +1,33 @@
+import PlayerProgressToast from "@/components/ui/PlayerProgressToast";
 import { initializeApp } from "@/index";
+import { handleDeepLinkUrl } from "@/lib/deepLinkHandler";
+import {
+  describeLoggerDeepLinkParams,
+  hasLoggerDeepLinkChanges,
+  parseLoggerDeepLinkParams,
+} from "@/lib/deepLinkLoggerParams";
 import { formatTimeRemaining } from "@/lib/helpers/formatters";
 import { runDownloadReconciliationScan } from "@/lib/fileLifecycleManager";
 import { logger } from "@/lib/logger";
 import { useThemedStyles } from "@/lib/theme";
-import { AuthProvider } from "@/providers/AuthProvider";
+import { pruneTraceDumps } from "@/lib/traceDump";
+import { AuthProvider, authInitializedPromise } from "@/providers/AuthProvider";
 import { DbProvider } from "@/providers/DbProvider";
 import { StoreProvider } from "@/providers/StoreProvider";
 import { playerService } from "@/services/PlayerService";
-import { progressService } from "@/services/ProgressService";
+import { getCoordinator } from "@/services/coordinator/PlayerStateCoordinator";
 import { useAppStore } from "@/stores/appStore";
+import { PlayerState } from "@/types/coordinator";
 import { ErrorBoundary } from "@/components/errors";
-import { FontAwesome6, MaterialCommunityIcons, Octicons } from "@expo/vector-icons";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import Octicons from "@expo/vector-icons/Octicons";
 import { useFonts } from "expo-font";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useRef } from "react";
-import { AppState, AppStateStatus, Linking, View } from "react-native";
+import { Alert, AppState, AppStateStatus, Linking, View } from "react-native";
+import { ReducedMotionConfig, ReduceMotion } from "react-native-reanimated";
 import TrackPlayer, { State } from "react-native-track-player";
 
 // Create cached sublogger for this component
@@ -44,9 +56,12 @@ export default function RootLayout() {
     FontAwesome6: FontAwesome6.font,
   });
 
-  // Wait for fonts to load before rendering the app
+  // Wait for fonts to load AND auth to initialize before hiding the splash screen.
+  // authInitializedPromise resolves when AuthProvider.setInitialized(true) fires,
+  // preventing the 100-500ms login screen flash on cold start when already authenticated.
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded || fontsError) {
+      await authInitializedPromise;
       await SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontsError]);
@@ -66,7 +81,7 @@ export default function RootLayout() {
   }, []);
 
   // Handle app state changes for refetching progress and reconnection
-  const lastBackgroundTime = useRef<number>(0);
+  const lastBackgroundTime = useRef<number>(Date.now());
   const playerInitTimestamp = useRef<number>(0);
   useEffect(() => {
     // Store the player init timestamp on mount
@@ -81,6 +96,9 @@ export default function RootLayout() {
         // Trigger log purge when app goes to background
         logger.manualTrim();
       } else if (nextAppState === "active") {
+        // Prune old trace dumps on foreground (mirrors logger.manualTrim pattern)
+        pruneTraceDumps().catch((e) => log.warn(`Trace dump prune failed: ${String(e)}`));
+
         const timeInBackground = Date.now() - lastBackgroundTime.current;
         const wasLongBackground = timeInBackground > 30000; // 30 seconds
 
@@ -118,20 +136,6 @@ export default function RootLayout() {
             playerInitTimestamp.current = currentPlayerInitTimestamp;
           }
 
-          // Still fetch progress from server and sync position
-          log.info("Triggering progress refetch on app foreground");
-          progressService
-            .fetchServerProgress()
-            .then(async () => {
-              // Sync position from database after fetching server progress
-              await playerService.syncPositionFromDatabase().catch((error) => {
-                log.error("Failed to sync position from database", error as Error);
-              });
-            })
-            .catch((error) => {
-              log.error("Failed to fetch server progress on app foreground", error as Error);
-            });
-
           // Fire-and-forget download reconciliation scan (mirrors iCloud exclusion pattern)
           // Clears stale DB records for missing files, detects zombies — non-blocking
           runDownloadReconciliationScan().catch((error) => {
@@ -151,28 +155,23 @@ export default function RootLayout() {
         }
 
         if (wasLongBackground || contextRecreated) {
-          log.info(
-            `App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, restoring persisted state`
-          );
+          const machineState = getCoordinator().getState();
+          const needsRestore =
+            machineState === PlayerState.IDLE || machineState === PlayerState.RESTORING;
 
-          // Restore current track from AsyncStore if missing
-          // Coordinator bridge keeps store in sync; no manual reconciliation needed
-          await useAppStore.getState().restorePersistedState();
+          if (needsRestore) {
+            log.info(
+              `App resumed after long background (${formatTimeRemaining(Math.round(timeInBackground / 1000))}s) or context recreated, restoring persisted state`
+            );
+            // Restore current track from AsyncStore if missing
+            // Coordinator bridge keeps store in sync; no manual reconciliation needed
+            await useAppStore.getState().restorePersistedState();
+          } else {
+            log.info(
+              `[RootLayout] Skipping restore on foreground — machine already in ${machineState}`
+            );
+          }
         }
-
-        log.info("Triggering progress refetch on app foreground");
-        // Fetch latest progress from server when app becomes active
-        progressService
-          .fetchServerProgress()
-          .then(async () => {
-            // Sync position from database after fetching server progress
-            await playerService.syncPositionFromDatabase().catch((error) => {
-              log.error("Failed to sync position from database", error as Error);
-            });
-          })
-          .catch((error) => {
-            log.error("Failed to fetch server progress on app foreground", error as Error);
-          });
 
         // Fire-and-forget download reconciliation scan (mirrors iCloud exclusion pattern)
         // Clears stale DB records for missing files, detects zombies — non-blocking
@@ -189,98 +188,75 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Handle deep links for logger configuration and bundle loader
+  // Handle deep links for logger configuration
   useEffect(() => {
     /**
-     * Parse deep link URLs and handle different link types
+     * Parse deep link URLs and handle logger configuration
      * Supported formats:
      * - side-shelf://logger?level[TAG_NAME]=warn&level[TAG_NAME_3]=debug&enabled[TAG_NAME_2]=false
-     * - side-shelf://bundle-loader?url=https://example.com/bundle
      */
     const handleDeepLink = async (url: string) => {
+      log.info(`[handleDeepLink] received url="${url}"`);
       try {
-        const urlObj = new URL(url);
-
-        // Handle bundle-loader deep links
-        if (url.includes("://bundle-loader")) {
-          log.info(`Processing bundle-loader deep link: ${url}`);
-
-          const bundleUrl = urlObj.searchParams.get("url");
-
-          if (bundleUrl) {
-            // Navigate to bundle-loader with URL pre-filled
-            router.push({
-              pathname: "/more/bundle-loader",
-              params: { url: bundleUrl },
-            });
-            log.info(`Navigating to bundle-loader with URL: ${bundleUrl}`);
-          } else {
-            log.warn("No URL parameter found in bundle-loader deep link");
-            // Still navigate to bundle-loader screen
-            router.push("/more/bundle-loader");
-          }
-
-          return;
-        }
-
         // Handle logger configuration deep links
         if (url.includes("://logger")) {
           log.info(`Processing logger deep link: ${url}`);
 
-          // Parse query parameters with bracket notation
-          const tagLevels: Record<string, string> = {};
-          const tagEnabled: Record<string, string> = {};
+          const params = parseLoggerDeepLinkParams(url);
 
-          urlObj.searchParams.forEach((value, key) => {
-            // Parse level[TAG_NAME]=warn format
-            const levelMatch = key.match(/^level\[(.+)\]$/);
-            if (levelMatch) {
-              const tagName = decodeURIComponent(levelMatch[1]);
-              tagLevels[tagName] = value;
-            }
-
-            // Parse enabled[TAG_NAME]=false format
-            const enabledMatch = key.match(/^enabled\[(.+)\]$/);
-            if (enabledMatch) {
-              const tagName = decodeURIComponent(enabledMatch[1]);
-              tagEnabled[tagName] = value;
-            }
-          });
-
-          // Apply logger configurations
-          let configApplied = false;
-
-          // Set log levels
-          for (const [tag, level] of Object.entries(tagLevels)) {
-            const logLevel = level.toLowerCase() as "debug" | "info" | "warn" | "error";
-            if (["debug", "info", "warn", "error"].includes(logLevel)) {
-              await logger.setTagLevel(tag, logLevel);
-              log.info(`Set log level for tag "${tag}" to ${logLevel}`);
-              configApplied = true;
-            }
-          }
-
-          // Set enabled/disabled state
-          for (const [tag, enabledValue] of Object.entries(tagEnabled)) {
-            const isEnabled = enabledValue.toLowerCase() !== "false";
-            if (isEnabled) {
-              logger.enableTag(tag);
-              log.info(`Enabled tag "${tag}"`);
-            } else {
-              logger.disableTag(tag);
-              log.info(`Disabled tag "${tag}"`);
-            }
-            configApplied = true;
-          }
-
-          if (configApplied) {
-            // Navigate to logger settings screen
-            router.push("/more/logger-settings");
-            log.info("Logger configuration applied, navigating to logger settings");
-          } else {
+          if (!hasLoggerDeepLinkChanges(params)) {
             log.warn("No valid logger configuration found in deep link");
+            return;
           }
 
+          // A tapped link can otherwise silently flip on verbose logging tags
+          // (e.g. "api:fetch:detailed", which logs full request/response bodies —
+          // see src/lib/api/redact.ts) with no user awareness. Logs are later
+          // exportable via expo-sharing (src/lib/exportUtils.ts), so require
+          // explicit confirmation before applying anything from a deep link.
+          const changeDescriptions = describeLoggerDeepLinkParams(params);
+          Alert.alert(
+            "Logger Configuration Change",
+            `This link is requesting the following logging changes:\n\n${changeDescriptions.join("\n")}\n\nDetailed logging can capture sensitive data, including login credentials and session tokens. Only apply this if you trust the source of this link.`,
+            [
+              {
+                text: "Cancel",
+                style: "cancel",
+                onPress: () => {
+                  log.info("Logger deep link changes declined by user");
+                },
+              },
+              {
+                text: "Apply",
+                onPress: async () => {
+                  for (const [tag, level] of Object.entries(params.tagLevels)) {
+                    await logger.setTagLevel(tag, level);
+                    log.info(`Set log level for tag "${tag}" to ${level}`);
+                  }
+
+                  for (const [tag, enabled] of Object.entries(params.tagEnabled)) {
+                    if (enabled) {
+                      logger.enableTag(tag);
+                      log.info(`Enabled tag "${tag}"`);
+                    } else {
+                      logger.disableTag(tag);
+                      log.info(`Disabled tag "${tag}"`);
+                    }
+                  }
+
+                  router.push("/more/logger-settings");
+                  log.info("Logger configuration applied, navigating to logger settings");
+                },
+              },
+            ]
+          );
+
+          return;
+        }
+
+        // Handle sideshelf:// navigation deep links
+        if (url.startsWith("sideshelf://")) {
+          await handleDeepLinkUrl(url);
           return;
         }
 
@@ -293,6 +269,7 @@ export default function RootLayout() {
 
     // Handle initial URL if app was opened via deep link
     Linking.getInitialURL().then((url) => {
+      log.info(`[RootLayout] getInitialURL="${url ?? "null"}"`);
       if (url) {
         handleDeepLink(url);
       }
@@ -300,6 +277,7 @@ export default function RootLayout() {
 
     // Listen for deep links while app is running
     const subscription = Linking.addEventListener("url", (event) => {
+      log.info(`[RootLayout] Linking.addEventListener url="${event.url}"`);
       handleDeepLink(event.url);
     });
 
@@ -314,6 +292,7 @@ export default function RootLayout() {
 
   return (
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <ReducedMotionConfig mode={ReduceMotion.System} />
       <ErrorBoundary boundaryName="AppRoot">
         <DbProvider>
           <AuthProvider>
@@ -348,6 +327,7 @@ export default function RootLayout() {
                   }}
                 />
               </Stack>
+              <PlayerProgressToast />
             </StoreProvider>
           </AuthProvider>
         </DbProvider>

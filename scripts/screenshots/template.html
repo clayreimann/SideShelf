@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>SideShelf App Store screenshot frame</title>
+    <style>
+      /*
+       * Canvas is exactly 1320x2868 -- the App Store Connect iPhone 6.9"
+       * requirement -- so overflow must never be allowed to grow the page;
+       * headless Chrome's --window-size screenshot only guarantees exact
+       * output dimensions when there's nothing to scroll to.
+       */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 1320px;
+        height: 2868px;
+        overflow: hidden;
+        background: {{BG_COLOR}};
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .caption-band {
+        flex: 0 0 auto;
+        box-sizing: border-box;
+        width: 100%;
+        padding: 120px 100px 0;
+        text-align: center;
+      }
+
+      .caption-band h1 {
+        margin: 0;
+        color: #ffffff;
+        font-size: 68px;
+        font-weight: 700;
+        line-height: 1.28;
+        letter-spacing: -0.5px;
+      }
+
+      .accent-underline {
+        width: 120px;
+        height: 7px;
+        margin: 32px auto 0;
+        border-radius: 4px;
+        background: {{ACCENT_COLOR}};
+      }
+
+      .device-wrap {
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        box-sizing: border-box;
+        padding-bottom: 90px;
+      }
+
+      .device-bezel {
+        position: relative;
+        width: 1080px;
+        border-radius: 88px;
+        border: 16px solid #000000;
+        background: #000000;
+        overflow: hidden;
+        box-shadow: 0 60px 130px rgba(0, 0, 0, 0.55);
+      }
+
+      .device-bezel img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .dynamic-island {
+        position: absolute;
+        top: 34px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 220px;
+        height: 64px;
+        border-radius: 32px;
+        background: #000000;
+        z-index: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="caption-band">
+      <h1>{{CAPTION}}</h1>
+      <div class="accent-underline"></div>
+    </div>
+    <div class="device-wrap">
+      <div class="device-bezel">
+        <div class="dynamic-island"></div>
+        <img src="{{IMAGE_SRC}}" alt="" />
+      </div>
+    </div>
+  </body>
+</html>

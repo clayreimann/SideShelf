@@ -2,9 +2,15 @@ import { clearAudioFileDownloadStatus, markAudioFileAsDownloaded } from "@/db/he
 import { getAudioFilesWithDownloadInfo } from "@/db/helpers/combinedQueries";
 import { getMediaMetadataByLibraryItemId } from "@/db/helpers/mediaMetadata";
 import { cacheCoverIfMissing } from "@/lib/covers";
-import { getDownloadPath, getDownloadsDirectory, verifyFileExists } from "@/lib/fileSystem";
+import {
+  getAudioFileLocation,
+  getDownloadPath,
+  getDownloadsDirectory,
+  verifyFileExists,
+} from "@/lib/fileSystem";
 import { setExcludeFromBackup } from "@/lib/iCloudBackupExclusion";
 import { logger } from "@/lib/logger";
+import { trace } from "@/lib/trace";
 import type { IDownloadRepairCollaborator } from "@/services/download/types";
 
 const log = logger.forTag("DownloadRepairCollaborator");
@@ -41,20 +47,25 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
   async repairDownloadStatus(libraryItemId: string): Promise<number> {
     log.info(`Repairing download status for ${libraryItemId}...`);
 
+    const parentSpan = trace.startSpan("player.load.repair_download_paths", { libraryItemId });
+
     try {
       const metadata = await getMediaMetadataByLibraryItemId(libraryItemId);
       if (!metadata) {
         log.info(`No metadata found for ${libraryItemId}`);
+        trace.endSpan(parentSpan, "ok", { totalFiles: 0, repairedCount: 0, clearedCount: 0 });
         return 0;
       }
 
       const audioFiles = await getAudioFilesWithDownloadInfo(metadata.id);
       if (audioFiles.length === 0) {
         log.info(`No audio files found for ${libraryItemId}`);
+        trace.endSpan(parentSpan, "ok", { totalFiles: 0, repairedCount: 0, clearedCount: 0 });
         return 0;
       }
 
       let repairedCount = 0;
+      let clearedCount = 0;
 
       for (const file of audioFiles) {
         if (!file.downloadInfo?.isDownloaded) {
@@ -62,23 +73,37 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
           continue;
         }
 
-        // Check if file exists at stored path
-        const existsAtStoredPath = await verifyFileExists(file.downloadInfo.downloadPath);
+        const storedPath = file.downloadInfo.downloadPath;
+        const existsAtStoredPath = await verifyFileExists(storedPath);
 
         if (existsAtStoredPath) {
           // File is fine, no repair needed
+          const fileSpan = trace.startSpan(
+            "player.load.repair_file",
+            {
+              audioFileId: file.id,
+              filename: file.filename,
+              storedPath,
+              existsAtStoredPath: true,
+              action: "ok",
+            },
+            parentSpan.context
+          );
+          trace.endSpan(fileSpan, "ok");
           continue;
         }
 
         log.warn(`File marked as downloaded but missing at stored path: ${file.filename}`);
-        log.warn(`  Stored path: ${file.downloadInfo.downloadPath}`);
+        log.warn(`  Stored path: ${storedPath}`);
 
-        // Try to find the file using the expected download path (current container)
-        const expectedPath = getDownloadPath(libraryItemId, file.filename);
-        const existsAtExpectedPath = await verifyFileExists(expectedPath);
+        // Try to find the file by checking both Documents and Caches using current container paths.
+        // getAudioFileLocation() is safe even for legacy absolute stored paths because it constructs
+        // fresh paths via Paths.document / Paths.cache — immune to iOS container UUID rotation.
+        const foundLocation = getAudioFileLocation(libraryItemId, file.filename);
 
-        if (existsAtExpectedPath) {
-          log.info(`  ✓ Found file at expected path: ${expectedPath}`);
+        if (foundLocation !== null) {
+          const expectedPath = getDownloadPath(libraryItemId, file.filename, foundLocation);
+          log.info(`  ✓ Found file at ${foundLocation}: ${expectedPath}`);
           log.info(`  Updating database with corrected path...`);
 
           // Update the database with the corrected path
@@ -97,13 +122,43 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
           }
 
           log.info(`  ✓ Repaired download path for ${file.filename}`);
+
+          const fileSpan = trace.startSpan(
+            "player.load.repair_file",
+            {
+              audioFileId: file.id,
+              filename: file.filename,
+              storedPath,
+              existsAtStoredPath: false,
+              foundLocation,
+              expectedPath,
+              action: "repaired",
+            },
+            parentSpan.context
+          );
+          trace.endSpan(fileSpan, "ok");
         } else {
-          log.warn(`  ✗ File not found at expected path either: ${expectedPath}`);
+          log.warn(`  ✗ File not found in Documents or Caches`);
           log.warn(`  File may have been deleted by iOS to free storage space`);
           log.warn(`  Clearing download status...`);
 
-          // File truly doesn't exist, clear the download status
+          // File truly doesn't exist in either location, clear the download status
           await clearAudioFileDownloadStatus(file.id);
+          clearedCount++;
+
+          const fileSpan = trace.startSpan(
+            "player.load.repair_file",
+            {
+              audioFileId: file.id,
+              filename: file.filename,
+              storedPath,
+              existsAtStoredPath: false,
+              foundLocation: null,
+              action: "cleared",
+            },
+            parentSpan.context
+          );
+          trace.endSpan(fileSpan, "ok");
         }
       }
 
@@ -113,9 +168,15 @@ export class DownloadRepairCollaborator implements IDownloadRepairCollaborator {
         log.info(`No repairs needed for library item ${libraryItemId}`);
       }
 
+      trace.endSpan(parentSpan, "ok", {
+        totalFiles: audioFiles.length,
+        repairedCount,
+        clearedCount,
+      });
       return repairedCount;
     } catch (error) {
       log.error(`Error repairing download status for ${libraryItemId}:`, error as Error);
+      trace.endSpan(parentSpan, "error");
       return 0;
     }
   }

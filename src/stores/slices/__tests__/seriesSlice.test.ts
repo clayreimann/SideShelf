@@ -148,7 +148,7 @@ describe("SeriesSlice", () => {
 
       store.getState().resetSeries();
       await store.getState().initializeSeries(false, true);
-      expect(store.getState().series.ready).toBe(false);
+      expect(store.getState().series.ready).toBe(true);
 
       store.getState().resetSeries();
       await store.getState().initializeSeries(true, false);
@@ -164,6 +164,16 @@ describe("SeriesSlice", () => {
       expect(getAllSeries).toHaveBeenCalled();
       const state = store.getState();
       expect(state.series.series).toEqual(mockSeries);
+    });
+
+    it("should fetch cached series when only the database is ready", async () => {
+      getAllSeries.mockResolvedValue(mockSeries);
+      transformSeriesToDisplayFormat.mockReturnValue(mockDisplaySeries);
+
+      await store.getState().initializeSeries(false, true);
+
+      expect(getAllSeries).toHaveBeenCalled();
+      expect(store.getState().series.series).toEqual(mockSeries);
     });
 
     it("should not fetch series when not ready", async () => {
@@ -336,9 +346,9 @@ describe("SeriesSlice", () => {
       expect(store.getState().series.ready).toBe(true);
     });
 
-    it("should set ready to false when API is not initialized", () => {
+    it("should stay ready when the DB is initialized without API credentials", () => {
       store.getState()._setSeriesReady(false, true);
-      expect(store.getState().series.ready).toBe(false);
+      expect(store.getState().series.ready).toBe(true);
     });
 
     it("should set ready to false when DB is not initialized", () => {
@@ -414,7 +424,15 @@ describe("SeriesSlice", () => {
       // Modify rawItems
       const modifiedRawItems = [
         ...mockDisplaySeries,
-        { id: "new-series", name: "New Series", description: null, addedAt: null, updatedAt: null, bookCount: 1, firstBookCoverUrl: null },
+        {
+          id: "new-series",
+          name: "New Series",
+          description: null,
+          addedAt: null,
+          updatedAt: null,
+          bookCount: 1,
+          firstBookCoverUrl: null,
+        },
       ];
       store.getState().series.rawItems = modifiedRawItems;
 

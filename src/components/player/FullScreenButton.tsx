@@ -1,7 +1,9 @@
+import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
+import IconButton from "@/components/ui/IconButton";
 import { Ionicons } from "@expo/vector-icons";
 import { SymbolView } from "expo-symbols";
-import { Platform, Pressable } from "react-native";
+import { Platform } from "react-native";
 
 /**
  * FullScreenButton component
@@ -30,16 +32,11 @@ export default function FullScreenButton({
   const { colors } = useThemedStyles();
 
   return (
-    <Pressable
+    <IconButton
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => ({
-        width: hitBoxSize,
-        height: hitBoxSize,
-        justifyContent: "center",
-        alignItems: "center",
-        opacity: pressed ? 0.5 : disabled ? 0.5 : 1,
-      })}
+      hitBoxSize={hitBoxSize}
+      accessibilityLabel={translate("accessibility.openFullPlayer")}
     >
       {Platform.OS === "ios" ? (
         <SymbolView
@@ -51,6 +48,6 @@ export default function FullScreenButton({
       ) : (
         <Ionicons name="expand" size={iconSize} color={colors.textPrimary} />
       )}
-    </Pressable>
+    </IconButton>
   );
 }

@@ -1,10 +1,11 @@
 import { translate } from "@/i18n";
 import { useThemedStyles } from "@/lib/theme";
+import IconButton from "@/components/ui/IconButton";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { MenuComponentRef, MenuView } from "@react-native-menu/menu";
 import { SymbolView, SymbolViewProps } from "expo-symbols";
 import { useRef } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 
 // Common jump interval options (in seconds)
 const JUMP_INTERVALS = [5, 10, 15, 30, 45, 60, 90, 120];
@@ -102,18 +103,16 @@ export default function SkipButton({
   // If no onJump handler provided, just render the button without menu
   if (!onJump) {
     return (
-      <Pressable
+      <IconButton
         onPress={onPress}
-        style={({ pressed }) => ({
-          width: hitBoxSize,
-          height: hitBoxSize,
-          justifyContent: "center",
-          alignItems: "center",
-          opacity: pressed ? 0.5 : 1,
-        })}
+        hitBoxSize={hitBoxSize}
+        accessibilityLabel={translate(
+          direction === "forward" ? "accessibility.skipForward" : "accessibility.skipBackward",
+          { seconds }
+        )}
       >
         {iconContent}
-      </Pressable>
+      </IconButton>
     );
   }
 
@@ -122,7 +121,7 @@ export default function SkipButton({
   // the menu is opened programmatically via ref.show() from onLongPress instead.
   // This avoids UIContextMenuInteraction gesture conflicts with the inner Pressable.
   return (
-    <Pressable
+    <IconButton
       onPress={() => {
         if (suppressNextPress.current) {
           suppressNextPress.current = false;
@@ -132,15 +131,17 @@ export default function SkipButton({
       }}
       onLongPress={() => {
         suppressNextPress.current = true;
-        menuRef.current?.show();
+        // show() is only implemented on Android; iOS relies on shouldOpenOnLongPress natively
+        if (typeof menuRef.current?.show === "function") {
+          menuRef.current.show();
+        }
       }}
-      style={({ pressed }) => ({
-        width: hitBoxSize,
-        height: hitBoxSize,
-        justifyContent: "center",
-        alignItems: "center",
-        opacity: pressed ? 0.5 : 1,
-      })}
+      hitBoxSize={hitBoxSize}
+      accessibilityLabel={translate(
+        direction === "forward" ? "accessibility.skipForward" : "accessibility.skipBackward",
+        { seconds }
+      )}
+      accessibilityHint={translate("accessibility.skipHint")}
     >
       <MenuView
         ref={menuRef}
@@ -156,6 +157,6 @@ export default function SkipButton({
       >
         <View style={{ alignItems: "center", justifyContent: "center" }}>{iconContent}</View>
       </MenuView>
-    </Pressable>
+    </IconButton>
   );
 }
