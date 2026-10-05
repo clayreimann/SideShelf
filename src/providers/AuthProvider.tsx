@@ -57,6 +57,16 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function resetUserScopedSlices(): void {
+  const store = useAppStore.getState();
+  store.resetLibrary();
+  store.resetSeries();
+  store.resetAuthors();
+  store.resetItemDetails();
+  store.resetUserProfile();
+  store.resetHome();
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { initialized: dbInitialized } = useDb();
   const [state, setState] = useState<AuthState>({
@@ -145,21 +155,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ]);
   const isAuthenticated = authStatus === "authenticated";
 
-  const clearUserData = useCallback(async () => {
-    // Wipe before resetting slices: a reset slice re-initializes from the DB immediately,
-    // so resetting first would reload the previous session's rows (e.g. its libraries).
-    try {
-      await wipeUserData();
-    } finally {
-      const store = useAppStore.getState();
-      store.resetLibrary();
-      store.resetSeries();
-      store.resetAuthors();
-      store.resetItemDetails();
-      store.resetUserProfile();
-      store.resetHome();
-    }
-  }, []);
+  // Wipe before resetting: a reset slice re-initializes from the DB immediately and would
+  // otherwise reload the previous session's rows (e.g. its libraries).
+  const clearUserData = useCallback(() => wipeUserData().finally(resetUserScopedSlices), []);
 
   const clearCredentials = useCallback(async () => {
     const results = await Promise.allSettled([
