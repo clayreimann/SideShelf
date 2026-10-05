@@ -34,6 +34,8 @@
     "test:report": "jest --coverage --json --outputFile=test-results.json && echo 'open test-report.html coverage/lcov-report/index.html'",
     "drizzle:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "check:circular": "node scripts/check-circular.mjs",
+    "pr-size": "node scripts/pr-size/local.mjs",
+    "test:pr-size": "node --test scripts/pr-size/__tests__/core.test.mjs scripts/pr-size/__tests__/local.test.mjs scripts/pr-size/__tests__/hooks.test.mjs",
     "generate:expo-types": "npx expo customize tsconfig.json",
     "typecheck": "npm run generate:expo-types && tsc --noEmit --pretty false",
     "static-analysis": "npm run typecheck && npm run lint && npm run check:circular",

@@ -34,6 +34,18 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CLAUDE_PROJECT_DIR\" ] && [ -f \"$CLAUDE_PROJECT_DIR/scripts/pr-size/local.mjs\" ] && node \"$CLAUDE_PROJECT_DIR/scripts/pr-size/local.mjs\" --hook 2>/dev/null; exit 0",
+            "timeout": 15
+          }
+        ]
+      }
     ]
   }
 }

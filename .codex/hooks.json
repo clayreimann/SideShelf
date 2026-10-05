@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'const x=require(\"child_process\"),fs=require(\"fs\"),p=require(\"path\"),u=require(\"url\"),h=require(\"crypto\");let i=\"\";process.stdin.on(\"data\",d=>i+=d).on(\"end\",async()=>{try{const j=JSON.parse(i||\"{}\");const r=x.execFileSync(\"git\",[\"rev-parse\",\"--show-toplevel\"],{cwd:j.cwd||process.cwd(),encoding:\"utf8\",stdio:[\"ignore\",\"pipe\",\"ignore\"]}).trim();const d=p.join(r,\"scripts\",\"pr-size\"),s=h.createHash(\"sha256\");for(const n of [\"local.mjs\",\"core.mjs\"]){const b=fs.readFileSync(p.join(d,n));s.update(n+\"\\n\"+b.length+\"\\n\");s.update(b)}if(s.digest(\"hex\")!==\"acac6192bccbdfb95a8e0ecb0d925a0a4972c95f48d4892276a35475ad7faf2e\")return;const m=await import(u.pathToFileURL(p.join(d,\"local.mjs\")).href);const o=await m.runHook(j);if(o)process.stdout.write(JSON.stringify(o))}catch{}});' 2>/dev/null; exit 0",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

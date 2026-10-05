@@ -30,3 +30,6 @@ jobs:
 
       - name: Run static analysis
         run: npm run static-analysis
+
+      - name: Run PR size advisory tests
+        run: npm run test:pr-size
