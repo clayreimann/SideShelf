@@ -71,9 +71,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/coverage/coverage-summary.json
-          git commit -m "chore: Update coverage baseline
-
-${{ env.COVERAGE_SUMMARY }}
-
-[skip ci]"
+          git commit -m "chore: Update coverage baseline" -m "${{ env.COVERAGE_SUMMARY }}" -m "[skip ci]"
           git push
