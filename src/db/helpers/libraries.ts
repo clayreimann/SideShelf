@@ -1,7 +1,7 @@
 import { db } from "@/db/client";
 import { libraries } from "@/db/schema/libraries";
 import type { ApiLibrariesResponse, ApiLibrary } from "@/types/api";
-import { eq, sql } from "drizzle-orm";
+import { eq, notInArray, sql } from "drizzle-orm";
 
 export type NewLibraryRow = typeof libraries.$inferInsert;
 export type LibraryRow = typeof libraries.$inferSelect;
@@ -59,6 +59,20 @@ export async function getLibraryById(id: string): Promise<LibraryRow | null> {
   const result = await db.select().from(libraries).where(eq(libraries.id, id)).limit(1);
 
   return result[0] || null;
+}
+
+/**
+ * Delete libraries whose IDs are not in `keepIds`.
+ *
+ * Used after a library refresh so libraries removed on the server (or left over from a
+ * previous server) do not linger in the local cache. An empty `keepIds` deletes all rows.
+ */
+export async function deleteLibrariesNotIn(keepIds: string[]): Promise<void> {
+  if (keepIds.length === 0) {
+    await db.delete(libraries);
+    return;
+  }
+  await db.delete(libraries).where(notInArray(libraries.id, keepIds));
 }
 
 // Delete all libraries (useful for refresh scenarios)

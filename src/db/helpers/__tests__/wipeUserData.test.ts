@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { createTestDb, TestDatabase } from "@/__tests__/utils/testDb";
+import { languages } from "@/db/schema/languages";
 import { libraries } from "@/db/schema/libraries";
+import { libraryFiles } from "@/db/schema/libraryFiles";
 import { libraryItems } from "@/db/schema/libraryItems";
 import {
   localListeningSessions,
@@ -51,5 +53,23 @@ describe("wipeUserData", () => {
     expect(await testDb.db.select().from(progressSyncOutbox)).toEqual([]);
     expect(await testDb.db.select().from(localProgressSnapshots)).toEqual([]);
     expect(await testDb.db.select().from(localListeningSessions)).toEqual([]);
+  });
+
+  it("deletes libraries, library files, and languages so a new server starts clean", async () => {
+    await testDb.db.insert(libraryFiles).values({
+      id: "file-1",
+      libraryItemId: "item-1",
+      ino: "1",
+      filename: "a.mp3",
+      path: "/a.mp3",
+    });
+    await testDb.db.insert(languages).values({ name: "English" });
+    testDb.sqlite.execSync("PRAGMA foreign_keys = OFF");
+
+    await wipeUserData();
+
+    expect(await testDb.db.select().from(libraries)).toEqual([]);
+    expect(await testDb.db.select().from(libraryFiles)).toEqual([]);
+    expect(await testDb.db.select().from(languages)).toEqual([]);
   });
 });

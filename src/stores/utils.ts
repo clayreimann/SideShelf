@@ -2,10 +2,15 @@
  * Utility functions for the library store
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthorListRow } from '@/db/helpers/authors';
+import type { LibraryRow } from '@/db/helpers/libraries';
 import { SeriesListRow } from '@/db/helpers/series';
 import type { LibraryItemListRow } from '@/types/database';
 import { AuthorSortConfig, SeriesSortConfig, SortConfig } from '@/types/store';
+import { logger } from '@/lib/logger';
+
+const log = logger.forTag('StoreUtils');
 
 /**
  * Storage keys for persisting state
@@ -14,6 +19,32 @@ export const STORAGE_KEYS = {
     selectedLibraryId: 'abs.selectedLibraryId',
     sortConfig: 'abs.sortConfig',
 } as const;
+
+/**
+ * The library to select by default: the first by display order (libraries without an
+ * order sort last). Returns undefined when there are no libraries.
+ */
+export function getDefaultLibrary(libraries: LibraryRow[]): LibraryRow | undefined {
+    return [...libraries].sort(
+        (a, b) => (a.displayOrder ?? Number.MAX_SAFE_INTEGER) - (b.displayOrder ?? Number.MAX_SAFE_INTEGER)
+    )[0];
+}
+
+/**
+ * Persist the selected library ID, or clear it when `libraryId` is null.
+ * Failures are logged, not thrown — the in-memory selection stays authoritative.
+ */
+export async function persistSelectedLibraryId(libraryId: string | null): Promise<void> {
+    try {
+        if (libraryId) {
+            await AsyncStorage.setItem(STORAGE_KEYS.selectedLibraryId, libraryId);
+        } else {
+            await AsyncStorage.removeItem(STORAGE_KEYS.selectedLibraryId);
+        }
+    } catch (error) {
+        log.error('Failed to persist selected library:', error as Error);
+    }
+}
 
 /**
  * Default sort configuration

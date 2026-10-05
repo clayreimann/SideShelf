@@ -11,6 +11,7 @@
 
 import { processFullLibraryItems } from "@/db/helpers/fullLibraryItems";
 import {
+  deleteLibrariesNotIn,
   getAllLibraries,
   getLibraryById,
   LibraryRow,
@@ -42,7 +43,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LibraryItemDisplayRow } from "@/types/components";
 import type { SliceCreator, SortConfig } from "@/types/store";
 import type { ApiBook, ApiPodcast } from "@/types/api";
-import { DEFAULT_SORT_CONFIG, sortLibraryItems, STORAGE_KEYS } from "../utils";
+import {
+  DEFAULT_SORT_CONFIG,
+  getDefaultLibrary,
+  persistSelectedLibraryId,
+  sortLibraryItems,
+  STORAGE_KEYS,
+} from "../utils";
 
 // Create cached sublogger for this slice
 const log = logger.forTag("LibrarySlice");
@@ -203,27 +210,15 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
           libraries = await get()._refetchLibraries();
         }
 
-        // If no library is selected but we have libraries, select the first one by display order
-        let finalSelectedLibraryId = selectedLibraryId;
-        let finalSelectedLibrary = libraries.find((l) => l.id == selectedLibraryId);
-        if (!selectedLibraryId && libraries.length > 0) {
-          // Sort by display order and select first
-          const sortedLibraries = [...libraries].sort((a, b) => {
-            const orderA = a.displayOrder ?? Number.MAX_SAFE_INTEGER;
-            const orderB = b.displayOrder ?? Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-          });
-          finalSelectedLibraryId = sortedLibraries[0].id;
-          finalSelectedLibrary = sortedLibraries[0];
-          log.info(`Auto-selecting first library by display order: ${finalSelectedLibrary.name}`);
-
-          // Persist the selection
-          try {
-            await AsyncStorage.setItem(STORAGE_KEYS.selectedLibraryId, finalSelectedLibraryId);
-          } catch (error) {
-            log.error(" Failed to persist auto-selected library:", error as Error);
-          }
+        // Keep the persisted selection only if it is in the cache; a missing one is stale
+        // (e.g. from a previous server), so fall back to the first library by display order.
+        let finalSelectedLibrary = libraries.find((l) => l.id === selectedLibraryId);
+        if (!finalSelectedLibrary) {
+          finalSelectedLibrary = getDefaultLibrary(libraries);
+          log.info(`Auto-selecting library: ${finalSelectedLibrary?.name ?? "none available"}`);
+          await persistSelectedLibraryId(finalSelectedLibrary?.id ?? null);
         }
+        const finalSelectedLibraryId = finalSelectedLibrary?.id ?? null;
 
         let rawItems: LibraryItemDisplayRow[] = [];
         let items = [];
@@ -267,7 +262,7 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
             library: {
               ...state.library,
               selectedLibraryId: finalSelectedLibraryId,
-              selectedLibrary: finalSelectedLibrary,
+              selectedLibrary: finalSelectedLibrary ?? null,
               libraries,
               rawItems,
               items: sortLibraryItems(rawItems, state.library.sortConfig),
@@ -493,33 +488,30 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
       // Marshal and store in database
       const libraryRows = marshalLibrariesFromResponse(response);
       await upsertLibraries(libraryRows);
+      // Drop libraries the server no longer reports (deleted, or left over from another server)
+      await deleteLibrariesNotIn(libraryRows.map((row) => row.id));
 
       // Get updated libraries from database
       const libraries = await getAllLibraries();
+      // Keep the selected row in sync with refreshed data (e.g. a rename). If the selection is
+      // gone (or there was none), fall back to the first library by display order.
+      const currentSelected = libraries.find((l) => l.id === get().library.selectedLibraryId);
+      const selectedLibrary = currentSelected ?? getDefaultLibrary(libraries) ?? null;
       set((state: LibrarySlice) => ({
         ...state,
-        library: { ...state.library, libraries },
+        library: {
+          ...state.library,
+          libraries,
+          selectedLibraryId: selectedLibrary?.id ?? null,
+          selectedLibrary,
+          ...(selectedLibrary ? {} : { rawItems: [], items: [] }),
+        },
       }));
 
-      if (!state.library.selectedLibraryId && libraries.length > 0) {
-        // If no library is selected but we have libraries, select the first one by display order
-        log.info(" Defaulting to first library by display order");
-        const sortedLibraries = [...libraries].sort((a, b) => {
-          const orderA = a.displayOrder ?? Number.MAX_SAFE_INTEGER;
-          const orderB = b.displayOrder ?? Number.MAX_SAFE_INTEGER;
-          return orderA - orderB;
-        });
-        const selectedLibrary = sortedLibraries[0];
-        set((state: LibrarySlice) => ({
-          ...state,
-          library: {
-            ...state.library,
-            selectedLibraryId: selectedLibrary.id,
-            selectedLibrary,
-          },
-        }));
-
-        await get()._loadCachedItems();
+      if (!currentSelected) {
+        log.info(` Defaulting to library: ${selectedLibrary?.name ?? "none available"}`);
+        await persistSelectedLibraryId(selectedLibrary?.id ?? null);
+        if (selectedLibrary) await get()._loadCachedItems();
       }
 
       log.info(`Successfully refreshed ${libraries.length} libraries`);
@@ -973,6 +965,8 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
       ...state,
       ...initialLibraryState,
     }));
+    // The persisted selection belongs to the session being reset
+    void persistSelectedLibraryId(null);
   },
 
   /**
@@ -1095,16 +1089,10 @@ export const createLibrarySlice: SliceCreator<LibrarySlice> = (set, get) => ({
     }
 
     // Step 2: If we have libraries but none selected, auto-select the first by display order
-    if (!selectedLibraryId && libraries.length > 0) {
-      const sortedLibraries = [...libraries].sort((a, b) => {
-        const orderA = a.displayOrder ?? Number.MAX_SAFE_INTEGER;
-        const orderB = b.displayOrder ?? Number.MAX_SAFE_INTEGER;
-        return orderA - orderB;
-      });
-      selectedLibraryId = sortedLibraries[0].id;
-      log.info(
-        ` Auto-selecting first library by display order: ${sortedLibraries[0].name} (id=${selectedLibraryId})`
-      );
+    const defaultLibrary = getDefaultLibrary(libraries);
+    if (!selectedLibraryId && defaultLibrary) {
+      selectedLibraryId = defaultLibrary.id;
+      log.info(` Auto-selecting first library by display order: ${defaultLibrary.name}`);
 
       // For first-time setup, force full API fetch to populate the library
       await get().selectLibrary(selectedLibraryId, true);

@@ -15,6 +15,7 @@ import {
 import { createTestDb, TestDatabase } from '../../../__tests__/utils/testDb';
 import {
   deleteAllLibraries,
+  deleteLibrariesNotIn,
   getAllLibraries,
   getLibraryById,
   marshalLibrariesFromResponse,
@@ -117,6 +118,25 @@ describe('Libraries Helper', () => {
 
       expect(result).toHaveLength(0);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('deleteLibrariesNotIn', () => {
+    it('removes only libraries missing from the keep list', async () => {
+      await upsertLibraries([mockLibraryRow, mockPodcastLibraryRow]);
+
+      await deleteLibrariesNotIn([mockLibraryRow.id]);
+
+      const remaining = await getAllLibraries();
+      expect(remaining.map((l) => l.id)).toEqual([mockLibraryRow.id]);
+    });
+
+    it('removes every library when the keep list is empty', async () => {
+      await upsertLibraries([mockLibraryRow, mockPodcastLibraryRow]);
+
+      await deleteLibrariesNotIn([]);
+
+      expect(await getAllLibraries()).toEqual([]);
     });
   });
 
