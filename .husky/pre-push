@@ -1,5 +1,5 @@
 #!/bin/sh
 # PR size advisory: prints a nudge, never blocks the push. stdin carries git's pushed-ref lines.
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-[ -f "$root/scripts/pr-size/local.mjs" ] && node "$root/scripts/pr-size/local.mjs" --pre-push
+[ -f "$root/scripts/pr-size/local.mjs" ] && node "$root/scripts/pr-size/local.mjs" --pre-push || true
 exit 0

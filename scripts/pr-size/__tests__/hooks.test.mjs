@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   appendFileSync,
   copyFileSync,
@@ -12,7 +12,7 @@ import {
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { codexHooksConfig, hookDigest } from "../digest.mjs";
-import { GIT_ENV, commit, fakeGhPath, git, repo } from "./helpers.mjs";
+import { GIT_ENV, commit, fakeGhPath, git, repo, tmp } from "./helpers.mjs";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const SRC = join(ROOT, "scripts/pr-size");
@@ -84,6 +84,29 @@ test("Codex hook never executes a checker script from an untrusted cwd", () => {
   const res = run(CODEX, dir);
   assert.equal(res.status, 0);
   assert.equal(existsSync(marker), false);
+});
+
+test("Husky pre-push exits 0 under sh -e when the checker cannot run", () => {
+  const gitBin = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+  const noNode = tmp("pr-size-nonode-");
+  writeFileSync(join(noNode, "git"), `#!/bin/sh\nexec "${gitBin}" "$@"\n`, { mode: 0o755 });
+  const cases = [
+    { PATH: process.env.PATH, error: /ERR_MODULE_NOT_FOUND/ },
+    { PATH: noNode, error: /node: (command )?not found/ },
+  ];
+  for (const { PATH, error } of cases) {
+    const dir = repo();
+    mkdirSync(join(dir, "scripts/pr-size"), { recursive: true });
+    writeFileSync(join(dir, "scripts/pr-size/local.mjs"), 'import "./missing.mjs";\n');
+    const res = spawnSync("/bin/sh", ["-e", join(ROOT, ".husky/pre-push")], {
+      cwd: dir,
+      input: "",
+      env: { ...GIT_ENV, PATH },
+      encoding: "utf8",
+    });
+    assert.match(res.stderr, error);
+    assert.equal(res.status, 0, res.stderr);
+  }
 });
 
 test("Claude hook is anchored to CLAUDE_PROJECT_DIR, never the cwd repo", () => {
