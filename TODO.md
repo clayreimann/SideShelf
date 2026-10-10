@@ -430,14 +430,22 @@ summarized in the review discussion; items below are the non-blocking todos it p
 
 ### Podcast Support
 
-- [ ] **Full Podcast Implementation** → [#21](https://github.com/clayreimann/SideShelf/issues/21)
-  - [ ] Podcast-specific UI components and layouts
-  - [ ] Episode management and subscription features
-  - [ ] Podcast-specific playback controls (skip silence, variable speed)
-  - [ ] RSS feed integration and auto-updates
-  - [ ] Podcast-specific progress tracking
-- [ ] Don't add library as a sort/display filter. Have separate library and podcast tabs so users don't need
-      to switch back and forth between libraries
+- [ ] **Full Podcast Implementation** → [#21](https://github.com/clayreimann/SideShelf/issues/21) — scope and
+      tiers in the [public 1.1 podcast spec](docs/superpowers/specs/2026-07-17-public-v1.1-podcasts-design.md)
+  - [ ] **Prerequisites:** isolated original fixtures and runtime API probes (F0/F0p), account commit
+        boundary, migration-failure gate, download/cover ownership
+  - [ ] **First increment (approved, pending):**
+    - [ ] Show and episode browsing; episodes newest first with an Unplayed filter
+    - [ ] Episode-aware streaming, progress, resume and restore
+    - [ ] Manual per-episode download, cancel, retry, delete and offline playback
+    - [ ] Played/unplayed that survives restart and offline use
+    - [ ] Separate aggregated Library (books) and Podcasts (shows) tabs — no library sort/display filter, no
+          mixed grid; per-type exclusions, new libraries included automatically; current server and account
+          only (cross-server waits on [multi-server](docs/plans/multi-server-sync-and-aliases.md))
+    - [ ] Book Series stay separate from podcast Shows/Seasons
+  - [ ] **Deferred contract:** Up Next, autoplay, automatic device downloads, retention
+- [ ] **Podcast wishlist (outside public 1.1 scope, not scheduled):** RSS subscription admin and
+      auto-updates, podcast discovery, podcast-specific skip silence
 
 ## 🎵 Player Features
 
