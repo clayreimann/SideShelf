@@ -21,9 +21,12 @@ Near-term work should favor release validation, remaining localization gaps, and
 
 ## Public 1.1 — Podcasts
 
-Public 1.1 adds full-featured listening for existing Audiobookshelf podcast libraries. The accepted scope includes episode-aware playback and progress, manual and automatic downloads, retention, played state, and a podcast-only Up Next experience.
+Public 1.1 adds full-featured listening for existing Audiobookshelf podcast libraries. The accepted full scope includes episode-aware playback and progress, manual and automatic downloads, retention, played state, and a podcast-only Up Next experience. It ships in increments; the first increment's version label is undecided, and shipping it does not complete public 1.1 or close [#21](https://github.com/clayreimann/SideShelf/issues/21). Partial podcast foundations exist; the first increment is not implemented end to end.
 
-React Native Track Player remains the production playback baseline for this release. The complete contract and acceptance boundaries are in the [Public 1.1 podcast specification](superpowers/specs/2026-07-17-public-v1.1-podcasts-design.md).
+- **First increment (approved 2026-10-10):** show and episode browsing; episode-aware streaming, progress, resume, and restore; manual per-episode downloads with offline playback; played/unplayed state that survives restart and offline use. Separate aggregated **Library** (books) and **Podcasts** (shows) tabs with persisted per-type library inclusion, scoped to the current server and account. Cross-server aggregation waits on the multi-server program below.
+- **Deferred delivery (still accepted scope):** podcast-only Up Next, autoplay, automatic device downloads, and retention.
+
+React Native Track Player remains the production playback baseline for this release. The complete contract, tier boundaries, and acceptance criteria are in the [Public 1.1 podcast specification](superpowers/specs/2026-07-17-public-v1.1-podcasts-design.md).
 
 ## Public 1.2 — Audio Browser and Cars
 
